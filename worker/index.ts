@@ -42,7 +42,7 @@ async function aresTick() {
 
 async function intakeTick() {
   if (!env.GOOGLE_SHEETS_CREDENTIALS) {
-    console.warn('[sirius-worker] no GOOGLE_SHEETS_CREDENTIALS — intake sync skipped');
+    console.warn('[sirius-worker] no Sheets credential configured — intake sync skipped');
     return;
   }
   const source = makeSheetSource(env.GOOGLE_SHEETS_CREDENTIALS);
