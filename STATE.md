@@ -49,6 +49,7 @@ _None awaiting. Approved:_
 ## Session log
 
 - 2026-08-03 — Kit created. No code exists.
+- 2026-08-03 — Step 2 complete: BRD v2.2 converted to `specs/001-sirius-v1/spec.md`. Traceability verified programmatically: 62 FR, 14 BR, 11 NFR, 20 AC preserved with IDs; all measured constants exact; ODs marked [NEEDS CLARIFICATION], unresolved. Quality checklist at `specs/001-sirius-v1/checklists/requirements.md`.
 - 2026-08-03 — CLAUDE.md amended by JP: added "Reply format — always" (communication protocol). Constitution regenerated verbatim → v1.1.0. Invariants untouched.
 - 2026-08-03 — Step 1 complete: constitution ratified at `.specify/memory/constitution.md` v1.0.0 — CLAUDE.md adopted verbatim (byte-identical body, all 17 invariants verified programmatically), Governance section added (CLAUDE.md stays authoritative; amendments enter CLAUDE.md first; gates never self-certified).
 - 2026-08-03 — Step 0 complete: installed `uv` + `specify-cli` 0.15.2 (official github/spec-kit); scaffolded Spec Kit with Claude integration (`.specify/`, `.claude/skills/speckit-*`); renamed docs to match CLAUDE.md references (`Sirius__BRD.md`, `Sirius__Implementation_Plan.md`, `frost-sirius-v1.html`); git repo initialised, first commit pushed to `jpdguzman-frost/sirius`. Deviation above approved by JP.
