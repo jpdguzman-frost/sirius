@@ -23,10 +23,10 @@
 
 ## Phase 1 — Schema, migrations, seed (~3d)
 
-- [ ] T007 Tests for schema rules in `test/models.test.ts`: `(project_id, trello_card_id)` unique while `mc_number` duplicates freely (99-deliverable MC-825 case); `deliverables_v` precedence trello_due → sheet_deadline → none; sprint `ends_on ≥ starts_on`; every collection requires `project_id` (invariants 1, 3, 14; BR-9; FR-1.4)
-- [ ] T008 Mongoose models for all 15 collections in `src/models/`, fields/defaults/validators exactly per data-model.md ownership groups (FR-1.1, FR-1.4; invariants 1, 3, 4)
-- [ ] T009 Migration runner + `scripts/migrate/001-indexes.js` (unique compounds, secondary indexes) + `scripts/migrate/002-deliverables-view.js` (`deliverables_v` MongoDB view implementing BR-9) — version-controlled, never hand-applied (invariant 14; constitution)
-- [ ] T010 `scripts/seed.js` + fixtures: two projects (one sharing a Trello board via `trello_label`), deliverables incl. a multi-deliverable MC group, work cards, sprints, CSV intake fixture — fixtures only, never production data (invariant 16; enables AC-4, AC-5, AC-6 tests)
+- [x] T007 Tests for schema rules in `test/models.test.ts`: `(project_id, trello_card_id)` unique while `mc_number` duplicates freely (99-deliverable MC-825 case); `deliverables_v` precedence trello_due → sheet_deadline → none; sprint `ends_on ≥ starts_on`; every collection requires `project_id` (invariants 1, 3, 14; BR-9; FR-1.4)
+- [x] T008 Mongoose models for all 15 collections in `src/models/`, fields/defaults/validators exactly per data-model.md ownership groups (FR-1.1, FR-1.4; invariants 1, 3, 4)
+- [x] T009 Migration runner + `scripts/migrate/001-indexes.js` (unique compounds, secondary indexes) + `scripts/migrate/002-deliverables-view.js` (`deliverables_v` MongoDB view implementing BR-9) — version-controlled, never hand-applied (invariant 14; constitution)
+- [x] T010 `scripts/seed.js` + fixtures: two projects (one sharing a Trello board via `trello_label`), deliverables incl. a multi-deliverable MC group, work cards, sprints, CSV intake fixture — fixtures only, never production data (invariant 16; enables AC-4, AC-5, AC-6 tests)
 
 **Checkpoint**: T007 green; seeded db passes scope queries.
 

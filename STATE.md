@@ -7,7 +7,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | # | Phase | Status | Gate |
 |---|---|---|---|
 | 0 | Setup & infrastructure | **done 2026-08-03** (T001–T006) | |
-| 1 | Schema + migrations + seed | not started | |
+| 1 | Schema + migrations + seed | **done 2026-08-03** (T007–T010) | |
 | 2 | Auth + audit | not started | |
 | 3 | Port lib/ + golden tests | not started | AC-10: ⬜ |
 | 4 | ARES read + mapping | not started — **unblocked** (OD-1 ✅) | NFR-3 realtime check at exit |
@@ -49,6 +49,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-03 — Phase 1 complete (T007–T010): 15 Mongoose collections 1:1 from §1.3, migration runner (001-indexes, 002-deliverables_v view) recorded in a migrations collection, fixture seed (two projects incl. shared-board label, MC-655 ×3 group, gap between sprints, intake CSV). 25/25 tests green in UTC and Asia/Manila on real mongod (memory server). ARES key from JP verified live (200; ARES Trello refresh cycle observed at 15 min — good for NFR-3). gh CLI installed but unauthenticated — repo secret ARES_API_KEY still pending JP login.
 
 - 2026-08-03 — Phase 0 complete (T001–T006): Express 5 + Ractive scaffold per ARES conventions, docker-compose (mongo 8, redis 7), frontend build pipeline with Ractive parse-check, CI (typecheck · lint · vitest · dual-TZ · audit · build · ARES probe), deploy.sh (ARES pattern, host vars pending from JP), invariant-17 board guard with tests. 7/7 tests green in UTC and Asia/Manila; shell boots and serves healthz + built frontend; live ARES probe validates all 8 endpoints. Deviations: none applied; two judgment notes reported to JP (tsx runtime; dev-only infra-less boot).
 
