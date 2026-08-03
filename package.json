@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx watch server.js",
     "start": "tsx server.js",
-    "worker": "tsx worker/index.js",
+    "worker": "tsx worker/index.ts",
     "build": "node frontend/build.js",
     "migrate": "tsx scripts/migrate/run.ts",
     "seed": "tsx scripts/seed.ts",
