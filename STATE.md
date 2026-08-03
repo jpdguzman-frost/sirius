@@ -10,7 +10,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | 1 | Schema + migrations + seed | **done 2026-08-03** (T007–T010) | |
 | 2 | Auth + audit | **done 2026-08-03** (T011–T016) | |
 | 3 | Port lib/ + golden tests | **done 2026-08-03** (T017–T026) | AC-10: ✅ gate passed by JP 2026-08-03 |
-| 4 | ARES read + mapping | not started — **unblocked** (OD-1 ✅) | NFR-3 realtime check at exit |
+| 4 | ARES read + mapping | **done 2026-08-03** (T027–T033; T034 end-to-end measure at staging) | NFR-3: ARES cycle observed 15 min ✓; e2e at staging |
 | 5 | Intake sync | not started | |
 | 6 | Model refresh + validation | not started | **PM sign-off: ⬜** |
 | 7 | UI — five tabs | not started | |
@@ -40,7 +40,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 
 ## Acceptance criteria scoreboard
 
-AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ⬜ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ⬜ · AC-9 ⬜ · AC-10 ✅ · AC-11 ⬜ · AC-12 ⬜ · AC-13 ⬜ · AC-14 ⬜ · AC-15 ⬜ · AC-16 ⬜ · AC-17 ⬜ · AC-18 ⬜ · AC-19 ⬜ · AC-20 ⬜
+AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ✅ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ⬜ · AC-9 ⬜ · AC-10 ✅ · AC-11 ⬜ · AC-12 ⬜ · AC-13 ⬜ · AC-14 ⬜ · AC-15 ⬜ · AC-16 ⬜ · AC-17 ⬜ · AC-18 ⬜ · AC-19 ⬜ · AC-20 ⬜
 
 ## Deviations proposed by the agent, awaiting JP
 
@@ -49,6 +49,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-03 — Phase 4 complete (T027–T033; T034 partial): ARES client (envelope/pagination/429), taxonomy mapper (AC-5 passes as a test), stable display_id assignment, BR-10 rules (oracle parity), syncAres with ownership-safe upserts + idempotent card_events + capacity copy + sync_runs, 15-min worker loop with healthz gate. Live-shape discovery: movements carry NO event id (synthesized key: cardId|from|to|detectedAt); steering rowKey is bare '837'; referenceWeeks uses .total not .cards (adapter handles both); live typical week now 2026-W07/116 vs BRD snapshot W21/120 — the scheduled refresh supersedes the snapshot as designed. NFR-3: ARES live refresh cycle observed at 15 min (healthz last/next timestamps); Trello→Sirius end-to-end measurement deferred to staging. 95/95 tests green UTC + Manila.
 
 - 2026-08-03 — GATE T026 PASSED by JP (AC-10): port fidelity accepted on the three-way evidence (verbatim oracle parity, BR-1 formula tests, workbook cross-validation 84/84). Phase 3 closed.
 

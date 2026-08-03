@@ -64,14 +64,14 @@
 
 ## Phase 4 — ARES read + mapping (~6d) — UNBLOCKED (OD-1 resolved 2026-08-03)
 
-- [ ] T027 ARES client in `src/services/ares.js` per contracts/ares-read.md — envelope unwrap by surface, `X-API-Key` header, 60 req/min pacing + `retryAfter` honor, pagination; recorded-fixture tests (FR-8.1)
-- [ ] T028 [P] Taxonomy mapper tests in `test/mapper.test.ts`: `Main Card` label → deliverable, verb-prefix titles → work cards attached to MC group (never a deliverable edge), `trello_label` board filtering, MC number extraction from titles, `display_id` assignment (`MC-655.3`) (invariants 3, 4; FR-1.3; AC-5; spec §Card taxonomy)
-- [ ] T029 [US1] `worker/syncAres.ts`: boards → cards sync, upsert on `(project_id, trello_card_id)`, blockers from 🛑 labels, `card_events` append idempotent on `source_event_id`; `sync_runs` written success or failure, last good data preserved (FR-4.1, FR-4.5, FR-8.5; AC-19)
-- [ ] T030 [P] [US4] Steering adapter: `referenceWeeks` + `effectiveWeeklyRate` via internal-tier endpoint behind `src/services/` adapter, copied into `projects` each run (BR-6a; FR-5.16)
-- [ ] T031 [P] [US1] BR-10 status classification in `src/services/status-rules.js`: configurable keyword rules mapping free-text list names → Pending/Ongoing/Done, tests in `test/status-rules.test.ts` (BR-10; OD-5 default documented as open)
-- [ ] T032 [US1] Movements backfill for the model window + cycle-time derivation from activity timestamps, cross-checked against `/api/v1/trello/cycle-time` (FR-4.5; BR-2 raw material)
-- [ ] T033 Worker scheduler loop in `worker/index.js` — 15-min cadences, health job with ARES `/healthz` freshness gate, alerting on failure (FR-8.5, FR-8.6; NFR-3)
-- [ ] T034 NFR-3 end-to-end freshness measurement (evidence in `STATE.md`): Trello change → Sirius visible, evidence recorded for JP (< 15 min per JP's realtime statement; STATE.md exit check)
+- [x] T027 ARES client in `src/services/ares.js` per contracts/ares-read.md — envelope unwrap by surface, `X-API-Key` header, 60 req/min pacing + `retryAfter` honor, pagination; recorded-fixture tests (FR-8.1)
+- [x] T028 [P] Taxonomy mapper tests in `test/mapper.test.ts`: `Main Card` label → deliverable, verb-prefix titles → work cards attached to MC group (never a deliverable edge), `trello_label` board filtering, MC number extraction from titles, `display_id` assignment (`MC-655.3`) (invariants 3, 4; FR-1.3; AC-5; spec §Card taxonomy)
+- [x] T029 [US1] `worker/syncAres.ts`: boards → cards sync, upsert on `(project_id, trello_card_id)`, blockers from 🛑 labels, `card_events` append idempotent on `source_event_id`; `sync_runs` written success or failure, last good data preserved (FR-4.1, FR-4.5, FR-8.5; AC-19)
+- [x] T030 [P] [US4] Steering adapter: `referenceWeeks` + `effectiveWeeklyRate` via internal-tier endpoint behind `src/services/` adapter, copied into `projects` each run (BR-6a; FR-5.16)
+- [x] T031 [P] [US1] BR-10 status classification in `src/services/status-rules.js`: configurable keyword rules mapping free-text list names → Pending/Ongoing/Done, tests in `test/status-rules.test.ts` (BR-10; OD-5 default documented as open)
+- [x] T032 [US1] Movements backfill for the model window + cycle-time derivation from activity timestamps, cross-checked against `/api/v1/trello/cycle-time` (FR-4.5; BR-2 raw material)
+- [x] T033 Worker scheduler loop in `worker/index.js` — 15-min cadences, health job with ARES `/healthz` freshness gate, alerting on failure (FR-8.5, FR-8.6; NFR-3)
+- [ ] T034 ⚠ PARTIAL (ARES-side 15-min live cycle observed + healthz gate wired; Trello→Sirius end-to-end measurement needs staging) — NFR-3 freshness evidence in `STATE.md`: Trello change → Sirius visible, evidence recorded for JP (< 15 min per JP's realtime statement; STATE.md exit check)
 
 **Checkpoint**: real board syncs into fixtures-shaped collections; re-running sync is idempotent.
 
