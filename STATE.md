@@ -9,7 +9,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | 1 | Schema + migrations + seed | not started | |
 | 2 | Auth + audit | not started | |
 | 3 | Port lib/ + golden tests | not started | AC-10: ⬜ |
-| 4 | ARES read + mapping | **BLOCKED — OD-1** | |
+| 4 | ARES read + mapping | not started — **unblocked** (OD-1 ✅) | NFR-3 realtime check at exit |
 | 5 | Intake sync | not started | |
 | 6 | Model refresh + validation | not started | **PM sign-off: ⬜** |
 | 7 | UI — five tabs | not started | |
@@ -21,10 +21,11 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 
 | # | Decision | Blocks | Status |
 |---|---|---|---|
-| OD-1 | ARES interface: DB role / read API / replication | Phase 4 | ⬜ open |
-| OD-8 | Hosting: Frost GCP or elsewhere (plan assumes Cloud Run + Cloud SQL) | Infra work | ⬜ open |
+| OD-1 | ARES interface: DB role / read API / replication | Phase 4 | ✅ **Resolved 2026-08-03: ARES read API** (`/api/v1/trello/*`, read-only key; contract in `specs/001-sirius-v1/contracts/ares-read.md`) |
+| OD-8 | Hosting: Frost GCP or elsewhere | Infra work | ✅ **Resolved 2026-08-03: beside ARES, same pattern; shared Mongo server, own `sirius` db** |
 | BRD §9 | Amend "write impossible by permission" to reflect the urgency write | Vendor assessment, v2 | ⬜ open |
 | — | Create duplicate Trello board for staging | Phase 8 | ⬜ open |
+| NFR-3 | Guide documents a 30-min ARES cache cycle; JP: new ARES is realtime, so < 15 min stands | Phase 4 exit verification | ⬜ verify end-to-end |
 
 ## Decisions needed later (not blocking yet)
 
@@ -49,6 +50,7 @@ _None awaiting. Approved:_
 ## Session log
 
 - 2026-08-03 — Kit created. No code exists.
+- 2026-08-03 — Stack amendment by JP (constitution v2.0.0): MongoDB (shared ARES server, own `sirius` db) + Redis · Express 5 + Ractive frontend (ARES conventions) · Passport Google OAuth (four checks unchanged) · deployed beside ARES. OD-1 resolved (ARES read API, verified live incl. movements endpoint — all `stable`). OD-8 resolved. NFR-3 kept at < 15 min per JP (new ARES is realtime; verify at phase 4 exit). Phase 4 unblocked. Plan artifacts reworked (plan, research, data-model as collections + verbatim SQL authority appendix, contracts incl. new ares-read.md, quickstart). UI estimate 12 → 15–18 days (React prototype no longer ports as code); total ~60–63 days.
 - 2026-08-03 — Step 3 complete: Implementation Plan converted to `specs/001-sirius-v1/` — plan.md (constitution check PASS, sequence + both gates intact, phase 4 BLOCKED-OD1), research.md (12 recorded decisions, OD-1 held open), data-model.md (§1.3 SQL byte-identical), contracts/ (http-api, worker, trello-write), quickstart.md. Verified programmatically.
 - 2026-08-03 — Step 2 complete: BRD v2.2 converted to `specs/001-sirius-v1/spec.md`. Traceability verified programmatically: 62 FR, 14 BR, 11 NFR, 20 AC preserved with IDs; all measured constants exact; ODs marked [NEEDS CLARIFICATION], unresolved. Quality checklist at `specs/001-sirius-v1/checklists/requirements.md`.
 - 2026-08-03 — CLAUDE.md amended by JP: added "Reply format — always" (communication protocol). Constitution regenerated verbatim → v1.1.0. Invariants untouched.

@@ -1,10 +1,73 @@
 # Data Model — Sirius v1 (Phase 1)
 
-The schema below is **reproduced byte-for-byte from `docs/Sirius__Implementation_Plan.md` §1.3**. It is the schema — not a starting point. The Prisma schema (`prisma/schema.prisma`) must express exactly this; migrations are version-controlled from the first line and no DDL is ever applied by hand against production (§1.5).
+*(Amended 2026-08-03: datastore is MongoDB per constitution v2.0.0. The Implementation Plan §1.3 schema remains the **content authority** — every field, ownership group, key and index below maps 1:1 from it; nothing is redesigned. The original SQL is kept verbatim in the appendix as the audit reference.)*
 
-Two rules shape everything (§1.2): **every table carries `project_id`** (multi-project from the first migration), and **ownership is explicit in the schema** — Trello-owned, sheet-owned, and Sirius-owned columns are grouped and commented so the write path can refuse anything it doesn't own. The one exception — urgency — is called out inline.
+## Translation rules (§1.3 → Mongoose)
 
-## Schema (Implementation Plan §1.3, verbatim)
+- **One table → one collection**, same name, same fields, same defaults. Join tables stay separate collections (no embedding) so the mapping stays auditable.
+- **Every collection carries `project_id`** (ObjectId ref → `projects`); every compound index leads with it (invariant 1, as amended).
+- **Primary keys / unique constraints → unique compound indexes** (listed per collection).
+- **`citext` → lowercase-normalised string** (Mongoose `lowercase: true` on email fields).
+- **Dates**: timestamps are BSON `Date` (UTC, invariant 11). Date-only fields (`starts_on`, `ends_on`, `trello_due`, `sheet_deadline`, `deadline`, `slotted_week`) are `YYYY-MM-DD` strings — they are Asia/Manila calendar days (ARES guide §4: re-interpreting them as UTC shifts everything by 8 hours). All workday math via `lib/calendar.ts` only.
+- **`deliverables_v` → a real MongoDB view** created by migration script: `$addFields` `deadline: {$ifNull: ["$trello_due", "$sheet_deadline"]}` and matching `deadline_source` — BR-9 precedence stays implemented in `deliverables_v` (invariant 14).
+- **CHECK constraints → Mongoose validators** (e.g. `ends_on >= starts_on`, difficulty enum).
+- **Append-only collections** (`audit_log`): no update/delete code paths exist; the audit writer service exposes insert only.
+- **Migrations**: schema shape, index creation and the view live in version-controlled scripts under `scripts/migrate/`, run in order, never applied by hand against production.
+
+## Collections
+
+| Collection | Fields (owner-grouped where relevant) | Unique | Indexes |
+|---|---|---|---|
+| `projects` | code, name, client, status('ongoing') · sources: trello_board_id, trello_label(null=whole board), intake_sheet_id, intake_sheet_gid, intake_sheet_tab · planning: weekly_capacity, ref_week_least, ref_week_typical, ref_week_most, effective_weekly_rate, model_window_months(12) · created_at | code | — |
+| `sprints` | project_id, name, starts_on, ends_on, position · validate ends_on ≥ starts_on | (project_id, position) | (project_id, starts_on) |
+| `users` | email(lowercase), name, active(true), last_login_at | email | — |
+| `user_projects` | user_id, project_id | (user_id, project_id) | — |
+| `deliverables` | project_id, mc_number(NOT unique — MC-825 has 99), display_id · **Trello-owned**: trello_card_id, trello_url, name, current_list, difficulty(Easy\|Medium\|Hard), lane(design\|ops\|assets), blocker, figma_url, labels[], trello_due, trello_synced_at · **the one write-back field**: urgency('Non-Urgent') · **sheet-owned** (joined on mc_number): sheet_deadline, use_case, brief, requestor · **Sirius-owned**: slotted_week(Monday, null=unscheduled), pinned(false), confidence('0.7'), sla_sketch, sla_render, status_note · active, created_at, updated_at | (project_id, trello_card_id) | (project_id, slotted_week) · (project_id, mc_number) · (project_id, active) |
+| `deliverables_v` *(view)* | deliverables + deadline = trello_due ?? sheet_deadline, deadline_source('trello'\|'sheet'\|null) — BR-9 | — | — |
+| `work_cards` | project_id, mc_number (tasks attach to the MC group, not one deliverable), trello_card_id, trello_url, name, task_prefix, difficulty, current_list, stage, figma_url, work_started_at, work_done_at, active | (project_id, trello_card_id) | (project_id, mc_number) |
+| `intake_requests` | project_id, mc_number, sheet_row, name, requestor, asset_type, use_case, brief, deadline, in_frost_prod, first_seen_at, last_seen_at, active | (project_id, mc_number) | — |
+| `intake_rejects` | project_id, sheet_row, raw, reason, seen_at | (project_id, sheet_row) | — |
+| `card_events` | project_id, trello_card_id, source_event_id (idempotency key), from_list, to_list, occurred_at | source_event_id | (project_id, trello_card_id, occurred_at) |
+| `model_samples` | project_id, trello_card_id, difficulty, lane, metric(design\|review), days, completed_at | — | (project_id, difficulty, lane, metric, completed_at) |
+| `model_grid` | project_id, difficulty, lane, metric, confidence(Average\|0.7\|0.85\|0.95), value, sample_n, computed_at | (project_id, difficulty, lane, metric, confidence) | — |
+| `throughput_grid` | project_id, difficulty, p25, p50, p70, computed_at | (project_id, difficulty) | — |
+| `conflict_acknowledgements` | project_id, conflict_key (week\|rule\|sorted card:phase pairs — invariant 13), acknowledged_by(lowercase), reason, at | (project_id, conflict_key) | — |
+| `audit_log` *(append-only)* | project_id, actor(lowercase), action, entity, entity_id, before, after, at | — | (project_id, entity, entity_id, at desc) |
+| `sync_runs` | project_id, source(ares\|sheet\|trello_write), ok, stats, error, at | — | (project_id, at desc) |
+
+Percentile computation (`model_grid`, `throughput_grid`) happens in worker code during the model refresh — not in the database (research D11).
+
+## Schema decisions worth defending in review (§1.4, verbatim — all survive the translation)
+
+**`mc_number` is not a key.** Verified on the live board: 15 MC numbers carry more than one `Main Card`, and MC-825 carries 99. Identity is `(project_id, trello_card_id)`; `display_id` is what humans read.
+
+**Work cards attach to the MC, not to a deliverable.** Only 1 of 27 task titles matched a deliverable title, so there is no dependable parent edge. Modelling one would silently mis-assign work.
+
+**Acknowledgements are keyed on the situation, not the rule.** `conflict_key` is `week | rule | sorted card:phase
+pairs`. Adding, removing or replotting a card produces a different key and the conflict resurfaces. Storing an
+acknowledgement against the rule alone would let a warning be switched off permanently by accident.
+
+**`card_events` is not optional.** Cycle time is measured in fractional days from Trello activity. Storing only two dates gives a coarser dataset than your history and the two stop being comparable — which would break the model refresh that fixes the forecast.
+
+## Entity → spec traceability
+
+| Collection / view | Spec entity | Key requirements |
+|---|---|---|
+| `projects` | Project | FR-1.1–1.5, BR-6a (capacity fields) |
+| `sprints` | Sprint | FR-5.14–5.15, BR-5 |
+| `users`, `user_projects` | Allow-list + membership | FR-2.4–2.5, AC-2, AC-3 |
+| `deliverables`, `deliverables_v` | Deliverable | FR-4.x, BR-9 (precedence in the view), invariant 3 |
+| `work_cards` | Work card | FR-4.2, invariant 4 (attach to MC group) |
+| `intake_requests`, `intake_rejects` | Intake request | FR-3.x, FR-8.4, AC-6, AC-9 |
+| `card_events` | Card event | FR-4.5, BR-2 (model raw material; idempotent on `source_event_id`) |
+| `model_samples`, `model_grid`, `throughput_grid` | Model grids | FR-7.3, FR-7.6, FR-7.7, BR-2/BR-4 |
+| `conflict_acknowledgements` | Conflict acknowledgement | FR-6.7–6.8, BR-9a, invariant 13 |
+| `audit_log` | Audit log entry | FR-2.6, NFR-7, invariant 10 |
+| `sync_runs` | Sync run | FR-8.5–8.6, invariant 8 |
+
+## Appendix — content authority: Implementation Plan §1.3 (Postgres, verbatim)
+
+The stack it targets is superseded (constitution v2.0.0); the **fields, keys, ownership comments and indexes remain the authority** the collections above are audited against.
 
 ```sql
 create extension if not exists "pgcrypto";
@@ -261,31 +324,3 @@ create table sync_runs (
   at          timestamptz not null default now()
 );
 ```
-
-## Schema decisions worth defending in review (§1.4, verbatim)
-
-**`mc_number` is not a key.** Verified on the live board: 15 MC numbers carry more than one `Main Card`, and MC-825 carries 99. Identity is `(project_id, trello_card_id)`; `display_id` is what humans read.
-
-**Work cards attach to the MC, not to a deliverable.** Only 1 of 27 task titles matched a deliverable title, so there is no dependable parent edge. Modelling one would silently mis-assign work.
-
-**Acknowledgements are keyed on the situation, not the rule.** `conflict_key` is `week | rule | sorted card:phase
-pairs`. Adding, removing or replotting a card produces a different key and the conflict resurfaces. Storing an
-acknowledgement against the rule alone would let a warning be switched off permanently by accident.
-
-**`card_events` is not optional.** Cycle time is measured in fractional days from Trello activity. Storing only two dates gives a coarser dataset than your history and the two stop being comparable — which would break the model refresh that fixes the forecast.
-
-## Entity → spec traceability
-
-| Table / view | Spec entity | Key requirements |
-|---|---|---|
-| `projects` | Project | FR-1.1–1.5, BR-6a (capacity fields) |
-| `sprints` | Sprint | FR-5.14–5.15, BR-5 |
-| `users`, `user_projects` | Allow-list + membership | FR-2.4–2.5, AC-2, AC-3 |
-| `deliverables`, `deliverables_v` | Deliverable | FR-4.x, BR-9 (deadline precedence in the view), invariant 3 |
-| `work_cards` | Work card | FR-4.2, invariant 4 (attach to MC group) |
-| `intake_requests`, `intake_rejects` | Intake request | FR-3.x, FR-8.4, AC-6, AC-9 |
-| `card_events` | Card event | FR-4.5, BR-2 (model raw material; idempotent on `source_event_id`) |
-| `model_samples`, `model_grid`, `throughput_grid` | Model grids | FR-7.3, FR-7.6, FR-7.7, BR-2/BR-4 |
-| `conflict_acknowledgements` | Conflict acknowledgement | FR-6.7–6.8, BR-9a, invariant 13 |
-| `audit_log` | Audit log entry | FR-2.6, NFR-7, invariant 10 |
-| `sync_runs` | Sync run | FR-8.5–8.6, invariant 8 |

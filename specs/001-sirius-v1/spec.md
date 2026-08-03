@@ -426,17 +426,26 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 - Encryption in transit and at rest; audit logging; automatic offboarding.
 - *Note carried from the BRD:* §9's statement that "write is impossible by permission" predates the urgency write and awaits amendment (tracked in STATE.md).
 
+## Clarifications
+
+### Session 2026-08-03 (JP)
+
+- **OD-1 — RESOLVED**: ARES exposes its data via its **read API** (`/api/v1/trello/*` — boards, cards, movements, cycle-time; all marked `stable`), authenticated with a read-only `X-API-Key`, server-side only. Contract: `https://ares.frostdesigngroup.com/api/docs` (guide.md + openapi.yaml, served behind the same key). ARES ingestion (FR-8.1) is unblocked.
+- **OD-8 — RESOLVED**: Sirius deploys beside ARES, same pattern and place, and uses the **same Mongo server as ARES** (its own `sirius` database).
+- **Stack amendment**: datastore is MongoDB + Redis; app is Express 5 with a Ractive frontend per ARES conventions; auth via Passport Google OAuth with the four checks unchanged. Constitution v2.0.0.
+- **NFR-3 stands at < 15 min**: the ARES guide documents a 30-minute cache cycle, but per JP the new ARES delivers in realtime, so ARES cadence is not the bottleneck. Verify end-to-end latency during ARES-integration work.
+
 ## Open Decisions
 
-From BRD §13. Marked, not resolved — each is answered by its owner and recorded here before dependent work proceeds. (The BRD's numbering has no OD-3.)
+From BRD §13. Marked, not resolved — each is answered by its owner and recorded in Clarifications before dependent work proceeds. (The BRD's numbering has no OD-3.)
 
-- **OD-1** [NEEDS CLARIFICATION: Where does ARES expose its data — shared DB, API, or replicated tables? Owner: Engineering. Blocks ARES ingestion (FR-8.1).]
+- **OD-1** — ✅ Resolved 2026-08-03, see Clarifications.
 - **OD-2** [NEEDS CLARIFICATION: Rolling window for the empirical model — 6 or 12 months? Owner: PM. Affects FR-7.6.]
 - **OD-4** [NEEDS CLARIFICATION: Should acknowledged conflicts expire after a set period, or persist until the cards change? Owner: PM. Affects FR-6.7.]
 - **OD-5** [NEEDS CLARIFICATION: Is `Client Approval` an ongoing or done state? Owner: PM. Affects BR-10 keyword rules.]
 - **OD-6** [NEEDS CLARIFICATION: Which projects are in v1 beyond GCash? Owner: Leadership. Affects seed data and rollout.]
 - **OD-7** [NEEDS CLARIFICATION: Retention for closed requests and archived cards. Owner: Leadership.]
-- **OD-8** [NEEDS CLARIFICATION: Hosting — Frost GCP, or elsewhere? Owner: Leadership. Affects infrastructure work.]
+- **OD-8** — ✅ Resolved 2026-08-03, see Clarifications.
 
 ## Assumptions
 
