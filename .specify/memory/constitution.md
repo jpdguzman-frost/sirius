@@ -1,12 +1,15 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 -> 1.1.0 (MINOR: new section added to source)
-- Change: CLAUDE.md amended by JP on 2026-08-03 to add "Reply format — always"
-  (communication protocol). Constitution regenerated verbatim from the amended
-  CLAUDE.md per Governance.
-- Invariants: all 17 unchanged, still character-for-character.
-- Added sections: Reply format — always (from source).
-- Removed sections: none.
+- Version change: 1.1.0 -> 2.0.0 (MAJOR: stack redefinition + two invariants reworded)
+- Change: CLAUDE.md amended by JP on 2026-08-03. Stack section replaced —
+  Postgres/Prisma/Next.js/Auth.js/Cloud Run+Cloud SQL superseded by the ARES
+  stack: Express 5, MongoDB via Mongoose (shared server with ARES), Redis,
+  Passport Google OAuth, Ractive frontend, deployed beside ARES. Invariant 1
+  reworded tables -> collections (same rule). Invariant 15 mechanism reworded:
+  Secret Manager -> server-side environment configuration (ARES pattern);
+  rule (never in bundle/repo/logs) unchanged.
+- Invariants: 17 count unchanged; 2 reworded as above, 15 untouched.
+- Trigger: OD-1 resolved (ARES read API) and stack-consolidation decision by JP.
 - Deferred TODOs: none.
 -->
 
@@ -25,7 +28,7 @@ Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning 
 
 ## Invariants — never violate, never "improve"
 
-1. **Every table carries `project_id`. Every query filters on it.** No exceptions, including audit and sync tables where the schema defines it.
+1. **Every collection carries `project_id`. Every query filters on it.** No exceptions, including audit and sync collections where the schema defines it.
 2. **Read-only everywhere except urgency.** No write path to Google Sheets, ever. No write to Trello except add/remove the `Urgent` label via `lib/trello.ts` `setUrgency()`. If you find yourself writing anything else to a source system, you have misread the task — stop.
 3. **`mc_number` is NOT a unique key.** Identity is `(project_id, trello_card_id)`. MC-825 carries 99 deliverables. `display_id` (e.g. `MC-655.3`) is for humans.
 4. **Work cards attach to the MC group, not to a single deliverable.** There is no reliable task→deliverable edge (1 of 27 titles matched). Do not model one.
@@ -39,15 +42,17 @@ Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning 
 12. **Sprints are editable data, not a cadence.** Overlapping sprints rejected on save. Gaps allowed and surfaced as *Outside any sprint*.
 13. **Conflict acknowledgements are keyed on the situation:** `week | rule | sorted card:phase pairs`. Any change to the cards involved invalidates the acknowledgement. Card-level indicators (red bar, late flag) are never suppressed by an acknowledgement.
 14. **Deadline precedence:** Trello due date wins where present, else sheet deadline, else none (implemented in `deliverables_v`).
-15. **Secrets live in Secret Manager.** Never in the client bundle, never in the repo, never in logs. Sheets access uses the attached service account — no key file exists.
+15. **Secrets live in server-side environment configuration only** (dotenv on the host, per the ARES pattern). Never in the client bundle, never in the repo, never in logs. The ARES API key is read-only and never leaves the server. The Sheets service-account credential is provisioned as a server-side secret, never committed.
 16. **Seed from fixtures, never from a production dump.** Real briefs never touch a developer laptop.
 17. **Staging points at a DUPLICATE Trello board.** Before writing any urgency code, verify the configured board ID is not a production board.
 
 ## Stack — fixed, do not re-litigate
 
-Next.js App Router · TypeScript `strict` · Prisma (or Drizzle if already chosen in repo) · Auth.js with Google provider · separate worker service for all sync (sync never runs inside a request) · Zod at every API boundary · Vitest · Cloud Run + Cloud SQL Postgres 16 · repository layout per Implementation Plan §2.3.
+*(Amended by JP, 2026-08-03 — aligned to the ARES stack; supersedes the Implementation Plan's §2–§3 stack choices.)*
 
-Do NOT: split into SPA + separate API domain · apply DDL by hand · port the forecast engine to another language · add libraries that duplicate what the stack provides.
+Node.js + Express 5 · TypeScript `strict` for server, worker and `lib/` · frontend follows ARES conventions: Ractive.js templates, plain JS scripts, CSS, HTML, no bundler (`frontend/build.js` concatenation) · MongoDB via Mongoose (same Mongo server as ARES, own `sirius` database) · Redis (sessions via connect-redis, caching) · Passport with `passport-google-oauth20` — the four auth checks unchanged · separate worker process for all sync (sync never runs inside a request) · Zod at every API boundary · Vitest · deployed beside ARES, same pattern · Trello data via the ARES read API (`/api/v1/trello/*`, read-only key, server-side only) · repository layout per `specs/001-sirius-v1/plan.md` (supersedes Implementation Plan §2.3).
+
+Do NOT: split into SPA + separate API domain · apply schema or index changes by hand against production (version-controlled migration scripts only) · port the forecast engine to another language · put the ARES key or any credential in a browser · add libraries that duplicate what the stack provides.
 
 ## Working style
 
@@ -97,4 +102,4 @@ A phase is done when: its acceptance criteria (AC-1 to AC-20, as mapped in the p
 - **Open decisions.** OD items (BRD §13) are resolved by JP, recorded in the spec's
   clarifications, and only then do blocked tasks unblock. No defaults picked silently.
 
-**Version**: 1.1.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-03
+**Version**: 2.0.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-03
