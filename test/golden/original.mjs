@@ -361,7 +361,20 @@
       unavoidable: L,
     };
   }
+  function ka(e) {
+    let t = (e || "").toLowerCase();
+    return /\b(done|approved|complete|completed|delivered|closed|shipped)\b/.test(
+      t,
+    )
+      ? "done"
+      : /\b(backlog|pending|queued|not started|on hold|paused|blocked|waiting|hold)\b/.test(
+            t,
+          )
+        ? "pending"
+        : "ongoing";
+  }
 export {
+  ka,
   fn, Tc, Xe, zu, Ke, Uc, Oc,
   jh, rp, Xh, Kh, Qh, V, np,
   on, sp, Zh, qu, Yh, Wu, up, Jh, eg, dp, rn,
