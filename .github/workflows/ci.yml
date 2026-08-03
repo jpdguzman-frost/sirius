@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm run test:run
+
+      # Invariant 11: identical results in UTC and Asia/Manila.
+      - name: Tests (dual timezone)
+        run: npm run test:tz
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Build frontend
+        run: npm run build
+
+      # ARES contract drift check (contracts/ares-read.md). Runs only when the
+      # read-only key is configured as a repo secret; drift fails the build.
+      - name: ARES contract probe
+        if: ${{ secrets.ARES_API_KEY != '' }}
+        env:
+          ARES_URL: https://ares.frostdesigngroup.com
+          ARES_API_KEY: ${{ secrets.ARES_API_KEY }}
+        run: npm run probe:ares
