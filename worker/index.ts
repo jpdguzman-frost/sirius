@@ -8,6 +8,9 @@ import 'dotenv/config';
 import mongoose from 'mongoose';
 import { validateEnv } from '../src/config/env.ts';
 import { runAresSync, makeClient } from './syncAres.ts';
+import { runIntakeSync } from './syncIntake.ts';
+import { makeSheetSource } from '../lib/sheets.ts';
+import { Project } from '../src/models/index.ts';
 
 const FIFTEEN_MIN = 15 * 60 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
@@ -36,12 +39,27 @@ async function aresTick() {
   }
 }
 
+async function intakeTick() {
+  if (!env.GOOGLE_SHEETS_CREDENTIALS) {
+    console.warn('[sirius-worker] no GOOGLE_SHEETS_CREDENTIALS — intake sync skipped');
+    return;
+  }
+  const source = makeSheetSource(env.GOOGLE_SHEETS_CREDENTIALS);
+  const projects = await Project.find({ status: 'ongoing', intake_sheet_id: { $ne: null } });
+  for (const p of projects) {
+    await runIntakeSync(p._id, () => source.readTab(p.intake_sheet_id!, p.intake_sheet_tab ?? 'Sheet1'));
+  }
+  console.log('[sirius-worker] intake sync complete');
+}
+
 async function healthTick() {
   console.log('[sirius-worker] health tick ok');
 }
 
 await aresTick();
+await intakeTick().catch((err) => console.error('[sirius-worker] intake sync failed:', err.message));
 setInterval(aresTick, FIFTEEN_MIN);
+setInterval(() => intakeTick().catch((err) => console.error('[sirius-worker] intake sync failed:', err.message)), FIFTEEN_MIN);
 setInterval(healthTick, DAY);
 
 process.on('SIGTERM', async () => {
