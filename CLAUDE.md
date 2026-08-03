@@ -40,6 +40,24 @@ Do NOT: split into SPA + separate API domain · apply DDL by hand · port the fo
 - Small commits, one concern each. Migrations are version-controlled from the first line.
 - Update `STATE.md` at the end of every working session: what's done, what's in flight, what's blocked, which ACs pass.
 
+## Reply format — always
+
+Every reply to JP follows this shape, in this order:
+
+1. **HEADLINE** — one sentence. The answer, the status, or the ask. If JP reads nothing else, this must be enough.
+2. **WHAT I NEED FROM YOU** — decisions or approvals only, as a numbered list. Skip the section entirely if nothing is needed.
+3. **STATUS** — max 5 bullets. One line each. Facts, not narration.
+4. **DETAIL** — collapsed at the bottom under `---`. Evidence, logs, reasoning. JP reads it only by choice.
+
+Hard rules:
+
+- Never narrate process ("first I checked…", "I then realized…"). Conclusions only. Reasoning goes in DETAIL.
+- Never restate JP's request or prior context back.
+- One reply = one screen. If longer, detail is above the line — move it down.
+- No hedging paragraphs. Tag uncertainty inline: [sure] / [likely] / [guess].
+- Tables over prose for anything with 3+ comparable items.
+- When asking JP to decide: keep it short, use simple words, lay out the options plainly. Never complicate a decision.
+
 ## Definition of done, per phase
 
 A phase is done when: its acceptance criteria (AC-1 to AC-20, as mapped in the phase prompt) pass as automated tests where testable; typecheck, lint, and vitest are green; `STATE.md` is updated; and nothing in this file was violated.

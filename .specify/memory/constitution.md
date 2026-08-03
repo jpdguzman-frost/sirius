@@ -1,15 +1,12 @@
 <!--
 Sync Impact Report
-- Version change: (template) -> 1.0.0 (initial ratification)
-- Adoption: CLAUDE.md (Sirius Build Constitution) adopted verbatim in full —
-  intro, "What Sirius is, in three lines", all 17 invariants, "Stack — fixed,
-  do not re-litigate", "Working style", "Definition of done, per phase".
-  No invariant softened, generalized, or reworded; body is copied
-  character-for-character from CLAUDE.md.
-- Template scaffolding: all placeholder principles/sections replaced by the
-  adopted text; the 17 invariants serve as the Core Principles.
-- Added sections: Governance (amendment procedure, versioning, compliance).
-- Removed sections: none from source.
+- Version change: 1.0.0 -> 1.1.0 (MINOR: new section added to source)
+- Change: CLAUDE.md amended by JP on 2026-08-03 to add "Reply format — always"
+  (communication protocol). Constitution regenerated verbatim from the amended
+  CLAUDE.md per Governance.
+- Invariants: all 17 unchanged, still character-for-character.
+- Added sections: Reply format — always (from source).
+- Removed sections: none.
 - Deferred TODOs: none.
 -->
 
@@ -60,6 +57,24 @@ Do NOT: split into SPA + separate API domain · apply DDL by hand · port the fo
 - Small commits, one concern each. Migrations are version-controlled from the first line.
 - Update `STATE.md` at the end of every working session: what's done, what's in flight, what's blocked, which ACs pass.
 
+## Reply format — always
+
+Every reply to JP follows this shape, in this order:
+
+1. **HEADLINE** — one sentence. The answer, the status, or the ask. If JP reads nothing else, this must be enough.
+2. **WHAT I NEED FROM YOU** — decisions or approvals only, as a numbered list. Skip the section entirely if nothing is needed.
+3. **STATUS** — max 5 bullets. One line each. Facts, not narration.
+4. **DETAIL** — collapsed at the bottom under `---`. Evidence, logs, reasoning. JP reads it only by choice.
+
+Hard rules:
+
+- Never narrate process ("first I checked…", "I then realized…"). Conclusions only. Reasoning goes in DETAIL.
+- Never restate JP's request or prior context back.
+- One reply = one screen. If longer, detail is above the line — move it down.
+- No hedging paragraphs. Tag uncertainty inline: [sure] / [likely] / [guess].
+- Tables over prose for anything with 3+ comparable items.
+- When asking JP to decide: keep it short, use simple words, lay out the options plainly. Never complicate a decision.
+
 ## Definition of done, per phase
 
 A phase is done when: its acceptance criteria (AC-1 to AC-20, as mapped in the phase prompt) pass as automated tests where testable; typecheck, lint, and vitest are green; `STATE.md` is updated; and nothing in this file was violated.
@@ -82,4 +97,4 @@ A phase is done when: its acceptance criteria (AC-1 to AC-20, as mapped in the p
 - **Open decisions.** OD items (BRD §13) are resolved by JP, recorded in the spec's
   clarifications, and only then do blocked tasks unblock. No defaults picked silently.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-03
+**Version**: 1.1.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-03
