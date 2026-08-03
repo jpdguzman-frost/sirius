@@ -13,7 +13,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | 4 | ARES read + mapping | **done 2026-08-03** (T027–T033; T034 end-to-end measure at staging) | NFR-3: ARES cycle observed 15 min ✓; e2e at staging |
 | 5 | Intake sync | **done 2026-08-03** (T035–T039; AC-6 literal counts at staging) | |
 | 6 | Model refresh + validation | **done 2026-08-03** (T040–T045) | **PM sign-off: ✅ 2026-08-03** |
-| 7 | UI — five tabs | not started | |
+| 7 | UI — five tabs | **built 2026-08-03** (T046–T062; T063 perf pass pending) | demoed on real 837 data |
 | 8 | Urgency write | not started | Staging duplicate board confirmed: ⬜ |
 | 8a | Conflict acknowledgements | not started | |
 | 9 | Security testing + pilot | not started | |
@@ -40,7 +40,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 
 ## Acceptance criteria scoreboard
 
-AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ✅ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ✅ (fixture-scale; literal at staging) · AC-9 ✅ · AC-10 ✅ · AC-11 ✅ (data side; UI at phase 7) · AC-12 ⬜ · AC-13 ⬜ · AC-14 ⬜ · AC-15 ⬜ · AC-16 ⬜ · AC-17 ⬜ · AC-18 ⬜ · AC-19 ⬜ · AC-20 ⬜
+AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ✅ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ✅ (fixture-scale; literal at staging) · AC-9 ✅ · AC-10 ✅ · AC-11 ✅ (data side; UI at phase 7) · AC-12 ✅ · AC-13 ✅ (API+UI) · AC-14 ✅ (API) · AC-15 ✅ · AC-16 ✅ · AC-17 ✅ · AC-18 ✅ · AC-19 ⬜ · AC-20 ⬜
 
 ## Deviations proposed by the agent, awaiting JP
 
@@ -49,6 +49,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-03 — Phase 7 built (T046–T062; T063 pending): backend (pipeline assembler via deliverables_v, Zod-strict schedule writes with audit, BR-6 conflict service with situation keys, suggest endpoint) + five Ractive tabs. Demoed LIVE on real 837 data: dev auto-login (development-only, allow-list-checked), sprints created + 12 deliverables slotted via the API, 24 milestones on Deadlines, suggest proposing 169 moves, late render date red on Forecast (AC-18 visual). Screenshots in docs/screenshots/ (gitignored — real names). Found+fixed: mongoose runs custom validators on explicit null (date-only validator). 124/124 tests green UTC+Manila. AC-12..18 now ✅.
 
 - 2026-08-03 — JP decision: urgency write path = DIRECT Trello API with dedicated integration account (option a, per BRD §9/§5.3). JP provides the token at phase 8. ARES stays read-only. Phase 7 go.
 
