@@ -91,11 +91,11 @@
 
 ## Phase 6 — Model refresh + validation (~4d) — RELEASE GATE at end
 
-- [ ] T040 Percentile math tests in `test/model.test.ts` with fixture `card_events`: design dwell by difficulty × lane, review dwell in *Sent for Client Review*, Average/70/85/95, sample_n recorded; spot-check against Appendix constants (BR-2, BR-4; FR-7.6)
-- [ ] T041 [US4] `worker/refreshModel.ts`: nightly per project over `model_window_months` (default 12, OD-2 open) → `model_grid` + `throughput_grid` in worker code (BR-2; FR-7.6)
-- [ ] T042 [P] [US4] Delta recording vs previous run + alert on sharp shift, in `worker/refreshModel.ts` (§5.4 step 5; FR-8.5)
-- [ ] T043 [US4] Model provenance + sample sizes exposed for the UI via `src/routes/deliverables.js` (grid read) (FR-7.7; AC-11)
-- [ ] T044 [US4] Run refresh against real ARES data; produce the grid + a dates sample for PM review, sample saved under `specs/001-sirius-v1/` evidence (BR-3; gate preparation)
+- [x] T040 Percentile math tests in `test/model.test.ts` with fixture `card_events`: design dwell by difficulty × lane, review dwell in *Sent for Client Review*, Average/70/85/95, sample_n recorded; spot-check against Appendix constants (BR-2, BR-4; FR-7.6)
+- [x] T041 [US4] `worker/refreshModel.ts`: nightly per project over `model_window_months` (default 12, OD-2 open) → `model_grid` + `throughput_grid` in worker code (BR-2; FR-7.6)
+- [x] T042 [P] [US4] Delta recording vs previous run + alert on sharp shift, in `worker/refreshModel.ts` (§5.4 step 5; FR-8.5)
+- [x] T043 [US4] Model provenance + sample sizes exposed for the UI via `src/routes/deliverables.js` (grid read) (FR-7.7; AC-11)
+- [x] T044 [US4] Run refresh against real ARES data; produce the grid + a dates sample for PM review, sample saved under `specs/001-sirius-v1/` evidence (BR-3; gate preparation)
 - [ ] T045 **GATE — JP + PM ONLY, agent cannot check this off**: forecast dates recognised as reality by the PM. **No forecast UI ships before this passes** (invariant 7; BR-3; Sequence item 6)
 
 **Checkpoint**: recomputed grid within expected range of Appendix snapshot; PM sign-off recorded in STATE.md.

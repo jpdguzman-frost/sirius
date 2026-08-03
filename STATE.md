@@ -12,7 +12,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | 3 | Port lib/ + golden tests | **done 2026-08-03** (T017–T026) | AC-10: ✅ gate passed by JP 2026-08-03 |
 | 4 | ARES read + mapping | **done 2026-08-03** (T027–T033; T034 end-to-end measure at staging) | NFR-3: ARES cycle observed 15 min ✓; e2e at staging |
 | 5 | Intake sync | **done 2026-08-03** (T035–T039; AC-6 literal counts at staging) | |
-| 6 | Model refresh + validation | not started | **PM sign-off: ⬜** |
+| 6 | Model refresh + validation | **built 2026-08-03** (T040–T044) — T045 gate open | **PM sign-off: ⬜ (report at docs/gate-t045-model-validation.md)** |
 | 7 | UI — five tabs | not started | |
 | 8 | Urgency write | not started | Staging duplicate board confirmed: ⬜ |
 | 8a | Conflict acknowledgements | not started | |
@@ -49,6 +49,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-03 — Phase 6 built (T040–T044; T045 RELEASE GATE OPEN): refresh derivation (lane-of-dwelled-list per BR-2 after a first-pass methodology fix; global review pool; delta alerts fired correctly on the change), nightly worker job, per-project grid loader with visible snapshot fallback, model read route. Real-data run: 439 cards / 15,366 events → 191 samples, 20 grid cells, review p70 5.95d (n=32) vs snapshot 4.8d (n=1,184). SAMPLE DEPTH IS THIN — ARES v1 movements history is young; option to deepen via per-card movement history before gating. Sheets live connection DEFERRED by JP (sheet fragile). Gate report (real names) local + gitignored. 115/115 tests green.
 
 - 2026-08-03 — Phase 5 complete (T035–T039): intake parser (three §5.2 gotchas; reserved requires valid MC; duplicates reject first-wins), AC-6 counting proven on a 998-row synthetic (495/495/8), lib/sheets service-account reader (google-auth-library, REST v4, serial dates), syncIntake (mirror, inactive-not-deleted AC-9, rejects, deadline join to the whole MC group with coverage measurement AC-8, sync_runs incl. AC-7 403 path AC-19), requests route with join status + filters + sync freshness. Worker intake tick every 15 min. 106/106 tests green UTC + Manila. Live-sheet run needs GOOGLE_SHEETS_CREDENTIALS + sheet shared to the service account (flag: needed before staging).
 
