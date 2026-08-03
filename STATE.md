@@ -9,7 +9,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | 0 | Setup & infrastructure | **done 2026-08-03** (T001–T006) | |
 | 1 | Schema + migrations + seed | **done 2026-08-03** (T007–T010) | |
 | 2 | Auth + audit | **done 2026-08-03** (T011–T016) | |
-| 3 | Port lib/ + golden tests | **built 2026-08-03** — T026 gate awaits JP + workbook export | AC-10: ⬜ (gate T026) |
+| 3 | Port lib/ + golden tests | **done 2026-08-03** (T017–T026) | AC-10: ✅ gate passed by JP 2026-08-03 |
 | 4 | ARES read + mapping | not started — **unblocked** (OD-1 ✅) | NFR-3 realtime check at exit |
 | 5 | Intake sync | not started | |
 | 6 | Model refresh + validation | not started | **PM sign-off: ⬜** |
@@ -40,7 +40,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 
 ## Acceptance criteria scoreboard
 
-AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ⬜ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ⬜ · AC-9 ⬜ · AC-10 ⬜ · AC-11 ⬜ · AC-12 ⬜ · AC-13 ⬜ · AC-14 ⬜ · AC-15 ⬜ · AC-16 ⬜ · AC-17 ⬜ · AC-18 ⬜ · AC-19 ⬜ · AC-20 ⬜
+AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ⬜ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ⬜ · AC-9 ⬜ · AC-10 ✅ · AC-11 ⬜ · AC-12 ⬜ · AC-13 ⬜ · AC-14 ⬜ · AC-15 ⬜ · AC-16 ⬜ · AC-17 ⬜ · AC-18 ⬜ · AC-19 ⬜ · AC-20 ⬜
 
 ## Deviations proposed by the agent, awaiting JP
 
@@ -49,6 +49,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-03 — GATE T026 PASSED by JP (AC-10): port fidelity accepted on the three-way evidence (verbatim oracle parity, BR-1 formula tests, workbook cross-validation 84/84). Phase 3 closed.
 
 - 2026-08-03 — Workbook export processed: real Delivery Forecast sheet (3,243 rows, 2025, OLD cycle model per JP). Raw CSV gitignored (BRD §9); 40 sanitized formula-driven rows extracted to test/golden/workbook-rows.json (MC numbers only, no titles/briefs). WORKDAY core cross-validated: 84/84 formula-driven holiday-free rows reproduce the sheet's dates exactly; the 12 excluded rows land on Saturdays = hand-edited cells, impossible WORKDAY outputs. Old model's render rule differs from BR-1 (predates it) — noted for the T026 gate; BR-1 + prototype remain the current-model authority. JP decision: holiday TZ quirk KEPT AS-IS. 72/72 tests green in UTC + Manila. T017/T020 now complete.
 

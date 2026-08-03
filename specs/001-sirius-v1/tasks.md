@@ -56,7 +56,7 @@
 - [x] T023 Port `lib/planner.ts` (`suggestPlan`, `weekLoad`, WEIGHTS, HARD_MIX) verbatim (invariant 5)
 - [x] T024 Tests for `lib/forecast.ts` (empirical) in `test/forecast.test.ts`: difficulty × lane grid lookup, confidence selection (Average/0.7/0.85/0.95), SLA override replaces modelled review and cascades (BR-2, BR-4; FR-7.3–7.5; AC-12 logic)
 - [x] T025 Port `lib/forecast.ts` + `lib/model.ts` grid lookup verbatim (invariant 5; FR-7.3)
-- [ ] T026 **GATE — JP ONLY, agent cannot check this off**: AC-10 confirmed — golden tests prove the port; phase gate for everything that consumes `lib/` (AC-10)
+- [x] T026 **GATE — PASSED by JP 2026-08-03** (evidence accepted: oracle parity ~3,600 cases, BR-1 mechanics, workbook rows 84/84): AC-10 confirmed — golden tests prove the port; phase gate for everything that consumes `lib/` (AC-10)
 
 **Checkpoint**: `lib/` fully green incl. golden set; JP sign-off recorded in STATE.md.
 
