@@ -121,7 +121,7 @@
 - [x] T060 [US4] Review SLA override input in `frontend/scripts/forecast.js` + `src/routes/schedule.js` → replaces modelled review, cascades downstream, audited (FR-7.5; AC-12)
 - [x] T061 Keyboard-only scheduling path in `frontend/scripts/schedules.js` — a row slottable without a pointer (NFR-9; AC-20)
 - [x] T062 [P] Sync status indicator + degraded mode in `frontend/scripts/app.js`: last good data shown, error surfaced, app usable (FR-8.6; AC-19)
-- [ ] T063 ⚠ PENDING (439 real cards render instantly; formal 5k pass + measurement outstanding) — Performance pass at 5,000 fixture cards in `server.js` + `frontend/scripts/pipeline.js`/`schedules.js`: server-rendered shell + list virtualization as needed, p95 < 2 s (NFR-1)
+- [x] T063 Performance pass at 5,000 fixture cards — pipeline 107ms / deadlines 85ms server-side (test/perf.test.ts) in `server.js` + `frontend/scripts/pipeline.js`/`schedules.js`: server-rendered shell + list virtualization as needed, p95 < 2 s (NFR-1)
 
 **Checkpoint**: five tabs demonstrable end-to-end on staging data; AC-13–AC-18, AC-20 pass.
 
@@ -148,12 +148,12 @@
 
 ## Phase 9 — Security testing + pilot (~13d incl. migration/pilot support)
 
-- [ ] T069 Staging smoke authz matrix: non-Frost + off-list + cross-project against every endpoint → denied/403 (AC-1, AC-2, AC-3; NFR-6)
+- [ ] T069 ⚠ LOCAL HALF DONE (13 routes, 401/403, test/authz-matrix.test.ts) — staging smoke authz matrix: non-Frost + off-list + cross-project against every endpoint → denied/403 (AC-1, AC-2, AC-3; NFR-6)
 - [ ] T070 [P] Sheet un-share drill: service account removed → clean failure surfaced, re-share restores (AC-7)
-- [ ] T071 [P] Log hygiene audit: no brief text, no credentials in any log path (NFR-11; invariant 15)
+- [ ] T071 ⚠ STATIC HALF DONE (test/log-hygiene.test.ts) — [P] Log hygiene audit: no brief text, no credentials in any log path (NFR-11; invariant 15)
 - [ ] T072 [P] Backup + restore drill on the shared Mongo server (`sirius` db), documented (NFR-8)
 - [ ] T073 Accessibility audit: WCAG 2.1 AA incl. the keyboard scheduling path (NFR-9; AC-20)
-- [ ] T074 `scripts/migrate-open-cards.ts`: migrate open cards/requests into production data per deadline-precedence and taxonomy rules (AC-8; BR-9; plan.md layout)
+- [x] T074 `scripts/migrate-open-cards.ts`: migrate open cards/requests into production data per deadline-precedence and taxonomy rules (AC-8; BR-9; plan.md layout)
 - [ ] T075 Full AC sweep on staging: AC-1..AC-20 recorded in STATE.md scoreboard with evidence links (Definition of done)
 - [ ] T076 Pilot support window: triage, fixes, STATE.md session logs; retention decision recorded when OD-7 lands (NFR-7; OD-7)
 

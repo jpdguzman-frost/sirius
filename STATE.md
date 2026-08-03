@@ -13,7 +13,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | 4 | ARES read + mapping | **done 2026-08-03** (T027–T033; T034 end-to-end measure at staging) | NFR-3: ARES cycle observed 15 min ✓; e2e at staging |
 | 5 | Intake sync | **done 2026-08-03** (T035–T039; AC-6 literal counts at staging) | |
 | 6 | Model refresh + validation | **done 2026-08-03** (T040–T045) | **PM sign-off: ✅ 2026-08-03** |
-| 7 | UI — five tabs | **built 2026-08-03** (T046–T062; T063 perf pass pending) | demoed on real 837 data |
+| 7 | UI — five tabs | **done 2026-08-03/04** (T046–T063; perf: 107ms/85ms @5k) | demoed on real 837 data |
 | 8 | Urgency write | **done 2026-08-04** (T064–T066) | TEST board round-trip: ✅ (board tx8gDsTH, label add/remove verified live) |
 | 8a | Conflict acknowledgements | **done 2026-08-04** (T067–T068) | audit-logged ✓ |
 | 9 | Security testing + pilot | not started | |
@@ -49,6 +49,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-04 — Pre-staging batch: T063 perf pass DONE (5,000 cards: pipeline 107ms, deadlines 85ms server-side — NFR-1 comfortable); authz matrix test walks the live router (13 project routes, 401/403 enforced mechanically); NFR-11 log hygiene enforced statically (caught+fixed a var-name-in-log); migrate-open-cards onboarding script; docs/DEPLOY.md runbook for JP's server setup (staging beside ARES, PROD_TRELLO_BOARD_IDS=hLL7WW2V, TEST board tx8gDsTH). 137/137 tests green UTC+Manila. Remaining: staging deploy (JP's server), then phase 9 drills + AC sweep + pilot gate.
 
 - 2026-08-04 — TEST board created (tx8gDsTH, 11 mirrored lists, full label taxonomy, 12 synthetic cards) and the LIVE urgency round-trip verified: Urgent label created on first use, added, removed — absence means non-urgent. Phase 8 DONE. Phase 8a DONE (T067–T068): acks keyed on the situation, lapse proven when a third urgent card joins, replot cleared with the banner, late flags never suppressed, restore + count, audit both ways. 133/133 tests green UTC+Manila.
 
