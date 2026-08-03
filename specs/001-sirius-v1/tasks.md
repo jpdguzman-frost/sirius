@@ -127,11 +127,11 @@
 
 ---
 
-## Phase 8 — Urgency write (~2d) — **BLOCKED until staging duplicate Trello board confirmed by JP**
+## Phase 8 — Urgency write (~2d) — built; live round-trip pending the TEST board (invariant 17 as amended)
 
-- [ ] T064 [US6] Tests first in `test/urgency.test.ts`: optimistic update rolls back on failed write; `audit_log` + `sync_runs` documents on success AND failure; absence-means-non-urgent round-trip (FR-4.6, FR-4.7; invariant 8)
-- [ ] T065 [US6] `lib/trello.ts`: `setUrgency()` + `ensureUrgentLabel()` — direct Trello API, dedicated integration-account token from server env, board-ID safety check refusing production boards outside production (FR-4.6; invariants 2, 15, 17)
-- [ ] T066 [US6] `src/routes/urgency.js` + Pipeline toggle UI: optimistic with rollback, audited, urgency visible in list (FR-4.6, FR-4.7; invariant 10)
+- [x] T064 [US6] Tests first in `test/urgency.test.ts`: optimistic update rolls back on failed write; `audit_log` + `sync_runs` documents on success AND failure; absence-means-non-urgent round-trip (FR-4.6, FR-4.7; invariant 8)
+- [x] T065 [US6] `lib/trello.ts`: `setUrgency()` + `ensureUrgentLabel()` — direct Trello API, dedicated integration-account token from server env, board-ID safety check refusing production boards outside production (FR-4.6; invariants 2, 15, 17)
+- [x] T066 [US6] `src/routes/urgency.js` + Pipeline toggle UI: optimistic with rollback, audited, urgency visible in list (FR-4.6, FR-4.7; invariant 10)
 
 **Checkpoint**: on the duplicate board only — label round-trip, forced-failure rollback, audit trail complete.
 
