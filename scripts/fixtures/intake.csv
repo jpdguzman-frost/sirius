@@ -1,0 +1,6 @@
+MC #,Deliverable,Type,Use Case,Type,Requestor,Deadline,Brief,In Frost Prod
+MC-655,Landing hero,Static,Campaign,Web,requestor.fixture@client.example,2026-08-28,Hero banner for August campaign,TRUE
+MC-701,Icon set,Asset,Product,Mobile,requestor.fixture@client.example,2026-09-04,Settings icon refresh,TRUE
+MC-702,Unfiled request,Static,Campaign,Web,another.fixture@client.example,2026-09-11,Not yet on the board,FALSE
+MC-9000,,Reserved,,,,,,
+this row is unparseable on purpose,,,,,,,,

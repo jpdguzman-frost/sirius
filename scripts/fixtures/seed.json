@@ -1,0 +1,123 @@
+{
+  "projects": [
+    {
+      "code": "rt-837",
+      "name": "GCash: Design Support (fixture)",
+      "client": "GCash",
+      "trello_board_id": "fixtureBoardA",
+      "weekly_capacity": 120,
+      "ref_week_least": 1,
+      "ref_week_typical": 120,
+      "ref_week_most": 367,
+      "effective_weekly_rate": 90.2
+    },
+    {
+      "code": "rt-900",
+      "name": "Acme: Brand Refresh (fixture)",
+      "client": "Acme",
+      "trello_board_id": "fixtureBoardShared",
+      "trello_label": "Acme",
+      "weekly_capacity": 40
+    }
+  ],
+  "sprints": [
+    { "project": "rt-837", "name": "Sprint 12", "starts_on": "2026-07-20", "ends_on": "2026-07-31", "position": 1 },
+    { "project": "rt-837", "name": "Sprint 13", "starts_on": "2026-08-10", "ends_on": "2026-08-21", "position": 2 },
+    { "project": "rt-900", "name": "Kickoff", "starts_on": "2026-08-03", "ends_on": "2026-08-14", "position": 1 }
+  ],
+  "users": [
+    { "email": "jpdguzman@frostdesigngroup.com", "name": "JP de Guzman", "projects": ["rt-837", "rt-900"] },
+    { "email": "pm.fixture@frostdesigngroup.com", "name": "PM Fixture", "projects": ["rt-837"] }
+  ],
+  "deliverables": [
+    {
+      "project": "rt-837",
+      "mc_number": "MC-655",
+      "display_id": "MC-655.1",
+      "trello_card_id": "fxCard655a",
+      "name": "MC-655 Landing hero",
+      "current_list": "Design",
+      "difficulty": "Medium",
+      "lane": "design",
+      "labels": ["Main Card"],
+      "sheet_deadline": "2026-08-28",
+      "slotted_week": "2026-08-10"
+    },
+    {
+      "project": "rt-837",
+      "mc_number": "MC-655",
+      "display_id": "MC-655.2",
+      "trello_card_id": "fxCard655b",
+      "name": "MC-655 Mobile variant",
+      "current_list": "Backlog",
+      "difficulty": "Easy",
+      "lane": "design",
+      "labels": ["Main Card"],
+      "trello_due": "2026-08-21",
+      "sheet_deadline": "2026-08-28"
+    },
+    {
+      "project": "rt-837",
+      "mc_number": "MC-655",
+      "display_id": "MC-655.3",
+      "trello_card_id": "fxCard655c",
+      "name": "MC-655 Email header",
+      "current_list": "Backlog",
+      "difficulty": "Hard",
+      "lane": "design",
+      "labels": ["Main Card"]
+    },
+    {
+      "project": "rt-837",
+      "mc_number": "MC-701",
+      "display_id": "MC-701",
+      "trello_card_id": "fxCard701",
+      "name": "MC-701 Icon set",
+      "current_list": "Sent for Client Review",
+      "difficulty": "Easy",
+      "lane": "assets",
+      "labels": ["Main Card"],
+      "sheet_deadline": "2026-09-04",
+      "pinned": true,
+      "slotted_week": "2026-08-10"
+    },
+    {
+      "project": "rt-900",
+      "mc_number": "MC-12",
+      "display_id": "MC-12",
+      "trello_card_id": "fxCardAcme12",
+      "name": "MC-12 Logo exploration",
+      "current_list": "Design",
+      "difficulty": "Hard",
+      "lane": "design",
+      "labels": ["Main Card", "Acme"],
+      "slotted_week": "2026-08-03"
+    }
+  ],
+  "work_cards": [
+    {
+      "project": "rt-837",
+      "mc_number": "MC-655",
+      "trello_card_id": "fxTask655r1",
+      "name": "Render Asset: MC-655 hero exports",
+      "task_prefix": "Render Asset",
+      "current_list": "Design"
+    },
+    {
+      "project": "rt-837",
+      "mc_number": "MC-655",
+      "trello_card_id": "fxTask655c1",
+      "name": "Cascade Mobile Screen: checkout flow",
+      "task_prefix": "Cascade Mobile Screen",
+      "current_list": "Backlog"
+    },
+    {
+      "project": "rt-837",
+      "mc_number": "MC-701",
+      "trello_card_id": "fxTask701i1",
+      "name": "Icon Clean Up: settings glyphs",
+      "task_prefix": "Icon Clean Up",
+      "current_list": "Done"
+    }
+  ]
+}
