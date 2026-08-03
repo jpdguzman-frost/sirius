@@ -79,11 +79,11 @@
 
 ## Phase 5 — Intake sheet sync (~4d)
 
-- [ ] T035 Parser tests in `test/intake.test.ts`: ragged-row padding, 1899-12-30 serial-date conversion, two `Type` columns disambiguated by position, current-data fixture yields **495 imported / 495 reserved / 8 rejected** (AC-6; §5.2 gotchas)
-- [ ] T036 [US5] `lib/sheets.ts` service-account read, `spreadsheets.readonly`, credential from server-side env only (FR-8.2, FR-8.3; invariant 15)
-- [ ] T037 [US5] `worker/syncIntake.ts`: mirror rows, skip pre-allocated MC rows silently + count, unparseable rows → `intake_rejects` with row/reason, vanished rows → inactive never deleted (FR-3.1, FR-3.4, FR-3.5, FR-8.4; AC-9)
-- [ ] T038 [US1] Deadline join tests in `test/intake.test.ts` then implementation in `worker/syncIntake.ts`: sheet deadline joined on `mc_number`, `deliverables_v` precedence live, coverage measurably rises ~1/269 → ~169/269 on fixture (BR-9; AC-8)
-- [ ] T039 [P] [US5] Sync status surfacing in `src/routes/requests.js`: last-success time + failure state from `sync_runs`, queryable for the UI (FR-8.6; AC-19)
+- [x] T035 Parser tests in `test/intake.test.ts`: ragged-row padding, 1899-12-30 serial-date conversion, two `Type` columns disambiguated by position, current-data fixture yields **495 imported / 495 reserved / 8 rejected** (AC-6; §5.2 gotchas)
+- [x] T036 [US5] `lib/sheets.ts` service-account read, `spreadsheets.readonly`, credential from server-side env only (FR-8.2, FR-8.3; invariant 15)
+- [x] T037 [US5] `worker/syncIntake.ts`: mirror rows, skip pre-allocated MC rows silently + count, unparseable rows → `intake_rejects` with row/reason, vanished rows → inactive never deleted (FR-3.1, FR-3.4, FR-3.5, FR-8.4; AC-9)
+- [x] T038 [US1] Deadline join tests in `test/intake.test.ts` then implementation in `worker/syncIntake.ts`: sheet deadline joined on `mc_number`, `deliverables_v` precedence live, coverage measurably rises ~1/269 → ~169/269 on fixture (BR-9; AC-8)
+- [x] T039 [P] [US5] Sync status surfacing in `src/routes/requests.js`: last-success time + failure state from `sync_runs`, queryable for the UI (FR-8.6; AC-19)
 
 **Checkpoint**: AC-6 counts exact on fixture; AC-8 join measured; AC-9 verified.
 
