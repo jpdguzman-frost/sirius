@@ -10,6 +10,7 @@ import { validateEnv } from '../src/config/env.ts';
 import { runAresSync, makeClient } from './syncAres.ts';
 import { runIntakeSync } from './syncIntake.ts';
 import { makeSheetSource } from '../lib/sheets.ts';
+import { runModelRefresh } from './refreshModel.ts';
 import { Project } from '../src/models/index.ts';
 
 const FIFTEEN_MIN = 15 * 60 * 1000;
@@ -52,6 +53,15 @@ async function intakeTick() {
   console.log('[sirius-worker] intake sync complete');
 }
 
+async function modelTick() {
+  try {
+    await runModelRefresh();
+    console.log('[sirius-worker] model refresh complete');
+  } catch (err) {
+    console.error('[sirius-worker] model refresh failed:', (err as Error).message);
+  }
+}
+
 async function healthTick() {
   console.log('[sirius-worker] health tick ok');
 }
@@ -60,6 +70,7 @@ await aresTick();
 await intakeTick().catch((err) => console.error('[sirius-worker] intake sync failed:', err.message));
 setInterval(aresTick, FIFTEEN_MIN);
 setInterval(() => intakeTick().catch((err) => console.error('[sirius-worker] intake sync failed:', err.message)), FIFTEEN_MIN);
+setInterval(modelTick, DAY); // nightly (FR-7.6)
 setInterval(healthTick, DAY);
 
 process.on('SIGTERM', async () => {

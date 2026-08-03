@@ -21,6 +21,7 @@ import passport, { configurePassport } from './auth/passport.ts';
 import { authRouter } from './auth/routes.ts';
 import { projectsRouter } from './routes/projects.ts';
 import { requestsRouter } from './routes/requests.ts';
+import { deliverablesRouter } from './routes/deliverables.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -74,6 +75,7 @@ export function createApp({ env, redis }: AppDeps): express.Express {
   app.use(authRouter());
   app.use(projectsRouter());
   app.use(requestsRouter());
+  app.use(deliverablesRouter());
 
   // Built frontend (frontend/build.js → public/). No credential ever ships here.
   app.use(express.static(path.join(__dirname, '..', 'public')));
