@@ -50,6 +50,8 @@ _None awaiting. Approved:_
 
 ## Session log
 
+- 2026-08-03 — UI aligned to the prototype design per JP (frost-sirius-v1.html opened and screenshotted as reference): Poppins, breadcrumb header, icon tabs, KPI rows, banners/callouts, day-scaled gantt with legend + deadline ticks, conflict banners, week cards, measured-delivery forecast panel. Verified in-browser on real 837 data, all five tabs. 124/124 tests stay green.
+
 - 2026-08-03 — Phase 7 built (T046–T062; T063 pending): backend (pipeline assembler via deliverables_v, Zod-strict schedule writes with audit, BR-6 conflict service with situation keys, suggest endpoint) + five Ractive tabs. Demoed LIVE on real 837 data: dev auto-login (development-only, allow-list-checked), sprints created + 12 deliverables slotted via the API, 24 milestones on Deadlines, suggest proposing 169 moves, late render date red on Forecast (AC-18 visual). Screenshots in docs/screenshots/ (gitignored — real names). Found+fixed: mongoose runs custom validators on explicit null (date-only validator). 124/124 tests green UTC+Manila. AC-12..18 now ✅.
 
 - 2026-08-03 — JP decision: urgency write path = DIRECT Trello API with dedicated integration account (option a, per BRD §9/§5.3). JP provides the token at phase 8. ARES stays read-only. Phase 7 go.
