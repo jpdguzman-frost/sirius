@@ -12,7 +12,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | 3 | Port lib/ + golden tests | **done 2026-08-03** (T017–T026) | AC-10: ✅ gate passed by JP 2026-08-03 |
 | 4 | ARES read + mapping | **done 2026-08-03** (T027–T033; T034 end-to-end measure at staging) | NFR-3: ARES cycle observed 15 min ✓; e2e at staging |
 | 5 | Intake sync | **done 2026-08-03** (T035–T039; AC-6 literal counts at staging) | |
-| 6 | Model refresh + validation | **built 2026-08-03** (T040–T044) — T045 gate open | **PM sign-off: ⬜ (report at docs/gate-t045-model-validation.md)** |
+| 6 | Model refresh + validation | **done 2026-08-03** (T040–T045) | **PM sign-off: ✅ 2026-08-03** |
 | 7 | UI — five tabs | not started | |
 | 8 | Urgency write | not started | Staging duplicate board confirmed: ⬜ |
 | 8a | Conflict acknowledgements | not started | |
@@ -40,7 +40,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 
 ## Acceptance criteria scoreboard
 
-AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ✅ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ✅ (fixture-scale; literal at staging) · AC-9 ✅ · AC-10 ✅ · AC-11 ⬜ · AC-12 ⬜ · AC-13 ⬜ · AC-14 ⬜ · AC-15 ⬜ · AC-16 ⬜ · AC-17 ⬜ · AC-18 ⬜ · AC-19 ⬜ · AC-20 ⬜
+AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ✅ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ✅ (fixture-scale; literal at staging) · AC-9 ✅ · AC-10 ✅ · AC-11 ✅ (data side; UI at phase 7) · AC-12 ⬜ · AC-13 ⬜ · AC-14 ⬜ · AC-15 ⬜ · AC-16 ⬜ · AC-17 ⬜ · AC-18 ⬜ · AC-19 ⬜ · AC-20 ⬜
 
 ## Deviations proposed by the agent, awaiting JP
 
@@ -49,6 +49,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-03 — RELEASE GATE T045 PASSED by JP + PM: the empirical model's dates recognised as reality. Phase 6 closed; phase 7 (UI) unlocked — forecast UI may now ship (invariant 7 satisfied).
 
 - 2026-08-03 — T044 evidence regenerated for project 837 (JP: primary project). Movements span Feb–Aug 2026 (6 months — not a young feed after all); work cards included in derivation → 257 samples: Easy/design n=142 @2.18d p70, Medium/design n=29, Hard/design n=9 @2.9d (snapshot 2.09), review n=45 @5.95d (snapshot 4.8). Values track the snapshot's shape; n-gap vs Appendix is corpus scope (ARES pooled full history; this is the honest per-project grid per BR-2). Report ready for PM review — T045 awaits JP+PM. Local-dev note: port 27017 is the HOST mongod shared with ares dev (docker compose optional on this machine).
 
