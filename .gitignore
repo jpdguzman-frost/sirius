@@ -20,3 +20,4 @@ coverage/
 *.log
 docs/forecasting-block.csv
 docs/gate-t045-model-validation.md
+docs/screenshots/
