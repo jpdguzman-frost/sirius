@@ -34,12 +34,12 @@
 
 ## Phase 2 — Auth, allow-list, audit (~4d)
 
-- [ ] T011 Authz matrix tests in `test/auth.test.ts`: non-Frost denied with reason (AC-1); Frost off allow-list denied (AC-2); unverified email denied; cross-project API call → 403 (AC-3) (FR-2.1–2.4)
-- [ ] T012 Passport Google strategy in `src/auth/` — the four server-side checks: email_verified, `hd` = ALLOWED_HD, matching email domain, active `users` document (FR-2.1–2.4; invariant 9)
-- [ ] T013 Redis session store (connect-redis) + httpOnly cookie in `server.js`; `ensureAuthenticated` middleware in `src/auth/session.js`, applied to every route (FR-2.3; NFR-6)
-- [ ] T014 `ensureProjectMember` middleware in `src/auth/membership.js` — session AND `user_projects` membership re-checked per project-scoped route (FR-1.2, AC-3, AC-4; invariant 9)
-- [ ] T015 [P] Append-only audit writer in `src/services/audit.js` (insert-only surface) + tests proving no update/delete path and before/after capture (FR-2.6; invariant 10; NFR-7)
-- [ ] T016 [P] [US7] Project switcher scoping in `src/routes/` handlers: project context resolution + every query filtered by `project_id` (FR-1.2, FR-1.4, AC-4)
+- [x] T011 Authz matrix tests in `test/auth.test.ts`: non-Frost denied with reason (AC-1); Frost off allow-list denied (AC-2); unverified email denied; cross-project API call → 403 (AC-3) (FR-2.1–2.4)
+- [x] T012 Passport Google strategy in `src/auth/` — the four server-side checks: email_verified, `hd` = ALLOWED_HD, matching email domain, active `users` document (FR-2.1–2.4; invariant 9)
+- [x] T013 Redis session store (connect-redis) + httpOnly cookie in `server.js`; `ensureAuthenticated` middleware in `src/auth/session.js`, applied to every route (FR-2.3; NFR-6)
+- [x] T014 `ensureProjectMember` middleware in `src/auth/membership.js` — session AND `user_projects` membership re-checked per project-scoped route (FR-1.2, AC-3, AC-4; invariant 9)
+- [x] T015 [P] Append-only audit writer in `src/services/audit.js` (insert-only surface) + tests proving no update/delete path and before/after capture (FR-2.6; invariant 10; NFR-7)
+- [x] T016 [P] [US7] Project switcher scoping in `src/routes/` handlers: project context resolution + every query filtered by `project_id` (FR-1.2, FR-1.4, AC-4)
 
 **Checkpoint**: authz matrix green against a running server.
 
