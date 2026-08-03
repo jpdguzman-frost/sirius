@@ -24,6 +24,9 @@ const base = z.object({
   ARES_API_KEY: z.string().optional(),
 
   TRELLO_API_KEY: z.string().optional(),
+  // Canonical name matches ARES's convention; TRELLO_WRITE_TOKEN accepted as
+  // a fallback so older env files keep working.
+  TRELLO_TOKEN: z.string().optional(),
   TRELLO_WRITE_TOKEN: z.string().optional(),
 
   GOOGLE_SHEETS_CREDENTIALS: z.string().optional(),

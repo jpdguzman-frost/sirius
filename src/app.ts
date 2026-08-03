@@ -23,6 +23,8 @@ import { projectsRouter } from './routes/projects.ts';
 import { requestsRouter } from './routes/requests.ts';
 import { deliverablesRouter } from './routes/deliverables.ts';
 import { scheduleRouter } from './routes/schedule.ts';
+import { urgencyRouter } from './routes/urgency.ts';
+import { makeTrelloWriter, type TrelloWriter } from '../lib/trello.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,9 +32,10 @@ export interface AppDeps {
   env: Env;
   redis: Redis | null;
   mongo: typeof mongoose | null;
+  trello?: TrelloWriter | null;
 }
 
-export function createApp({ env, redis }: AppDeps): express.Express {
+export function createApp({ env, redis, trello }: AppDeps): express.Express {
   const app = express();
 
   app.set('trust proxy', 1);
@@ -97,6 +100,7 @@ export function createApp({ env, redis }: AppDeps): express.Express {
   app.use(requestsRouter());
   app.use(deliverablesRouter());
   app.use(scheduleRouter());
+  app.use(urgencyRouter(env, trello !== undefined ? trello : makeTrelloWriter(env)));
 
   // Built frontend (frontend/build.js → public/). No credential ever ships here.
   app.use(express.static(path.join(__dirname, '..', 'public')));
