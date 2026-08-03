@@ -1,0 +1,14 @@
+<script id="tpl-app" type="text/ractive">
+  <header class="topbar">
+    <span class="brand">Frost: Sirius</span>
+    <nav class="tabs">
+      {{#each tabs}}
+        <button class="tab {{#if .id === activeTab}}active{{/if}}" on-click="['switchTab', .id]">{{.label}}</button>
+      {{/each}}
+    </nav>
+    <span class="project-switcher">{{projectName || '—'}}</span>
+  </header>
+  <main class="view">
+    <p class="placeholder">{{placeholder}}</p>
+  </main>
+</script>

@@ -12,7 +12,7 @@ node_modules/
 *-key.json
 
 # Build output
-.next/
+public/
 dist/
 coverage/
 
