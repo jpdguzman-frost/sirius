@@ -18,3 +18,4 @@ coverage/
 
 # Logs
 *.log
+docs/forecasting-block.csv

@@ -47,10 +47,10 @@
 
 ## Phase 3 — Port `lib/` + golden tests (~4d)
 
-- [ ] T017 ⚠ PARTIAL (oracle extracted from bundle; workbook rows pending JP) — Golden fixture set in `test/golden/` — inputs + expected dates extracted from the Delivery Forecast workbook rows (AC-10 basis; BR-1)
+- [x] T017 Golden fixture set in `test/golden/` — bundle oracle + 40 sanitized workbook rows from JP's export — inputs + expected dates extracted from the Delivery Forecast workbook rows (AC-10 basis; BR-1)
 - [x] T018 Tests for `lib/calendar.ts` in `test/calendar.test.ts`: `workday()`, `toFriday()`, holidays, Manila timezone, dual-TZ identical results (invariant 11; BR-1)
 - [x] T019 Port `lib/calendar.ts` verbatim from the prototype bundle (invariant 5; STATE.md deviation)
-- [ ] T020 ⚠ PARTIAL (formula mechanics tested; workbook golden rows pending JP) — Golden tests for `lib/forecast.legacy.ts` in `test/forecast.legacy.test.ts`: identical dates to the workbook for identical inputs across the full golden set — `WORKDAY` arithmetic, Friday render start, `1.28 × review + 2.96` (AC-10; BR-1)
+- [x] T020 Golden tests for `lib/forecast.legacy.ts` — BR-1 mechanics + workbook WORKDAY cross-validation (old-model export; render rule superseded by BR-1, noted for gate) in `test/forecast.legacy.test.ts`: identical dates to the workbook for identical inputs across the full golden set — `WORKDAY` arithmetic, Friday render start, `1.28 × review + 2.96` (AC-10; BR-1)
 - [x] T021 Port `lib/forecast.legacy.ts` verbatim — tests only, never imported by UI code (invariant 6; FR-7.2)
 - [x] T022 Tests for `lib/planner.ts` in `test/planner.test.ts`: urgency → deadline → difficulty ordering, throughput ceiling fill, blocked-card exclusion, pinned immovable, WEIGHTS (1/2/4) only for hard-mix, unachievable-mix spread-and-report, multi-row relative shift (BR-6b, BR-7, BR-7a, BR-8; AC-16)
 - [x] T023 Port `lib/planner.ts` (`suggestPlan`, `weekLoad`, WEIGHTS, HARD_MIX) verbatim (invariant 5)
