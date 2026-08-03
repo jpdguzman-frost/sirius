@@ -304,6 +304,18 @@ app.on({
     app.set({ requests: res.requests, rejects: res.rejects });
   },
   toggleGroup(_ctx, mc) { app.toggle(`expanded.${mc}`); },
+  async toggleUrgency(_ctx, cardId, current) {
+    const idx = app.get('rows').findIndex((r) => r.cardId === cardId);
+    const next = current === 'Urgent' ? 'Non-Urgent' : 'Urgent';
+    app.set(`rows.${idx}.urgency`, next); // optimistic — reverts on failure (FR-4.7)
+    try {
+      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/urgency`, { urgent: next === 'Urgent' });
+    } catch (err) {
+      app.set(`rows.${idx}.urgency`, current);
+      app.set('banner', `Urgency write failed — reverted. ${err.detail && err.detail.message ? err.detail.message : err.message}`);
+      setTimeout(() => app.set('banner', ''), 6000);
+    }
+  },
 
   weekShiftView(_ctx, dir) { app.set('weekStart', mondayShift(app.get('weekStart'), dir)); },
   dragRow(ctx, cardId) {

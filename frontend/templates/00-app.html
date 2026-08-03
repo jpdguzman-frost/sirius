@@ -89,7 +89,7 @@
         <td class="mono">{{row.displayId}}</td>
         <td class="clip">{{row.name}} {{#if row.blocker}}<span class="badge bad">🛑 {{row.blocker}}</span>{{/if}}</td>
         <td><span class="badge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span> <span class="dim">{{row.lane}}</span></td>
-        <td><span class="badge {{#if row.urgency === 'Urgent'}}urgentchip{{/if}}">{{#if row.urgency === 'Urgent'}}⚡ {{/if}}{{row.urgency}}</span></td>
+        <td><button class="badge togglable {{#if row.urgency === 'Urgent'}}urgentchip{{/if}}" on-click="['toggleUrgency', row.cardId, row.urgency]" title="Writes an Urgent label to the Trello card — the one write">{{#if row.urgency === 'Urgent'}}⚡ {{/if}}{{row.urgency}}</button></td>
         <td><span class="badge s-{{row.status}}">{{row.currentList || '—'}}</span></td>
         <td><span class="badge s-{{row.status}}">{{row.statusNote ? 'manual' : row.status}}</span></td>
         <td class="dim">{{row.requestor || '—'}}</td>
