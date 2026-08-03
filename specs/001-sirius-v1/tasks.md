@@ -10,12 +10,12 @@
 
 ## Phase 0 — Setup & infrastructure (~4d)
 
-- [ ] T001 Scaffold repository per plan.md layout — `server.js`, `src/{auth,routes,models,services}/`, `lib/`, `worker/`, `frontend/{templates,scripts,styles}/`, `scripts/migrate/`, `test/`; package.json with Express 5, Mongoose, ioredis, connect-redis, passport, passport-google-oauth20, zod, ractive, vitest; TypeScript `strict` config covering server/worker/lib (constitution stack; NFR-6 groundwork)
-- [ ] T002 [P] docker-compose.yml (mongo, redis) + `.env.example` with every variable from quickstart.md, values empty (invariant 15, NFR-5)
-- [ ] T003 [P] `frontend/build.js` concatenation pipeline with Ractive template parse-check, ARES conventions (NFR-1; plan.md frontend structure)
-- [ ] T004 CI workflow: typecheck · lint · `vitest run` · dual-TZ run (`TZ=UTC` + `TZ=Asia/Manila`) · dependency audit · frontend build (invariant 11, NFR-10; plan.md pipeline)
-- [ ] T005 [P] ARES contract probe in CI — verify documented shapes in `contracts/ares-read.md` against `openapi.yaml`, fail build on drift (FR-8.1)
-- [ ] T006 Deploy scripts targeting the ARES host pattern, staging + production configs; staging env asserts duplicate-board IDs only (invariant 17; NFR-4; OD-8 resolution)
+- [x] T001 Scaffold repository per plan.md layout — `server.js`, `src/{auth,routes,models,services}/`, `lib/`, `worker/`, `frontend/{templates,scripts,styles}/`, `scripts/migrate/`, `test/`; package.json with Express 5, Mongoose, ioredis, connect-redis, passport, passport-google-oauth20, zod, ractive, vitest; TypeScript `strict` config covering server/worker/lib (constitution stack; NFR-6 groundwork)
+- [x] T002 [P] docker-compose.yml (mongo, redis) + `.env.example` with every variable from quickstart.md, values empty (invariant 15, NFR-5)
+- [x] T003 [P] `frontend/build.js` concatenation pipeline with Ractive template parse-check, ARES conventions (NFR-1; plan.md frontend structure)
+- [x] T004 CI workflow: typecheck · lint · `vitest run` · dual-TZ run (`TZ=UTC` + `TZ=Asia/Manila`) · dependency audit · frontend build (invariant 11, NFR-10; plan.md pipeline)
+- [x] T005 [P] ARES contract probe in CI — verify documented shapes in `contracts/ares-read.md` against `openapi.yaml`, fail build on drift (FR-8.1)
+- [x] T006 Deploy scripts targeting the ARES host pattern, staging + production configs; staging env asserts duplicate-board IDs only (invariant 17; NFR-4; OD-8 resolution)
 
 **Checkpoint**: `npm run dev` boots an empty shell; CI green on an empty test suite.
 
