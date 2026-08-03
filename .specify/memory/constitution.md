@@ -1,15 +1,11 @@
 <!--
 Sync Impact Report
-- Version change: 1.1.0 -> 2.0.0 (MAJOR: stack redefinition + two invariants reworded)
-- Change: CLAUDE.md amended by JP on 2026-08-03. Stack section replaced —
-  Postgres/Prisma/Next.js/Auth.js/Cloud Run+Cloud SQL superseded by the ARES
-  stack: Express 5, MongoDB via Mongoose (shared server with ARES), Redis,
-  Passport Google OAuth, Ractive frontend, deployed beside ARES. Invariant 1
-  reworded tables -> collections (same rule). Invariant 15 mechanism reworded:
-  Secret Manager -> server-side environment configuration (ARES pattern);
-  rule (never in bundle/repo/logs) unchanged.
-- Invariants: 17 count unchanged; 2 reworded as above, 15 untouched.
-- Trigger: OD-1 resolved (ARES read API) and stack-consolidation decision by JP.
+- Version change: 2.0.0 -> 3.0.0 (MAJOR: invariant 17 redefined)
+- Change: CLAUDE.md amended by JP on 2026-08-04. Invariant 17: the
+  production board is too large to duplicate, so staging/local point at a
+  NON-PRODUCTION TEST board mirroring the production structure (lists +
+  label taxonomy, sample cards). The board-id production guard stays.
+- Invariants: 17 count unchanged; #17 redefined as above.
 - Deferred TODOs: none.
 -->
 
@@ -44,7 +40,7 @@ Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning 
 14. **Deadline precedence:** Trello due date wins where present, else sheet deadline, else none (implemented in `deliverables_v`).
 15. **Secrets live in server-side environment configuration only** (dotenv on the host, per the ARES pattern). Never in the client bundle, never in the repo, never in logs. The ARES API key is read-only and never leaves the server. The Sheets service-account credential is provisioned as a server-side secret, never committed.
 16. **Seed from fixtures, never from a production dump.** Real briefs never touch a developer laptop.
-17. **Staging points at a DUPLICATE Trello board.** Before writing any urgency code, verify the configured board ID is not a production board.
+17. **Staging and local point at a NON-PRODUCTION TEST board that mirrors the production board's structure** — same lists and label taxonomy (`Main Card`, `Difficulty: …`, 🛑 blockers); a dozen sample cards suffice. (Amended 2026-08-04: the production board is too large to duplicate.) Before any urgency write runs, verify the configured board ID is not a production board.
 
 ## Stack — fixed, do not re-litigate
 
@@ -102,4 +98,4 @@ A phase is done when: its acceptance criteria (AC-1 to AC-20, as mapped in the p
 - **Open decisions.** OD items (BRD §13) are resolved by JP, recorded in the spec's
   clarifications, and only then do blocked tasks unblock. No defaults picked silently.
 
-**Version**: 2.0.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-03
+**Version**: 3.0.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-04

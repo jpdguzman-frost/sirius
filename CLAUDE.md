@@ -24,7 +24,7 @@ Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning 
 14. **Deadline precedence:** Trello due date wins where present, else sheet deadline, else none (implemented in `deliverables_v`).
 15. **Secrets live in server-side environment configuration only** (dotenv on the host, per the ARES pattern). Never in the client bundle, never in the repo, never in logs. The ARES API key is read-only and never leaves the server. The Sheets service-account credential is provisioned as a server-side secret, never committed.
 16. **Seed from fixtures, never from a production dump.** Real briefs never touch a developer laptop.
-17. **Staging points at a DUPLICATE Trello board.** Before writing any urgency code, verify the configured board ID is not a production board.
+17. **Staging and local point at a NON-PRODUCTION TEST board that mirrors the production board's structure** — same lists and label taxonomy (`Main Card`, `Difficulty: …`, 🛑 blockers); a dozen sample cards suffice. (Amended 2026-08-04: the production board is too large to duplicate.) Before any urgency write runs, verify the configured board ID is not a production board.
 
 ## Stack — fixed, do not re-litigate
 
