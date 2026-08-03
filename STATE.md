@@ -50,6 +50,8 @@ _None awaiting. Approved:_
 
 ## Session log
 
+- 2026-08-03 — JP decision: urgency write path = DIRECT Trello API with dedicated integration account (option a, per BRD §9/§5.3). JP provides the token at phase 8. ARES stays read-only. Phase 7 go.
+
 - 2026-08-03 — RELEASE GATE T045 PASSED by JP + PM: the empirical model's dates recognised as reality. Phase 6 closed; phase 7 (UI) unlocked — forecast UI may now ship (invariant 7 satisfied).
 
 - 2026-08-03 — T044 evidence regenerated for project 837 (JP: primary project). Movements span Feb–Aug 2026 (6 months — not a young feed after all); work cards included in derivation → 257 samples: Easy/design n=142 @2.18d p70, Medium/design n=29, Hard/design n=9 @2.9d (snapshot 2.09), review n=45 @5.95d (snapshot 4.8). Values track the snapshot's shape; n-gap vs Appendix is corpus scope (ARES pooled full history; this is the honest per-project grid per BR-2). Report ready for PM review — T045 awaits JP+PM. Local-dev note: port 27017 is the HOST mongod shared with ares dev (docker compose optional on this machine).
