@@ -139,8 +139,8 @@
 
 ## Phase 8a — Conflict acknowledgements (~1d)
 
-- [ ] T067 [US3] Key computation tests then implementation: `conflict_key` = week | rule | sorted card:phase pairs; any card change lapses the ack; card-level indicators never suppressed (invariant 13; BR-9a; FR-6.7)
-- [ ] T068 [US3] Ack endpoints + Deadlines UI in `src/routes/schedule.js` + `frontend/scripts/deadlines.js`: dismiss removes from banner + replot list, acknowledged count + restore, every ack/restore audited (FR-6.7, FR-6.8; invariant 10; AC-17 interplay)
+- [x] T067 [US3] Key computation tests then implementation: `conflict_key` = week | rule | sorted card:phase pairs; any card change lapses the ack; card-level indicators never suppressed (invariant 13; BR-9a; FR-6.7)
+- [x] T068 [US3] Ack endpoints + Deadlines UI in `src/routes/schedule.js` + `frontend/scripts/deadlines.js`: dismiss removes from banner + replot list, acknowledged count + restore, every ack/restore audited (FR-6.7, FR-6.8; invariant 10; AC-17 interplay)
 
 **Checkpoint**: ack lapses on replot; audit trail shows who/when/why.
 

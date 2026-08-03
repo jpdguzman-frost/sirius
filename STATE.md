@@ -14,8 +14,8 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | 5 | Intake sync | **done 2026-08-03** (T035–T039; AC-6 literal counts at staging) | |
 | 6 | Model refresh + validation | **done 2026-08-03** (T040–T045) | **PM sign-off: ✅ 2026-08-03** |
 | 7 | UI — five tabs | **built 2026-08-03** (T046–T062; T063 perf pass pending) | demoed on real 837 data |
-| 8 | Urgency write | **built 2026-08-04** (T064–T066; stub-tested) | TEST board round-trip: ⬜ (invariant 17 amended) |
-| 8a | Conflict acknowledgements | not started | |
+| 8 | Urgency write | **done 2026-08-04** (T064–T066) | TEST board round-trip: ✅ (board tx8gDsTH, label add/remove verified live) |
+| 8a | Conflict acknowledgements | **done 2026-08-04** (T067–T068) | audit-logged ✓ |
 | 9 | Security testing + pilot | not started | |
 
 ## Decisions needed from JP (blocking)
@@ -25,7 +25,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | OD-1 | ARES interface: DB role / read API / replication | Phase 4 | ✅ **Resolved 2026-08-03: ARES read API** (`/api/v1/trello/*`, read-only key; contract in `specs/001-sirius-v1/contracts/ares-read.md`) |
 | OD-8 | Hosting: Frost GCP or elsewhere | Infra work | ✅ **Resolved 2026-08-03: beside ARES, same pattern; shared Mongo server, own `sirius` db** |
 | BRD §9 | Amend "write impossible by permission" to reflect the urgency write | Vendor assessment, v2 | ⬜ open |
-| — | Run scripts/create-test-board.ts (or create the TEST board by hand) and confirm its id | Phase 8 live validation | ⬜ open |
+| — | TEST board | Phase 8 | ✅ created: tx8gDsTH (structure-mirroring, 12 synthetic cards) |
 | NFR-3 | Guide documents a 30-min ARES cache cycle; JP: new ARES is realtime, so < 15 min stands | Phase 4 exit verification | ⬜ verify end-to-end |
 
 ## Decisions needed later (not blocking yet)
@@ -49,6 +49,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-04 — TEST board created (tx8gDsTH, 11 mirrored lists, full label taxonomy, 12 synthetic cards) and the LIVE urgency round-trip verified: Urgent label created on first use, added, removed — absence means non-urgent. Phase 8 DONE. Phase 8a DONE (T067–T068): acks keyed on the situation, lapse proven when a third urgent card joins, replot cleared with the banner, late flags never suppressed, restore + count, audit both ways. 133/133 tests green UTC+Manila.
 
 - 2026-08-04 — Invariant 17 amended by JP (constitution v3.0.0): structure-mirroring TEST board replaces the full duplicate (board too large). Env names aligned to ARES: TRELLO_TOKEN canonical, TRELLO_WRITE_TOKEN fallback (JP's .env works unchanged). Phase 8 BUILT (T064–T066): setUrgency per §5.3, Trello-first write with structural rollback, audit+sync_runs on every attempt, invariant-17 guard tested, urgency toggle in Pipeline with optimistic revert. 130/130 tests green UTC+Manila. Live round-trip awaits the test board (scripts/create-test-board.ts ready — JP to authorize the run).
 
