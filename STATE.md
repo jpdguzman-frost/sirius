@@ -9,7 +9,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | 0 | Setup & infrastructure | **done 2026-08-03** (T001–T006) | |
 | 1 | Schema + migrations + seed | **done 2026-08-03** (T007–T010) | |
 | 2 | Auth + audit | **done 2026-08-03** (T011–T016) | |
-| 3 | Port lib/ + golden tests | not started | AC-10: ⬜ |
+| 3 | Port lib/ + golden tests | **built 2026-08-03** — T026 gate awaits JP + workbook export | AC-10: ⬜ (gate T026) |
 | 4 | ARES read + mapping | not started — **unblocked** (OD-1 ✅) | NFR-3 realtime check at exit |
 | 5 | Intake sync | not started | |
 | 6 | Model refresh + validation | not started | **PM sign-off: ⬜** |
@@ -49,6 +49,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-03 — Phase 3 built (T017–T025; T026 gate open): lib/calendar, model, forecast, planner ported verbatim from the bundle with a verbatim-extracted oracle (test/golden/original.mjs) and parity tests (~3,600-card forecast matrix; planner/quota/note-string parity). forecast.legacy reconstructed from BR-1 (bundle retired executable spreadsheet mode) with BR-3 seed grids — WORKBOOK EXPORT NOW A BLOCKER for the AC-10 gate. Quirks found & preserved (extraction-notes.md): toFriday Fri/Sat/Sun→next Monday; holiday matching TZ-dependent (validated dates computed WITHOUT holiday exclusion in Manila); renderApproved from sketchApproved; week keys shift east of UTC; COLUMN_MAP undefined in bundle sheet parser. 68/68 tests green in UTC + Manila.
 
 - 2026-08-03 — Phase 2 complete (T011–T016): Passport Google SSO with the four checks in evaluateSignIn (tested incl. spoofed-hd case), per-request allow-list re-check (deactivation revokes live sessions), Redis sessions httpOnly, ensureProjectMember 403 on cross-project (AC-3), /api/projects membership-scoped (AC-4 basis), append-only audit writer. AC-1, AC-2, AC-3 pass as automated tests. 39/39 green in UTC + Manila. Note: Google OAuth client credentials still needed from JP before live sign-in works (tests inject sessions).
 
