@@ -13,7 +13,7 @@ import { ensureAuthenticated, type SessionUser } from '../auth/session.ts';
 import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
 import { loadPipeline } from '../services/pipeline.ts';
-import { Deliverable, Sprint } from '../models/index.ts';
+import { ConflictAcknowledgement, Deliverable, Sprint } from '../models/index.ts';
 import { sprintIssues, suggestPlan, type PlannerCard } from '../../lib/planner.ts';
 import { buildWeeks } from '../../lib/calendar.ts';
 
@@ -187,6 +187,48 @@ export function scheduleRouter(): Router {
         before: { sprints: before.map((s) => ({ name: s.name, start: s.starts_on, end: s.ends_on })) },
         after: { sprints: sorted },
       });
+      res.json({ ok: true });
+    },
+  );
+
+  // Conflict acknowledgements (FR-6.7/6.8; BR-9a; invariant 13): keyed on
+  // the situation; must reach the audit log (phase 8a).
+  router.post(
+    '/api/projects/:projectId/conflicts/acknowledge',
+    ensureAuthenticated,
+    ensureProjectMember,
+    async (req, res) => {
+      const body = z.object({ conflict_key: z.string().min(3).max(2000), reason: z.string().max(500).optional() }).strict().safeParse(req.body);
+      if (!body.success) {
+        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
+        return;
+      }
+      const projectId = res.locals.project._id as Types.ObjectId;
+      const actor = (req.user as SessionUser).email;
+      await ConflictAcknowledgement.updateOne(
+        { project_id: projectId, conflict_key: body.data.conflict_key },
+        { $set: { acknowledged_by: actor, reason: body.data.reason ?? null, at: new Date() }, $setOnInsert: { project_id: projectId } },
+        { upsert: true },
+      );
+      await audit({ project_id: projectId, actor, action: 'conflict.acknowledge', entity: 'conflict', entity_id: body.data.conflict_key, after: { reason: body.data.reason ?? null } });
+      res.json({ ok: true });
+    },
+  );
+
+  router.post(
+    '/api/projects/:projectId/conflicts/restore',
+    ensureAuthenticated,
+    ensureProjectMember,
+    async (req, res) => {
+      const body = z.object({ conflict_key: z.string().min(3).max(2000) }).strict().safeParse(req.body);
+      if (!body.success) {
+        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
+        return;
+      }
+      const projectId = res.locals.project._id as Types.ObjectId;
+      const actor = (req.user as SessionUser).email;
+      await ConflictAcknowledgement.deleteOne({ project_id: projectId, conflict_key: body.data.conflict_key });
+      await audit({ project_id: projectId, actor, action: 'conflict.restore', entity: 'conflict', entity_id: body.data.conflict_key });
       res.json({ ok: true });
     },
   );

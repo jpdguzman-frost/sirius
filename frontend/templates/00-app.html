@@ -213,10 +213,19 @@
 
   {{#each deadlineConflicts as c}}
     <div class="conflict {{c.rule}}">
+      <button class="ack" on-click="['ackConflict', c.key]" title="Acknowledge — silences THIS situation only; any change to the cards involved brings it back">✕</button>
       <span class="ctag">{{ruleLabel(c.rule)}} · {{fmt(c.week)}}</span> — {{c.explanation}}
       <div class="chips">{{#each c.items as i}}<span class="badge">{{i.displayId}} · {{i.phase}}</span>{{/each}}</div>
     </div>
   {{/each}}
+  {{#if acknowledged.length}}
+    <div class="note soft">Acknowledged ({{acknowledged.length}}) —
+      {{#each acknowledged as a}}
+        <span class="badge">{{ruleLabel(a.rule)}} {{fmt(a.week)}}{{#if a.ack && a.ack.reason}} · “{{a.ack.reason}}”{{/if}}</span>
+        <button class="chip" on-click="['restoreConflict', a.key]">restore</button>
+      {{/each}}
+    </div>
+  {{/if}}
 
   {{#if replot.length}}
     <div class="replotcard"><div class="rtitle">RAISE WITH THE PM FOR REPLOTTING</div>

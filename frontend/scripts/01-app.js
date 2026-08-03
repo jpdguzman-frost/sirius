@@ -63,6 +63,7 @@ const app = new Ractive({
     deadlinePayload: { milestones: [], conflicts: [], replot: [] },
     deadlineWeeks: [],
     deadlineConflicts: [],
+    acknowledged: [],
     replot: [],
     dueThisMonth: 0,
     urgentThisMonth: 0,
@@ -284,6 +285,7 @@ function computeDeadlines() {
       };
     }),
     deadlineConflicts: payload.conflicts.filter((c) => keys.includes(c.week)),
+    acknowledged: (payload.acknowledged || []).filter((c) => keys.includes(c.week)),
     replot: payload.replot,
     dueThisMonth: inMonth.length,
     urgentThisMonth: inMonth.filter((x) => x.urgent).length,
@@ -388,6 +390,20 @@ app.on({
 
   monthShift(_ctx, dir) {
     app.set('monthOffset', app.get('monthOffset') + dir);
+    computeDeadlines();
+  },
+  async ackConflict(_ctx, key) {
+    const reason = window.prompt('Acknowledge this conflict — optional reason (it goes to the audit log):', '');
+    if (reason === null) return;
+    await api.send('POST', `/api/projects/${app.get('activeProjectId')}/conflicts/acknowledge`, { conflict_key: key, ...(reason ? { reason } : {}) });
+    const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
+    app.set('deadlinePayload', res);
+    computeDeadlines();
+  },
+  async restoreConflict(_ctx, key) {
+    await api.send('POST', `/api/projects/${app.get('activeProjectId')}/conflicts/restore`, { conflict_key: key });
+    const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
+    app.set('deadlinePayload', res);
     computeDeadlines();
   },
 

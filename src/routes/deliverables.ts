@@ -10,7 +10,7 @@ import { ensureProjectMember } from '../auth/membership.ts';
 import { loadProjectModel } from '../services/model-grid.ts';
 import { loadPipeline, toMilestones } from '../services/pipeline.ts';
 import { detectConflicts, replotList } from '../services/conflicts.ts';
-import { Sprint, SyncRun } from '../models/index.ts';
+import { ConflictAcknowledgement, Sprint, SyncRun } from '../models/index.ts';
 
 const today = () => {
   const d = new Date();
@@ -53,12 +53,25 @@ export function deliverablesRouter(): Router {
       const projectId = res.locals.project._id;
       const pipeline = await loadPipeline(projectId, today());
       const milestones = toMilestones(pipeline.rows);
-      const conflicts = detectConflicts(milestones, res.locals.project.weekly_capacity);
+      const all = detectConflicts(milestones, res.locals.project.weekly_capacity);
+      // BR-9a: an acknowledgement silences ONE situation — its key carries the
+      // exact cards, so any change re-surfaces the conflict (invariant 13).
+      // Card-level indicators (late flags on milestones) are NEVER suppressed.
+      const acks = await ConflictAcknowledgement.find({ project_id: projectId });
+      const ackedKeys = new Set(acks.map((a) => a.conflict_key));
+      const active = all.filter((c) => !ackedKeys.has(c.key));
+      const acknowledged = all.filter((c) => ackedKeys.has(c.key));
       res.json({
         ok: true,
         milestones,
-        conflicts,
-        replot: replotList(conflicts),
+        conflicts: active,
+        acknowledged: acknowledged.map((c) => ({
+          ...c,
+          ack: acks.find((a) => a.conflict_key === c.key)
+            ? { by: acks.find((a) => a.conflict_key === c.key)!.acknowledged_by, reason: acks.find((a) => a.conflict_key === c.key)!.reason ?? null, at: acks.find((a) => a.conflict_key === c.key)!.at }
+            : null,
+        })),
+        replot: replotList(active),
       });
     },
   );
