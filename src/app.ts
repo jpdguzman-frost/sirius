@@ -2,10 +2,9 @@
  * Sirius — HTTP composition (ARES pattern: all Express wiring here, testable
  * via supertest; server.js only bootstraps).
  *
- * Phase 0 shell: health, sessions, static frontend. Auth strategy (phase 2),
- * API routes (phases 4–8a) mount here as they land. Every future API route
- * passes ensureAuthenticated + ensureProjectMember — hiding a tab is not
- * access control (invariant 9).
+ * Every API route passes ensureAuthenticated; every project-scoped route
+ * additionally passes ensureProjectMember — hiding a tab is not access
+ * control (invariant 9). Sessions live in Redis, httpOnly cookie (FR-2.3).
  */
 
 import path from 'node:path';
@@ -18,6 +17,9 @@ import type mongoose from 'mongoose';
 import type { Env } from './config/env.ts';
 import { mongoState } from './db/mongo.ts';
 import { redisState } from './db/redis.ts';
+import passport, { configurePassport } from './auth/passport.ts';
+import { authRouter } from './auth/routes.ts';
+import { projectsRouter } from './routes/projects.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,6 +49,10 @@ export function createApp({ env, redis }: AppDeps): express.Express {
     }),
   );
 
+  configurePassport(env);
+  app.use(passport.initialize());
+  app.use(passport.session());
+
   app.get('/healthz', (_req, res) => {
     res.json({
       status: 'ok',
@@ -55,6 +61,17 @@ export function createApp({ env, redis }: AppDeps): express.Express {
       env: env.NODE_ENV,
     });
   });
+
+  // Test-only session injection — lets the authz matrix run without a live
+  // Google round-trip. Never mounted outside NODE_ENV=test.
+  if (env.NODE_ENV === 'test') {
+    app.post('/__test/login', (req, res, next) => {
+      req.logIn(req.body, (err) => (err ? next(err) : res.json({ ok: true })));
+    });
+  }
+
+  app.use(authRouter());
+  app.use(projectsRouter());
 
   // Built frontend (frontend/build.js → public/). No credential ever ships here.
   app.use(express.static(path.join(__dirname, '..', 'public')));
