@@ -1,0 +1,45 @@
+# CLAUDE.md — Sirius Build Constitution
+
+You are building **Sirius**, Frost Design Group's internal delivery pipeline and forecasting platform. Source documents: `docs/Sirius__BRD.md` (v2.2 — the *what*) and `docs/Sirius__Implementation_Plan.md` (the *how*). When they conflict, the Implementation Plan wins on engineering detail; the BRD wins on scope and business rules. If a conflict matters, stop and ask.
+
+## What Sirius is, in three lines
+
+Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning decisions: which week a deliverable is slotted, confidence, SLA overrides, pins, status notes. It writes **one thing** back anywhere: an `Urgent` label on a Trello card. It is multi-project from the first migration.
+
+## Invariants — never violate, never "improve"
+
+1. **Every table carries `project_id`. Every query filters on it.** No exceptions, including audit and sync tables where the schema defines it.
+2. **Read-only everywhere except urgency.** No write path to Google Sheets, ever. No write to Trello except add/remove the `Urgent` label via `lib/trello.ts` `setUrgency()`. If you find yourself writing anything else to a source system, you have misread the task — stop.
+3. **`mc_number` is NOT a unique key.** Identity is `(project_id, trello_card_id)`. MC-825 carries 99 deliverables. `display_id` (e.g. `MC-655.3`) is for humans.
+4. **Work cards attach to the MC group, not to a single deliverable.** There is no reliable task→deliverable edge (1 of 27 titles matched). Do not model one.
+5. **`lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` are ported verbatim from `frost-sirius-v1.jsx`.** They are validated. Do not refactor, rename, or "clean up" their logic. Golden tests prove the port before anything else uses them.
+6. **`lib/forecast.legacy.ts` (the spreadsheet formula) is for migration tests only.** It is never imported by UI code. It overstates review waits 2.6–4.6× (BR-3). The empirical model is the only forecast users see.
+7. **The empirical model is a release gate, not a feature** (Sequence item 6). Do not build UI that displays forecast dates until the model refresh produces dates the PM recognises.
+8. **Urgency write is optimistic with rollback.** A failed Trello write reverts the local change. Sirius never displays a state Trello lacks. Every write logs to `audit_log` and `sync_runs`.
+9. **Auth is four server-side checks:** verified email, `hd` claim = `frostdesigngroup.com`, matching email domain, active allow-list row. Every API route re-checks session AND project membership. Hiding a tab is not access control.
+10. **Every state change writes to the immutable `audit_log`** — schedule moves, pins, SLA overrides, urgency, conflict acknowledgements, project settings.
+11. **Store UTC, render and compute Asia/Manila.** Workday math uses `lib/calendar.ts` only.
+12. **Sprints are editable data, not a cadence.** Overlapping sprints rejected on save. Gaps allowed and surfaced as *Outside any sprint*.
+13. **Conflict acknowledgements are keyed on the situation:** `week | rule | sorted card:phase pairs`. Any change to the cards involved invalidates the acknowledgement. Card-level indicators (red bar, late flag) are never suppressed by an acknowledgement.
+14. **Deadline precedence:** Trello due date wins where present, else sheet deadline, else none (implemented in `deliverables_v`).
+15. **Secrets live in Secret Manager.** Never in the client bundle, never in the repo, never in logs. Sheets access uses the attached service account — no key file exists.
+16. **Seed from fixtures, never from a production dump.** Real briefs never touch a developer laptop.
+17. **Staging points at a DUPLICATE Trello board.** Before writing any urgency code, verify the configured board ID is not a production board.
+
+## Stack — fixed, do not re-litigate
+
+Next.js App Router · TypeScript `strict` · Prisma (or Drizzle if already chosen in repo) · Auth.js with Google provider · separate worker service for all sync (sync never runs inside a request) · Zod at every API boundary · Vitest · Cloud Run + Cloud SQL Postgres 16 · repository layout per Implementation Plan §2.3.
+
+Do NOT: split into SPA + separate API domain · apply DDL by hand · port the forecast engine to another language · add libraries that duplicate what the stack provides.
+
+## Working style
+
+- **Tests first for anything in `lib/` and any business rule (BR-1 through BR-10).** The forecast golden tests are the highest-value tests in the project.
+- Reference requirements by ID (FR-x.y, BR-n, AC-n, NFR-n) in commit messages and PR descriptions.
+- When a task depends on an undecided item (OD-1, OD-6, OD-7, OD-8), stop and ask JP. Do not pick a default silently.
+- Small commits, one concern each. Migrations are version-controlled from the first line.
+- Update `STATE.md` at the end of every working session: what's done, what's in flight, what's blocked, which ACs pass.
+
+## Definition of done, per phase
+
+A phase is done when: its acceptance criteria (AC-1 to AC-20, as mapped in the phase prompt) pass as automated tests where testable; typecheck, lint, and vitest are green; `STATE.md` is updated; and nothing in this file was violated.
