@@ -38,7 +38,8 @@ function readDir(dir, ext, { parseCheck = false } = {}) {
     .map((f) => {
       const body = fs.readFileSync(path.join(full, f), 'utf8');
       if (parseCheck) assertParses(`${dir}/${f}`, body);
-      return `/* ==== ${dir}/${f} ==== */\n${body}`;
+      const banner = ext === '.html' ? `<!-- ==== ${dir}/${f} ==== -->` : `/* ==== ${dir}/${f} ==== */`;
+      return `${banner}\n${body}`;
     })
     .join('\n');
 }

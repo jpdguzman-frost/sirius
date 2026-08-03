@@ -1,133 +1,186 @@
 <script id="tpl-app" type="text/ractive">
 <header class="topbar">
-  <span class="brand">Frost: Sirius</span>
-  <nav class="tabs">
-    {{#each tabs as t}}
-      <button class="tab {{#if t.id === activeTab}}active{{/if}}" on-click="['switchTab', t.id]">{{t.label}}</button>
-    {{/each}}
-  </nav>
+  <span class="brand">Frost: Sirius <span class="crumb">›</span> <span class="crumbtab">{{tabLabel}}</span></span>
+  <span class="projectlabel">PROJECT</span>
   <select class="project-switcher" value="{{activeProjectId}}" on-change="['switchProject']">
     {{#each projects as p}}<option value="{{p._id}}">{{p.name}}</option>{{/each}}
   </select>
+  {{#if boardId}}<a class="boardlink" href="https://trello.com/b/{{boardId}}" target="_blank">{{boardId}} ↗</a>{{/if}}
   <span class="sync {{#if sync && !sync.ok}}bad{{/if}}">{{syncLabel}}</span>
+  <span class="userchip"><span class="avatar">{{userInitial}}</span>
+    <span class="who"><span class="name">{{userName}}</span><br /><button class="sub" on-click="['signOut']">Sign out</button></span>
+  </span>
 </header>
+
+<nav class="tabs">
+  {{#each tabs as t}}
+    <button class="tab {{#if t.id === activeTab}}active{{/if}}" on-click="['switchTab', t.id]"><span class="ticon">{{t.icon}}</span>{{t.label}}</button>
+  {{/each}}
+</nav>
 
 {{#if banner}}<div class="banner">{{banner}}</div>{{/if}}
 
 <main class="view">
 
 {{#if activeTab === 'requests'}}
-  <div class="toolbar">
-    {{#each requestFilters as f}}<button class="chip {{#if f === requestFilter}}on{{/if}}" on-click="['setRequestFilter', f]">{{f}}</button>{{/each}}
-  </div>
-  <div class="scroll"><table class="grid">
-    <thead><tr><th>MC #</th><th>Deliverable</th><th>Type</th><th>Use case</th><th>Requestor</th><th>Deadline</th><th>Status</th><th>Brief</th></tr></thead>
-    <tbody>
-    {{#each requests as r}}
-      <tr>
-        <td class="mono">{{r.mc_number}}</td><td>{{r.name}}</td><td>{{r.asset_type}}</td><td>{{r.use_case}}</td>
-        <td class="dim">{{r.requestor}}</td><td>{{fmt(r.deadline)}}</td>
-        <td><span class="badge {{#if r.status === 'In pipeline'}}ok{{else}}warn{{/if}}">{{r.status}}</span></td>
-        <td class="dim clip">{{r.brief}}</td>
-      </tr>
-    {{/each}}
-    </tbody>
-  </table></div>
-  {{#if rejects.length}}
-    <h3>Rows needing correction ({{rejects.length}})</h3>
-    <table class="grid slim"><tbody>
-      {{#each rejects as x}}<tr><td class="mono">row {{x.sheet_row}}</td><td>{{x.raw}}</td><td class="dim">{{x.reason}}</td></tr>{{/each}}
-    </tbody></table>
+  {{#if requests.length || rejects.length}}
+    <div class="toolbar">
+      {{#each requestFilters as f}}<button class="chip {{#if f === requestFilter}}on{{/if}}" on-click="['setRequestFilter', f]">{{f}}</button>{{/each}}
+    </div>
+    <div class="scroll"><table class="grid">
+      <thead><tr><th>MC #</th><th>Deliverable</th><th>Type</th><th>Use case</th><th>Requestor</th><th>Deadline</th><th>Status</th><th>Brief</th></tr></thead>
+      <tbody>
+      {{#each requests as r}}
+        <tr>
+          <td class="mono">{{r.mc_number}}</td><td>{{r.name}}</td><td>{{r.asset_type}}</td><td>{{r.use_case}}</td>
+          <td class="dim">{{r.requestor}}</td><td>{{fmt(r.deadline)}}</td>
+          <td><span class="badge {{#if r.status === 'In pipeline'}}ok{{else}}warn{{/if}}">{{r.status}}</span></td>
+          <td class="dim clip">{{r.brief}}</td>
+        </tr>
+      {{/each}}
+      </tbody>
+    </table></div>
+    {{#if rejects.length}}
+      <div class="callout"><div class="ctitle">⚠ {{rejects.length}} rows need correction in the sheet</div>
+        {{#each rejects as x}}<div class="crow"><span class="mono">row {{x.sheet_row}}</span><span>{{x.raw}}</span><span class="dim">{{x.reason}}</span></div>{{/each}}
+      </div>
+    {{/if}}
+  {{else}}
+    <div class="note soft" style="flex-direction:column; align-items:center; padding:3rem;">
+      <strong style="color:var(--ink); font-size:1.05rem;">No requests loaded</strong>
+      <span>The intake sheet mirror is deferred until the sheet stabilises. The sync service reads it server-side — nothing is edited here, ever.</span>
+    </div>
   {{/if}}
 {{/if}}
 
 {{#if activeTab === 'pipeline'}}
+  <div class="kpis">
+    <div class="kpi"><div class="klabel">Main cards</div><div class="kvalue">{{kpi.main}}</div></div>
+    <div class="kpi"><div class="klabel">Work cards</div><div class="kvalue">{{kpi.work}}</div></div>
+    <div class="kpi"><div class="klabel">Open work</div><div class="kvalue">{{kpi.open}}</div></div>
+    <div class="kpi red"><div class="klabel">Urgent</div><div class="kvalue">{{kpi.urgent}}</div></div>
+    <div class="kpi red"><div class="klabel">At risk</div><div class="kvalue">{{kpi.atRisk}}</div></div>
+  </div>
+
+  <div class="note">🔒 Difficulty, list, due date and Figma links are read from Trello and can’t be edited here.
+    <span class="dim">{{syncLabel}} · every 15 minutes</span></div>
+  <div class="note soft">Urgency is the one field Sirius writes back — it becomes an <strong>Urgent</strong> label on the Trello card, and its absence means non-urgent. The write path ships in phase 8.</div>
+
+  {{#if corrections.length}}
+    <div class="callout">
+      <div class="ctitle">⚠ {{corrections.length}} cards incomplete in Trello</div>
+      {{#each visibleCorrections as c}}
+        <div class="crow"><span class="mono">{{c.displayId}}</span><span>{{c.name}}</span><span class="dim">— missing {{c.missing.join(', ')}}</span>
+          {{#if c.trelloUrl}}<a href="{{c.trelloUrl}}" target="_blank">Open card</a>{{/if}}</div>
+      {{/each}}
+      {{#if corrections.length > 5}}<button class="chip" on-click="['toggleCorrections']">{{showAllCorrections ? 'Show fewer' : 'Show all ' + corrections.length}}</button>{{/if}}
+      <div class="dim" style="margin-top:0.4rem;">Without a difficulty label the card cannot forecast; without a due date it cannot raise a deadline conflict. Fix in Trello and it corrects on the next sync.</div>
+    </div>
+  {{/if}}
+
+  <input class="search" placeholder="🔍  Search cards or MC#" value="{{searchQ}}" />
+
   <div class="scroll"><table class="grid">
-    <thead><tr><th></th><th>ID</th><th>Deliverable</th><th>Difficulty</th><th>Lane</th><th>Urgency</th><th>List</th><th>Status</th><th>Requestor</th><th>Deadline</th><th>Links</th></tr></thead>
+    <thead><tr><th></th><th>MC #</th><th>Card name</th><th>Difficulty</th><th>Urgency</th><th>Current list</th><th>Status</th><th>Requestor</th><th>Due</th><th>Links</th></tr></thead>
     <tbody>
-    {{#each rows as row}}
+    {{#each pipelineRows as row}}
       <tr class="{{#if row.blocker}}blocked{{/if}}">
         <td><button class="chev" on-click="['toggleGroup', row.mcNumber]">{{#if expanded[row.mcNumber]}}▾{{else}}▸{{/if}}</button></td>
         <td class="mono">{{row.displayId}}</td>
-        <td>{{row.name}} {{#if row.blocker}}<span class="badge bad">🛑 {{row.blocker}}</span>{{/if}}</td>
-        <td><span class="badge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span></td>
-        <td class="dim">{{row.lane}}</td>
-        <td><span class="badge {{#if row.urgency === 'Urgent'}}bad{{/if}}">{{row.urgency}}</span></td>
-        <td class="dim">{{row.currentList}}</td>
+        <td class="clip">{{row.name}} {{#if row.blocker}}<span class="badge bad">🛑 {{row.blocker}}</span>{{/if}}</td>
+        <td><span class="badge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span> <span class="dim">{{row.lane}}</span></td>
+        <td><span class="badge {{#if row.urgency === 'Urgent'}}urgentchip{{/if}}">{{#if row.urgency === 'Urgent'}}⚡ {{/if}}{{row.urgency}}</span></td>
+        <td><span class="badge s-{{row.status}}">{{row.currentList || '—'}}</span></td>
         <td><span class="badge s-{{row.status}}">{{row.statusNote ? 'manual' : row.status}}</span></td>
         <td class="dim">{{row.requestor || '—'}}</td>
-        <td>{{fmt(row.deadline)}} {{#if row.deadlineSource}}<span class="dim">({{row.deadlineSource}})</span>{{/if}}</td>
-        <td>{{#if row.trelloUrl}}<a href="{{row.trelloUrl}}" target="_blank">Trello</a>{{/if}} {{#if row.figmaUrl}}<a href="{{row.figmaUrl}}" target="_blank">Figma</a>{{/if}}</td>
+        <td class="nowrap">{{fmt(row.deadline)}} {{#if row.deadlineSource}}<span class="dim">({{row.deadlineSource}})</span>{{/if}}</td>
+        <td class="nowrap">{{#if row.trelloUrl}}<a href="{{row.trelloUrl}}" target="_blank">Trello</a>{{/if}} {{#if row.figmaUrl}}<a href="{{row.figmaUrl}}" target="_blank">Figma</a>{{/if}}</td>
       </tr>
       {{#if expanded[row.mcNumber]}}
         {{#each workCardsByMc[row.mcNumber] as w}}
-          <tr class="task"><td></td><td class="dim mono">task</td><td colspan="5">{{w.name}}</td><td><span class="badge s-{{w.status}}">{{w.status}}</span></td><td colspan="2" class="dim">{{w.currentList}}</td>
+          <tr class="task"><td></td><td class="dim mono">task</td><td colspan="4">{{w.name}}</td><td><span class="badge s-{{w.status}}">{{w.status}}</span></td><td colspan="2" class="dim">{{w.currentList}}</td>
           <td>{{#if w.trelloUrl}}<a href="{{w.trelloUrl}}" target="_blank">Trello</a>{{/if}}</td></tr>
         {{/each}}
       {{/if}}
     {{/each}}
     </tbody>
   </table></div>
-  {{#if corrections.length}}
-    <h3>Cards needing correction ({{corrections.length}})</h3>
-    <table class="grid slim"><tbody>
-      {{#each corrections as c}}<tr><td class="mono">{{c.displayId}}</td><td>{{c.name}}</td><td class="dim">missing {{c.missing.join(', ')}}</td>
-      <td>{{#if c.trelloUrl}}<a href="{{c.trelloUrl}}" target="_blank">fix in Trello</a>{{/if}}</td></tr>{{/each}}
-    </tbody></table>
-  {{/if}}
 {{/if}}
 
 {{#if activeTab === 'schedules'}}
   <div class="toolbar">
-    <button class="chip" on-click="['openSprints']">Sprints…</button>
-    <button class="chip" on-click="['runSuggest']">Suggest plan</button>
+    <button class="navbtn" on-click="['weekShiftView', -1]">‹</button>
+    <span class="rangetitle">{{rangeLabel}}</span>
+    <button class="navbtn" on-click="['weekShiftView', 1]">›</button>
+    <span class="dim">Cards / week <strong>{{capacity.weekly}}</strong> {{#if capacity.typical}}<span class="dim">(typical {{capacity.typical}})</span>{{/if}}</span>
+    <button class="chip primary" on-click="['runSuggest']">✦ Suggest plan</button>
+    <button class="chip" on-click="['openSprints']">🗓 Sprints</button>
     {{#if suggest}}
       <button class="chip on" on-click="['acceptSuggest']">Accept {{suggestCount}} moves</button>
       <button class="chip" on-click="['clearSuggest']">Discard</button>
-      {{#if suggest.unavoidable}}<span class="badge bad">backlog hard mix {{pct(suggest.backlogHardShare)}} — ceiling {{pct(hardCeiling)}} unreachable; hard work spread evenly</span>{{/if}}
     {{/if}}
-    <span class="dim">Drag a row onto a week column, or focus a row and use ←/→. The gantt is output, not a control.</span>
+    <span class="legend">
+      <span><span class="sw sketch"></span>Sketch</span>
+      <span><span class="sw review"></span>Review</span>
+      <span><span class="sw render"></span>Render</span>
+      <span><span class="sw latebar"></span>Render past deadline</span>
+      <span><span class="sw dl"></span>Client deadline</span>
+    </span>
   </div>
+  {{#if suggest && suggest.unavoidable}}
+    <div class="conflict over-capacity"><span class="ctag">Unachievable mix</span> — {{pct(suggest.backlogHardShare)}} of unpinned deliverables are Hard, against a historical ceiling of {{pct(hardCeiling)}}. No arrangement of these weeks can stay under it, so the plan spreads hard work as evenly as possible instead.</div>
+  {{/if}}
+  <div class="dim" style="margin-bottom:0.6rem;">Grab a row to reslot it, or focus a row and use ←/→. Pinned rows are never moved by a suggestion. The gantt is output, not a control.</div>
+
   <div class="scroll"><table class="grid sched">
-    <thead><tr>
-      <th></th><th>ID</th><th>Deliverable</th><th>Diff</th><th>Sprint</th>
-      {{#each weekCols as wk}}<th class="wk drop" on-dragover="['dragOver']" on-drop="['dropOnWeek', wk.key]">{{fmt(wk.key)}}</th>{{/each}}
-    </tr></thead>
+    <thead>
+      <tr class="gheadrow"><th></th><th>MC no.</th><th>Scope</th><th>Requestor</th><th>Status</th>
+        <th class="ganttcell" style="padding:0.5rem 0.8rem !important;">
+          <div class="footcells">{{#each weekCols as wk}}<div class="footcell"><span class="gwk">{{fmt(wk.key)}}</span></div>{{/each}}</div>
+        </th></tr>
+    </thead>
     <tbody>
-    {{#each schedRows as row}}
-      <tr tabindex="0" draggable="true" class="{{#if selected[row.cardId]}}sel{{/if}}"
-          on-dragstart="['dragRow', row.cardId]" on-keydown="['rowKey', row.cardId]">
-        <td class="nowrap"><input type="checkbox" checked="{{selected[row.cardId]}}" /><button class="chev" on-click="['togglePin', row.cardId, row.pinned]" title="{{row.pinned ? 'Unpin — suggestions may move this' : 'Pin — suggestions leave this alone'}}">{{row.pinned ? '📌' : '·'}}</button></td>
-        <td class="mono">{{row.displayId}}</td>
-        <td class="clip">{{row.name}}
-          <button class="chev" on-click="['duplicateRow', row.cardId]" title="Duplicate without links">⧉</button>
-          <button class="chev" on-click="['editNote', row.cardId, row.statusNote]" title="Status override with note">✎</button>
-          {{#if row.statusNote}}<span class="badge warn" title="{{row.statusNote}}">manual</span>{{/if}}
-        </td>
-        <td><span class="badge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span></td>
-        <td class="dim">{{row.sprintName}}</td>
-        {{#each weekCols as wk}}
-          <td class="wk drop" on-dragover="['dragOver']" on-drop="['dropOnWeek', wk.key]">
-            {{#if row.slottedWeek === wk.key}}
-              <div class="bar" title="sketch {{row.forecast ? fmt(row.forecast.sketchDelivery) : '—'}} · render {{row.forecast ? fmt(row.forecast.renderDelivery) : '—'}}">
-                <span class="seg sketch"></span><span class="seg review"></span><span class="seg render {{#if row.forecast && row.forecast.late}}red{{/if}}"></span>
-                {{#if row.deadline}}<span class="dl" title="deadline {{fmt(row.deadline)}}">▮</span>{{/if}}
-              </div>
-            {{elseif suggest && suggest.plan[row.cardId] === wk.key}}
-              <div class="bar ghosted" title="suggested — apply with Accept"></div>
-            {{/if}}
+    {{#each schedGroups as g}}
+      <tr class="grouphead"><td colspan="6">{{g.name}} <span class="gmeta">{{g.meta}} · {{g.rows.length}} items</span></td></tr>
+      {{#each g.rows as row}}
+        <tr tabindex="0" draggable="true" class="{{#if selected[row.cardId]}}sel{{/if}}"
+            on-dragstart="['dragRow', row.cardId]" on-keydown="['rowKey', row.cardId]">
+          <td class="nowrap"><input type="checkbox" checked="{{selected[row.cardId]}}" /><button class="chev" on-click="['togglePin', row.cardId, row.pinned]" title="{{row.pinned ? 'Unpin — suggestions may move this' : 'Pin — suggestions leave this alone'}}">{{row.pinned ? '📌' : '·'}}</button></td>
+          <td class="mono">{{row.displayId}}{{#if row.forecast && row.forecast.late}}<br /><span class="latenote">⏰ late</span>{{/if}}</td>
+          <td class="clip">{{row.name}}
+            <br /><span class="badge {{#if row.urgency === 'Urgent'}}urgentchip{{/if}}">{{#if row.urgency === 'Urgent'}}⚡ {{/if}}{{row.urgency}}</span>
+            <span class="badge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span>
+            <button class="chev" on-click="['duplicateRow', row.cardId]" title="Duplicate without links">⧉</button>
+            <button class="chev" on-click="['editNote', row.cardId, row.statusNote]" title="Status override with note">✎</button>
+            {{#if row.statusNote}}<span class="badge warn" title="{{row.statusNote}}">manual</span>{{/if}}
           </td>
-        {{/each}}
-      </tr>
+          <td><span class="badge">{{row.requestor || '—'}}</span></td>
+          <td><span class="badge s-{{row.status}}">{{row.currentList || '—'}}</span></td>
+          <td class="ganttcell">
+            <div class="gtrack">
+              <div class="gweeks">{{#each weekCols as wk}}<div class="gweek" on-dragover="['dragOver']" on-drop="['dropOnWeek', wk.key]"></div>{{/each}}</div>
+              {{#if row.slottedWeek && row.forecast}}
+                {{#each ganttBars(row) as b}}<div class="gbar {{b.cls}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}"></div>{{/each}}
+                {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
+              {{elseif suggest && suggest.plan[row.cardId]}}
+                <div class="gbar ghosted" style="left:{{ghostLeft(row)}}%;width:12%;" title="suggested — apply with Accept"></div>
+              {{elseif !row.slottedWeek}}
+                <div class="gunsched">⏱ Not yet scheduled — drag the row onto a week</div>
+              {{/if}}
+            </div>
+          </td>
+        </tr>
+      {{/each}}
     {{/each}}
     </tbody>
     <tfoot><tr><td colspan="5" class="dim">cards vs capacity {{capacity.weekly}} · hard share amber >{{pct(hardIdeal)}} red >{{pct(hardCeiling)}}</td>
-      {{#each weekCols as wk}}<td class="wk foot {{footClass(wk.key)}}">{{footLabel(wk.key)}}</td>{{/each}}
+      <td class="ganttcell"><div class="footcells">{{#each weekCols as wk}}<div class="footcell {{footClass(wk.key)}}">{{footLabel(wk.key)}}</div>{{/each}}</div></td>
     </tr></tfoot>
   </table></div>
+
   {{#if sprintModal}}
     <div class="modal-back" on-click="['closeSprints']"><div class="modal" on-click="['noop']">
-      <h3>Sprints — editable data, not a cadence</h3>
+      <h3 style="margin-top:0;">Sprints — editable data, not a cadence</h3>
       {{#each sprintDraft as s}}
         <div class="sprintrow">
           <input value="{{s.name}}" /><input type="date" value="{{s.start}}" /><input type="date" value="{{s.end}}" />
@@ -136,69 +189,98 @@
       {{/each}}
       <div class="toolbar">
         <button class="chip" on-click="['addSprint']">Add sprint</button>
-        <button class="chip on" on-click="['saveSprints']">Save</button>
+        <button class="chip primary" on-click="['saveSprints']">Save</button>
         {{#if sprintError}}<span class="badge bad">{{sprintError}}</span>{{/if}}
-        <span class="dim">Overlaps reject on save. Gaps are legal — weeks outside any sprint say so.</span>
       </div>
+      <div class="dim">Overlaps reject on save. Gaps are legal — weeks outside any sprint say so.</div>
     </div></div>
   {{/if}}
 {{/if}}
 
 {{#if activeTab === 'deadlines'}}
   <div class="toolbar">
-    <button class="chip" on-click="['monthShift', -1]">←</button>
-    <strong>{{monthLabel}}</strong>
-    <button class="chip" on-click="['monthShift', 1]">→</button>
-    <span class="dim">Read-only — all dates derive from Sprint Schedules.</span>
+    <button class="navbtn" on-click="['monthShift', -1]">‹</button>
+    <span class="rangetitle">{{monthLabel}}</span>
+    <button class="navbtn" on-click="['monthShift', 1]">›</button>
+    <span class="note soft" style="margin:0 0 0 auto;">🔒 Reference only. Dates follow Sprint Schedules — replotting happens there.</span>
   </div>
+  <div class="kpis">
+    <div class="kpi"><div class="klabel">Due this month</div><div class="kvalue">{{dueThisMonth}}</div></div>
+    <div class="kpi red"><div class="klabel">Urgent</div><div class="kvalue">{{urgentThisMonth}}</div></div>
+    <div class="kpi orange"><div class="klabel">Conflicts</div><div class="kvalue">{{deadlineConflicts.length}}</div></div>
+    <div class="kpi purple"><div class="klabel">Needs replotting</div><div class="kvalue">{{replot.length}}</div></div>
+  </div>
+
   {{#each deadlineConflicts as c}}
-    <div class="conflict"><strong>{{c.rule}}</strong> · week of {{fmt(c.week)}} — {{c.explanation}}
-      {{#each c.items as i}}<span class="badge">{{i.displayId}} {{i.phase}}</span>{{/each}}
+    <div class="conflict {{c.rule}}">
+      <span class="ctag">{{ruleLabel(c.rule)}} · {{fmt(c.week)}}</span> — {{c.explanation}}
+      <div class="chips">{{#each c.items as i}}<span class="badge">{{i.displayId}} · {{i.phase}}</span>{{/each}}</div>
     </div>
   {{/each}}
-  {{#each deadlineWeeks as w}}
-    <h3>Week of {{fmt(w.key)}}</h3>
-    <table class="grid slim"><tbody>
-      {{#each w.items as m}}
-        <tr>
-          <td class="mono">{{m.displayId}}</td><td>{{m.name}}</td>
-          <td><span class="badge {{m.phase}}">{{m.phase}} delivery</span></td>
-          <td>{{fmt(m.date)}}</td>
-          <td>{{#if m.urgent}}<span class="badge bad">Urgent</span>{{/if}} {{#if m.late}}<span class="badge bad">late</span>{{/if}}</td>
-          <td>{{#if m.trelloUrl}}<a href="{{m.trelloUrl}}" target="_blank">Trello</a>{{/if}} {{#if m.figmaUrl}}<a href="{{m.figmaUrl}}" target="_blank">Figma</a>{{/if}}</td>
-        </tr>
-      {{/each}}
-    </tbody></table>
-  {{/each}}
+
   {{#if replot.length}}
-    <h3>Replot list ({{replot.length}})</h3>
-    <table class="grid slim"><tbody>
-      {{#each replot as r}}<tr><td class="mono">{{r.displayId}}</td><td>{{r.name}}</td><td class="dim">{{r.reasons.join(' · ')}}</td></tr>{{/each}}
-    </tbody></table>
+    <div class="replotcard"><div class="rtitle">RAISE WITH THE PM FOR REPLOTTING</div>
+      {{#each replot as r}}<div class="rrow"><span class="mono">{{r.displayId}}</span><span>{{r.name}}</span><span class="dim">{{r.reasons.join(' · ')}}</span></div>{{/each}}
+    </div>
   {{/if}}
+
+  <div class="weekgrid">
+    {{#each deadlineWeeks as w}}
+      <div class="weekcard {{#if w.flagged}}flagged{{/if}}">
+        <div class="whead"><span class="wtitle">{{w.label}}</span><span class="wmeta">{{w.items.length}} due{{#if w.urgent}} · {{w.urgent}} urgent{{/if}}</span></div>
+        <div class="wsub">{{w.sub}}</div>
+        <div class="capbar"><div class="fill" style="width:{{w.capPct}}%;"></div></div>
+        <div class="capnote">{{w.items.length}} / {{capacity.weekly}} cards</div>
+        {{#each w.items as m}}
+          <div class="entry {{#if m.late}}late{{elseif m.urgent}}urgent{{/if}}">
+            <span class="who">{{m.displayId}}</span>
+            <span class="badge {{m.phase}}">{{m.phase}}</span>
+            {{#if m.urgent}}<span class="badge urgentchip">⚡</span>{{/if}}
+            {{#if m.late}}<span class="badge bad">late</span>{{/if}}
+            <span class="edate">{{fmt(m.date)}}</span>
+            {{#if m.trelloUrl}}<a href="{{m.trelloUrl}}" target="_blank">↗</a>{{/if}}
+          </div>
+        {{/each}}
+      </div>
+    {{/each}}
+  </div>
 {{/if}}
 
 {{#if activeTab === 'forecast'}}
+  {{#if modelProvenance}}
+    <div class="greenpanel">
+      <div class="gtitle">✦ Forecast from measured delivery — {{modelProvenance.source}}{{#if modelProvenance.fallback}} · <span class="badge warn">snapshot fallback</span>{{/if}}</div>
+      <div class="gstats">
+        <span class="gstat"><span class="glabel">Median review wait</span><br /><span class="gvalue">{{modelReview.median}} d</span></span>
+        <span class="gstat"><span class="glabel">70th percentile</span><br /><span class="gvalue">{{modelReview['0.7']}} d</span></span>
+        <span class="gstat"><span class="glabel">85th percentile</span><br /><span class="gvalue">{{modelReview['0.85']}} d</span></span>
+        <span class="gstat"><span class="glabel">95th percentile</span><br /><span class="gvalue">{{modelReview['0.95']}} d</span></span>
+      </div>
+      <div class="gnote">Design time is keyed on difficulty <em>and</em> lane. Review n={{modelReview.n}}. The retired spreadsheet model put review waits at 12.5–22 days against these measured values.</div>
+    </div>
+  {{/if}}
+  <p class="explain">Same column names as the Delivery Forecast sheet, so the team reads it unchanged. Difficulty comes from the Trello card label and can’t be edited here; Confidence is the platform’s own lever. <strong>Review SLA</strong> is the manual override — enter actual review days and it replaces the modelled review time for that card, which drives Forecasted Review Time and every date to its right.</p>
+
   <div class="scroll"><table class="grid">
-    <thead><tr><th>ID</th><th>Deliverable</th><th>Difficulty</th><th>Confidence</th><th>Sketch SLA</th><th>Render SLA</th>
+    <thead><tr><th>Request</th><th>Difficulty</th><th>Confidence</th><th class="slahead">Sketch SLA</th><th class="slahead">Render SLA</th>
       <th>Sketch Delivery Date</th><th>Sketch Approved</th><th>Render Delivery Date</th><th>Render Approved</th>
       <th>Baseline Review</th><th>Forecasted Review Time</th><th>Total Cycle Time</th><th>n</th></tr></thead>
     <tbody>
     {{#each forecastRows as row}}
       <tr>
-        <td class="mono">{{row.displayId}}</td><td class="clip">{{row.name}}</td>
-        <td><span class="badge d-{{row.difficulty}}">{{row.difficulty}}</span></td>
+        <td class="clip"><span class="mono">{{row.displayId}}</span> / {{row.name}}</td>
+        <td><span class="badge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span></td>
         <td><select value="{{row.confidence}}" on-change="['setConfidence', row.cardId]">
-          <option>Average</option><option>0.7</option><option>0.85</option><option>0.95</option>
+          <option value="Average">Average</option><option value="0.7">70th pct</option><option value="0.85">85th pct</option><option value="0.95">95th pct</option>
         </select></td>
         <td><input class="sla" type="number" min="0" step="0.5" value="{{row.slaSketch}}" on-change="['setSla', row.cardId, 'sla_sketch']" /></td>
         <td><input class="sla" type="number" min="0" step="0.5" value="{{row.slaRender}}" on-change="['setSla', row.cardId, 'sla_render']" /></td>
         {{#if row.forecast}}
-          <td>{{fmt(row.forecast.sketchDelivery)}}</td><td>{{fmt(row.forecast.sketchApproved)}}</td>
-          <td class="{{#if row.forecast.late}}redtext{{/if}}">{{fmt(row.forecast.renderDelivery)}}</td><td>{{fmt(row.forecast.renderApproved)}}</td>
+          <td class="nowrap"><strong>{{fmt(row.forecast.sketchDelivery)}}</strong></td><td class="nowrap">{{fmt(row.forecast.sketchApproved)}}</td>
+          <td class="nowrap {{#if row.forecast.late}}redtext{{/if}}"><strong>{{fmt(row.forecast.renderDelivery)}}</strong></td><td class="nowrap">{{fmt(row.forecast.renderApproved)}}</td>
           <td class="dim">{{(row.forecast.sketchReview * 2).toFixed(2)}}</td>
           <td>{{row.forecast.forecastedReviewTime.toFixed(2)}}</td>
-          <td>{{row.forecast.totalCycleTime.toFixed(2)}}</td>
+          <td><strong>{{row.forecast.totalCycleTime.toFixed(2)}}</strong></td>
           <td class="dim">{{row.forecast.sampleSize}}</td>
         {{else}}<td colspan="8" class="dim">no difficulty — cannot forecast</td>{{/if}}
       </tr>
@@ -206,7 +288,7 @@
     </tbody>
   </table></div>
   {{#if modelProvenance}}
-    <div class="provenance">Model: {{modelProvenance.source}} · cells {{modelProvenance.cells}}{{#if modelProvenance.fallback}} · <span class="badge warn">snapshot fallback</span>{{/if}} · review n={{modelReview.n}} · 0.7 → {{modelReview['0.7']}}d</div>
+    <div class="provenance">Model cells {{modelProvenance.cells}} · sample sizes shown per row (n) · recomputed nightly from a rolling window (FR-7.6)</div>
   {{/if}}
 {{/if}}
 

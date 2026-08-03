@@ -4,77 +4,7 @@
 const WEIGHTS = { Easy: 1, Medium: 2, Hard: 4, '': 2 };
 const HARD_IDEAL = 0.083;
 const HARD_CEILING = 0.129;
-
-const app = new Ractive({
-  target: '#app',
-  template: '#tpl-app',
-  data: {
-    tabs: [
-      { id: 'requests', label: 'Requests' },
-      { id: 'pipeline', label: 'Pipeline' },
-      { id: 'schedules', label: 'Sprint Schedules' },
-      { id: 'deadlines', label: 'Deadlines' },
-      { id: 'forecast', label: 'Forecast' },
-    ],
-    activeTab: 'pipeline',
-    projects: [],
-    activeProjectId: null,
-    banner: '',
-    sync: null,
-    syncLabel: '…',
-    // pipeline/schedules/forecast
-    rows: [],
-    workCardsByMc: {},
-    corrections: [],
-    sprints: [],
-    capacity: { weekly: 0 },
-    expanded: {},
-    selected: {},
-    weekCols: [],
-    suggest: null,
-    suggestCount: 0,
-    sprintModal: false,
-    sprintDraft: [],
-    sprintError: '',
-    hardIdeal: HARD_IDEAL,
-    hardCeiling: HARD_CEILING,
-    // requests
-    requests: [],
-    rejects: [],
-    requestFilters: ['all', 'filed', 'unfiled', 'missing-deadline'],
-    requestFilter: 'all',
-    // deadlines
-    monthOffset: 0,
-    monthLabel: '',
-    deadlineWeeks: [],
-    deadlineConflicts: [],
-    replot: [],
-    // model
-    modelProvenance: null,
-    modelReview: null,
-    // helpers used inside the template
-    fmt: (iso) => fmtDate(iso),
-    pct: (x) => `${Math.round((x || 0) * 1000) / 10}%`,
-  },
-  computed: {
-    schedRows() {
-      const rows = this.get('rows');
-      const sprints = this.get('sprints');
-      return rows
-        .filter((r) => r.status !== 'done')
-        .map((r) => {
-          const s = r.slottedWeek ? sprints.find((sp) => r.slottedWeek >= sp.start && r.slottedWeek <= sp.end) : null;
-          return { ...r, sprintName: r.slottedWeek ? (s ? s.name : 'Outside any sprint') : 'Unscheduled' };
-        })
-        .sort((a, b) => (a.sprintName + a.displayId).localeCompare(b.sprintName + b.displayId));
-    },
-    forecastRows() {
-      return this.get('rows').filter((r) => r.status !== 'done');
-    },
-  },
-});
-
-/* ---------- helpers ---------- */
+const WEEK_COUNT = 8;
 
 function todayIso() {
   const d = new Date();
@@ -88,6 +18,168 @@ function mondayIso(base) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+const app = new Ractive({
+  target: '#app',
+  template: '#tpl-app',
+  data: {
+    tabs: [
+      { id: 'requests', label: 'Requests', icon: '🗂' },
+      { id: 'pipeline', label: 'Pipeline', icon: '▦' },
+      { id: 'schedules', label: 'Sprint Schedules', icon: '🗓' },
+      { id: 'deadlines', label: 'Deadlines', icon: '⏰' },
+      { id: 'forecast', label: 'Forecast', icon: '📈' },
+    ],
+    activeTab: 'pipeline',
+    projects: [],
+    activeProjectId: null,
+    userName: '',
+    userInitial: '',
+    banner: '',
+    sync: null,
+    syncLabel: '…',
+    rows: [],
+    workCardsByMc: {},
+    corrections: [],
+    showAllCorrections: false,
+    sprints: [],
+    capacity: { weekly: 0 },
+    expanded: {},
+    selected: {},
+    searchQ: '',
+    weekStart: mondayIso(todayIso()),
+    suggest: null,
+    suggestCount: 0,
+    sprintModal: false,
+    sprintDraft: [],
+    sprintError: '',
+    hardIdeal: HARD_IDEAL,
+    hardCeiling: HARD_CEILING,
+    requests: [],
+    rejects: [],
+    requestFilters: ['all', 'filed', 'unfiled', 'missing-deadline'],
+    requestFilter: 'all',
+    monthOffset: 0,
+    monthLabel: '',
+    deadlinePayload: { milestones: [], conflicts: [], replot: [] },
+    deadlineWeeks: [],
+    deadlineConflicts: [],
+    replot: [],
+    dueThisMonth: 0,
+    urgentThisMonth: 0,
+    modelProvenance: null,
+    modelReview: null,
+    fmt: (iso) => fmtDate(iso),
+    pct: (x) => `${Math.round((x || 0) * 1000) / 10}%`,
+    ruleLabel: (r) =>
+      r === 'urgent-overlap' ? '⚡ Urgent overlap' : r === 'past-deadline' ? '🛡 Past deadline' : '▤ Over capacity',
+  },
+  computed: {
+    tabLabel() {
+      const t = this.get('tabs').find((x) => x.id === this.get('activeTab'));
+      return t ? t.label : '';
+    },
+    boardId() {
+      const p = this.get('projects').find((x) => x._id === this.get('activeProjectId'));
+      return p ? p.trello_board_id : '';
+    },
+    kpi() {
+      const rows = this.get('rows');
+      const byMc = this.get('workCardsByMc');
+      const work = Object.values(byMc).reduce((a, l) => a + l.length, 0);
+      const open = Object.values(byMc).reduce((a, l) => a + l.filter((w) => w.status !== 'done').length, 0);
+      return {
+        main: rows.length,
+        work,
+        open,
+        urgent: rows.filter((r) => r.urgency === 'Urgent').length,
+        atRisk: rows.filter((r) => r.forecast && r.forecast.late).length,
+      };
+    },
+    pipelineRows() {
+      const q = (this.get('searchQ') || '').toLowerCase();
+      const rows = this.get('rows');
+      if (!q) return rows;
+      return rows.filter((r) => `${r.displayId} ${r.mcNumber} ${r.name}`.toLowerCase().includes(q));
+    },
+    visibleCorrections() {
+      const c = this.get('corrections');
+      return this.get('showAllCorrections') ? c : c.slice(0, 5);
+    },
+    weekCols() {
+      const from = this.get('weekStart');
+      return Array.from({ length: WEEK_COUNT }, (_, i) => ({ key: mondayShift(from, i) }));
+    },
+    rangeLabel() {
+      const from = this.get('weekStart');
+      const to = mondayShift(from, WEEK_COUNT - 1);
+      return `${fmtDate(from)} – ${fmtDate(mondayShift(to, 1))}, ${new Date(from + 'T00:00:00').getFullYear()}`;
+    },
+    schedRows() {
+      const sprints = this.get('sprints');
+      return this.get('rows')
+        .filter((r) => r.status !== 'done')
+        .map((r) => {
+          const s = r.slottedWeek ? sprints.find((sp) => r.slottedWeek >= sp.start && r.slottedWeek <= sp.end) : null;
+          return { ...r, sprintName: r.slottedWeek ? (s ? s.name : 'Outside any sprint') : 'Unscheduled' };
+        });
+    },
+    schedGroups() {
+      const rows = this.get('schedRows');
+      const sprints = this.get('sprints');
+      const groups = [];
+      for (const s of sprints) {
+        const inSprint = rows.filter((r) => r.sprintName === s.name);
+        if (inSprint.length) groups.push({ name: s.name, meta: `${fmtDate(s.start)} – ${fmtDate(s.end)}`, rows: inSprint });
+      }
+      const outside = rows.filter((r) => r.sprintName === 'Outside any sprint');
+      if (outside.length) groups.push({ name: 'Outside any sprint', meta: 'weeks no sprint covers', rows: outside });
+      const unsched = rows.filter((r) => r.sprintName === 'Unscheduled');
+      if (unsched.length) groups.push({ name: 'Unscheduled', meta: 'not yet plotted', rows: unsched });
+      return groups;
+    },
+    forecastRows() {
+      return this.get('rows').filter((r) => r.status !== 'done');
+    },
+  },
+});
+
+/* ---- gantt helpers: percentage positions across the visible week range ---- */
+
+function rangeDays() {
+  return WEEK_COUNT * 7;
+}
+function pctOf(dateIso) {
+  const start = Date.parse(app.get('weekStart') + 'T00:00:00');
+  const days = (Date.parse(dateIso + 'T00:00:00') - start) / 864e5;
+  return (days / rangeDays()) * 100;
+}
+const clamp = (x) => Math.max(0, Math.min(100, x));
+
+app.set('ganttBars', (row) => {
+  if (!row.slottedWeek || !row.forecast) return [];
+  const f = row.forecast;
+  const bars = [];
+  const seg = (fromIso, toIso, cls, title) => {
+    const left = clamp(pctOf(fromIso));
+    const right = clamp(pctOf(toIso) + 100 / rangeDays());
+    if (right <= 0 || left >= 100 || right <= left) return;
+    bars.push({ cls, left: left.toFixed(2), width: (right - left).toFixed(2), title });
+  };
+  seg(row.slottedWeek, f.sketchDelivery, 'sketch', `sketch → ${fmtDate(f.sketchDelivery)}`);
+  seg(f.sketchDelivery, f.sketchApproved, 'review', `review → ${fmtDate(f.sketchApproved)}`);
+  seg(f.sketchApproved, f.renderDelivery, f.late ? 'render red' : 'render', `render → ${fmtDate(f.renderDelivery)}`);
+  return bars;
+});
+app.set('deadlineTick', (row) => {
+  if (!row.deadline) return null;
+  const p = pctOf(row.deadline);
+  return p >= 0 && p <= 100 ? p.toFixed(2) : null;
+});
+app.set('ghostLeft', (row) => {
+  const s = app.get('suggest');
+  if (!s || !s.plan[row.cardId]) return 0;
+  return clamp(pctOf(s.plan[row.cardId])).toFixed(2);
+});
 app.set('footClass', (weekKey) => {
   const rows = app.get('schedRows').filter((r) => r.slottedWeek === weekKey);
   const cap = app.get('capacity').weekly || 1;
@@ -107,10 +199,15 @@ app.set('footLabel', (weekKey) => {
 /* ---------- data loading ---------- */
 
 async function loadShell() {
-  const me = await api.get('/api/projects');
-  app.set('projects', me.projects);
-  if (!app.get('activeProjectId') && me.projects.length) {
-    app.set('activeProjectId', me.projects[0]._id);
+  const [me, projects] = await Promise.all([api.get('/api/me'), api.get('/api/projects')]);
+  const name = me.user.name || me.user.email || '';
+  app.set({
+    projects: projects.projects,
+    userName: name,
+    userInitial: (name[0] || '?').toUpperCase(),
+  });
+  if (!app.get('activeProjectId') && projects.projects.length) {
+    app.set('activeProjectId', projects.projects[0]._id);
   }
   await loadAll();
 }
@@ -125,7 +222,6 @@ async function loadAll() {
       api.get(`/api/projects/${pid}/deadlines`),
       api.get(`/api/projects/${pid}/model`),
     ]);
-    const from = mondayIso(todayIso());
     app.set({
       rows: pipeline.rows,
       workCardsByMc: pipeline.workCardsByMc,
@@ -133,15 +229,19 @@ async function loadAll() {
       sprints: pipeline.sprints,
       capacity: pipeline.capacity,
       sync: pipeline.sync,
-      syncLabel: pipeline.sync ? (pipeline.sync.ok ? `synced ${new Date(pipeline.sync.at).toLocaleTimeString()}` : 'sync failing — showing last good data') : 'no sync yet',
+      syncLabel: pipeline.sync
+        ? pipeline.sync.ok
+          ? `synced ${new Date(pipeline.sync.at).toLocaleTimeString()}`
+          : 'sync failing — showing last good data'
+        : 'no sync yet',
       banner: pipeline.sync && !pipeline.sync.ok ? `Sync error: ${pipeline.sync.error || 'unknown'} — data below is the last good state.` : '',
       requests: requests.requests,
       rejects: requests.rejects,
-      weekCols: Array.from({ length: 8 }, (_, i) => ({ key: mondayShift(from, i) })),
+      deadlinePayload: deadlines,
       modelProvenance: model.provenance,
       modelReview: model.model.review,
     });
-    computeDeadlines(deadlines);
+    computeDeadlines();
   } catch (err) {
     app.set('banner', `Load failed: ${err.message} — the app stays usable with what it has.`);
   }
@@ -152,7 +252,8 @@ function filterQuery() {
   return f && f !== 'all' ? `?filter=${f}` : '';
 }
 
-function computeDeadlines(payload) {
+function computeDeadlines() {
+  const payload = app.get('deadlinePayload');
   const offset = app.get('monthOffset');
   const base = new Date();
   base.setMonth(base.getMonth() + offset, 1);
@@ -165,13 +266,27 @@ function computeDeadlines(payload) {
     return d.getFullYear() === y && d.getMonth() === m;
   });
   const byWeek = {};
-  for (const ms of inMonth) {
-    (byWeek[ms.week] = byWeek[ms.week] || []).push(ms);
-  }
+  for (const ms of inMonth) (byWeek[ms.week] = byWeek[ms.week] || []).push(ms);
+  const cap = app.get('capacity').weekly || 1;
+  const keys = Object.keys(byWeek).sort();
   app.set({
-    deadlineWeeks: Object.keys(byWeek).sort().map((key) => ({ key, items: byWeek[key] })),
-    deadlineConflicts: payload.conflicts.filter((c) => inMonth.some((ms) => ms.week === c.week)),
+    deadlineWeeks: keys.map((key, i) => {
+      const items = byWeek[key];
+      const urgent = items.filter((x) => x.urgent).length;
+      return {
+        key,
+        label: `Week ${i + 1}`,
+        sub: fmtDate(key),
+        items,
+        urgent,
+        flagged: urgent >= 2 || items.some((x) => x.late),
+        capPct: Math.min(100, (items.length / cap) * 100).toFixed(1),
+      };
+    }),
+    deadlineConflicts: payload.conflicts.filter((c) => keys.includes(c.week)),
     replot: payload.replot,
+    dueThisMonth: inMonth.length,
+    urgentThisMonth: inMonth.filter((x) => x.urgent).length,
   });
 }
 
@@ -181,15 +296,16 @@ app.on({
   noop(ctx) { ctx.event && ctx.event.stopPropagation(); },
   switchTab(_ctx, id) { app.set('activeTab', id); },
   async switchProject() { await loadAll(); },
+  signOut() { api.send('POST', '/auth/logout').then(() => window.location.reload()); },
+  toggleCorrections() { app.toggle('showAllCorrections'); },
   async setRequestFilter(_ctx, f) {
     app.set('requestFilter', f);
-    const pid = app.get('activeProjectId');
-    const res = await api.get(`/api/projects/${pid}/requests${filterQuery()}`);
+    const res = await api.get(`/api/projects/${app.get('activeProjectId')}/requests${filterQuery()}`);
     app.set({ requests: res.requests, rejects: res.rejects });
   },
   toggleGroup(_ctx, mc) { app.toggle(`expanded.${mc}`); },
 
-  /* schedules */
+  weekShiftView(_ctx, dir) { app.set('weekStart', mondayShift(app.get('weekStart'), dir)); },
   dragRow(ctx, cardId) {
     ctx.event.dataTransfer.setData('text/plain', cardId);
     ctx.event.dataTransfer.effectAllowed = 'move';
@@ -197,15 +313,14 @@ app.on({
   dragOver(ctx) { ctx.event.preventDefault(); },
   async dropOnWeek(ctx, weekKey) {
     ctx.event.preventDefault();
-    const grabbed = ctx.event.dataTransfer.getData('text/plain');
-    await moveRows(grabbed, weekKey);
+    await moveRows(ctx.event.dataTransfer.getData('text/plain'), weekKey);
   },
   async rowKey(ctx, cardId) {
     const key = ctx.event.key;
     if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
     ctx.event.preventDefault();
     const row = app.get('schedRows').find((r) => r.cardId === cardId);
-    const from = row.slottedWeek || mondayIso(todayIso());
+    const from = row.slottedWeek || app.get('weekStart');
     await moveRows(cardId, mondayShift(from, key === 'ArrowRight' ? 1 : -1));
   },
   async togglePin(_ctx, cardId, pinned) {
@@ -223,10 +338,11 @@ app.on({
     await loadAll();
   },
   async runSuggest() {
-    const pid = app.get('activeProjectId');
-    const res = await api.send('POST', `/api/projects/${pid}/suggest`, { from: mondayIso(todayIso()), weeks: 8 });
-    app.set('suggest', res);
-    app.set('suggestCount', Object.keys(res.plan).length);
+    const res = await api.send('POST', `/api/projects/${app.get('activeProjectId')}/suggest`, {
+      from: app.get('weekStart'),
+      weeks: WEEK_COUNT,
+    });
+    app.set({ suggest: res, suggestCount: Object.keys(res.plan).length });
   },
   clearSuggest() { app.set({ suggest: null, suggestCount: 0 }); },
   async acceptSuggest() {
@@ -238,7 +354,6 @@ app.on({
     await loadAll();
   },
 
-  /* sprints */
   openSprints() {
     app.set('sprintDraft', app.get('sprints').map((s) => ({ ...s })));
     app.set({ sprintModal: true, sprintError: '' });
@@ -259,14 +374,11 @@ app.on({
     }
   },
 
-  /* deadlines */
-  async monthShift(_ctx, dir) {
+  monthShift(_ctx, dir) {
     app.set('monthOffset', app.get('monthOffset') + dir);
-    const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
-    computeDeadlines(res);
+    computeDeadlines();
   },
 
-  /* forecast */
   async setConfidence(ctx, cardId) {
     await api.send('PATCH', patchUrl(cardId), { confidence: ctx.node.value });
     await loadAll();
@@ -294,8 +406,7 @@ async function moveRows(grabbedId, targetWeek) {
   const deltaWeeks = Math.round((Date.parse(targetWeek) - Date.parse(from)) / (7 * 864e5));
   const moves = group.map((cardId) => {
     const row = rows.find((r) => r.cardId === cardId);
-    const base = row.slottedWeek || targetWeek;
-    return { cardId, week: row.slottedWeek ? mondayShift(base, deltaWeeks) : targetWeek };
+    return { cardId, week: row.slottedWeek ? mondayShift(row.slottedWeek, deltaWeeks) : targetWeek };
   });
   await api.send('POST', `/api/projects/${app.get('activeProjectId')}/replot`, { moves });
   await loadAll();
