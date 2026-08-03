@@ -23,13 +23,24 @@ export default [
     },
   },
 
-  // --- Frontend scripts (browser, concatenated — Ractive is a global) ---
+  // --- Frontend scripts (browser; build.js concatenates them into ONE
+  // <script>, so top-level consts in 00-api.js are shared scope) ---
   {
     files: ['frontend/scripts/**/*.js'],
     languageOptions: {
       ecmaVersion: 2024,
       sourceType: 'script',
-      globals: { ...globals.browser, Ractive: 'readonly' },
+      globals: {
+        ...globals.browser,
+        Ractive: 'readonly',
+        api: 'readonly',
+        fmtDate: 'readonly',
+        mondayShift: 'readonly',
+      },
+    },
+    rules: {
+      'no-redeclare': 'off', // the defining file "redeclares" the shared names
+      'no-unused-vars': ['error', { varsIgnorePattern: '^(api|fmtDate|mondayShift|app)$' }],
     },
   },
 ];

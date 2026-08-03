@@ -31,6 +31,10 @@ const base = z.object({
 
   APP_BASE_URL: z.string().optional(),
 
+  // Dev-only auto-login (email). Honoured EXCLUSIVELY when NODE_ENV=development;
+  // the allow-list check still applies. Never set outside a laptop.
+  DEV_AUTOLOGIN: z.string().optional(),
+
   // Invariant 17 guardrail: comma-separated production Trello board ids.
   // Outside production, any configured board matching this list refuses to run.
   PROD_TRELLO_BOARD_IDS: z.string().optional(),
