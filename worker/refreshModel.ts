@@ -12,7 +12,7 @@ import {
   gridDelta,
   type GridCell,
 } from '../src/services/model-refresh.ts';
-import { CardEvent, Deliverable, ModelGrid, ModelSample, Project, SyncRun, ThroughputGrid } from '../src/models/index.ts';
+import { CardEvent, Deliverable, ModelGrid, ModelSample, Project, SyncRun, ThroughputGrid, WorkCard } from '../src/models/index.ts';
 import type { Difficulty, Lane } from '../lib/model.ts';
 
 export interface RefreshStats {
@@ -30,14 +30,26 @@ export async function refreshProjectModel(projectId: Types.ObjectId): Promise<Re
   since.setMonth(since.getMonth() - (project.model_window_months ?? 12));
 
   const events = await CardEvent.find({ project_id: projectId, occurred_at: { $gte: since } });
+  // The model measures how ALL work flows through lanes — deliverables AND
+  // work cards (the ARES-built Appendix grid counted every card; sampling
+  // deliverables alone starves the grid). Difficulty labels appear on both.
   const deliverables = await Deliverable.find({ project_id: projectId }).select(
     'trello_card_id difficulty lane',
   );
-  const cards = deliverables.map((d) => ({
-    trello_card_id: d.trello_card_id,
-    difficulty: (d.difficulty ?? null) as Difficulty | null,
-    lane: (d.lane ?? null) as Lane | null,
-  }));
+  const workCards = await WorkCard.find({ project_id: projectId }).select('trello_card_id difficulty');
+  const VALID = new Set(['Easy', 'Medium', 'Hard']);
+  const cards = [
+    ...deliverables.map((d) => ({
+      trello_card_id: d.trello_card_id,
+      difficulty: (d.difficulty ?? null) as Difficulty | null,
+      lane: (d.lane ?? null) as Lane | null,
+    })),
+    ...workCards.map((w) => ({
+      trello_card_id: w.trello_card_id,
+      difficulty: (VALID.has(w.difficulty ?? '') ? w.difficulty : null) as Difficulty | null,
+      lane: null as Lane | null,
+    })),
+  ];
 
   const samples = deriveSamples(
     events.map((e) => ({ trello_card_id: e.trello_card_id, to_list: e.to_list ?? null, occurred_at: e.occurred_at })),
