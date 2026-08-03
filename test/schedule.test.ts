@@ -1,0 +1,198 @@
+/**
+ * Phase 7 backend — schedule writes (AC-13/AC-14 API side), ownership
+ * enforcement, sprint overlap rejection (FR-5.15), suggest-proposes-only
+ * (AC-15), duplicate-without-links (FR-5.12), deadlines conflicts
+ * (AC-17, AC-18; BR-6), audit on every change (invariant 10).
+ */
+
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import request, { type Agent } from 'supertest';
+import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
+import { createApp } from '../src/app.ts';
+import { validateEnv } from '../src/config/env.ts';
+import { AuditLog, Deliverable, Project, Sprint, User, UserProject } from '../src/models/index.ts';
+
+const env = validateEnv({ NODE_ENV: 'test' });
+
+beforeAll(async () => {
+  await startTestDb();
+}, 120_000);
+afterAll(async () => {
+  await stopTestDb();
+});
+beforeEach(async () => {
+  await clearCollections();
+});
+
+async function setup() {
+  const project = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'fxA', weekly_capacity: 3 });
+  const user = await User.create({ email: 'pm@frostdesigngroup.com' });
+  await UserProject.create({ user_id: user._id, project_id: project._id });
+  const mk = (i: number, over: Record<string, unknown> = {}) =>
+    Deliverable.create({
+      project_id: project._id, mc_number: `MC-${i}`, display_id: `MC-${i}`, trello_card_id: `c${i}`,
+      name: `D${i}`, difficulty: 'Medium', lane: 'design', current_list: 'Design', ...over,
+    });
+  const app = createApp({ env, redis: null, mongo: null });
+  const agent = request.agent(app);
+  await agent.post('/__test/login').send({ userId: String(user._id), email: user.email }).expect(200);
+  return { project, user, agent, mk };
+}
+
+describe('planning writes (AC-13 API side)', () => {
+  it('slots a week, sets pin/confidence/SLA/note, audits before/after', async () => {
+    const { project, agent, mk } = await setup();
+    await mk(1);
+    await agent
+      .patch(`/api/projects/${project._id}/deliverables/c1/planning`)
+      .send({ slotted_week: '2026-08-10', pinned: true, confidence: '0.85', sla_sketch: 2, status_note: 'manual: waiting on legal' })
+      .expect(200);
+    const d = await Deliverable.findOne({ trello_card_id: 'c1' }).orFail();
+    expect(d.slotted_week).toBe('2026-08-10');
+    expect(d.pinned).toBe(true);
+    expect(d.confidence).toBe('0.85');
+    const log = await AuditLog.findOne({ action: 'schedule.planning' }).orFail();
+    expect(log.actor).toBe('pm@frostdesigngroup.com');
+    expect((log.before as Record<string, unknown>).slotted_week).toBeNull();
+    expect((log.after as Record<string, unknown>).slotted_week).toBe('2026-08-10');
+  });
+
+  it('refuses Trello-owned fields outright (§1.2 ownership; invariant 2)', async () => {
+    const { project, agent, mk } = await setup();
+    await mk(1);
+    const res = await agent
+      .patch(`/api/projects/${project._id}/deliverables/c1/planning`)
+      .send({ name: 'hacked', difficulty: 'Easy' });
+    expect(res.status).toBe(400);
+    const d = await Deliverable.findOne({ trello_card_id: 'c1' }).orFail();
+    expect(d.name).toBe('D1');
+  });
+});
+
+describe('multi-row replot (AC-14 API side, BR-8)', () => {
+  it('applies moves to every unpinned row and skips pinned ones (FR-5.9)', async () => {
+    const { project, agent, mk } = await setup();
+    await mk(1, { slotted_week: '2026-08-03' });
+    await mk(2, { slotted_week: '2026-08-10' });
+    await mk(3, { slotted_week: '2026-08-03', pinned: true });
+    // +1 week relative shift, computed client-side, applied absolutely
+    const res = await agent
+      .post(`/api/projects/${project._id}/replot`)
+      .send({ moves: [
+        { cardId: 'c1', week: '2026-08-10' },
+        { cardId: 'c2', week: '2026-08-17' },
+        { cardId: 'c3', week: '2026-08-10' },
+      ] })
+      .expect(200);
+    expect(res.body.moved).toBe(2);
+    expect((await Deliverable.findOne({ trello_card_id: 'c1' }))?.slotted_week).toBe('2026-08-10');
+    expect((await Deliverable.findOne({ trello_card_id: 'c2' }))?.slotted_week).toBe('2026-08-17');
+    expect((await Deliverable.findOne({ trello_card_id: 'c3' }))?.slotted_week).toBe('2026-08-03'); // pinned
+    expect(await AuditLog.countDocuments({ action: 'schedule.replot' })).toBe(2);
+  });
+});
+
+describe('sprints (FR-5.14, FR-5.15, BR-5)', () => {
+  it('rejects overlapping sprints on save; allows gaps', async () => {
+    const { project, agent } = await setup();
+    const overlap = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { name: 'S1', start: '2026-08-03', end: '2026-08-14' },
+        { name: 'S2', start: '2026-08-10', end: '2026-08-21' },
+      ],
+    });
+    expect(overlap.status).toBe(422);
+    expect(overlap.body.error.code).toBe('SPRINT_CONFLICT');
+    expect(await Sprint.countDocuments({})).toBe(0);
+
+    await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { name: 'S1', start: '2026-08-03', end: '2026-08-14' },
+        { name: 'S2', start: '2026-08-24', end: '2026-09-04' }, // gap — legal
+      ],
+    }).expect(200);
+    expect(await Sprint.countDocuments({})).toBe(2);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(1);
+  });
+});
+
+describe('suggest plan (AC-15, AC-16; BR-7)', () => {
+  it('proposes without applying; pinned rows never appear in the plan', async () => {
+    const { project, agent, mk } = await setup();
+    await mk(1);
+    await mk(2, { urgency: 'Urgent' });
+    await mk(3, { pinned: true, slotted_week: '2026-08-10' });
+    const res = await agent
+      .post(`/api/projects/${project._id}/suggest`)
+      .send({ from: '2026-08-03', weeks: 4 })
+      .expect(200);
+    expect(res.body.plan.c1).toBeDefined();
+    expect(res.body.plan.c2).toBeDefined();
+    expect(res.body.plan.c3).toBeUndefined(); // pinned (AC-16)
+    // nothing applied (AC-15)
+    expect((await Deliverable.findOne({ trello_card_id: 'c1' }))?.slotted_week ?? null).toBeNull();
+  });
+});
+
+describe('duplicate (FR-5.12)', () => {
+  it('copies the row without Trello or Figma links', async () => {
+    const { project, agent, mk } = await setup();
+    await mk(1, { trello_url: 'https://trello.com/c/x', figma_url: 'https://figma.com/f/y', trello_due: '2026-08-21' });
+    const res = await agent.post(`/api/projects/${project._id}/deliverables/c1/duplicate`).expect(200);
+    const copy = await Deliverable.findOne({ trello_card_id: res.body.cardId }).orFail();
+    expect(copy.name).toBe('D1 (copy)');
+    expect(copy.trello_url ?? null).toBeNull();
+    expect(copy.figma_url ?? null).toBeNull();
+    expect(copy.trello_due ?? null).toBeNull();
+    expect(copy.difficulty).toBe('Medium');
+  });
+});
+
+describe('deadlines view (AC-17, AC-18; BR-6, BR-9a)', () => {
+  it('flags and names two urgent milestones in a week; late rows land on the replot list', async () => {
+    const { project, agent, mk } = await setup();
+    // both urgent, slotted same week → sketch milestones collide (AC-17)
+    await mk(1, { urgency: 'Urgent', slotted_week: '2026-08-03', sheet_deadline: '2026-09-30' });
+    await mk(2, { urgency: 'Urgent', slotted_week: '2026-08-03', sheet_deadline: '2026-09-30' });
+    // deadline before the render forecast → late (AC-18)
+    await mk(3, { slotted_week: '2026-08-03', sheet_deadline: '2026-08-05' });
+
+    const res = await agent.get(`/api/projects/${project._id}/deadlines`).expect(200);
+    const urgentConflicts = res.body.conflicts.filter((c: { rule: string }) => c.rule === 'urgent-overlap');
+    expect(urgentConflicts.length).toBeGreaterThanOrEqual(1);
+    const named = urgentConflicts[0].items.map((i: { displayId: string }) => i.displayId).sort();
+    expect(named).toEqual(['MC-1', 'MC-2']);
+
+    const late = res.body.milestones.filter((m: { late: boolean }) => m.late);
+    expect(late.length).toBe(1);
+    expect(late[0].displayId).toBe('MC-3');
+    expect(res.body.replot.map((r: { displayId: string }) => r.displayId)).toContain('MC-3');
+
+    // conflict keys carry the situation (invariant 13)
+    expect(urgentConflicts[0].key).toMatch(/^2026-08-\d{2}\|urgent-overlap\|c1:sketch,c2:sketch$/);
+  });
+
+  it('a card with no deadline cannot raise a deadline conflict (BR-9)', async () => {
+    const { project, agent, mk } = await setup();
+    await mk(1, { slotted_week: '2026-08-03' }); // no deadline anywhere
+    const res = await agent.get(`/api/projects/${project._id}/deadlines`).expect(200);
+    expect(res.body.milestones.every((m: { late: boolean }) => !m.late)).toBe(true);
+    expect(res.body.conflicts.filter((c: { rule: string }) => c.rule === 'past-deadline')).toHaveLength(0);
+  });
+});
+
+describe('pipeline read (FR-4.1–4.4)', () => {
+  it('serves rows with forecast, corrections, sprints and capacity', async () => {
+    const { project, agent, mk } = await setup();
+    await mk(1, { figma_url: 'https://figma.com/f/x', sheet_deadline: '2026-09-04' });
+    await mk(2, { difficulty: null }); // missing difficulty + deadline + figma
+    const res = await agent.get(`/api/projects/${project._id}/deliverables`).expect(200);
+    expect(res.body.rows).toHaveLength(2);
+    const r1 = res.body.rows.find((r: { cardId: string }) => r.cardId === 'c1');
+    expect(r1.forecast.sketchDelivery).toBeTruthy();
+    expect(r1.deadlineSource).toBe('sheet');
+    const corrections = res.body.corrections.map((c: { cardId: string }) => c.cardId);
+    expect(corrections).toContain('c2');
+    expect(res.body.capacity.weekly).toBe(3);
+  });
+});

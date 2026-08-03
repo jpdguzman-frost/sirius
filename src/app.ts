@@ -22,6 +22,7 @@ import { authRouter } from './auth/routes.ts';
 import { projectsRouter } from './routes/projects.ts';
 import { requestsRouter } from './routes/requests.ts';
 import { deliverablesRouter } from './routes/deliverables.ts';
+import { scheduleRouter } from './routes/schedule.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -64,6 +65,25 @@ export function createApp({ env, redis }: AppDeps): express.Express {
     });
   });
 
+  // Dev-only auto-login: NODE_ENV=development AND DEV_AUTOLOGIN set AND the
+  // email is an ACTIVE allow-list row. Real SSO takes over the moment Google
+  // credentials exist. Never mounted in staging/production.
+  if (env.NODE_ENV === 'development' && env.DEV_AUTOLOGIN) {
+    app.get('/auth/dev', (req, res, next) => {
+      import('./models/index.ts').then(async ({ User }) => {
+        const user = await User.findOne({ email: env.DEV_AUTOLOGIN!.toLowerCase() });
+        if (!user || !user.active) {
+          res.status(403).json({ ok: false, error: { code: 'DEV_LOGIN_DENIED', message: 'DEV_AUTOLOGIN email is not an active allow-list row.' } });
+          return;
+        }
+        req.logIn({ userId: user._id.toString(), email: user.email, name: user.name }, (err) => {
+          if (err) return next(err);
+          res.redirect('/');
+        });
+      }, next);
+    });
+  }
+
   // Test-only session injection — lets the authz matrix run without a live
   // Google round-trip. Never mounted outside NODE_ENV=test.
   if (env.NODE_ENV === 'test') {
@@ -76,6 +96,7 @@ export function createApp({ env, redis }: AppDeps): express.Express {
   app.use(projectsRouter());
   app.use(requestsRouter());
   app.use(deliverablesRouter());
+  app.use(scheduleRouter());
 
   // Built frontend (frontend/build.js → public/). No credential ever ships here.
   app.use(express.static(path.join(__dirname, '..', 'public')));

@@ -23,7 +23,9 @@ const { ObjectId, Mixed } = Schema.Types;
 const DATE_ONLY = {
   type: String,
   validate: {
-    validator: (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v),
+    // null is a legal "no date" (sync $sets null explicitly; mongoose runs
+    // custom validators on null, unlike undefined)
+    validator: (v: string | null) => v == null || /^\d{4}-\d{2}-\d{2}$/.test(v),
     message: 'date-only fields are YYYY-MM-DD strings (Manila calendar days)',
   },
 };
