@@ -11,7 +11,7 @@ requirement ID traced.
 |---|---|
 | 0 Setup · 1 Schema · 2 Auth · 3 lib port · 4 ARES · 5 Intake · 6 Model · 7 UI · 8 Urgency · 8a Acks | **ALL DONE**, gates T026 (AC-10) and T045 (PM dates) passed by JP |
 | 9 Security + pilot | Local halves done (authz matrix, log hygiene, perf). **Blocked on JP's server** — staging deploys beside ARES per `docs/DEPLOY.md` |
-| 10 Two-way sync (added 2026-08-04) | **Specs done** (constitution v4.0.0, FR-9, T077–T086): write registry = `Urgent` label + due date; ARES push per `docs/ARES_PUSH_BUILD_SPEC.md` (separate agent build) + `contracts/ares-push.md`. Ships before pilot. Build not started |
+| 10 Two-way sync (added 2026-08-04) | **Sirius side BUILT** (T077–T084; constitution v4.0.0, FR-9): due-date write + reconcile + webhook receiver + drain + poll fallback, 170/170 tests. Open: T085 (JP hands `docs/ARES_PUSH_BUILD_SPEC.md` to the ARES agent + provisions `ARES_WEBHOOK_SECRET`), T086 e2e at staging. Ships before pilot |
 
 137/137 tests green (`npm run test:tz` — runs the suite in UTC AND Asia/Manila).
 15/20 ACs pass as automated tests; the rest are staging/manual (see STATE.md scoreboard).

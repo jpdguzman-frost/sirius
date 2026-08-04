@@ -9,8 +9,8 @@ write to any source system exists; Google Sheets has no write path, ever.
 
 | # | Field | Trello op | Sirius surface | Audit action | Since |
 |---|---|---|---|---|---|
-| W1 | `Urgent` label | `POST /cards/{id}/idLabels` · `DELETE /cards/{id}/idLabels/{labelId}` | Pipeline urgency toggle | `urgency_set` | v1 (FR-4.6) |
-| W2 | Due date | `PUT /cards/{id}` with `{due}`; `{due: null}` clears | Deadline edit in Pipeline | `due_set` | 2026-08-04 (FR-9.1) |
+| W1 | `Urgent` label | `POST /cards/{id}/idLabels` · `DELETE /cards/{id}/idLabels/{labelId}` | Pipeline urgency toggle | `urgency.set` | v1 (FR-4.6) |
+| W2 | Due date | `PUT /cards/{id}` with `{due}`; `{due: null}` clears | Deadline edit in Pipeline | `due.set` | 2026-08-04 (FR-9.1) |
 
 Interfaces live in `lib/trello.ts` only: `setUrgency(cardId, boardId, urgent)` (§5.3 verbatim
 shape, unchanged) and `setDue(cardId, isoDateTimeOrNull)`.

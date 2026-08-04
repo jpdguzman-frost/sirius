@@ -167,14 +167,14 @@ Ships **before** the pilot per JP's sequencing decision — the pre-pilot securi
 to cover the due-date write and the webhook receiver. The ARES half is built separately from
 `docs/ARES_PUSH_BUILD_SPEC.md`; only T086 depends on it.
 
-- [ ] T077 [P] Reconcile tests FIRST: sync reads the `Urgent` label + due date from ARES card data into Sirius fields; ownership matrix proven safe (Sirius planning fields untouched); echo of a Sirius-originated write is a no-op with no audit row (FR-9.5; invariant 8)
-- [ ] T078 Reconcile implementation in `worker/syncAres.ts` + `src/services/mapper.ts` (FR-9.5)
-- [ ] T079 [P] W2 write tests FIRST: `setDue` add/change/clear, existing time-of-day preserved, 17:00 Manila default, rollback on Trello failure, audit `due_set`, board guard, no-op guard (FR-9.1; FR-9.3; invariants 14, 17)
-- [ ] T080 `lib/trello.ts` `setDue()` + deadline write route in `src/routes/` per `contracts/trello-write.md` W2 (FR-9.1; BR-9 preserved)
-- [ ] T081 Deadline edit in the Pipeline UI with optimistic revert, matching the urgency toggle pattern (FR-9.1; FR-4.7)
-- [ ] T082 [P] Receiver tests FIRST: HMAC over `timestamp.body`, ±5 min window, constant-time compare, `event_id` dedupe, 202-fast with `{accepted, duplicates, ignored}`, unknown-board drop, 401 leaks nothing, no sync work in-request; `ARES_WEBHOOK_SECRET` added to the log-hygiene forbidden list (FR-9.4; NFR-6; NFR-11)
-- [ ] T083 `POST /api/webhooks/ares` receiver + `push_events` collection (unique `event_id`, TTL 7d) + worker drain with per-card coalescing → targeted `GET /api/v1/trello/cards/{id}` reconcile per `contracts/ares-push.md` (FR-9.4; FR-9.5)
-- [ ] T084 Poll fallback adaptation: hourly reconcile while push healthy, revert to 15-min + alerting `sync_runs` row after 30 min push silence with ARES healthy; push freshness surfaced in the sync status UI (FR-9.6; FR-8.5; FR-8.6)
+- [x] T077 [P] Reconcile tests FIRST: sync reads the `Urgent` label + due date from ARES card data into Sirius fields; ownership matrix proven safe (Sirius planning fields untouched); echo of a Sirius-originated write is a no-op with no audit row (FR-9.5; invariant 8)
+- [x] T078 Reconcile implementation in `worker/syncAres.ts` + `src/services/mapper.ts` (FR-9.5)
+- [x] T079 [P] W2 write tests FIRST: `setDue` add/change/clear, existing time-of-day preserved, 17:00 Manila default, rollback on Trello failure, audit `due_set`, board guard, no-op guard (FR-9.1; FR-9.3; invariants 14, 17)
+- [x] T080 `lib/trello.ts` `setDue()` + deadline write route in `src/routes/` per `contracts/trello-write.md` W2 (FR-9.1; BR-9 preserved)
+- [x] T081 Deadline edit in the Pipeline UI with optimistic revert, matching the urgency toggle pattern (FR-9.1; FR-4.7)
+- [x] T082 [P] Receiver tests FIRST: HMAC over `timestamp.body`, ±5 min window, constant-time compare, `event_id` dedupe, 202-fast with `{accepted, duplicates, ignored}`, unknown-board drop, 401 leaks nothing, no sync work in-request; `ARES_WEBHOOK_SECRET` added to the log-hygiene forbidden list (FR-9.4; NFR-6; NFR-11)
+- [x] T083 `POST /api/webhooks/ares` receiver + `push_events` collection (unique `event_id`, TTL 7d) + worker drain with per-card coalescing → targeted `GET /api/v1/trello/cards/{id}` reconcile per `contracts/ares-push.md` (FR-9.4; FR-9.5)
+- [x] T084 Poll fallback adaptation: hourly reconcile while push healthy, revert to 15-min + alerting `sync_runs` row after 30 min push silence with ARES healthy; push freshness surfaced in the sync status UI (FR-9.6; FR-8.5; FR-8.6)
 - [ ] T085 **JP**: hand `docs/ARES_PUSH_BUILD_SPEC.md` to the ARES build agent; provision `ARES_WEBHOOK_SECRET` on both hosts; confirm subscriber config points staging at the TEST board first
 - [ ] T086 End-to-end on staging once ARES push is live: manual Trello change (incl. a hand-removed `Urgent` label and a hand-set due date) reflected in Sirius in < 1 min; fallback drill — push disabled → 15-min poll takes over with the alert (NFR-3 as amended; FR-9.5; FR-9.6)
 

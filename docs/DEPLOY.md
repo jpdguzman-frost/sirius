@@ -17,6 +17,9 @@ pattern. Invariant 15: all secrets live in the host's `.env`, never the repo.
    - `GOOGLE_CLIENT_ID/SECRET=` (Google OAuth Web client; callback
      `https://<host>/auth/google/callback`) — required for real SSO
    - `ARES_URL=https://ares.frostdesigngroup.com` · `ARES_API_KEY=` (read-only key)
+   - `ARES_WEBHOOK_SECRET=` (generate: `openssl rand -hex 32`; the SAME value goes
+     into ARES's push subscriber config — see `docs/ARES_PUSH_BUILD_SPEC.md`.
+     Unset = push disabled; the 15-min poll carries everything)
    - `TRELLO_API_KEY=` · `TRELLO_TOKEN=` (dedicated integration account)
    - **Staging safety (invariant 17)**: `PROD_TRELLO_BOARD_IDS=hLL7WW2V`
      — staging then refuses any urgency write to the production board;
