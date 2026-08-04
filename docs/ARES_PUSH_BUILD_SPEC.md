@@ -32,7 +32,7 @@ A single env-var-configured subscriber is an acceptable v1:
 
 ```
 PUSH_SUBSCRIBER_NAME=sirius
-PUSH_SUBSCRIBER_URL=https://<sirius-host>/api/webhooks/ares
+PUSH_SUBSCRIBER_URL=http://127.0.0.1:3955/sirius/api/webhooks/ares   # loopback, same box; note the /sirius base path
 PUSH_SUBSCRIBER_SECRET=<hex, provisioned by JP — same value configured on the subscriber>
 PUSH_SUBSCRIBER_BOARDS=hLL7WW2V,tx8gDsTH        # comma-separated Trello board shortLinks/ids
 ```
@@ -141,7 +141,7 @@ API, or deliveries to other subscribers.
 
 ## 4. First-subscriber facts (for integration testing)
 
-The Sirius receiver at `POST /api/webhooks/ares`: verifies the APS-4 signature with a ±5 min
+The Sirius receiver at `POST /sirius/api/webhooks/ares` (BASE_PATH mount — the bare path 404s): verifies the APS-4 signature with a ±5 min
 timestamp window, dedupes on `event_id`, and answers `202 {accepted, duplicates, ignored}` in
 under 1 s — it defers all processing. It is safe to re-send generously: duplicates are counted
 and dropped. Staging first: point the subscriber config at Sirius staging with the TEST board

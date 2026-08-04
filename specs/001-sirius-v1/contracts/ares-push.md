@@ -12,7 +12,9 @@ the same state. The read API remains the single source of truth; push only colla
 
 ## Endpoint
 
-`POST /api/webhooks/ares` on the Sirius web process.
+`POST /api/webhooks/ares` on the Sirius web process — **under `BASE_PATH`**, so the live
+URL is `http://127.0.0.1:3955/sirius/api/webhooks/ares` (loopback, same box) or
+`https://platforms.frostdesigngroup.com/sirius/api/webhooks/ares` through Apache.
 
 - Authenticated by **signature, not session** — this route is exempt from the session /
   membership middleware (it is not under `/api/projects/:projectId`, so the authz-matrix test
@@ -37,7 +39,7 @@ the same state. The read API remains the single source of truth; push only colla
   "delivery_id": "01J...ULID",
   "sent_at": "2026-08-04T09:15:00Z",
   "events": [
-    { "event_id": "01J...ULID", "type": "card.changed", "board_id": "hLL7WW2V",
+    { "event_id": "01J...ULID", "type": "card.changed", "board_id": "hLL7WW2V"  // 8-char Trello shortLink — what Sirius keys projects on,
       "card_id": "abc123", "occurred_at": "2026-08-04T09:14:58Z" }
   ]
 }
