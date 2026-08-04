@@ -1,6 +1,6 @@
 # STATE.md — Sirius Build State
 
-_Last updated: 2026-08-03 · Update at the end of every working session._
+_Last updated: 2026-08-04 · Update at the end of every working session._
 
 ## Phase status
 
@@ -17,6 +17,7 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 | 8 | Urgency write | **done 2026-08-04** (T064–T066) | TEST board round-trip: ✅ (board tx8gDsTH, label add/remove verified live) |
 | 8a | Conflict acknowledgements | **done 2026-08-04** (T067–T068) | audit-logged ✓ |
 | 9 | Security testing + pilot | not started | |
+| 10 | Two-way sync (due-date write + ARES push) | **specs done 2026-08-04** (T077–T086); build not started | ships before pilot per JP |
 
 ## Decisions needed from JP (blocking)
 
@@ -24,8 +25,10 @@ _Last updated: 2026-08-03 · Update at the end of every working session._
 |---|---|---|---|
 | OD-1 | ARES interface: DB role / read API / replication | Phase 4 | ✅ **Resolved 2026-08-03: ARES read API** (`/api/v1/trello/*`, read-only key; contract in `specs/001-sirius-v1/contracts/ares-read.md`) |
 | OD-8 | Hosting: Frost GCP or elsewhere | Infra work | ✅ **Resolved 2026-08-03: beside ARES, same pattern; shared Mongo server, own `sirius` db** |
-| BRD §9 | Amend "write impossible by permission" to reflect the urgency write | Vendor assessment, v2 | ⬜ open |
+| BRD §9 | Amend "write impossible by permission" — write surface is now the two-entry registry (urgency + due date) | Vendor assessment, v2 | ⬜ open (grew 2026-08-04) |
 | — | TEST board | Phase 8 | ✅ created: tx8gDsTH (structure-mirroring, 12 synthetic cards) |
+| T085 | Hand `docs/ARES_PUSH_BUILD_SPEC.md` to the ARES build agent + provision `ARES_WEBHOOK_SECRET` on both hosts | T086 (e2e push verify) | ⬜ open |
+| W2 | Due-write canonical time: 17:00 Asia/Manila, preserve existing time-of-day on edit | Nothing (default taken; veto window) | ⬜ JP may veto |
 | NFR-3 | Guide documents a 30-min ARES cache cycle; JP: new ARES is realtime, so < 15 min stands | Phase 4 exit verification | ⬜ verify end-to-end |
 
 ## Decisions needed later (not blocking yet)
@@ -49,6 +52,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-04 — **Two-way sync decided by JP and specced (phase 10, FR-9)**. Drill-down resolved four intents: (1) write surface opens beyond urgency — due date only, as an enumerated **write registry** (constitution v4.0.0 MAJOR: invariants 2 & 8 redefined, 14 clarified; mirror regenerated, body byte-identical); (2) freshness via **ARES push** (option c) on the notification-then-read pattern — `docs/ARES_PUSH_BUILD_SPEC.md` written self-contained for a separate ARES-side agent build, Sirius consumption contract at `contracts/ares-push.md` (HMAC over `timestamp.body`, ±5 min window, event_id dedupe, 202-fast receiver, worker-side reconcile, poll stays as fallback); (3) Trello stays truth for Trello-owned fields — reconcile will read back the `Urgent` label + due date, closing today's write-only loop; (4) Sirius-only packaging — `trello-write.md` rewritten as the registry (W1 urgency, W2 due), spec.md gains FR-9.1–9.6 + NFR-3 amendment (< 1 min target, 15-min ceiling), tasks T077–T086 added (~5–6d Sirius side), pilot gate now includes phase 10 per JP's build-now call. Defaults taken (vetoable): due writes 17:00 Asia/Manila preserving existing time-of-day. JP-owned: T085 (hand ARES spec to the agent build; provision `ARES_WEBHOOK_SECRET`), BRD §9 amendment now covers two fields.
 
 - 2026-08-04 — Pre-staging batch: T063 perf pass DONE (5,000 cards: pipeline 107ms, deadlines 85ms server-side — NFR-1 comfortable); authz matrix test walks the live router (13 project routes, 401/403 enforced mechanically); NFR-11 log hygiene enforced statically (caught+fixed a var-name-in-log); migrate-open-cards onboarding script; docs/DEPLOY.md runbook for JP's server setup (staging beside ARES, PROD_TRELLO_BOARD_IDS=hLL7WW2V, TEST board tx8gDsTH). 137/137 tests green UTC+Manila. Remaining: staging deploy (JP's server), then phase 9 drills + AC sweep + pilot gate.
 

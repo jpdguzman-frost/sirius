@@ -11,6 +11,7 @@ requirement ID traced.
 |---|---|
 | 0 Setup · 1 Schema · 2 Auth · 3 lib port · 4 ARES · 5 Intake · 6 Model · 7 UI · 8 Urgency · 8a Acks | **ALL DONE**, gates T026 (AC-10) and T045 (PM dates) passed by JP |
 | 9 Security + pilot | Local halves done (authz matrix, log hygiene, perf). **Blocked on JP's server** — staging deploys beside ARES per `docs/DEPLOY.md` |
+| 10 Two-way sync (added 2026-08-04) | **Specs done** (constitution v4.0.0, FR-9, T077–T086): write registry = `Urgent` label + due date; ARES push per `docs/ARES_PUSH_BUILD_SPEC.md` (separate agent build) + `contracts/ares-push.md`. Ships before pilot. Build not started |
 
 137/137 tests green (`npm run test:tz` — runs the suite in UTC AND Asia/Manila).
 15/20 ACs pass as automated tests; the rest are staging/manual (see STATE.md scoreboard).
@@ -23,8 +24,10 @@ Passport Google SSO (4 server-side checks) + Ractive frontend (no bundler —
 (`worker/index.ts`) owns ALL sync: ARES every 15 min, intake every 15 min
 (deferred — sheet fragile per JP), model refresh nightly. Trello data comes
 from the **ARES read API** (`contracts/ares-read.md`), never Trello directly.
-The ONE write anywhere: `Urgent` label via `lib/trello.ts` — Trello-first,
-local persists only on success, everything audited.
+Writes are the enumerated registry in `contracts/trello-write.md` — `Urgent`
+label + card due date (amended 2026-08-04), via `lib/trello.ts` — Trello-first,
+local persists only on success, everything audited. ARES push (phase 10)
+collapses read latency to < 1 min; the poll stays as reconcile fallback.
 
 ## Landmarks
 
@@ -79,7 +82,11 @@ gitignored); env names aligned to ARES.
 
 - **JP**: server setup (`docs/DEPLOY.md`), Google OAuth client, sheet
   un-defer (then AC-6/7/8 literals + `GOOGLE_SHEETS_CREDENTIALS`), BRD §9
-  amendment before vendor review, OD-2/4/5/6/7 (non-blocking).
+  amendment before vendor review (now covers TWO written fields), hand
+  `docs/ARES_PUSH_BUILD_SPEC.md` to the ARES agent build + provision
+  `ARES_WEBHOOK_SECRET` (T085), OD-2/4/5/6/7 (non-blocking).
+- **Phase 10 build (T077–T084)**: reconcile written fields from ARES reads,
+  `setDue` + route + UI, webhook receiver + worker drain, poll fallback.
 - **Phase 9 on staging**: deploy → authz smoke over HTTPS → urgency
   round-trip on `tx8gDsTH` → backup/restore drill → keyboard/AA pass →
   NFR-3 end-to-end measurement → full AC-1..20 sweep into STATE.md →
