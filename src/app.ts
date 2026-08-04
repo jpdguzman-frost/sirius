@@ -12,11 +12,10 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import session from 'express-session';
 import { RedisStore } from 'connect-redis';
-import type { Redis } from 'ioredis';
 import type mongoose from 'mongoose';
 import type { Env } from './config/env.ts';
 import { mongoState } from './db/mongo.ts';
-import { redisState } from './db/redis.ts';
+import { redisState, type RedisClient } from './db/redis.ts';
 import passport, { configurePassport } from './auth/passport.ts';
 import { authRouter } from './auth/routes.ts';
 import { projectsRouter } from './routes/projects.ts';
@@ -31,7 +30,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export interface AppDeps {
   env: Env;
-  redis: Redis | null;
+  redis: RedisClient | null;
   mongo: typeof mongoose | null;
   trello?: TrelloWriter | null;
 }
