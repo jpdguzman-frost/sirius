@@ -259,6 +259,17 @@ IDs and text are the BRD's, preserved verbatim. Priority M = must, S = should.
 | FR-8.5 | Sync failures are logged and alerted; last good data remains visible | M |
 | FR-8.6 | Sync status and last-success time visible in the UI | S |
 
+#### FR-9 — Two-way sync *(added 2026-08-04, JP-directed change — not in BRD v2.2; BRD §9 amendment pending)*
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-9.1 | The deliverable deadline is editable in Sirius; the edit writes the Trello card due date (write registry W2), including clearing it | M |
+| FR-9.2 | Every Trello write comes from the enumerated write registry (`contracts/trello-write.md`); registry growth requires a constitution amendment | M |
+| FR-9.3 | Every write is optimistic with rollback and logs `audit_log` + `sync_runs` per attempt (extends FR-4.7 beyond urgency) | M |
+| FR-9.4 | Sirius accepts signed push notifications from ARES and re-reads the affected card from the ARES read API — the push is a trigger, never a data carrier (`contracts/ares-push.md`) | M |
+| FR-9.5 | Trello-owned fields — including the `Urgent` label and due date — reconcile from ARES reads, so manual Trello changes surface in Sirius; Sirius-owned planning fields are never touched by sync | M |
+| FR-9.6 | Push failure degrades to polling with an alert; the poll remains the reconcile fallback — no data loss on a dead push channel | M |
+
 ### Business Rules
 
 Preserved verbatim from BRD §7.
@@ -317,11 +328,13 @@ Preserved verbatim from BRD §7.
 
 NFR-9 is not optional decoration: drag-based scheduling requires an equivalent keyboard action for AA conformance.
 
+NFR-3 amended 2026-08-04: with ARES push live (FR-9.4) the working target is **< 1 min**; the 15-minute ceiling stays as the poll-fallback guarantee (FR-9.6).
+
 ### Key Entities
 
 - **Project**: A client engagement — name, client, status, its Trello board (and disambiguating label where the board is shared), its intake sheet, capacity in cards per week bounded by ARES reference weeks, and its own editable sprint list.
 - **Sprint**: An editable named date range belonging to a project. Not a cadence. Overlaps rejected; gaps legal and surfaced.
-- **Deliverable**: The planning and forecasting unit — a Trello card carrying the `Main Card` label (269 on the verified board). Identity is (project, Trello card); `mc_number` is **not** unique — MC-825 carries 99 deliverables; a display id such as `MC-655.3` is for humans. Fields divide by owner: Trello-owned (name, list, difficulty, lane, blockers, due date, links), sheet-owned (deadline, use case, brief, requestor), Sirius-owned (slotted week, pin, confidence, SLA overrides, status note) — and urgency, the one field written back.
+- **Deliverable**: The planning and forecasting unit — a Trello card carrying the `Main Card` label (269 on the verified board). Identity is (project, Trello card); `mc_number` is **not** unique — MC-825 carries 99 deliverables; a display id such as `MC-655.3` is for humans. Fields divide by owner: Trello-owned (name, list, difficulty, lane, blockers, due date, links), sheet-owned (deadline, use case, brief, requestor), Sirius-owned (slotted week, pin, confidence, SLA overrides, status note) — and the written-back fields per the write registry: urgency and the due date (amended 2026-08-04).
 - **Work card**: A production task (209 on the verified board), prefixed by verb (`Render Asset:`, `Cascade Mobile Screen:`, `Icon Clean Up:`). Attaches to the MC group — there is no reliable task→deliverable edge (1 of 27 titles matched).
 - **Intake request**: One row of the project's intake sheet — MC #, name, requestor, type, use case, brief, deadline. Read-only mirror; vanished rows go inactive, never deleted.
 - **Card event**: A single Trello lane movement with its timestamp — the raw material for cycle times and the empirical model.
@@ -434,6 +447,13 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 - **OD-8 — RESOLVED**: Sirius deploys beside ARES, same pattern and place, and uses the **same Mongo server as ARES** (its own `sirius` database).
 - **Stack amendment**: datastore is MongoDB + Redis; app is Express 5 with a Ractive frontend per ARES conventions; auth via Passport Google OAuth with the four checks unchanged. Constitution v2.0.0.
 - **NFR-3 stands at < 15 min**: the ARES guide documents a 30-minute cache cycle, but per JP the new ARES delivers in realtime, so ARES cadence is not the bottleneck. Verify end-to-end latency during ARES-integration work.
+
+### Session 2026-08-04 (JP) — two-way sync
+
+- **Write registry opened (constitution v4.0.0, MAJOR)**: the Trello write surface grows from urgency-only to an enumerated registry — today exactly `Urgent` label (W1) and card due date (W2). Deadline edits happen in Sirius and write through to Trello. Further growth requires a constitution amendment. Sheets stay read-only forever.
+- **ARES push chosen over polling (NFR-3 → < 1 min target)**: ARES gains an outbound webhook feature (built by a separate agent from `docs/ARES_PUSH_BUILD_SPEC.md`); Sirius consumes it per `contracts/ares-push.md` on the notification-then-read pattern. The 15-min poll remains as reconcile fallback.
+- **Sequencing**: build now — the pilot ships with deadline writes and push, widening the pre-pilot security review accordingly (phase 10, T077–T086).
+- **Truth for Trello-owned fields**: Trello, always — manual Trello changes flow back via push and reconcile into Sirius, including the two written fields (FR-9.5).
 
 ## Open Decisions
 

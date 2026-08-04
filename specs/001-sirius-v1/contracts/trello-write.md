@@ -1,28 +1,51 @@
-# Contract — The one write: Trello urgency label
+# Contract — Trello writes: the write registry
 
-Urgency is the **only thing Sirius writes anywhere** (invariant 2, FR-4.6). It adds or removes a single label named `Urgent` on a single Trello card; absence means non-urgent, so there is no second state to keep in sync.
+Amended 2026-08-04 (JP): the write surface grew from one entry to two. The principle is
+unchanged and constitutional (invariant 2): **the write surface is enumerable** — it is this
+table, exhaustively. Growing it is a constitution amendment, never a code change. No other
+write to any source system exists; Google Sheets has no write path, ever.
 
-## Interface (Implementation Plan §5.3, verbatim shape)
+## The registry
 
-```ts
-export async function setUrgency(cardId: string, boardId: string, urgent: boolean) {
-  const labelId = await ensureUrgentLabel(boardId);
-  return urgent
-    ? trello.post(`/cards/${cardId}/idLabels`, { value: labelId })
-    : trello.delete(`/cards/${cardId}/idLabels/${labelId}`);
-}
-```
+| # | Field | Trello op | Sirius surface | Audit action | Since |
+|---|---|---|---|---|---|
+| W1 | `Urgent` label | `POST /cards/{id}/idLabels` · `DELETE /cards/{id}/idLabels/{labelId}` | Pipeline urgency toggle | `urgency_set` | v1 (FR-4.6) |
+| W2 | Due date | `PUT /cards/{id}` with `{due}`; `{due: null}` clears | Deadline edit in Pipeline | `due_set` | 2026-08-04 (FR-9.1) |
 
-`ensureUrgentLabel` creates the `Urgent` label on first use — 0 of 26 boards have one today (BRD §4).
+Interfaces live in `lib/trello.ts` only: `setUrgency(cardId, boardId, urgent)` (§5.3 verbatim
+shape, unchanged) and `setDue(cardId, isoDateTimeOrNull)`.
 
-## Non-negotiable rules
+## Rules binding every registry entry (invariant 8, FR-9.3)
 
-1. **Optimistic with rollback** (invariant 8, FR-4.7): the UI applies the change locally, and a failed Trello write reverts it. Sirius never displays a state Trello lacks.
-2. **Every call writes an `audit_log` row and a `sync_runs` row** — success and failure alike.
-3. **Credential**: `TRELLO_WRITE_TOKEN` from server-side environment configuration (invariant 15, as amended), belonging to a **dedicated integration account** that is a member of the Design Support boards only — never a personal admin token (Trello cannot scope a token per board; a leaked token then exposes those boards, not everything a person can see). It is its own credential, separate from the ARES read key and the Sheets service account — and note the ARES key cannot write at all: this path talks to the Trello API directly.
-4. **Staging safety** (invariant 17): staging points at a **duplicate Trello board** — a staging test against the live board would relabel real cards (§3.3). Before any urgency code runs, verify the configured board ID is not a production board. Phase 8 does not start until the duplicate board is confirmed.
-5. This path ships **last** (sequence item 8), with its own review.
+1. **Trello-first, optimistic with rollback**: the local change persists only after the Trello
+   write succeeds; a failed write reverts it. Sirius never displays a state Trello lacks.
+2. **Every attempt writes an `audit_log` row and a `sync_runs` row** — success and failure alike.
+3. **Board guard (invariant 17)**: before any write, refuse if the target board is listed in
+   `PROD_TRELLO_BOARD_IDS` in a non-production environment.
+4. **No-op guard**: a write whose value equals the current local value is rejected client- and
+   server-side — no Trello call, no audit row.
+5. **Credential**: `TRELLO_API_KEY` + `TRELLO_TOKEN`, server-side env only, belonging to the
+   **dedicated integration account** that is a member of the Design Support boards only. W2 adds
+   no blast radius: Trello tokens are account-scoped, not per-operation, so the existing token
+   already carried due-date permission.
+6. **Echo**: every write returns via Trello → ARES → push (`contracts/ares-push.md`). Reconcile
+   is idempotent — a same-value set changes nothing and writes no audit row.
+7. **Ships with tests**: rollback, board guard, audit rows, and a live round-trip on the TEST
+   board (`tx8gDsTH`) before staging sign-off.
+
+## W2 semantics — due date
+
+- Sirius deadlines are Manila calendar days (`YYYY-MM-DD`); Trello `due` is a datetime.
+- **Canonical write time**: the chosen date at **17:00 Asia/Manila**. When the card already has
+  a due date, preserve its existing time-of-day and change only the date. *(Default set in the
+  2026-08-04 spec package — JP may veto; any time on the Manila day round-trips to the same
+  date-only value through the mapper.)*
+- **Clearing**: a cleared deadline sends `{due: null}`; precedence (invariant 14, BR-9) then
+  falls back to the sheet deadline inside `deliverables_v` — untouched by this change.
+- **Precedence preserved by construction**: Sirius edits the deadline *by writing the Trello
+  due date*, so "Trello due wins" remains true and the sheet is never written.
 
 ## Recorded consequence
 
-BRD §9's "write is impossible by permission" is no longer true. Amend before the vendor assessment rather than after (§5.3; tracked in STATE.md).
+BRD §9's "write is impossible by permission" is no longer true, and the write surface is now
+two fields, not one. Amend BRD §9 before the vendor assessment (JP-owned, tracked in STATE.md).
