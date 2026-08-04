@@ -152,7 +152,7 @@
 - [ ] T070 [P] Sheet un-share drill: service account removed → clean failure surfaced, re-share restores (AC-7)
 - [ ] T071 ⚠ STATIC HALF DONE (test/log-hygiene.test.ts) — [P] Log hygiene audit: no brief text, no credentials in any log path (NFR-11; invariant 15)
 - [x] T072 [P] Backup + restore drill on the shared Mongo server (`sirius` db), documented (NFR-8)
-- [ ] T073 Accessibility audit: WCAG 2.1 AA incl. the keyboard scheduling path (NFR-9; AC-20)
+- [ ] T073 ⏸ ON HOLD (JP 2026-08-04: team UI update in flight — audit after it lands) — Accessibility audit: WCAG 2.1 AA incl. the keyboard scheduling path (NFR-9; AC-20)
 - [x] T074 `scripts/migrate-open-cards.ts`: migrate open cards/requests into production data per deadline-precedence and taxonomy rules (AC-8; BR-9; plan.md layout)
 - [ ] T075 Full AC sweep on staging: AC-1..AC-20 recorded in STATE.md scoreboard with evidence links (Definition of done)
 - [ ] T076 Pilot support window: triage, fixes, STATE.md session logs; retention decision recorded when OD-7 lands (NFR-7; OD-7)
@@ -188,7 +188,7 @@ to cover the due-date write and the webhook receiver. The ARES half is built sep
 - [x] T088 `users.is_admin` + `ensureAdmin` middleware (`src/auth/`) + `src/routes/admin.ts` (list/add/activate/memberships, Zod-strict) (FR-10.1–10.7)
 - [x] T089 `GET /api/me` + Admin tab in the frontend (admin-visible, prototype design language): user table, add form with project checkboxes, activate/deactivate, membership editing — optimistic with revert (FR-10.1–10.4)
 - [x] T090 `scripts/allowlist.ts` `ADMIN=1` flag; seed JP as first admin on the host; deploy (FR-10.8)
-- [ ] T091 Fold the new screens into the keyboard/WCAG AA pass (T073 scope grows) (NFR-9)
+- [ ] T091 ⏸ ON HOLD with T073 — Fold the new screens into the keyboard/WCAG AA pass (T073 scope grows) (NFR-9)
 
 **Checkpoint**: JP manages a real account end-to-end from the UI.
 
