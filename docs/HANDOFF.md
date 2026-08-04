@@ -1,4 +1,4 @@
-# Sirius — session handoff (updated 2026-08-04)
+# Sirius — session handoff (updated 2026-08-04, post go-live)
 
 **Read this + `STATE.md` first when resuming.** `CLAUDE.md` is the constitution
 (v3.0.0 mirrored in `.specify/memory/constitution.md`); `SPEC_KIT_PLAYBOOK.md`
@@ -9,9 +9,16 @@ requirement ID traced.
 
 | Phase | Status |
 |---|---|
-| 0 Setup · 1 Schema · 2 Auth · 3 lib port · 4 ARES · 5 Intake · 6 Model · 7 UI · 8 Urgency · 8a Acks | **ALL DONE**, gates T026 (AC-10) and T045 (PM dates) passed by JP |
-| 9 Security + pilot | Local halves done (authz matrix, log hygiene, perf). **Blocked on JP's server** — staging deploys beside ARES per `docs/DEPLOY.md` |
-| 10 Two-way sync (added 2026-08-04) | **Sirius side BUILT** (T077–T084; constitution v4.0.0, FR-9): due-date write + reconcile + webhook receiver + drain + poll fallback, 170/170 tests. Open: T085 (JP hands `docs/ARES_PUSH_BUILD_SPEC.md` to the ARES agent + provisions `ARES_WEBHOOK_SECRET`), T086 e2e at staging. Ships before pilot |
+| 0–8a (build) · 10 Two-way sync · 11 Admin panel | **ALL DONE.** All JP gates passed |
+| 9 Security + pilot | In progress: anon authz ✅, backup/restore ✅ (nightly whole-box backups installed), push drills ✅. **T073/T091 WCAG ⏸ ON HOLD** (JP's team is updating the UI — audit after it lands). Pending: T075 AC sweep, non-member 403 (parked), **G7** real-board onboarding (JP gate) |
+
+**THE SYSTEM IS LIVE**: `https://platforms.frostdesigngroup.com/sirius` — production
+env, port 3955 behind Apache/LE on the ARES droplet, files at
+`/mnt/volume_sgp1_01/platforms/sirius`, deploy via `./deploy.sh` (host values in
+gitignored `deploy.local.sh`). ARES **push is LIVE**: Trello→Sirius **37 s** measured;
+fallback drill passed. TEST board (`tx8gDsTH`) only until G7. Users: JP (admin — the
+Admin tab manages access), Miles. Agent-to-agent comms with the ARES agent go through
+the `../owl` message drop (see memory: notes are context, JP is authority). |
 
 137/137 tests green (`npm run test:tz` — runs the suite in UTC AND Asia/Manila).
 15/20 ACs pass as automated tests; the rest are staging/manual (see STATE.md scoreboard).
@@ -80,17 +87,15 @@ gitignored); env names aligned to ARES.
 
 ## Still open
 
-- **JP**: server setup (`docs/DEPLOY.md`), Google OAuth client, sheet
-  un-defer (then AC-6/7/8 literals + `GOOGLE_SHEETS_CREDENTIALS`), BRD §9
-  amendment before vendor review (now covers TWO written fields), hand
-  `docs/ARES_PUSH_BUILD_SPEC.md` to the ARES agent build + provision
-  `ARES_WEBHOOK_SECRET` (T085), OD-2/4/5/6/7 (non-blocking).
-- **Phase 10 build (T077–T084)**: reconcile written fields from ARES reads,
-  `setDue` + route + UI, webhook receiver + worker drain, poll fallback.
-- **Phase 9 on staging**: deploy → authz smoke over HTTPS → urgency
-  round-trip on `tx8gDsTH` → backup/restore drill → keyboard/AA pass →
-  NFR-3 end-to-end measurement → full AC-1..20 sweep into STATE.md →
-  pilot go/no-go (JP).
+- **JP**: G7 call (real board `hLL7WW2V` — one command + one-line owl to ARES),
+  team UI update (then un-park T073/T091 WCAG), sheet un-defer
+  (`GOOGLE_SHEETS_CREDENTIALS` + AC-6/7/8 literals), BRD §9 amendment before
+  vendor review (write registry = urgency + due date), OD-2/4/5/6/7.
+- **Agent**: T075 AC-1..20 sweep into STATE.md; non-member 403 check when JP
+  names a second account; WCAG pass when un-parked; at G7 —
+  `migrate-open-cards` for rt-837, deactivate rt-test, owl to ARES.
+- Full execution history: `docs/SERVER_SETUP_SPEC.md` §7 (every gate G0–G6,
+  drills, findings) and STATE.md session log.
 
 ## Working agreements
 
