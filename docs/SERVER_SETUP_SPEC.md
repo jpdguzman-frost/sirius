@@ -117,6 +117,14 @@ depends on it.
 
 ## 7. Execution log
 
+- **Push contract VERIFIED end-to-end 2026-08-04/05**: ARES's shipping code probed our live
+  receiver (signature accept/reject, replay window, dedupe, batch, absent-card_id resync —
+  all correct) and its three real deliveries drained clean in ~1–4 s each (sync_runs
+  `ares_push` ok). ARES side is deployed and OFF; switch-on is JP's call (4 env vars +
+  restart on the ARES side, `tx8gDsTH` only). T086 runs the moment it flips. Correction
+  absorbed: no flat `/api/v1/trello/cards` list exists — we never used it. Comms via the
+  `../owl` message drop.
+
 - **Admin panel SHIPPED 2026-08-05 (FR-10, T087–T090)**: spec → tests → build → deploy in
   one pass. JP seeded as first admin (CLI `ADMIN=1`); Miles remains a member. Live checks:
   anonymous admin API 401; the tab appears only for admins with enforcement server-side.
