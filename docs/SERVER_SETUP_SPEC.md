@@ -55,14 +55,14 @@ regardless (inert in production, an extra belt anywhere else).
 DNS A: platforms.frostdesigngroup.com → droplet
 Apache :443 (LE cert, certbot-managed renewal)
   vhost platforms.frostdesigngroup.com
-    ProxyPass        /sirius  http://127.0.0.1:3950/sirius   (prefix NOT stripped)
-    ProxyPassReverse /sirius  http://127.0.0.1:3950/sirius
+    ProxyPass        /sirius  http://127.0.0.1:3955/sirius   (prefix NOT stripped)
+    ProxyPassReverse /sirius  http://127.0.0.1:3955/sirius
     ProxyPreserveHost On · X-Forwarded-Proto "https"          (app has trust proxy)
     /                 → placeholder page (future tools index)
 Apache :80 → 301 to https (certbot default)
 
 pm2 (nvm node):
-  sirius          npm run start    PORT=3950  BASE_PATH=/sirius
+  sirius          npm run start    PORT=3955  BASE_PATH=/sirius
   sirius-worker   npm run worker
 
 /mnt/volume_sgp1_01/platforms/sirius   ← rsync target (DEST_DIR)
@@ -71,7 +71,7 @@ Mongo: localhost — db sirius (no staging tier; TEST-board project only until G
 Redis: localhost — session prefix sirius:sess: (already namespaced)
 ```
 
-Port **3950** (JP, 2026-08-05 — moved off 3100 to avoid friction with other tenants; 3950 verified free and its localhost OAuth origin registered).
+Port **3955** (JP, 2026-08-05 — moved off 3100 per JP; 3950 turned out to be osiris’s — 3955 verified free on BOTH server and laptop, JP to add localhost:3955 origin/callback in the Google console for future local SSO).
 
 ## 4. Code change required first: `BASE_PATH` (needs JP approval)
 
@@ -101,7 +101,7 @@ depends on it.
 | **G2** | Discovery (READ-ONLY) | SSH in; record: Apache version + enabled modules (proxy, ssl) + existing vhosts; certbot presence + existing certs; node/nvm + pm2 versions; mongod + redis reachable on localhost; port 3100 free; disk on `/mnt/volume_sgp1_01`; ufw/firewall state. Output: a findings block posted to JP; NO writes | read-only |
 | **G3** | Provision | `mkdir -p /mnt/volume_sgp1_01/platforms/sirius`; write host `.env` from `DEPLOY.md` list (`NODE_ENV=production`, db `sirius`, `BASE_PATH=/sirius`; secrets generated on-host, never pasted into chat); fill local `deploy.sh` `DEST_*` (dir `platforms/sirius`, host/port/key per `docs/deploy.sh`) | yes — additive only |
 | **G4** | Vhost + TLS | DNS A record confirmed live (JP, §6) → write the `platforms.frostdesigngroup.com` vhost (proxy config §3, site root placeholder); `apachectl configtest`; enable site; reload; `certbot --apache -d platforms.frostdesigngroup.com`; verify auto-renewal timer. ARES's existing vhosts untouched — configtest before every reload | yes |
-| **G5** | First deploy + boot | `./deploy.sh` (tests → build → rsync → `npm ci` → migrate → pm2 start both apps); onboard staging project against the TEST board (`migrate-open-cards.ts`, `CODE=rt-837 BOARD=tx8gDsTH`); allow-list JP; verify `https://…/sirius/healthz`, sign-in, tabs on synthetic data | yes |
+| **G5** | First deploy + boot | `./deploy.sh` (tests → build → rsync → `npm ci` → migrate → pm2 start both apps); onboard staging project against the TEST board (`migrate-open-cards.ts`, `CODE=rt-test BOARD=tx8gDsTH` — rt-837 stays reserved for the real board at G7); allow-list JP; verify `https://…/sirius/healthz`, sign-in, tabs on synthetic data | yes |
 | **G6** | Smoke → phase 9 | The `DEPLOY.md` smoke checklist + urgency & due round-trips on `tx8gDsTH`; then the phase-9 drill sequence (T069–T076) on the live instance (TEST-board project only), each reported to JP | yes |
 | **G7** | Real-board onboarding | Separate approval, after drills: onboard the production-board project (`migrate-open-cards.ts`, `BOARD=hLL7WW2V`), deactivate/remove the TEST project, pilot go/no-go per *Pilot Security Readiness* | yes |
 
@@ -122,12 +122,12 @@ depends on it.
   Trello credentials transferred without display; only `GOOGLE_CLIENT_ID/SECRET` (JP, pre-G5)
   and the deferred Sheets keys are empty. Local `deploy.sh` now sources gitignored
   `deploy.local.sh` (created, filled); remote command sources nvm.
-- **G5 prelude 2026-08-05**: port moved 3100 → 3950 everywhere (JP); OAuth = the ARES
-  client reused — JP added the platforms + localhost:3950 redirect URIs; client ID/secret
+- **G5 prelude 2026-08-05**: port moved 3100 → 3955 everywhere (JP); OAuth = the ARES
+  client reused — JP added the platforms + localhost:3955 redirect URIs; client ID/secret
   copied into Sirius's `.env` server-side from ARES's `.env` (values never left the box).
 - **G4 DONE 2026-08-05**: `platforms.frostdesigngroup.com` vhost enabled (configtest before
   each reload); LE certificate issued (expires 2026-11-02, certbot.timer auto-renews);
-  HTTP→HTTPS 301; placeholder page at `/`; `/sirius` proxies to 127.0.0.1:3950 (503 until
+  HTTP→HTTPS 301; placeholder page at `/`; `/sirius` proxies to 127.0.0.1:3955 (503 until
   G5 boots the app — correct); `X-Forwarded-Proto https` set in the ssl vhost.
 
 ## 7a. G2 discovery findings (read-only, 2026-08-05)

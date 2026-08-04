@@ -53,8 +53,8 @@ collapses read latency to < 1 min; the poll stays as reconcile fallback.
 - **Local Mongo**: port 27017 is the HOST mongod (shared with ares dev), NOT
   the docker container. Demo data: db `sirius-gate` (real 837 board synced).
 - **Demo**: `MONGODB_URI=mongodb://localhost:27017/sirius-gate NODE_ENV=development
-  DEV_AUTOLOGIN=jpdguzman@frostdesigngroup.com PORT=3950 npx tsx server.js`
-  → http://localhost:3950/auth/dev. Dev auto-login is development-only +
+  DEV_AUTOLOGIN=jpdguzman@frostdesigngroup.com PORT=3955 npx tsx server.js`
+  → http://localhost:3955/auth/dev. Dev auto-login is development-only +
   allow-list-checked.
 - **Boards**: production `hLL7WW2V` (rt-837, GCash Design Support — the
   primary project). TEST board `tx8gDsTH` (structure-mirroring, 12 synthetic
