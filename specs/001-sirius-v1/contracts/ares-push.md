@@ -82,6 +82,11 @@ Event types (kept deliberately tiny — the payload is a trigger, not a data car
 ## Delivery semantics & fallback
 
 - **At-least-once, unordered.** Safe by the notification-then-read design.
+- **A `board.resync` may arrive batched with ordinary card events** — it traverses ARES's
+  normal queue/batcher. Never assume a resync is a delivery of one (drill-verified).
+- ARES's 15-s debounce is keyed per card, not per change: bursts coalesce into one
+  `card.changed` whose `occurred_at` is the LATEST edit. Counting events to verify a flush
+  is wrong; reading the card back (as we do) is right.
 - Poll cadence: while push is healthy (any accepted delivery within the last 30 min) the
   existing sync loop relaxes to an **hourly full reconcile**. If no push arrives for 30 min
   while ARES `/healthz` shows upstream activity, the loop reverts to **15 min** and writes an

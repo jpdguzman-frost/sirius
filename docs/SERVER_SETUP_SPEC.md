@@ -117,6 +117,16 @@ depends on it.
 
 ## 7. Execution log
 
+- **FALLBACK DRILL PASSED 2026-08-04 — T086 fully closed, FR-9.6 observed live.** ARES
+  paused push 03:59–04:43Z (44 min). Mid-pause label edit (04:06) went stale exactly as
+  designed, bounded: at >30 min silence Sirius wrote ONE alert `sync_runs` row, reverted to
+  15-min polling, and the full sync at 04:42:14 reconciled the edit (~36 min staleness,
+  inside the ~45-min worst case). On resume: ARES auto-resync (batched with the flushed
+  card event) arrived 04:43:44; Sirius drained it and converged within 2 min. Alert count
+  stayed at 1 — no spam. ARES-side corrections recorded in `contracts/ares-push.md`:
+  no dead-letters during a pause (nothing is attempted), resyncs may batch, per-card
+  debounce coalesces with latest `occurred_at`.
+
 - **T086 PASSED 2026-08-04 — PUSH IS LIVE**: JP switched ARES on; hand-edited label on the
   TEST board reached Sirius's database **push-driven in 37 s** both directions (Trello→ARES
   ~5 s · ARES debounce ~15 s · receiver → 15-s drain tick). NFR-3 **< 1 min target MET**
