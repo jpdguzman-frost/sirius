@@ -189,3 +189,17 @@ th.slahead { background: #fef3c7 !important; color: #b45309 !important; }
   font: inherit; font-size: 0.8rem; padding: 0.1rem 0.3rem;
   border: 1px solid #cbd5e1; border-radius: 6px;
 }
+
+/* Admin tab (FR-10) */
+.admin-title { margin: 0.4rem 0 0.8rem; font-size: 1.05rem; }
+.admin-add { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 0.9rem 1rem; margin-bottom: 1rem; }
+.admin-add h3 { margin: 0 0 0.5rem; font-size: 0.9rem; }
+.admin-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
+.admin-form input[type="email"], .admin-form input[type="text"] {
+  font: inherit; font-size: 0.82rem; padding: 0.35rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 8px; min-width: 220px;
+}
+.admin-projects { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; }
+.chk { font-size: 0.78rem; color: #475569; display: inline-flex; gap: 0.3rem; align-items: center; white-space: nowrap; }
+.addbtn { font-weight: 700; }
+.inactive-row td { opacity: 0.55; }
+.note.danger { background: #fee2e2; border: 1px solid #fca5a5; color: #b91c1c; border-radius: 10px; padding: 0.5rem 0.8rem; margin-bottom: 0.8rem; }

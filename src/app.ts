@@ -18,6 +18,7 @@ import { mongoState } from './db/mongo.ts';
 import { redisState, type RedisClient } from './db/redis.ts';
 import passport, { configurePassport } from './auth/passport.ts';
 import { authRouter } from './auth/routes.ts';
+import { adminRouter } from './routes/admin.ts';
 import { projectsRouter } from './routes/projects.ts';
 import { requestsRouter } from './routes/requests.ts';
 import { deliverablesRouter } from './routes/deliverables.ts';
@@ -108,6 +109,7 @@ export function createApp({ env, redis, trello }: AppDeps): express.Express {
   }
 
   root.use(authRouter(base));
+  root.use(adminRouter());
   root.use(projectsRouter());
   root.use(requestsRouter());
   root.use(deliverablesRouter());

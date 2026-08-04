@@ -56,6 +56,13 @@ const app = new Ractive({
     hardCeiling: HARD_CEILING,
     requests: [],
     rejects: [],
+    isAdmin: false,
+    adminUsers: [],
+    adminProjects: [],
+    adminForm: { email: '', name: '', projectIds: {} },
+    adminEditing: null,
+    adminEditSel: {},
+    adminError: '',
     requestFilters: ['all', 'filed', 'unfiled', 'missing-deadline'],
     requestFilter: 'all',
     monthOffset: 0,
@@ -202,16 +209,35 @@ app.set('footLabel', (weekKey) => {
 async function loadShell() {
   const [me, projects] = await Promise.all([api.get('/api/me'), api.get('/api/projects')]);
   const name = me.user.name || me.user.email || '';
+  const tabs = app.get('tabs').filter((t) => t.id !== 'admin');
+  if (me.user.admin) tabs.push({ id: 'admin', label: 'Admin', icon: '🔐' });
   app.set({
     projects: projects.projects,
     userName: name,
     userInitial: (name[0] || '?').toUpperCase(),
+    isAdmin: !!me.user.admin,
+    tabs,
   });
   if (!app.get('activeProjectId') && projects.projects.length) {
     app.set('activeProjectId', projects.projects[0]._id);
   }
   await loadAll();
 }
+
+async function loadAdmin() {
+  try {
+    const res = await api.get('/api/admin/users');
+    app.set({ adminUsers: res.users, adminProjects: res.projects, adminEditing: null });
+  } catch (err) {
+    app.set('adminError', (err.detail && err.detail.message) || err.message);
+  }
+}
+
+app.set('projCode', (pid) => {
+  const p = (app.get('adminProjects') || []).find((x) => x.id === pid);
+  return p ? p.code : '?';
+});
+app.set('fmtWhen', (iso) => (iso ? new Date(iso).toLocaleString() : 'never'));
 
 /* W2 deadline write (FR-9.1): optimistic with revert, same pattern as
    urgency; Trello is written first server-side, so a failure reverts here. */
@@ -319,7 +345,10 @@ function computeDeadlines() {
 
 app.on({
   noop(ctx) { ctx.event && ctx.event.stopPropagation(); },
-  switchTab(_ctx, id) { app.set('activeTab', id); },
+  switchTab(_ctx, id) {
+    app.set('activeTab', id);
+    if (id === 'admin' && app.get('isAdmin')) loadAdmin();
+  },
   async switchProject() { await loadAll(); },
   signOut() { api.send('POST', '/auth/logout').then(() => window.location.reload()); },
   toggleCorrections() { app.toggle('showAllCorrections'); },
@@ -341,6 +370,47 @@ app.on({
       setTimeout(() => app.set('banner', ''), 6000);
     }
   },
+  /* ---- Admin tab (FR-10): allow-listing from a screen ---- */
+  adminDismiss() { app.set('adminError', ''); },
+  async adminAdd() {
+    const f = app.get('adminForm');
+    const projectIds = Object.keys(f.projectIds || {}).filter((k) => f.projectIds[k]);
+    const payload = { email: (f.email || '').trim(), projectIds };
+    if ((f.name || '').trim()) payload.name = f.name.trim();
+    try {
+      await api.send('POST', '/api/admin/users', payload);
+      app.set({ adminForm: { email: '', name: '', projectIds: {} }, adminError: '' });
+      await loadAdmin();
+    } catch (err) {
+      app.set('adminError', (err.detail && err.detail.message) || err.message);
+    }
+  },
+  async adminToggleActive(_ctx, id, current) {
+    try {
+      await api.send('PATCH', `/api/admin/users/${id}`, { active: !current });
+      await loadAdmin();
+    } catch (err) {
+      app.set('adminError', (err.detail && err.detail.message) || err.message);
+    }
+  },
+  adminEdit(_ctx, id) {
+    const u = app.get('adminUsers').find((x) => x.id === id);
+    const sel = {};
+    (u.projectIds || []).forEach((p) => { sel[p] = true; });
+    app.set({ adminEditing: id, adminEditSel: sel });
+  },
+  adminCancelEdit() { app.set('adminEditing', null); },
+  async adminSaveEdit(_ctx, id) {
+    const sel = app.get('adminEditSel') || {};
+    try {
+      await api.send('PUT', `/api/admin/users/${id}/memberships`, { projectIds: Object.keys(sel).filter((k) => sel[k]) });
+      app.set('adminEditing', null);
+      await loadAdmin();
+    } catch (err) {
+      app.set('adminError', (err.detail && err.detail.message) || err.message);
+    }
+  },
+
   editDeadline(_ctx, cardId) { app.set('editingDeadline', cardId); },
   // the clear button fires on mousedown, before this blur handler lands
   cancelDeadline() { setTimeout(() => app.set('editingDeadline', null), 150); },

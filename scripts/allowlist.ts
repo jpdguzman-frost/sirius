@@ -3,8 +3,9 @@
  * Auth is four checks — the active allow-list row is the fourth; this is the
  * ONLY way rows are created (no self-signup path exists).
  *
- * Usage: EMAIL=jp@frostdesigngroup.com [NAME="JP"] [CODE=rt-test] npx tsx scripts/allowlist.ts
+ * Usage: EMAIL=jp@frostdesigngroup.com [NAME="JP"] [CODE=rt-test] [ADMIN=1] npx tsx scripts/allowlist.ts
  *        CODE grants membership to that project; omit for allow-list only.
+ *        ADMIN=1 promotes to admin (FR-10.8 — promote/demote is CLI-only).
  */
 
 import 'dotenv/config';
@@ -23,10 +24,17 @@ await mongoose.connect(env.MONGODB_URI);
 
 const user = await User.findOneAndUpdate(
   { email: EMAIL },
-  { $set: { active: true, ...(process.env.NAME ? { name: process.env.NAME } : {}) }, $setOnInsert: { email: EMAIL } },
+  {
+    $set: {
+      active: true,
+      ...(process.env.NAME ? { name: process.env.NAME } : {}),
+      ...(process.env.ADMIN === '1' ? { is_admin: true } : {}),
+    },
+    $setOnInsert: { email: EMAIL },
+  },
   { upsert: true, new: true },
 );
-console.log(`[allowlist] ${EMAIL} active`);
+console.log(`[allowlist] ${EMAIL} active${user.is_admin ? ' (admin)' : ''}`);
 
 if (process.env.CODE) {
   const project = await Project.findOne({ code: process.env.CODE });

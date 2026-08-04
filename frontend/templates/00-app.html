@@ -309,5 +309,60 @@
   {{/if}}
 {{/if}}
 
+{{#if activeTab === 'admin'}}
+  <h2 class="admin-title">Access — who can use Sirius</h2>
+  {{#if adminError}}
+    <div class="note danger">{{adminError}} <button class="badge togglable" on-click="['adminDismiss']">dismiss</button></div>
+  {{/if}}
+
+  <div class="admin-add">
+    <h3>Add a person</h3>
+    <div class="admin-form">
+      <input type="email" placeholder="name@frostdesigngroup.com" value="{{adminForm.email}}" aria-label="Email address" />
+      <input type="text" placeholder="Name (optional)" value="{{adminForm.name}}" aria-label="Name" />
+      <div class="admin-projects">
+        {{#each adminProjects as p}}
+          <label class="chk"><input type="checkbox" checked="{{adminForm.projectIds[p.id]}}" /> {{p.code}} · {{p.name}}</label>
+        {{/each}}
+      </div>
+      <button class="badge togglable addbtn" on-click="['adminAdd']">＋ Add person</button>
+    </div>
+    <div class="dim">Only @frostdesigngroup.com accounts — they sign in with Google after being added here. No emails are sent. Admins are managed from the server, not this screen.</div>
+  </div>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Email</th><th>Name</th><th>Projects</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
+    <tbody>
+    {{#each adminUsers as u}}
+      <tr class="{{#if !u.active}}inactive-row{{/if}}">
+        <td class="nowrap">{{u.email}} {{#if u.admin}}<span class="badge ok">admin</span>{{/if}}</td>
+        <td class="dim">{{u.name || '—'}}</td>
+        <td>
+          {{#if adminEditing === u.id}}
+            {{#each adminProjects as p}}
+              <label class="chk"><input type="checkbox" checked="{{adminEditSel[p.id]}}" /> {{p.code}}</label>
+            {{/each}}
+            <button class="badge togglable" on-click="['adminSaveEdit', u.id]">save</button>
+            <button class="badge togglable" on-click="['adminCancelEdit']">cancel</button>
+          {{else}}
+            {{#each u.projectIds as pid}}<span class="badge">{{projCode(pid)}}</span> {{/each}}
+            <button class="badge togglable" on-click="['adminEdit', u.id]" title="Edit project access" aria-label="Edit project access for {{u.email}}">✎</button>
+          {{/if}}
+        </td>
+        <td>{{#if u.active}}<span class="badge ok">active</span>{{else}}<span class="badge bad">deactivated</span>{{/if}}</td>
+        <td class="dim nowrap">{{fmtWhen(u.lastLoginAt)}}</td>
+        <td class="nowrap">
+          {{#if u.active}}
+            <button class="badge togglable" on-click="['adminToggleActive', u.id, true]" title="They lose access on their next request">deactivate</button>
+          {{else}}
+            <button class="badge togglable" on-click="['adminToggleActive', u.id, false]">reactivate</button>
+          {{/if}}
+        </td>
+      </tr>
+    {{/each}}
+    </tbody>
+  </table></div>
+{{/if}}
+
 </main>
 </script>

@@ -18,8 +18,13 @@ import { ensureProjectMember } from '../auth/membership.ts';
 export function projectsRouter(): Router {
   const router = Router();
 
-  router.get('/api/me', ensureAuthenticated, (req, res) => {
-    res.json({ ok: true, user: req.user });
+  router.get('/api/me', ensureAuthenticated, async (req, res) => {
+    // admin flag read fresh per request (FR-10.1) — the tab appears/vanishes
+    // with the flag; enforcement is server-side either way (FR-10.5)
+    const sessionUser = req.user as SessionUser;
+    const { User } = await import('../models/index.ts');
+    const doc = await User.findById(sessionUser.userId);
+    res.json({ ok: true, user: { ...sessionUser, admin: Boolean(doc?.active && doc?.is_admin) } });
   });
 
   router.get('/api/projects', ensureAuthenticated, async (req, res) => {

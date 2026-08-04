@@ -90,6 +90,9 @@ const userSchema = new Schema(
     email: { type: String, required: true, lowercase: true, trim: true },
     name: String,
     active: { type: Boolean, required: true, default: true },
+    // FR-10: admins manage the allow-list from the Admin tab. Promote/demote
+    // is CLI-only (scripts/allowlist.ts ADMIN=1) — the panel manages members.
+    is_admin: { type: Boolean, required: true, default: false },
     last_login_at: Date,
   },
   { collection: 'users' },
