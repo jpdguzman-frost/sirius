@@ -117,6 +117,11 @@ depends on it.
 
 ## 7. Execution log
 
+- **Admin panel SHIPPED 2026-08-05 (FR-10, T087–T090)**: spec → tests → build → deploy in
+  one pass. JP seeded as first admin (CLI `ADMIN=1`); Miles remains a member. Live checks:
+  anonymous admin API 401; the tab appears only for admins with enforcement server-side.
+  T091 (AA pass over the new screens) folds into T073.
+
 - **Nightly backups INSTALLED 2026-08-05** (JP: option b, whole box): all databases,
   gzipped, 03:30 Manila via /etc/cron.d/mongo-backup, 30-day retention; first run 23 MB ok.
   NB: the host abbreviates its +08:00 zone as "PST" (Philippine Standard Time) — schedule
