@@ -117,6 +117,15 @@ depends on it.
 
 ## 7. Execution log
 
+- **G5 DONE 2026-08-05**: first deploy green end-to-end — local suite + typecheck + build →
+  rsync → `npm ci` → migrations (001–003) → pm2 `sirius` + `sirius-worker` online. Boot log
+  clean; `https://platforms.frostdesigngroup.com/sirius/healthz` = ok/connected/connected
+  (production); app root serves. Project `rt-test` (TEST board) onboarded; JP allow-listed
+  and member. **Finding**: ARES tracks 23 boards incl. `hLL7WW2V` but NOT `tx8gDsTH` — the
+  TEST board returns 0 cards, so the instance is data-empty until JP registers the TEST
+  board in ARES (add ARES's Trello account to the board + register) or G7 onboards the real
+  board. Write round-trips (G6) are unaffected — they talk to Trello directly.
+
 - **G3 DONE 2026-08-05**: `/mnt/volume_sgp1_01/platforms/sirius` created; host `.env`
   provisioned (0600) — `SESSION_SECRET` + `ARES_WEBHOOK_SECRET` generated on-host, ARES +
   Trello credentials transferred without display; only `GOOGLE_CLIENT_ID/SECRET` (JP, pre-G5)
