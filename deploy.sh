@@ -54,7 +54,7 @@ if [ $? -ne 0 ]; then echo -e "${RED}rsync failed${NC}"; exit 1; fi
 
 echo -e "${BLUE}Installing deps + migrating + restarting on host...${NC}"
 ssh -q -i "${SSH_KEY}" -p "${DEST_PORT}" "${DEST_USER}@${DEST_HOST}" \
-  "cd ${DEST_DIR} && npm ci --omit=dev && npm run migrate && (pm2 restart sirius sirius-worker || pm2 start server.js --name sirius && pm2 start worker/index.js --name sirius-worker)"
+  "cd ${DEST_DIR} && npm ci --omit=dev && npm run migrate && (pm2 restart sirius sirius-worker || (pm2 start npm --name sirius -- run start && pm2 start npm --name sirius-worker -- run worker))"
 
 if [ $? -ne 0 ]; then echo -e "${RED}Remote install/restart failed${NC}"; exit 1; fi
 

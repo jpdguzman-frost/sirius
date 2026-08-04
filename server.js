@@ -6,7 +6,7 @@
  *   3. createApp() — HTTP composition lives in src/app.ts (testable via supertest)
  *   4. app.listen()
  *
- * Sync NEVER runs here — the worker process (worker/index.js) owns all sync.
+ * Sync NEVER runs here — the worker process (worker/index.ts) owns all sync.
  */
 
 import 'dotenv/config';
