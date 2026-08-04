@@ -115,7 +115,19 @@ depends on it.
    until G7).
 4. **G0+G1+G2 approved** ("go", 2026-08-05).
 
-## 7. G2 discovery findings (read-only, 2026-08-05)
+## 7. Execution log
+
+- **G3 DONE 2026-08-05**: `/mnt/volume_sgp1_01/platforms/sirius` created; host `.env`
+  provisioned (0600) — `SESSION_SECRET` + `ARES_WEBHOOK_SECRET` generated on-host, ARES +
+  Trello credentials transferred without display; only `GOOGLE_CLIENT_ID/SECRET` (JP, pre-G5)
+  and the deferred Sheets keys are empty. Local `deploy.sh` now sources gitignored
+  `deploy.local.sh` (created, filled); remote command sources nvm.
+- **G4 DONE 2026-08-05**: `platforms.frostdesigngroup.com` vhost enabled (configtest before
+  each reload); LE certificate issued (expires 2026-11-02, certbot.timer auto-renews);
+  HTTP→HTTPS 301; placeholder page at `/`; `/sirius` proxies to 127.0.0.1:3100 (503 until
+  G5 boots the app — correct); `X-Forwarded-Proto https` set in the ssl vhost.
+
+## 7a. G2 discovery findings (read-only, 2026-08-05)
 
 - Ubuntu 22.04.5 · Apache 2.4.52 with proxy, proxy_http, ssl, headers, rewrite already
   enabled · certbot 1.21 managing existing certs with the `<domain>.conf` +

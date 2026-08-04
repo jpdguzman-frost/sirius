@@ -3,16 +3,17 @@
 # Sirius Deployment Script — ARES pattern: nothing deploys unless the full
 # suite is green locally; rsync only what the server needs; restart remotely.
 #
-# Fill DEST_* from the ARES deployment values (same host pattern — OD-8).
-# STAGING deploys set NODE_ENV=staging on the host; the invariant-17 guard
-# refuses to boot staging against a production Trello board.
+# Host details live in deploy.local.sh (gitignored — invariant 15 spirit:
+# infrastructure coordinates stay out of the repo). Copy the DEST_* block
+# below into deploy.local.sh and fill it from the ARES deployment values.
 
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
-DEST_USER=""          # per ARES deploy.sh
-DEST_HOST=""          # per ARES deploy.sh
+DEST_USER=""
+DEST_HOST=""
 DEST_PORT="22"
-DEST_DIR=""           # e.g. /mnt/.../sirius
+DEST_DIR=""
 SSH_KEY="~/.ssh/id_rsa"
+[ -f "${SRC_DIR}/deploy.local.sh" ] && source "${SRC_DIR}/deploy.local.sh"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; NC='\033[0m'
 
@@ -54,7 +55,7 @@ if [ $? -ne 0 ]; then echo -e "${RED}rsync failed${NC}"; exit 1; fi
 
 echo -e "${BLUE}Installing deps + migrating + restarting on host...${NC}"
 ssh -q -i "${SSH_KEY}" -p "${DEST_PORT}" "${DEST_USER}@${DEST_HOST}" \
-  "cd ${DEST_DIR} && npm ci --omit=dev && npm run migrate && (pm2 restart sirius sirius-worker || (pm2 start npm --name sirius -- run start && pm2 start npm --name sirius-worker -- run worker))"
+  "source ~/.nvm/nvm.sh && cd ${DEST_DIR} && npm ci --omit=dev && npm run migrate && (pm2 restart sirius sirius-worker --update-env || (pm2 start npm --name sirius -- run start && pm2 start npm --name sirius-worker -- run worker))"
 
 if [ $? -ne 0 ]; then echo -e "${RED}Remote install/restart failed${NC}"; exit 1; fi
 
