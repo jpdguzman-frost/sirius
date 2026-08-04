@@ -4,24 +4,24 @@ You are building **Sirius**, Frost Design Group's internal delivery pipeline and
 
 ## What Sirius is, in three lines
 
-Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning decisions: which week a deliverable is slotted, confidence, SLA overrides, pins, status notes. It writes **one thing** back anywhere: an `Urgent` label on a Trello card. It is multi-project from the first migration.
+Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning decisions: which week a deliverable is slotted, confidence, SLA overrides, pins, status notes. It writes back only what the write registry enumerates — today the `Urgent` label and the card due date — nothing else, anywhere. It is multi-project from the first migration.
 
 ## Invariants — never violate, never "improve"
 
 1. **Every collection carries `project_id`. Every query filters on it.** No exceptions, including audit and sync collections where the schema defines it.
-2. **Read-only everywhere except urgency.** No write path to Google Sheets, ever. No write to Trello except add/remove the `Urgent` label via `lib/trello.ts` `setUrgency()`. If you find yourself writing anything else to a source system, you have misread the task — stop.
+2. **Read-only everywhere except the write registry.** (Amended 2026-08-04.) No write path to Google Sheets, ever. No write to Trello except the enumerated write registry in `specs/001-sirius-v1/contracts/trello-write.md` — today exactly two entries, both via `lib/trello.ts`: the `Urgent` label (`setUrgency()`) and the card due date (`setDue()`). Growing the registry is a constitution amendment, never a code change. If you find yourself writing anything else to a source system, you have misread the task — stop.
 3. **`mc_number` is NOT a unique key.** Identity is `(project_id, trello_card_id)`. MC-825 carries 99 deliverables. `display_id` (e.g. `MC-655.3`) is for humans.
 4. **Work cards attach to the MC group, not to a single deliverable.** There is no reliable task→deliverable edge (1 of 27 titles matched). Do not model one.
 5. **`lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` are ported verbatim from `frost-sirius-v1.jsx`.** They are validated. Do not refactor, rename, or "clean up" their logic. Golden tests prove the port before anything else uses them.
 6. **`lib/forecast.legacy.ts` (the spreadsheet formula) is for migration tests only.** It is never imported by UI code. It overstates review waits 2.6–4.6× (BR-3). The empirical model is the only forecast users see.
 7. **The empirical model is a release gate, not a feature** (Sequence item 6). Do not build UI that displays forecast dates until the model refresh produces dates the PM recognises.
-8. **Urgency write is optimistic with rollback.** A failed Trello write reverts the local change. Sirius never displays a state Trello lacks. Every write logs to `audit_log` and `sync_runs`.
+8. **Every Trello write is optimistic with rollback.** (Amended 2026-08-04; was urgency-only.) A failed Trello write reverts the local change. Sirius never displays a state Trello lacks. Every write logs to `audit_log` and `sync_runs`. Trello-owned fields — including the written ones — reconcile from ARES reads, so a manual change made in Trello always surfaces in Sirius.
 9. **Auth is four server-side checks:** verified email, `hd` claim = `frostdesigngroup.com`, matching email domain, active allow-list row. Every API route re-checks session AND project membership. Hiding a tab is not access control.
 10. **Every state change writes to the immutable `audit_log`** — schedule moves, pins, SLA overrides, urgency, conflict acknowledgements, project settings.
 11. **Store UTC, render and compute Asia/Manila.** Workday math uses `lib/calendar.ts` only.
 12. **Sprints are editable data, not a cadence.** Overlapping sprints rejected on save. Gaps allowed and surfaced as *Outside any sprint*.
 13. **Conflict acknowledgements are keyed on the situation:** `week | rule | sorted card:phase pairs`. Any change to the cards involved invalidates the acknowledgement. Card-level indicators (red bar, late flag) are never suppressed by an acknowledgement.
-14. **Deadline precedence:** Trello due date wins where present, else sheet deadline, else none (implemented in `deliverables_v`).
+14. **Deadline precedence:** Trello due date wins where present, else sheet deadline, else none (implemented in `deliverables_v`). A Sirius deadline edit writes the Trello due date (registry entry W2), so precedence is preserved by construction.
 15. **Secrets live in server-side environment configuration only** (dotenv on the host, per the ARES pattern). Never in the client bundle, never in the repo, never in logs. The ARES API key is read-only and never leaves the server. The Sheets service-account credential is provisioned as a server-side secret, never committed.
 16. **Seed from fixtures, never from a production dump.** Real briefs never touch a developer laptop.
 17. **Staging and local point at a NON-PRODUCTION TEST board that mirrors the production board's structure** — same lists and label taxonomy (`Main Card`, `Difficulty: …`, 🛑 blockers); a dozen sample cards suffice. (Amended 2026-08-04: the production board is too large to duplicate.) Before any urgency write runs, verify the configured board ID is not a production board.
@@ -30,7 +30,7 @@ Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning 
 
 *(Amended by JP, 2026-08-03 — aligned to the ARES stack; supersedes the Implementation Plan's §2–§3 stack choices.)*
 
-Node.js + Express 5 · TypeScript `strict` for server, worker and `lib/` · frontend follows ARES conventions: Ractive.js templates, plain JS scripts, CSS, HTML, no bundler (`frontend/build.js` concatenation) · MongoDB via Mongoose (same Mongo server as ARES, own `sirius` database) · Redis (sessions via connect-redis, caching) · Passport with `passport-google-oauth20` — the four auth checks unchanged · separate worker process for all sync (sync never runs inside a request) · Zod at every API boundary · Vitest · deployed beside ARES, same pattern · Trello data via the ARES read API (`/api/v1/trello/*`, read-only key, server-side only) · repository layout per `specs/001-sirius-v1/plan.md` (supersedes Implementation Plan §2.3).
+Node.js + Express 5 · TypeScript `strict` for server, worker and `lib/` · frontend follows ARES conventions: Ractive.js templates, plain JS scripts, CSS, HTML, no bundler (`frontend/build.js` concatenation) · MongoDB via Mongoose (same Mongo server as ARES, own `sirius` database) · Redis (sessions via connect-redis, caching) · Passport with `passport-google-oauth20` — the four auth checks unchanged · separate worker process for all sync (sync never runs inside a request) · Zod at every API boundary · Vitest · deployed beside ARES, same pattern · Trello data via the ARES read API (`/api/v1/trello/*`, read-only key, server-side only) · realtime updates via ARES push webhooks (HMAC-signed, notification-then-read per `contracts/ares-push.md`; the poll stays as the reconcile fallback) · repository layout per `specs/001-sirius-v1/plan.md` (supersedes Implementation Plan §2.3).
 
 Do NOT: split into SPA + separate API domain · apply schema or index changes by hand against production (version-controlled migration scripts only) · port the forecast engine to another language · put the ARES key or any credential in a browser · add libraries that duplicate what the stack provides.
 
