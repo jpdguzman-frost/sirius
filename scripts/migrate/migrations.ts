@@ -56,6 +56,17 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    // push_events (contracts/ares-push.md): unique event_id + drain index +
+    // 7-day TTL. 001 already ran on existing databases, so the new collection
+    // gets its own migration.
+    id: '003-push-events',
+    up: async () => {
+      const { PushEvent } = await import('../../src/models/index.ts');
+      await PushEvent.createCollection();
+      await PushEvent.syncIndexes();
+    },
+  },
 ];
 
 /** Applies pending migrations in order; records each in `migrations`. */

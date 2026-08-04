@@ -1,7 +1,8 @@
 /**
- * Mongoose models — 15 collections, translated 1:1 from Implementation Plan
- * §1.3 (see specs/001-sirius-v1/data-model.md; the SQL appendix there is the
- * content authority these schemas are audited against).
+ * Mongoose models — the 15 collections translated 1:1 from Implementation
+ * Plan §1.3 (see specs/001-sirius-v1/data-model.md; the SQL appendix there is
+ * the content authority these schemas are audited against), plus push_events
+ * (contracts/ares-push.md, added 2026-08-04).
  *
  * Rules that shape everything:
  *  - Every collection carries project_id; audit_log/sync_runs allow null per
@@ -124,9 +125,11 @@ const deliverableSchema = new Schema(
     figma_url: String,
     labels: { type: [String], required: true, default: [] },
     trello_due: DATE_ONLY,
+    trello_due_at: Date, // raw due instant from ARES — preserves time-of-day on W2 writes
     trello_synced_at: { type: Date, required: true, default: Date.now },
 
-    // ---- the one field Sirius writes back (invariant 2) ----
+    // ---- written back by Sirius (write registry W1), reconciled from the
+    // ---- Urgent label on every sync (FR-9.5) — Trello is the truth
     urgency: { type: String, required: true, default: 'Non-Urgent' },
 
     // ---- from the intake sheet, joined on mc_number ----
@@ -309,6 +312,29 @@ const auditLogSchema = new Schema(
 );
 auditLogSchema.index({ project_id: 1, entity: 1, entity_id: 1, at: -1 });
 
+// ============ push events ============
+// ARES push notifications (contracts/ares-push.md): the receiver persists and
+// answers 202; the WORKER drains — sync never runs inside a request. Events
+// are triggers, not truth: the drain re-reads the card from the ARES read API.
+
+const pushEventSchema = new Schema(
+  {
+    project_id: projectRef,
+    event_id: { type: String, required: true }, // ARES ULID — idempotency key
+    type: { type: String, required: true }, // card.changed | card.created | board.resync
+    board_id: { type: String, required: true },
+    card_id: String, // absent on board.resync
+    occurred_at: { type: Date, required: true },
+    received_at: { type: Date, required: true, default: Date.now },
+    status: { type: String, required: true, default: 'pending' }, // pending | done | failed
+    error: String,
+  },
+  { collection: 'push_events' },
+);
+pushEventSchema.index({ event_id: 1 }, { unique: true });
+pushEventSchema.index({ project_id: 1, status: 1, received_at: 1 });
+pushEventSchema.index({ received_at: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 }); // TTL 7d
+
 const syncRunSchema = new Schema(
   {
     project_id: { type: ObjectId, ref: 'Project' }, // nullable per source schema
@@ -339,6 +365,7 @@ export const ThroughputGrid = mongoose.model('ThroughputGrid', throughputGridSch
 export const ConflictAcknowledgement = mongoose.model('ConflictAcknowledgement', conflictAckSchema);
 export const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 export const SyncRun = mongoose.model('SyncRun', syncRunSchema);
+export const PushEvent = mongoose.model('PushEvent', pushEventSchema);
 
 export const ALL_MODELS = [
   Project,
@@ -356,4 +383,5 @@ export const ALL_MODELS = [
   ConflictAcknowledgement,
   AuditLog,
   SyncRun,
+  PushEvent,
 ];
