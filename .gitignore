@@ -21,3 +21,6 @@ coverage/
 docs/forecasting-block.csv
 docs/gate-t045-model-validation.md
 docs/screenshots/
+
+# ARES deploy script copy — host/SSH details stay out of the repo
+docs/deploy.sh
