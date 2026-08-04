@@ -37,6 +37,14 @@ const base = z.object({
 
   APP_BASE_URL: z.string().optional(),
 
+  // Mount the whole app under a path prefix (platforms host pattern:
+  // platforms.frostdesigngroup.com/sirius → BASE_PATH=/sirius). Empty/unset =
+  // domain root, which is what local dev and the tests use.
+  BASE_PATH: z
+    .string()
+    .regex(/^\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/, 'BASE_PATH must start with / and have no trailing slash')
+    .optional(),
+
   // Dev-only auto-login (email). Honoured EXCLUSIVELY when NODE_ENV=development;
   // the allow-list check still applies. Never set outside a laptop.
   DEV_AUTOLOGIN: z.string().optional(),

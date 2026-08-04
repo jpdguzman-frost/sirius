@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import passport from './passport.ts';
 
-export function authRouter(): Router {
+export function authRouter(basePath = ''): Router {
   const router = Router();
 
   router.get('/auth/google', passport.authenticate('google', { scope: ['openid', 'email', 'profile'] }));
@@ -16,11 +16,11 @@ export function authRouter(): Router {
       if (err) return next(err);
       if (!user) {
         const reason = info?.message ?? 'Sign-in denied.';
-        return res.redirect(`/auth/failed?reason=${encodeURIComponent(reason)}`);
+        return res.redirect(`${basePath}/auth/failed?reason=${encodeURIComponent(reason)}`);
       }
       req.logIn(user, (loginErr) => {
         if (loginErr) return next(loginErr);
-        res.redirect('/');
+        res.redirect(`${basePath}/`);
       });
     })(req, res, next);
   });

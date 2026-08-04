@@ -41,13 +41,19 @@ export function createApp({ env, redis, trello }: AppDeps): express.Express {
 
   app.set('trust proxy', 1);
 
+  // The whole app mounts on one router at BASE_PATH (default: domain root) —
+  // the platforms-host pattern serves Sirius at /sirius behind Apache without
+  // the code knowing more than this one prefix.
+  const base = env.BASE_PATH ?? '';
+  const root = express.Router();
+
   // ARES push receiver first: needs the RAW body for its HMAC and has no use
   // for the JSON parser or a session (contracts/ares-push.md).
-  app.use(aresWebhookRouter(env));
+  root.use(aresWebhookRouter(env));
 
-  app.use(express.json({ limit: '1mb' }));
+  root.use(express.json({ limit: '1mb' }));
 
-  app.use(
+  root.use(
     session({
       store: redis ? new RedisStore({ client: redis, prefix: 'sirius:sess:' }) : undefined,
       secret: env.SESSION_SECRET ?? 'dev-only-not-a-secret',
@@ -57,15 +63,16 @@ export function createApp({ env, redis, trello }: AppDeps): express.Express {
         httpOnly: true,
         sameSite: 'lax',
         secure: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+        path: base || '/',
       },
     }),
   );
 
   configurePassport(env);
-  app.use(passport.initialize());
-  app.use(passport.session());
+  root.use(passport.initialize());
+  root.use(passport.session());
 
-  app.get('/healthz', (_req, res) => {
+  root.get('/healthz', (_req, res) => {
     res.json({
       status: 'ok',
       mongo: mongoState(),
@@ -78,7 +85,7 @@ export function createApp({ env, redis, trello }: AppDeps): express.Express {
   // email is an ACTIVE allow-list row. Real SSO takes over the moment Google
   // credentials exist. Never mounted in staging/production.
   if (env.NODE_ENV === 'development' && env.DEV_AUTOLOGIN) {
-    app.get('/auth/dev', (req, res, next) => {
+    root.get('/auth/dev', (req, res, next) => {
       import('./models/index.ts').then(async ({ User }) => {
         const user = await User.findOne({ email: env.DEV_AUTOLOGIN!.toLowerCase() });
         if (!user || !user.active) {
@@ -87,7 +94,7 @@ export function createApp({ env, redis, trello }: AppDeps): express.Express {
         }
         req.logIn({ userId: user._id.toString(), email: user.email, name: user.name }, (err) => {
           if (err) return next(err);
-          res.redirect('/');
+          res.redirect(`${base}/`);
         });
       }, next);
     });
@@ -96,25 +103,26 @@ export function createApp({ env, redis, trello }: AppDeps): express.Express {
   // Test-only session injection — lets the authz matrix run without a live
   // Google round-trip. Never mounted outside NODE_ENV=test.
   if (env.NODE_ENV === 'test') {
-    app.post('/__test/login', (req, res, next) => {
+    root.post('/__test/login', (req, res, next) => {
       req.logIn(req.body, (err) => (err ? next(err) : res.json({ ok: true })));
     });
   }
 
-  app.use(authRouter());
-  app.use(projectsRouter());
-  app.use(requestsRouter());
-  app.use(deliverablesRouter());
-  app.use(scheduleRouter());
-  app.use(writesRouter(env, trello !== undefined ? trello : makeTrelloWriter(env)));
+  root.use(authRouter(base));
+  root.use(projectsRouter());
+  root.use(requestsRouter());
+  root.use(deliverablesRouter());
+  root.use(scheduleRouter());
+  root.use(writesRouter(env, trello !== undefined ? trello : makeTrelloWriter(env)));
 
   // Built frontend (frontend/build.js → public/). No credential ever ships here.
-  app.use(express.static(path.join(__dirname, '..', 'public')));
+  root.use(express.static(path.join(__dirname, '..', 'public')));
 
   // Unknown API paths answer JSON, not HTML.
-  app.use('/api', (_req, res) => {
+  root.use('/api', (_req, res) => {
     res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
   });
 
+  app.use(base || '/', root);
   return app;
 }

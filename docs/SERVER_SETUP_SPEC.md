@@ -21,10 +21,13 @@ deploy pattern. The web tier is **Apache** with **Let's Encrypt** (certbot) — 
 current tooling — terminating TLS for `platforms.frostdesigngroup.com` and reverse-proxying
 `/sirius` to the Node process on localhost.
 
-First boot is **staging-mode on the live URL** (recommended, §6): `sirius-staging` database,
-TEST board `tx8gDsTH`, `PROD_TRELLO_BOARD_IDS=hLL7WW2V` so the production board physically
-cannot be written. After the phase-9 drills pass, the same instance flips to production
-config — that flip is its own JP gate.
+**No staging tier** (JP, 2026-08-05: "we don't really stage platform — anything we deploy
+goes live"). The instance boots `NODE_ENV=production`, database `sirius`, on the live URL.
+Safety during the pre-pilot window comes from data, not environment: the ONLY project
+onboarded until the drills pass is the TEST board (`tx8gDsTH`), and every Trello write
+resolves its board from the project — so the production board is unreachable until its
+project is deliberately onboarded at G7. `PROD_TRELLO_BOARD_IDS=hLL7WW2V` stays in the env
+regardless (inert in production, an extra belt anywhere else).
 
 ## 2. Facts and constraints
 
@@ -64,7 +67,7 @@ pm2 (nvm node):
 
 /mnt/volume_sgp1_01/platforms/sirius   ← rsync target (DEST_DIR)
   .env (hand-provisioned, never synced)
-Mongo: localhost — db sirius-staging → sirius at the flip
+Mongo: localhost — db sirius (no staging tier; TEST-board project only until G7)
 Redis: localhost — session prefix sirius:sess: (already namespaced)
 ```
 
@@ -96,24 +99,21 @@ depends on it.
 | **G0** | Spec approval | JP approves this document, §6 decisions answered | no |
 | **G1** | Base-path code | §4 change + tests, committed, suite green | no |
 | **G2** | Discovery (READ-ONLY) | SSH in; record: Apache version + enabled modules (proxy, ssl) + existing vhosts; certbot presence + existing certs; node/nvm + pm2 versions; mongod + redis reachable on localhost; port 3100 free; disk on `/mnt/volume_sgp1_01`; ufw/firewall state. Output: a findings block posted to JP; NO writes | read-only |
-| **G3** | Provision | `mkdir -p /mnt/volume_sgp1_01/platforms/sirius`; write host `.env` from `DEPLOY.md` list (staging values; secrets generated on-host or provided by JP, never pasted into chat); fill local `deploy.sh` `DEST_*` (dir `platforms/sirius`, host/port/key per `docs/deploy.sh`) | yes — additive only |
+| **G3** | Provision | `mkdir -p /mnt/volume_sgp1_01/platforms/sirius`; write host `.env` from `DEPLOY.md` list (`NODE_ENV=production`, db `sirius`, `BASE_PATH=/sirius`; secrets generated on-host, never pasted into chat); fill local `deploy.sh` `DEST_*` (dir `platforms/sirius`, host/port/key per `docs/deploy.sh`) | yes — additive only |
 | **G4** | Vhost + TLS | DNS A record confirmed live (JP, §6) → write the `platforms.frostdesigngroup.com` vhost (proxy config §3, site root placeholder); `apachectl configtest`; enable site; reload; `certbot --apache -d platforms.frostdesigngroup.com`; verify auto-renewal timer. ARES's existing vhosts untouched — configtest before every reload | yes |
 | **G5** | First deploy + boot | `./deploy.sh` (tests → build → rsync → `npm ci` → migrate → pm2 start both apps); onboard staging project against the TEST board (`migrate-open-cards.ts`, `CODE=rt-837 BOARD=tx8gDsTH`); allow-list JP; verify `https://…/sirius/healthz`, sign-in, tabs on synthetic data | yes |
-| **G6** | Smoke → phase 9 | The `DEPLOY.md` smoke checklist + urgency & due round-trips on `tx8gDsTH`; then the phase-9 drill sequence (T069 staging half, T070–T076) each reported to JP | yes |
-| **G7** | Production flip | Separate approval, after drills: `NODE_ENV=production`, db `sirius`, real board on the project config, `PROD_TRELLO_BOARD_IDS` kept everywhere non-production, pilot go/no-go per *Pilot Security Readiness* | yes |
+| **G6** | Smoke → phase 9 | The `DEPLOY.md` smoke checklist + urgency & due round-trips on `tx8gDsTH`; then the phase-9 drill sequence (T069–T076) on the live instance (TEST-board project only), each reported to JP | yes |
+| **G7** | Real-board onboarding | Separate approval, after drills: onboard the production-board project (`migrate-open-cards.ts`, `BOARD=hLL7WW2V`), deactivate/remove the TEST project, pilot go/no-go per *Pilot Security Readiness* | yes |
 
-## 6. Decisions needed from JP before G2
+## 6. Decisions — answered by JP 2026-08-05
 
-1. **DNS** — does `platforms.frostdesigngroup.com` already have an A record to the droplet?
-   If not: JP creates it (registrar/DNS panel) before G4; G2–G3 can proceed without it.
-2. **Google OAuth client** — JP creates (Google Cloud console → OAuth client, Web), callback
-   `https://platforms.frostdesigngroup.com/sirius/auth/google/callback`; values go straight
-   into the host `.env` at G3. Needed before G5 boot.
-3. **Staging-on-live-URL confirmed?** One instance, staging config first, flip at G7
-   (recommended — one URL, one vhost, the board guard carries the safety). Alternative: a
-   separate `/sirius-staging` path kept permanently — more moving parts, not recommended.
-4. **Approve §4** (base-path code change) and this spec as a whole (G0+G1 in one "go" if
-   both are fine).
+1. **DNS** — ✅ A record for `platforms.frostdesigngroup.com` already points at the droplet.
+2. **Google OAuth client** — JP creates it with the agent walking him through it, before G5
+   boot (the app refuses to start without it). Callback:
+   `https://platforms.frostdesigngroup.com/sirius/auth/google/callback`.
+3. **No staging tier** — deploys go live; safety-by-data per §1 (TEST-board project only
+   until G7).
+4. **G0+G1+G2 approved** ("go", 2026-08-05).
 
 ## 7. Safety rails
 
