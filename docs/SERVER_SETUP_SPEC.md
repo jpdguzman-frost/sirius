@@ -115,7 +115,26 @@ depends on it.
    until G7).
 4. **G0+G1+G2 approved** ("go", 2026-08-05).
 
-## 7. Safety rails
+## 7. G2 discovery findings (read-only, 2026-08-05)
+
+- Ubuntu 22.04.5 · Apache 2.4.52 with proxy, proxy_http, ssl, headers, rewrite already
+  enabled · certbot 1.21 managing existing certs with the `<domain>.conf` +
+  `<domain>-le-ssl.conf` pattern — our vhost follows it. nginx installed but **inactive**;
+  Apache owns :80/:443.
+- Node v24.4.1 (nvm) · pm2 6.0.8 running 11 apps (ares among them) · Mongo 7.0.28 and
+  Redis bound to localhost only.
+- DNS: `platforms.frostdesigngroup.com` → droplet ✓ (verified). No Apache vhost claims the
+  name (grep + `apachectl -S`): today HTTP falls through to 000-default and HTTPS to the
+  default 443 vhost with a mismatched cert — our vhost + cert fixes both.
+- **Port 3000 is taken** (apollo.live). 3100 free → Sirius binds 3100 as planned.
+- `/mnt/volume_sgp1_01` exists with the platform apps at top level; `platforms/` subdir does
+  not exist yet (created at G3). NB: the path sits on the root filesystem (58G, 62% used,
+  23G free) — named like a block volume but isn't one.
+- ufw inactive (edge protection presumably at the cloud firewall — not ours to change).
+- ⚠ Observation for JP, untouched: pm2 app `ares` showed 40 restarts with 21 min uptime and
+  823 MB memory at discovery time.
+
+## 8. Safety rails
 
 - ARES must never blink: no Apache reload without `configtest`; no changes inside
   `/mnt/volume_sgp1_01/ares`; no pm2 commands against the `ares` process; Mongo/Redis are
