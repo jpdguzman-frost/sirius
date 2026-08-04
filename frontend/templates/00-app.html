@@ -64,7 +64,7 @@
 
   <div class="note">🔒 Difficulty, list, due date and Figma links are read from Trello and can’t be edited here.
     <span class="dim">{{syncLabel}} · every 15 minutes</span></div>
-  <div class="note soft">Urgency is the one field Sirius writes back — it becomes an <strong>Urgent</strong> label on the Trello card, and its absence means non-urgent. The write path ships in phase 8.</div>
+  <div class="note soft">Sirius writes exactly two things back to Trello (the write registry): the <strong>Urgent</strong> label — absence means non-urgent — and the card <strong>due date</strong>, editable in the Due column. Everything else is read-only.</div>
 
   {{#if corrections.length}}
     <div class="callout">
@@ -93,7 +93,15 @@
         <td><span class="badge s-{{row.status}}">{{row.currentList || '—'}}</span></td>
         <td><span class="badge s-{{row.status}}">{{row.statusNote ? 'manual' : row.status}}</span></td>
         <td class="dim">{{row.requestor || '—'}}</td>
-        <td class="nowrap">{{fmt(row.deadline)}} {{#if row.deadlineSource}}<span class="dim">({{row.deadlineSource}})</span>{{/if}}</td>
+        <td class="nowrap">
+          {{#if editingDeadline === row.cardId}}
+            <input type="date" class="dl-input" value="{{row.trelloDue}}" on-change="['setDeadline', row.cardId]" on-blur="['cancelDeadline']" autofocus />
+            {{#if row.trelloDue}}<button class="badge togglable" on-mousedown="['clearDeadline', row.cardId]" title="Clear the Trello due date — the sheet deadline (if any) takes over">✕</button>{{/if}}
+          {{else}}
+            <button class="dl-edit" on-click="['editDeadline', row.cardId]" title="Edit the deadline — writes the Trello due date (write registry W2)">{{#if row.deadline}}{{fmt(row.deadline)}}{{else}}<span class="dim">— set</span>{{/if}}</button>
+            {{#if row.deadlineSource}}<span class="dim">({{row.deadlineSource}})</span>{{/if}}
+          {{/if}}
+        </td>
         <td class="nowrap">{{#if row.trelloUrl}}<a href="{{row.trelloUrl}}" target="_blank">Trello</a>{{/if}} {{#if row.figmaUrl}}<a href="{{row.figmaUrl}}" target="_blank">Figma</a>{{/if}}</td>
       </tr>
       {{#if expanded[row.mcNumber]}}

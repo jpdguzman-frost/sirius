@@ -213,6 +213,29 @@ async function loadShell() {
   await loadAll();
 }
 
+/* W2 deadline write (FR-9.1): optimistic with revert, same pattern as
+   urgency; Trello is written first server-side, so a failure reverts here. */
+async function writeDeadline(cardId, value) {
+  const idx = app.get('rows').findIndex((r) => r.cardId === cardId);
+  const row = app.get(`rows.${idx}`);
+  app.set('editingDeadline', null);
+  if ((value || null) === (row.trelloDue || null)) return; // no-op guard — no call, no audit
+  const prev = { deadline: row.deadline, deadlineSource: row.deadlineSource, trelloDue: row.trelloDue };
+  app.set(`rows.${idx}.deadline`, value);
+  app.set(`rows.${idx}.deadlineSource`, value ? 'trello' : null);
+  app.set(`rows.${idx}.trelloDue`, value);
+  try {
+    await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/deadline`, { date: value });
+    await loadAll(); // precedence may fall back to the sheet deadline (BR-9)
+  } catch (err) {
+    app.set(`rows.${idx}.deadline`, prev.deadline);
+    app.set(`rows.${idx}.deadlineSource`, prev.deadlineSource);
+    app.set(`rows.${idx}.trelloDue`, prev.trelloDue);
+    app.set('banner', `Deadline write failed — reverted. ${err.detail && err.detail.message ? err.detail.message : err.message}`);
+    setTimeout(() => app.set('banner', ''), 6000);
+  }
+}
+
 async function loadAll() {
   const pid = app.get('activeProjectId');
   if (!pid) return;
@@ -232,7 +255,7 @@ async function loadAll() {
       sync: pipeline.sync,
       syncLabel: pipeline.sync
         ? pipeline.sync.ok
-          ? `synced ${new Date(pipeline.sync.at).toLocaleTimeString()}`
+          ? `synced ${new Date(pipeline.sync.at).toLocaleTimeString()}${pipeline.sync.push_at && Date.now() - new Date(pipeline.sync.push_at).getTime() < 30 * 60 * 1000 ? ' · push live' : ''}`
           : 'sync failing — showing last good data'
         : 'no sync yet',
       banner: pipeline.sync && !pipeline.sync.ok ? `Sync error: ${pipeline.sync.error || 'unknown'} — data below is the last good state.` : '',
@@ -318,6 +341,11 @@ app.on({
       setTimeout(() => app.set('banner', ''), 6000);
     }
   },
+  editDeadline(_ctx, cardId) { app.set('editingDeadline', cardId); },
+  // the clear button fires on mousedown, before this blur handler lands
+  cancelDeadline() { setTimeout(() => app.set('editingDeadline', null), 150); },
+  async setDeadline(ctx, cardId) { await writeDeadline(cardId, ctx.node.value || null); },
+  async clearDeadline(_ctx, cardId) { await writeDeadline(cardId, null); },
 
   weekShiftView(_ctx, dir) { app.set('weekStart', mondayShift(app.get('weekStart'), dir)); },
   dragRow(ctx, cardId) {
