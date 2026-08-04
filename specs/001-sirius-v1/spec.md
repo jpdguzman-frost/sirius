@@ -270,6 +270,21 @@ IDs and text are the BRD's, preserved verbatim. Priority M = must, S = should.
 | FR-9.5 | Trello-owned fields — including the `Urgent` label and due date — reconcile from ARES reads, so manual Trello changes surface in Sirius; Sirius-owned planning fields are never touched by sync | M |
 | FR-9.6 | Push failure degrades to polling with an alert; the poll remains the reconcile fallback — no data loss on a dead push channel | M |
 
+#### FR-10 — Admin panel *(added 2026-08-05, JP-directed change — user-access management UI)*
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-10.1 | An **Admin** tab, visible only to admins, lists every account: email, name, active state, admin flag, last sign-in, project memberships | M |
+| FR-10.2 | Admins add a person — email (must be `@frostdesigngroup.com`, hard-validated), name, and project memberships chosen from existing projects | M |
+| FR-10.3 | Admins deactivate/reactivate accounts; deactivation revokes live sessions on the next request (existing per-request allow-list re-check) | M |
+| FR-10.4 | Admins grant/revoke project memberships per account | M |
+| FR-10.5 | Server-side enforcement: every admin route requires session + active allow-list row + admin flag (`ensureAdmin`); hiding the tab is not access control | M |
+| FR-10.6 | The last active admin cannot be deactivated — no self-lockout | M |
+| FR-10.7 | Every action writes `audit_log`: `user.added`, `user.deactivated`, `user.reactivated`, `memberships.set` (invariant 10) | M |
+| FR-10.8 | Scope bounds: no hard deletes (deactivate only) · no email notifications · admin promote/demote is CLI-only (`scripts/allowlist.ts ADMIN=1`) — the panel manages members, not admins | M |
+
+*Clarified 2026-08-05 (JP): admin flag model (first admin: JP) · core actions only (no role management in UI) · new tab beside the five · built immediately so the WCAG pass covers it. The four sign-in checks are untouched — admin is authorization layered after them; no constitution amendment required.*
+
 ### Business Rules
 
 Preserved verbatim from BRD §7.

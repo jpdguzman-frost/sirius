@@ -182,6 +182,18 @@ to cover the due-date write and the webhook receiver. The ARES half is built sep
 
 ---
 
+## Phase 11 — Admin panel (~2d) — added 2026-08-05 (JP; FR-10)
+
+- [ ] T087 [P] Admin authz tests FIRST: every `/api/admin` route walked mechanically — 401 anonymous, 403 active non-admin, 200 admin; domain validation; last-admin guard; deactivation revokes the live session on next request; audit rows per action (FR-10.2–10.7; NFR-6)
+- [ ] T088 `users.is_admin` + `ensureAdmin` middleware (`src/auth/`) + `src/routes/admin.ts` (list/add/activate/memberships, Zod-strict) (FR-10.1–10.7)
+- [ ] T089 `GET /api/me` + Admin tab in the frontend (admin-visible, prototype design language): user table, add form with project checkboxes, activate/deactivate, membership editing — optimistic with revert (FR-10.1–10.4)
+- [ ] T090 `scripts/allowlist.ts` `ADMIN=1` flag; seed JP as first admin on the host; deploy (FR-10.8)
+- [ ] T091 Fold the new screens into the keyboard/WCAG AA pass (T073 scope grows) (NFR-9)
+
+**Checkpoint**: JP manages a real account end-to-end from the UI.
+
+---
+
 ## Dependencies
 
 ```
