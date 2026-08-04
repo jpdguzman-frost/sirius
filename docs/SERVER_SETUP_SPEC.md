@@ -117,6 +117,13 @@ depends on it.
 
 ## 7. Execution log
 
+- **Backup/restore drill PASSED 2026-08-05 (T072, NFR-8)**: dumped `sirius` (124 KB),
+  restored into a scratch db, all 17 collection counts identical, `deliverables_v` view
+  definition survives dump/restore, scratch dropped; dump retained at
+  `platforms/sirius/backups/20260804-1113` as backup #1. Runbook added to `DEPLOY.md`.
+  **Finding for JP**: the host had NO Mongo backup schedule for ANY database (ares
+  included) — nightly cron + 30-day retention proposed.
+
 - **G6 smoke IN PROGRESS 2026-08-05**: TEST board registered in ARES by JP (12 cards →
   8 deliverables + 4 work cards, 0 unlinked). LIVE on the deployed instance: due
   round-trip (set 17:00 Manila → restore) ✓ · **reconcile loop both directions** — manual

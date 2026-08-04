@@ -151,7 +151,7 @@
 - [ ] T069 ⚠ LOCAL HALF DONE (13 routes, 401/403, test/authz-matrix.test.ts) — staging smoke authz matrix: non-Frost + off-list + cross-project against every endpoint → denied/403 (AC-1, AC-2, AC-3; NFR-6)
 - [ ] T070 [P] Sheet un-share drill: service account removed → clean failure surfaced, re-share restores (AC-7)
 - [ ] T071 ⚠ STATIC HALF DONE (test/log-hygiene.test.ts) — [P] Log hygiene audit: no brief text, no credentials in any log path (NFR-11; invariant 15)
-- [ ] T072 [P] Backup + restore drill on the shared Mongo server (`sirius` db), documented (NFR-8)
+- [x] T072 [P] Backup + restore drill on the shared Mongo server (`sirius` db), documented (NFR-8)
 - [ ] T073 Accessibility audit: WCAG 2.1 AA incl. the keyboard scheduling path (NFR-9; AC-20)
 - [x] T074 `scripts/migrate-open-cards.ts`: migrate open cards/requests into production data per deadline-precedence and taxonomy rules (AC-8; BR-9; plan.md layout)
 - [ ] T075 Full AC sweep on staging: AC-1..AC-20 recorded in STATE.md scoreboard with evidence links (Definition of done)

@@ -54,6 +54,19 @@ non-Frost account denied · authz matrix script · urgency round-trip on the
 TEST board (`BOARD=tx8gDsTH npx tsx scripts/urgency-roundtrip.ts`) ·
 backup/restore drill on the shared mongod · log hygiene spot-check.
 
+## Backup & restore (NFR-8 — drill passed 2026-08-05)
+
+- **Backup**: `mongodump --db sirius --out /mnt/volume_sgp1_01/platforms/sirius/backups/<stamp>`
+  (~124 KB at pilot scale; `deliverables_v` dumps as a view definition, not data — restores
+  correctly as a view).
+- **Restore test** (the quarterly drill): `mongorestore --nsFrom "sirius.*" --nsTo
+  "sirius_restore_test.*" <dir>` → compare collection counts → drop the scratch db.
+- **Disaster restore**: `mongorestore --db sirius <dir>/sirius` onto a clean server, then
+  `npm run migrate` (idempotent) and redeploy — sessions are disposable (Redis), users
+  re-sign-in.
+- Nightly schedule + 30-day retention: proposed to JP 2026-08-05 (no Mongo backup schedule
+  existed on the host for ANY database at that date).
+
 ## What production changes later
 
 `NODE_ENV=production`, `MONGODB_URI=.../sirius`, the real board on the
