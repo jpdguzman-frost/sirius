@@ -55,14 +55,14 @@ regardless (inert in production, an extra belt anywhere else).
 DNS A: platforms.frostdesigngroup.com → droplet
 Apache :443 (LE cert, certbot-managed renewal)
   vhost platforms.frostdesigngroup.com
-    ProxyPass        /sirius  http://127.0.0.1:3100/sirius   (prefix NOT stripped)
-    ProxyPassReverse /sirius  http://127.0.0.1:3100/sirius
+    ProxyPass        /sirius  http://127.0.0.1:3950/sirius   (prefix NOT stripped)
+    ProxyPassReverse /sirius  http://127.0.0.1:3950/sirius
     ProxyPreserveHost On · X-Forwarded-Proto "https"          (app has trust proxy)
     /                 → placeholder page (future tools index)
 Apache :80 → 301 to https (certbot default)
 
 pm2 (nvm node):
-  sirius          npm run start    PORT=3100  BASE_PATH=/sirius
+  sirius          npm run start    PORT=3950  BASE_PATH=/sirius
   sirius-worker   npm run worker
 
 /mnt/volume_sgp1_01/platforms/sirius   ← rsync target (DEST_DIR)
@@ -71,7 +71,7 @@ Mongo: localhost — db sirius (no staging tier; TEST-board project only until G
 Redis: localhost — session prefix sirius:sess: (already namespaced)
 ```
 
-Port **3100** assumed free — verified in discovery; changed there if taken.
+Port **3950** (JP, 2026-08-05 — moved off 3100 to avoid friction with other tenants; 3950 verified free and its localhost OAuth origin registered).
 
 ## 4. Code change required first: `BASE_PATH` (needs JP approval)
 
@@ -122,9 +122,12 @@ depends on it.
   Trello credentials transferred without display; only `GOOGLE_CLIENT_ID/SECRET` (JP, pre-G5)
   and the deferred Sheets keys are empty. Local `deploy.sh` now sources gitignored
   `deploy.local.sh` (created, filled); remote command sources nvm.
+- **G5 prelude 2026-08-05**: port moved 3100 → 3950 everywhere (JP); OAuth = the ARES
+  client reused — JP added the platforms + localhost:3950 redirect URIs; client ID/secret
+  copied into Sirius's `.env` server-side from ARES's `.env` (values never left the box).
 - **G4 DONE 2026-08-05**: `platforms.frostdesigngroup.com` vhost enabled (configtest before
   each reload); LE certificate issued (expires 2026-11-02, certbot.timer auto-renews);
-  HTTP→HTTPS 301; placeholder page at `/`; `/sirius` proxies to 127.0.0.1:3100 (503 until
+  HTTP→HTTPS 301; placeholder page at `/`; `/sirius` proxies to 127.0.0.1:3950 (503 until
   G5 boots the app — correct); `X-Forwarded-Proto https` set in the ssl vhost.
 
 ## 7a. G2 discovery findings (read-only, 2026-08-05)

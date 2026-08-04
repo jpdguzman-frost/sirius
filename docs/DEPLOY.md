@@ -26,7 +26,7 @@ pattern. Invariant 15: all secrets live in the host's `.env`, never the repo.
      the staging project points at the TEST board `tx8gDsTH`.
    - Sheets (deferred): `GOOGLE_SHEETS_CREDENTIALS=` when the sheet stabilises.
 4. **Reverse proxy / TLS**: same pattern as ARES (nginx/caddy) → port from
-   `PORT=` (pick a free one, e.g. 3100). Cookie is `secure` in staging/prod,
+   `PORT=` (pick a free one, 3950 (JP, 2026-08-05)). Cookie is `secure` in staging/prod,
    so TLS is required for sign-in.
 
 ## Each deploy (from the laptop)
