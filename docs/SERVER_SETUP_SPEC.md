@@ -117,6 +117,11 @@ depends on it.
 
 ## 7. Execution log
 
+- **Nightly backups INSTALLED 2026-08-05** (JP: option b, whole box): all databases,
+  gzipped, 03:30 Manila via /etc/cron.d/mongo-backup, 30-day retention; first run 23 MB ok.
+  NB: the host abbreviates its +08:00 zone as "PST" (Philippine Standard Time) — schedule
+  times are Manila. Miles Alba allow-listed + member of rt-test (JP request).
+
 - **Backup/restore drill PASSED 2026-08-05 (T072, NFR-8)**: dumped `sirius` (124 KB),
   restored into a scratch db, all 17 collection counts identical, `deliverables_v` view
   definition survives dump/restore, scratch dropped; dump retained at

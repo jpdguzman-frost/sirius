@@ -64,8 +64,20 @@ backup/restore drill on the shared mongod · log hygiene spot-check.
 - **Disaster restore**: `mongorestore --db sirius <dir>/sirius` onto a clean server, then
   `npm run migrate` (idempotent) and redeploy — sessions are disposable (Redis), users
   re-sign-in.
-- Nightly schedule + 30-day retention: proposed to JP 2026-08-05 (no Mongo backup schedule
-  existed on the host for ANY database at that date).
+- **Nightly schedule INSTALLED 2026-08-05** (JP chose whole-box coverage): `/etc/cron.d/
+  mongo-backup` runs `/mnt/volume_sgp1_01/backups/mongo-backup.sh` at 03:30 Manila — ALL
+  databases, gzipped (~23 MB/run today), 30-day retention, log at `backups/mongo/backup.log`.
+
+## Adding users
+
+`ssh` to the host, then:
+```bash
+cd /mnt/volume_sgp1_01/platforms/sirius && source ~/.nvm/nvm.sh
+EMAIL=person@frostdesigngroup.com NAME="Person" CODE=rt-test npx tsx scripts/allowlist.ts
+```
+Allow-lists the account (auth check #4) and grants membership to the CODE project. Repeat
+with another CODE for more projects; omit CODE for allow-list only. Deactivate: flip
+`active:false` on the users doc — revokes live sessions on their next request.
 
 ## What production changes later
 
