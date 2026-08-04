@@ -117,6 +117,16 @@ depends on it.
 
 ## 7. Execution log
 
+- **G6 smoke IN PROGRESS 2026-08-05**: TEST board registered in ARES by JP (12 cards →
+  8 deliverables + 4 work cards, 0 unlinked). LIVE on the deployed instance: due
+  round-trip (set 17:00 Manila → restore) ✓ · **reconcile loop both directions** — manual
+  Trello label add/remove reflected by ARES in ~5 s and reconciled into Sirius's urgency
+  field on sync (FR-9.5) ✓ · HTTPS authz smoke: anonymous API reads/writes 401, unsigned
+  webhook 401 ✓. NFR-3 poll leg: Trello→ARES ≈5 s + ≤15-min poll = comfortably inside the
+  ceiling; the <1-min push target waits on ARES's subscribe feature (in development).
+  Remaining drills: non-member 403 (needs a second Frost account), backup/restore,
+  keyboard/AA, AC sweep.
+
 - **G5 sign-in VERIFIED live 2026-08-05 (JP)**: Google SSO end-to-end through the reused
   ARES client — four auth checks passed, session persisted in Redis, app renders with the
   sync loop running. Found+fixed on the way: connect-redis v9 requires the node-redis
