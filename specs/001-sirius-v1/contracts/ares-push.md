@@ -39,11 +39,15 @@ URL is `http://127.0.0.1:3955/sirius/api/webhooks/ares` (loopback, same box) or
   "delivery_id": "01J...ULID",
   "sent_at": "2026-08-04T09:15:00Z",
   "events": [
-    { "event_id": "01J...ULID", "type": "card.changed", "board_id": "hLL7WW2V"  // 8-char Trello shortLink — what Sirius keys projects on,
+    { "event_id": "01J...ULID", "type": "card.changed", "board_id": "hLL7WW2V",
       "card_id": "abc123", "occurred_at": "2026-08-04T09:14:58Z" }
   ]
 }
 ```
+
+`board_id` is the 8-character Trello **shortLink** (`hLL7WW2V`, `tx8gDsTH`) — exactly what
+Sirius keys `projects.trello_board_id` on. `card_id` is Trello's full 24-hex card id, passed
+verbatim to `GET /api/v1/trello/cards/{cardId}` on the read-back.
 
 Event types (kept deliberately tiny — the payload is a trigger, not a data carrier):
 
