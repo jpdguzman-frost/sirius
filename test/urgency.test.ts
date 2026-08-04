@@ -33,6 +33,7 @@ class StubTrello implements TrelloWriter {
     if (this.fail) throw new Error('Trello POST /cards failed: HTTP 500');
     this.calls.push({ cardId, boardId, urgent });
   }
+  async setDue(): Promise<void> {} // W2 lives in deadline-write.test.ts
 }
 
 async function setup(envOver: Record<string, string> = {}) {

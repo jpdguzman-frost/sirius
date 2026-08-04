@@ -38,6 +38,7 @@ export interface PipelineRow {
   requestor: string | null;
   deadline: string | null;
   deadlineSource: string | null;
+  trelloDue: string | null;
   trelloUrl: string | null;
   figmaUrl: string | null;
   slottedWeek: string | null;
@@ -150,6 +151,7 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
     requestor: (d.requestor as string) ?? null,
     deadline: (d.deadline as string) ?? null,
     deadlineSource: (d.deadline_source as string) ?? null,
+    trelloDue: (d.trello_due as string) ?? null, // W2 edit target (FR-9.1)
     trelloUrl: (d.trello_url as string) ?? null,
     figmaUrl: (d.figma_url as string) ?? null,
     slottedWeek: (d.slotted_week as string) ?? null,

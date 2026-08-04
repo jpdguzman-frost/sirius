@@ -11,6 +11,7 @@ import { execSync } from 'node:child_process';
 const FORBIDDEN = [
   'brief', 'description', 'ARES_API_KEY', 'TRELLO_TOKEN', 'TRELLO_WRITE_TOKEN',
   'SESSION_SECRET', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_SHEETS_CREDENTIALS',
+  'ARES_WEBHOOK_SECRET',
 ];
 
 describe('NFR-11 — no brief text, no credentials in logs', () => {

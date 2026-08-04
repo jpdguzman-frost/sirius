@@ -164,6 +164,22 @@ export class AresClient {
   }
 
   /**
+   * Single card (gap repair + push-drain reconcile, contracts/ares-push.md).
+   * Drift-tolerant on shape ({card, movements} or the card bare); 404 comes
+   * back null — the full board sync catches true deletions.
+   */
+  async card(cardId: string): Promise<AresCard | null> {
+    try {
+      const data = await this.get<Record<string, unknown>>(`/api/v1/trello/cards/${cardId}`);
+      const card = ((data as { card?: unknown })?.card ?? data) as AresCard | null;
+      return card && (card as AresCard).cardId ? (card as AresCard) : null;
+    } catch (err) {
+      if ((err as AresError).status === 404) return null;
+      throw err;
+    }
+  }
+
+  /**
    * Capacity reference weeks (BR-6a) — internal-tier endpoint behind this
    * adapter ONLY. Live shape verified 2026-08-03: deliveryForecast.
    * referenceWeeks.{leastProductive,typical,mostProductive}.total +

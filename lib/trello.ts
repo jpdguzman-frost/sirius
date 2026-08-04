@@ -1,14 +1,38 @@
 /**
- * lib/trello.ts — THE single write path (invariant 2; §5.3; FR-4.6).
- * Sirius writes exactly one thing anywhere: add/remove a label named
- * `Urgent` on a Trello card. Absence means non-urgent — no second state to
- * keep in sync. Credential: dedicated integration account, server-side env
- * only (TRELLO_API_KEY + TRELLO_TOKEN; TRELLO_WRITE_TOKEN accepted).
+ * lib/trello.ts — THE write path (invariant 2 as amended 2026-08-04).
+ * Sirius writes exactly what the write registry enumerates
+ * (specs/001-sirius-v1/contracts/trello-write.md) and nothing else:
+ *   W1  add/remove the `Urgent` label — absence means non-urgent
+ *   W2  the card due date (set or clear)
+ * Credential: dedicated integration account, server-side env only
+ * (TRELLO_API_KEY + TRELLO_TOKEN; TRELLO_WRITE_TOKEN accepted).
  */
 
 export interface TrelloWriter {
   ensureUrgentLabel(boardId: string): Promise<string>;
   setUrgency(cardId: string, boardId: string, urgent: boolean): Promise<void>;
+  /** W2: dueIso is a full ISO instant, or null to clear the due date. */
+  setDue(cardId: string, dueIso: string | null): Promise<void>;
+}
+
+/**
+ * Compose the due instant for a W2 write (contracts/trello-write.md):
+ * the chosen Manila calendar day at 17:00 Asia/Manila — or, when the card
+ * already has a due, at its existing time-of-day. Guard: a preserved
+ * time-of-day before 08:00 Manila would fold back to the PREVIOUS day when
+ * the mapper slices the UTC instant, so those fall back to 17:00.
+ */
+export function composeDueIso(dateOnly: string, preserveFrom?: Date | null): string {
+  let time = '17:00:00';
+  if (preserveFrom) {
+    const manila = new Date(preserveFrom.getTime() + 8 * 60 * 60 * 1000);
+    const hh = manila.getUTCHours();
+    if (hh >= 8) {
+      const pad = (n: number) => String(n).padStart(2, '0');
+      time = `${pad(hh)}:${pad(manila.getUTCMinutes())}:${pad(manila.getUTCSeconds())}`;
+    }
+  }
+  return new Date(`${dateOnly}T${time}+08:00`).toISOString();
 }
 
 const BASE = 'https://api.trello.com/1';
@@ -63,6 +87,12 @@ export class TrelloClient implements TrelloWriter {
     } else {
       await this.call('DELETE', `/cards/${cardId}/idLabels/${labelId}`);
     }
+  }
+
+  /** W2 (contracts/trello-write.md): set or clear the card due date. */
+  async setDue(cardId: string, dueIso: string | null): Promise<void> {
+    const value = dueIso === null ? 'null' : encodeURIComponent(dueIso);
+    await this.call('PUT', `/cards/${cardId}?due=${value}`);
   }
 }
 

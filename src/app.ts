@@ -23,7 +23,8 @@ import { projectsRouter } from './routes/projects.ts';
 import { requestsRouter } from './routes/requests.ts';
 import { deliverablesRouter } from './routes/deliverables.ts';
 import { scheduleRouter } from './routes/schedule.ts';
-import { urgencyRouter } from './routes/urgency.ts';
+import { writesRouter } from './routes/writes.ts';
+import { aresWebhookRouter } from './routes/webhooks.ts';
 import { makeTrelloWriter, type TrelloWriter } from '../lib/trello.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -39,6 +40,11 @@ export function createApp({ env, redis, trello }: AppDeps): express.Express {
   const app = express();
 
   app.set('trust proxy', 1);
+
+  // ARES push receiver first: needs the RAW body for its HMAC and has no use
+  // for the JSON parser or a session (contracts/ares-push.md).
+  app.use(aresWebhookRouter(env));
+
   app.use(express.json({ limit: '1mb' }));
 
   app.use(
@@ -100,7 +106,7 @@ export function createApp({ env, redis, trello }: AppDeps): express.Express {
   app.use(requestsRouter());
   app.use(deliverablesRouter());
   app.use(scheduleRouter());
-  app.use(urgencyRouter(env, trello !== undefined ? trello : makeTrelloWriter(env)));
+  app.use(writesRouter(env, trello !== undefined ? trello : makeTrelloWriter(env)));
 
   // Built frontend (frontend/build.js → public/). No credential ever ships here.
   app.use(express.static(path.join(__dirname, '..', 'public')));

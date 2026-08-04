@@ -22,6 +22,9 @@ const base = z.object({
 
   ARES_URL: z.string().optional(),
   ARES_API_KEY: z.string().optional(),
+  // Shared HMAC secret for the ARES push receiver (contracts/ares-push.md).
+  // Unset = push disabled; the 15-min poll carries everything, as before.
+  ARES_WEBHOOK_SECRET: z.string().optional(),
 
   TRELLO_API_KEY: z.string().optional(),
   // Canonical name matches ARES's convention; TRELLO_WRITE_TOKEN accepted as

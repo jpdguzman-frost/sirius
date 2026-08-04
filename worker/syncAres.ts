@@ -9,7 +9,7 @@
 
 import { Types } from 'mongoose';
 import { AresClient, type AresMovement } from '../src/services/ares.ts';
-import { assignDisplayIds, mapTrello } from '../src/services/mapper.ts';
+import { assignDisplayIds, mapTrello, type MappedDeliverable, type MappedWorkCard } from '../src/services/mapper.ts';
 import { CardEvent, Deliverable, Project, SyncRun, WorkCard } from '../src/models/index.ts';
 import type { Env } from '../src/config/env.ts';
 import { assertNotProductionBoards } from '../src/services/guard.ts';
@@ -33,6 +33,66 @@ export function makeClient(env: Env): AresClient {
 const sourceEventId = (m: AresMovement) =>
   `${m.cardId}|${m.fromList ?? ''}|${m.toList ?? ''}|${m.detectedAt}`;
 
+/**
+ * Ownership-safe deliverable upsert — Trello-owned fields only; Sirius-owned
+ * planning fields are NEVER touched by sync (§1.2 ownership). Urgency and the
+ * due instant reconcile FROM Trello via ARES (FR-9.5): a manual change made
+ * in Trello surfaces here, and the echo of Sirius's own write is a same-value
+ * no-op. Shared by the full board sync and the push drain.
+ */
+export async function upsertDeliverable(
+  projectId: Types.ObjectId,
+  d: MappedDeliverable,
+  displayId: string | undefined,
+): Promise<void> {
+  await Deliverable.updateOne(
+    { project_id: projectId, trello_card_id: d.trello_card_id },
+    {
+      $set: {
+        name: d.name,
+        mc_number: d.mc_number,
+        display_id: displayId,
+        current_list: d.current_list,
+        difficulty: d.difficulty ?? null,
+        lane: d.lane,
+        blocker: d.blocker ?? null,
+        figma_url: d.figma_url ?? null,
+        labels: d.labels,
+        trello_due: d.trello_due,
+        trello_due_at: d.trello_due_at ? new Date(d.trello_due_at) : null,
+        urgency: d.urgent ? 'Urgent' : 'Non-Urgent',
+        trello_url: d.trello_url ?? null,
+        active: d.active,
+        trello_synced_at: new Date(),
+        updated_at: new Date(),
+      },
+      $setOnInsert: { project_id: projectId, created_at: new Date() },
+    },
+    { upsert: true },
+  );
+}
+
+/** Ownership-safe work-card upsert — shared by full sync and the push drain. */
+export async function upsertWorkCard(projectId: Types.ObjectId, w: MappedWorkCard): Promise<void> {
+  await WorkCard.updateOne(
+    { project_id: projectId, trello_card_id: w.trello_card_id },
+    {
+      $set: {
+        name: w.name,
+        mc_number: w.mc_number,
+        task_prefix: w.task_prefix ?? null,
+        difficulty: w.difficulty ?? null,
+        current_list: w.current_list,
+        figma_url: w.figma_url ?? null,
+        trello_url: w.trello_url ?? null,
+        active: w.active,
+      },
+      $setOnInsert: { project_id: projectId },
+    },
+    { upsert: true },
+  );
+}
+
 export async function syncProject(
   client: AresClient,
   project: InstanceType<typeof Project> extends never ? never : { _id: Types.ObjectId; code: string; trello_board_id: string; trello_label?: string | null },
@@ -53,53 +113,13 @@ export async function syncProject(
   const seenDeliverables = new Set<string>();
   for (const d of mapped.deliverables) {
     seenDeliverables.add(d.trello_card_id);
-    await Deliverable.updateOne(
-      { project_id: projectId, trello_card_id: d.trello_card_id },
-      {
-        // Trello-owned fields only — Sirius-owned planning fields are NEVER
-        // touched by sync (§1.2 ownership; urgency has its own path).
-        $set: {
-          name: d.name,
-          mc_number: d.mc_number,
-          display_id: displayIds.get(d.trello_card_id),
-          current_list: d.current_list,
-          difficulty: d.difficulty ?? null,
-          lane: d.lane,
-          blocker: d.blocker ?? null,
-          figma_url: d.figma_url ?? null,
-          labels: d.labels,
-          trello_due: d.trello_due,
-          trello_url: d.trello_url ?? null,
-          active: d.active,
-          trello_synced_at: new Date(),
-          updated_at: new Date(),
-        },
-        $setOnInsert: { project_id: projectId, created_at: new Date() },
-      },
-      { upsert: true },
-    );
+    await upsertDeliverable(projectId, d, displayIds.get(d.trello_card_id));
   }
 
   const seenWork = new Set<string>();
   for (const w of mapped.workCards) {
     seenWork.add(w.trello_card_id);
-    await WorkCard.updateOne(
-      { project_id: projectId, trello_card_id: w.trello_card_id },
-      {
-        $set: {
-          name: w.name,
-          mc_number: w.mc_number,
-          task_prefix: w.task_prefix ?? null,
-          difficulty: w.difficulty ?? null,
-          current_list: w.current_list,
-          figma_url: w.figma_url ?? null,
-          trello_url: w.trello_url ?? null,
-          active: w.active,
-        },
-        $setOnInsert: { project_id: projectId },
-      },
-      { upsert: true },
-    );
+    await upsertWorkCard(projectId, w);
   }
 
   // Cards gone from the board: inactive, never deleted (mirror of FR-8.4).
@@ -172,13 +192,21 @@ export async function syncProject(
   };
 }
 
-/** Sync every active project; one sync_runs document per project per run. */
-export async function runAresSync(env: Env): Promise<void> {
+/**
+ * Sync every active project; one sync_runs document per project per run.
+ * `policy` (FR-9.6, worker/drainPush.ts) may skip a project this tick —
+ * while ARES push is healthy the full sync relaxes to an hourly reconcile.
+ */
+export async function runAresSync(
+  env: Env,
+  policy?: (projectId: Types.ObjectId) => Promise<boolean>,
+): Promise<void> {
   const client = makeClient(env);
   const projects = await Project.find({ status: 'ongoing' });
   assertNotProductionBoards(env, projects.map((p) => p.trello_board_id)); // invariant 17
 
   for (const project of projects) {
+    if (policy && !(await policy(project._id))) continue;
     try {
       const stats = await syncProject(client, project, { movementsFrom: await lastGoodRun(project._id) });
       await SyncRun.create({ project_id: project._id, source: 'ares', ok: true, stats });

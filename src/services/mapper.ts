@@ -9,6 +9,7 @@
  */
 
 import { laneOf } from '../../lib/model.ts';
+import { URGENT_LABEL_NAME } from '../../lib/trello.ts';
 import type { AresCard } from './ares.ts';
 
 export const MAIN_CARD_LABEL = 'Main Card';
@@ -30,6 +31,10 @@ export interface MappedDeliverable {
   figma_url?: string;
   labels: string[];
   trello_due: string | null;
+  /** Raw due instant from ARES — kept so W2 writes preserve time-of-day. */
+  trello_due_at: string | null;
+  /** Reconciled from the `Urgent` label (FR-9.5) — Trello is the truth. */
+  urgent: boolean;
   active: boolean;
 }
 
@@ -114,6 +119,8 @@ export function mapTrello(cards: AresCard[], projectLabel: string | null): MapRe
         figma_url: figmaOf(card),
         labels,
         trello_due: dateOnly(card.due),
+        trello_due_at: card.due ?? null,
+        urgent: labels.includes(URGENT_LABEL_NAME),
         active,
       });
       if (!mc) result.unlinked.push({ trello_card_id: card.cardId, name: card.name, isMainCard: true });

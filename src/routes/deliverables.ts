@@ -10,7 +10,7 @@ import { ensureProjectMember } from '../auth/membership.ts';
 import { loadProjectModel } from '../services/model-grid.ts';
 import { loadPipeline, toMilestones } from '../services/pipeline.ts';
 import { detectConflicts, replotList } from '../services/conflicts.ts';
-import { ConflictAcknowledgement, Sprint, SyncRun } from '../models/index.ts';
+import { ConflictAcknowledgement, PushEvent, Sprint, SyncRun } from '../models/index.ts';
 
 const today = () => {
   const d = new Date();
@@ -29,6 +29,8 @@ export function deliverablesRouter(): Router {
       const pipeline = await loadPipeline(projectId, today());
       const sprints = await Sprint.find({ project_id: projectId }).sort({ position: 1 }).lean();
       const lastAres = await SyncRun.findOne({ project_id: projectId, source: 'ares' }).sort({ at: -1 }).lean();
+      // FR-8.6 + FR-9.6: push channel freshness beside the poll freshness.
+      const lastPush = await PushEvent.findOne({ project_id: projectId }).sort({ received_at: -1 }).select('received_at').lean();
       res.json({
         ok: true,
         ...pipeline,
@@ -40,7 +42,7 @@ export function deliverablesRouter(): Router {
           most: res.locals.project.ref_week_most ?? null,
           effectiveWeeklyRate: res.locals.project.effective_weekly_rate ?? null,
         },
-        sync: lastAres ? { at: lastAres.at, ok: lastAres.ok, error: lastAres.error ?? null } : null,
+        sync: lastAres ? { at: lastAres.at, ok: lastAres.ok, error: lastAres.error ?? null, push_at: lastPush?.received_at ?? null } : null,
       });
     },
   );

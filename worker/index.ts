@@ -8,12 +8,14 @@ import 'dotenv/config';
 import mongoose from 'mongoose';
 import { validateEnv } from '../src/config/env.ts';
 import { runAresSync, makeClient } from './syncAres.ts';
+import { drainPushEvents, shouldRunFullSync } from './drainPush.ts';
 import { runIntakeSync } from './syncIntake.ts';
 import { makeSheetSource } from '../lib/sheets.ts';
 import { runModelRefresh } from './refreshModel.ts';
 import { Project } from '../src/models/index.ts';
 
 const FIFTEEN_MIN = 15 * 60 * 1000;
+const FIFTEEN_SEC = 15 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
 
 const env = validateEnv(process.env);
@@ -33,10 +35,19 @@ async function aresTick() {
       console.warn('[sirius-worker] ARES healthz not ok — skipping this cycle');
       return;
     }
-    await runAresSync(env);
+    // FR-9.6: while push is healthy the full sync relaxes to hourly.
+    await runAresSync(env, (projectId) => shouldRunFullSync(env, projectId));
     console.log('[sirius-worker] ares sync complete');
   } catch (err) {
     console.error('[sirius-worker] ares sync failed:', (err as Error).message);
+  }
+}
+
+async function drainTick() {
+  try {
+    await drainPushEvents(env);
+  } catch (err) {
+    console.error('[sirius-worker] push drain failed:', (err as Error).message);
   }
 }
 
@@ -69,6 +80,9 @@ async function healthTick() {
 await aresTick();
 await intakeTick().catch((err) => console.error('[sirius-worker] intake sync failed:', err.message));
 setInterval(aresTick, FIFTEEN_MIN);
+// Push drain: cheap indexed check every 15 s — the < 1 min NFR-3 target
+// (contracts/ares-push.md) lives or dies on this cadence.
+if (env.ARES_WEBHOOK_SECRET) setInterval(drainTick, FIFTEEN_SEC);
 setInterval(() => intakeTick().catch((err) => console.error('[sirius-worker] intake sync failed:', err.message)), FIFTEEN_MIN);
 setInterval(modelTick, DAY); // nightly (FR-7.6)
 setInterval(healthTick, DAY);
