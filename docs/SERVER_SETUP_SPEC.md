@@ -117,6 +117,13 @@ depends on it.
 
 ## 7. Execution log
 
+- **G5 sign-in VERIFIED live 2026-08-05 (JP)**: Google SSO end-to-end through the reused
+  ARES client — four auth checks passed, session persisted in Redis, app renders with the
+  sync loop running. Found+fixed on the way: connect-redis v9 requires the node-redis
+  client — ioredis got `ERR syntax error` on every session write (invisible locally; tests
+  use the memory store). Pipeline empty as expected — awaiting JP registering `tx8gDsTH`
+  in ARES; next: G6 smoke once data flows.
+
 - **G5 DONE 2026-08-05**: first deploy green end-to-end — local suite + typecheck + build →
   rsync → `npm ci` → migrations (001–003) → pm2 `sirius` + `sirius-worker` online. Boot log
   clean; `https://platforms.frostdesigngroup.com/sirius/healthz` = ok/connected/connected
