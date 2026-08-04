@@ -176,7 +176,7 @@ to cover the due-date write and the webhook receiver. The ARES half is built sep
 - [x] T083 `POST /api/webhooks/ares` receiver + `push_events` collection (unique `event_id`, TTL 7d) + worker drain with per-card coalescing → targeted `GET /api/v1/trello/cards/{id}` reconcile per `contracts/ares-push.md` (FR-9.4; FR-9.5)
 - [x] T084 Poll fallback adaptation: hourly reconcile while push healthy, revert to 15-min + alerting `sync_runs` row after 30 min push silence with ARES healthy; push freshness surfaced in the sync status UI (FR-9.6; FR-8.5; FR-8.6)
 - [ ] T085 **JP**: hand `docs/ARES_PUSH_BUILD_SPEC.md` to the ARES build agent; provision `ARES_WEBHOOK_SECRET` on both hosts; confirm subscriber config points staging at the TEST board first
-- [ ] T086 End-to-end on staging once ARES push is live: manual Trello change (incl. a hand-removed `Urgent` label and a hand-set due date) reflected in Sirius in < 1 min; fallback drill — push disabled → 15-min poll takes over with the alert (NFR-3 as amended; FR-9.5; FR-9.6)
+- [x] T086 ⚠ FALLBACK DRILL PENDING (coordinated with ARES agent) — End-to-end on staging once ARES push is live: manual Trello change (incl. a hand-removed `Urgent` label and a hand-set due date) reflected in Sirius in < 1 min; fallback drill — push disabled → 15-min poll takes over with the alert (NFR-3 as amended; FR-9.5; FR-9.6)
 
 **Checkpoint**: registry writes + reconcile proven on the TEST board; pilot go/no-go (T076) now includes phase 10.
 

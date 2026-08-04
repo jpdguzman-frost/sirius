@@ -117,6 +117,13 @@ depends on it.
 
 ## 7. Execution log
 
+- **T086 PASSED 2026-08-04 — PUSH IS LIVE**: JP switched ARES on; hand-edited label on the
+  TEST board reached Sirius's database **push-driven in 37 s** both directions (Trello→ARES
+  ~5 s · ARES debounce ~15 s · receiver → 15-s drain tick). NFR-3 **< 1 min target MET**
+  (ceiling was 15 min). Six live deliveries in the first minutes, every drain ok. Remaining
+  sliver: the coordinated fallback drill (pause ARES consumer → watch our 30-min poll
+  reversion + alert) — scheduled with the ARES agent for a calm moment.
+
 - **Push contract VERIFIED end-to-end 2026-08-04/05**: ARES's shipping code probed our live
   receiver (signature accept/reject, replay window, dedupe, batch, absent-card_id resync —
   all correct) and its three real deliveries drained clean in ~1–4 s each (sync_runs
