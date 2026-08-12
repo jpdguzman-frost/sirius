@@ -46,6 +46,8 @@ export interface PipelineRow {
   confidence: string;
   slaSketch: number | null;
   slaRender: number | null;
+  /** BR-6c: card-equivalents — 1 + (MC group's work cards ÷ group's deliverables); 1 outside any group. */
+  weight: number;
   forecast: {
     sketchDelivery: string;
     sketchApproved: string;
@@ -90,6 +92,22 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
       trelloUrl: w.trello_url ?? null,
       figmaUrl: w.figma_url ?? null,
     });
+  }
+
+  // BR-6c: a row is a deliverable, but capacity counts CARDS — each row
+  // weighs 1 + (its MC group's work cards ÷ the group's deliverables), so a
+  // full board's rows sum to deliverables + attached work cards (478 on the
+  // verified board). Tasks attach to the MC group (invariant 4); a task
+  // whose MC has no deliverable row weighs into nothing. NOT used by the
+  // hard-mix test (BR-6b) or suggestPlan (lib/planner.ts, golden-locked).
+  const rowsByMc = new Map<string, number>();
+  for (const r of rows) {
+    if (r.mcNumber) rowsByMc.set(r.mcNumber, (rowsByMc.get(r.mcNumber) ?? 0) + 1);
+  }
+  for (const r of rows) {
+    const group = r.mcNumber ? rowsByMc.get(r.mcNumber)! : 0;
+    const tasks = r.mcNumber ? (workCardsByMc[r.mcNumber]?.length ?? 0) : 0;
+    r.weight = group > 0 ? 1 + tasks / group : 1;
   }
 
   const corrections = rows
@@ -159,6 +177,7 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
     confidence: (d.confidence as string) ?? '0.7',
     slaSketch: (d.sla_sketch as number) ?? null,
     slaRender: (d.sla_render as number) ?? null,
+    weight: 1, // BR-6c weight lands after the work-card load in loadPipeline
     forecast: fc,
     missing,
   };
@@ -181,6 +200,7 @@ export function toMilestones(rows: PipelineRow[]): Milestone[] {
         urgent: r.urgency === 'Urgent',
         deadline: r.deadline,
         late: phase === 'render' && r.forecast.late,
+        weight: r.weight, // BR-6c default on Deadlines too, pending the errata answer
         trelloUrl: r.trelloUrl,
         figmaUrl: r.figmaUrl,
       });

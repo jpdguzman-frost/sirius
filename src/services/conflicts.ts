@@ -19,9 +19,17 @@ export interface Milestone {
   urgent: boolean;
   deadline: string | null;
   late: boolean; // forecast past deadline — card-level, NEVER suppressed (BR-9a)
+  weight?: number; // BR-6c card-equivalents; absent = 1
+  plannedDay?: string | null; // FR-12: valid day placement, else null = follow the forecast
   trelloUrl?: string | null;
   figmaUrl?: string | null;
 }
+
+/** BR-6c/§5.4 display rule: fractions to one decimal, whole numbers plain. */
+export const fmtLoad = (n: number): string => {
+  const r = Math.round(n * 1000) / 1000;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+};
 
 export interface Conflict {
   key: string;
@@ -54,13 +62,17 @@ export function detectConflicts(milestones: Milestone[], weeklyCapacity: number)
       });
     }
 
-    if (items.length > weeklyCapacity) {
+    // BR-6c (2026-08-12): load is card-equivalents, not row count — a row
+    // carries its MC group's work-card share, so the unit matches BR-6a's
+    // cards-per-week capacity.
+    const load = items.reduce((s, m) => s + (m.weight ?? 1), 0);
+    if (load > weeklyCapacity) {
       const displaced = items.filter((m) => !m.urgent);
       conflicts.push({
         key: `${week}|over-capacity|${pairKey(displaced)}`,
         week,
         rule: 'over-capacity',
-        explanation: `${items.length} milestones against a capacity of ${weeklyCapacity} cards — the non-urgent items listed are displaced.`,
+        explanation: `${fmtLoad(load)} cards' worth of milestones against a capacity of ${weeklyCapacity} cards — the non-urgent items listed are displaced.`,
         items: displaced.map(({ cardId, displayId, name, phase }) => ({ cardId, displayId, name, phase })),
       });
     }
