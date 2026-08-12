@@ -109,7 +109,8 @@ describe('requests route (FR-3.2, FR-3.3, FR-3.6, FR-8.6)', () => {
     await agent.post('/__test/login').send({ userId: String(user._id), email: user.email }).expect(200);
 
     const all = await agent.get(`/api/projects/${p._id}/requests`).expect(200);
-    expect(all.body.requests.map((r: { status: string }) => r.status)).toEqual(['In pipeline', 'Not yet filed']);
+    // FR-11.3 (2026-08-12): three-state — no note on these, so unfiled = For Filing
+    expect(all.body.requests.map((r: { status: string }) => r.status)).toEqual(['In Pipeline', 'For Filing']);
     expect(all.body.sync.lastAttemptOk).toBe(true);
     expect(all.body.sync.lastSuccessAt).toBeTruthy();
 
