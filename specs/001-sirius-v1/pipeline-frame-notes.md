@@ -26,7 +26,22 @@
 | 251:7925 | Due cell | Interaction | Editable here; click opens date input with Set and clear. ⚠ Annotation still reads v1.1 ("precedence manual → Trello → sheet", dashed local override) — **superseded**: v1.2 §4.2 + errata confirm the edit WRITES the Trello due date (W2), no local layer. Implement write-through in the Date-Picker chrome shown |
 | 70:10037 | Links cell | Functionality | Trello/Figma source icons, open new tab, never editable inline; missing Figma → incomplete panel |
 
-**Un-annotated elements** (build from visual + existing FRs): Type cell (badge, values like UI/Asset/Icon/Spot Illustration), Client cell (`@handle` badge), Work Started / Work Done cells (row 1 renders Work Started in Date-Picker chrome — no annotation; **treat as read-only display per FR-4.5**, cycle fields derive from Trello activity), table header, horizontal scroll slider (custom, chevrons + thumb).
+## Rex verification pass (plugin-context sweep, 2026-08-12) — 32 total, 8 the MCP missed
+
+Full-tree walk via Rex confirmed every MCP-extracted annotation **verbatim** and surfaced 8 more (mostly frame/container-level, dropped by the MCP's sparse-response mode):
+
+| Node | Component | Category | Content (condensed) |
+|---|---|---|---|
+| 17:1015 | Pipeline/Default (frame) | Design | Full page 1600×1201; Top + Content sections; **success criterion: 1:1 at 1600px, all values bind to ARES variables** |
+| 70:10522 | Top | Design | Shell header 1600×268 flex column: TopNav 186 + Stats 82; 64px inset (content 1472); `--font-sans` Google Sans Flex (annotation says self-hosted — **JP overrode: Google Fonts CDN**); raw hex/px is a defect; done-when: diff to zero at 1600px |
+| 28:3683 | stats-container | Design | 82px row, four equal 368px columns (1472÷4), no gap, shared 1px `--border-border`; overline `--text-label` 600, value `--text-display` 600, 8px apart |
+| 17:2063 | Content | Design | Stack: incomplete panel (conditional) → search 54px → callout 53px → table + scroll bar; 24px gaps |
+| 70:10008 | Table | Functionality | §4.1: rows = deliverables (`Main Card`); expand reveals the MC group's tasks; identity `(project_id, trello_card_id)`; done-when 269+209+20=498 |
+| 70:10009 | Header | Design | 56px, `--slate-100` bg; **definitive column order: MC #, Card Name, Type, Difficulty, Urgency, Status, Client, Due, Work Started, Work Done, Cycle Time, Weeks, Links**; header `--text-label` 600 uppercase muted; 1px `--slate-100` row separators, no vertical rules; horizontal scroll below min width |
+| 251:23859 | Due (missing/overdue) | Design | Missing: outlined red "none" pill or amber warning border on the picker; format `17 Jan 2026`; tooltip names the source; overdue tints `--status-warning` |
+| 251:6758 | horizontal-slider | Interaction | Custom scroll bar: track `--slate-300`, thumb on `--slate-100` container, chevron nudge buttons; **below 1600px the table scrolls horizontally — never column collapse** |
+
+**Un-annotated elements** (build from visual + existing FRs): Type cell (badge — UI/Asset/Icon/Spot Illustration), Client cell (`@handle` badge), MC/Card-Name cells, Work Started / Work Done / Cycle Time / Weeks cells (Work Started renders in Date-Picker chrome but carries no annotation — **read-only display per FR-4.5**, cycle fields derive from Trello activity; Weeks = slotted-week display).
 
 ## Drift register (frame ↔ decided state) — for the product team
 
