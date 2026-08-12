@@ -11,6 +11,10 @@ function todayIso() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/* frame date format: '7 Aug 2026' (annotation 251:23859) — one formatter,
+   not one per call */
+const LONG_DATE = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
 function mondayIso(base) {
   const d = new Date(base + 'T00:00:00');
   const day = d.getDay() === 0 ? 7 : d.getDay();
@@ -53,7 +57,7 @@ const app = new Ractive({
     urgencyMenu: null, // cardId whose urgency select is open (annotation 169:26074)
     savingUrgency: {}, // per-card in-flight write chrome (annotation 169:26364)
     pipeThumb: { needed: false, left: 0, width: 100 },
-    todayKey: todayIso(),
+    iconSprite: ICON_SPRITE,
     weekStart: mondayIso(todayIso()),
     suggest: null,
     suggestCount: 0,
@@ -90,11 +94,7 @@ const app = new Ractive({
     modelProvenance: null,
     modelReview: null,
     fmt: (iso) => fmtDate(iso),
-    // frame date format: '7 Aug 2026' (annotation 251:23859)
-    fmtLong: (iso) => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''),
-    // frame vocabulary for the incomplete panel: 'due date', 'Figma attachment'
-    missingText: (missing) =>
-      'Missing ' + missing.map((m) => (m === 'deadline' ? 'due date' : m === 'Figma link' ? 'Figma attachment' : m + ' label')).join(' and '),
+    fmtLong: (iso) => (iso ? LONG_DATE.format(new Date(iso + 'T00:00:00')) : ''),
     pct: (x) => `${Math.round((x || 0) * 1000) / 10}%`,
     // BR-6c/§5.4 display rule: fractions to one decimal, whole numbers plain
     fmtLoad: (n) => {
@@ -127,15 +127,12 @@ const app = new Ractive({
       };
     },
     pipelineRows() {
-      // annotation 17:2057: MC #, card name, type, client, status and other loaded fields
+      // annotation 17:2057 — the searchable text is precomputed per row in
+      // loadAll (r.blob), so a keystroke costs one includes() per row
       const q = (this.get('searchQ') || '').toLowerCase();
       const rows = this.get('rows');
       if (!q) return rows;
-      return rows.filter((r) =>
-        `${r.displayId} ${r.mcNumber} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`
-          .toLowerCase()
-          .includes(q),
-      );
+      return rows.filter((r) => (r.blob || '').includes(q));
     },
     visibleCorrections() {
       const c = this.get('corrections');
@@ -221,25 +218,41 @@ app.set('ghostLeft', (row) => {
 const rowLoad = (rows) => rows.reduce((a, r) => a + (r.weight || 1), 0);
 
 /* Search-match highlight (annotation 17:2057): escape first, then wrap the
-   matches in <mark> — rendered via triple-mustache, so escaping is mandatory. */
+   matches in <mark> — rendered via triple-mustache, so escaping is mandatory.
+   The app.get('searchQ') read registers the Ractive dependency; the regex
+   compiles once per distinct query, not once per cell. */
 const escHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+let hlCache = { q: '', rx: null };
 app.set('hl', (text) => {
   const q = (app.get('searchQ') || '').trim();
   const safe = escHtml(text);
   if (!q) return safe;
-  const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig');
-  return safe.replace(rx, (m) => `<mark>${m}</mark>`);
+  if (hlCache.q !== q) {
+    hlCache = { q, rx: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig') };
+  }
+  return safe.replace(hlCache.rx, (m) => `<mark>${m}</mark>`);
 });
 
-/* Custom horizontal scroll for the pipeline table (annotation 251:6758). */
+/* Custom horizontal scroll for the pipeline table (annotation 251:6758) —
+   rAF-throttled; handlers resolve their scroller from the event node, so a
+   second table can reuse the pattern without fighting over one thumb. */
+let thumbRaf = 0;
 function updateThumb(el) {
-  const needed = el.scrollWidth > el.clientWidth + 1; // slider only when the table actually overflows
-  const width = Math.max(8, (el.clientWidth / el.scrollWidth) * 100);
-  const denom = el.scrollWidth - el.clientWidth;
-  const left = denom > 0 ? (el.scrollLeft / denom) * (100 - width) : 0;
-  app.set('pipeThumb', { needed, left: Math.round(left * 100) / 100, width: Math.round(width * 100) / 100 });
+  if (thumbRaf) return;
+  thumbRaf = requestAnimationFrame(() => {
+    thumbRaf = 0;
+    const needed = el.scrollWidth > el.clientWidth + 1; // slider only when the table actually overflows
+    const width = Math.max(8, (el.clientWidth / el.scrollWidth) * 100);
+    const denom = el.scrollWidth - el.clientWidth;
+    const left = denom > 0 ? (el.scrollLeft / denom) * (100 - width) : 0;
+    app.set('pipeThumb', { needed, left: Math.round(left * 100) / 100, width: Math.round(width * 100) / 100 });
+  });
 }
+const scrollerOf = (node) => {
+  const wrap = node.closest('.pscrollwrap');
+  return wrap ? wrap.querySelector('.pscroll') : document.querySelector('.pscroll');
+};
 window.addEventListener('resize', () => {
   const el = document.querySelector('.pscroll');
   if (el) updateThumb(el);
@@ -337,6 +350,10 @@ async function loadAll() {
       api.get(`/api/projects/${pid}/deadlines`),
       api.get(`/api/projects/${pid}/model`),
     ]);
+    // searchable text per row, computed once per load (annotation 17:2057)
+    pipeline.rows.forEach((r) => {
+      r.blob = `${r.displayId} ${r.mcNumber} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
+    });
     app.set({
       rows: pipeline.rows,
       workCardsByMc: pipeline.workCardsByMc,
@@ -539,14 +556,14 @@ app.on({
     }
   },
   pipeScrolled(ctx) { updateThumb(ctx.node); },
-  nudgeScroll(_ctx, dir) {
-    const el = document.querySelector('.pscroll');
+  nudgeScroll(ctx, dir) {
+    const el = scrollerOf(ctx.node);
     if (!el) return;
     el.scrollLeft += dir * 240;
     updateThumb(el);
   },
   trackJump(ctx) {
-    const el = document.querySelector('.pscroll');
+    const el = scrollerOf(ctx.node);
     if (!el) return;
     const rect = ctx.node.getBoundingClientRect();
     const frac = (ctx.event.clientX - rect.left) / rect.width;

@@ -54,6 +54,7 @@
   --space-8: 8px;
   --space-16: 16px; /* content-stack gap, measured from the frame (JP 2026-08-12) */
   --space-24: 24px;
+  --page-inset: 64px; /* horizontal content inset — defines the 1472px content width */
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 
   /* semantic aliases used by the annotations */

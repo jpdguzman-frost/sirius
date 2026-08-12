@@ -1,4 +1,5 @@
 <script id="tpl-app" type="text/ractive">
+{{{iconSprite}}}
 <header class="shellnav">
   <div class="shellrow">
     <nav class="crumbs" aria-label="Breadcrumb">
@@ -110,7 +111,7 @@
           <span class="ideets">
             <span class="rowtag">{{c.displayId}}</span>
             <span class="iname">{{c.name}}</span>
-            <span class="ireason">{{missingText(c.missing)}}</span>
+            <span class="ireason">Missing {{c.missing.join(' and ')}}</span>
           </span>
           {{#if c.trelloUrl}}<a class="iopen" href="{{c.trelloUrl}}" target="_blank">Open Card</a>{{/if}}
         </div>
@@ -120,7 +121,7 @@
     </div>
   {{/if}}
 
-  <div class="searchbar">{{{icon.search}}}<input name="pipeline-search" placeholder="Search cards or MC#" value="{{searchQ}}" aria-label="Search cards or MC number" /></div>
+  <div class="searchbar">{{{icon.search}}}<input name="pipeline-search" placeholder="Search cards or MC#" value="{{searchQ}}" lazy="250" aria-label="Search cards or MC number" /></div>
 
   <div class="pscrollwrap">
     <div class="pscroll" on-scroll="['pipeScrolled']">
@@ -135,17 +136,17 @@
         {{#each pipelineRows as row}}
           <tr class="prow" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
             <td class="col-mc"><div class="mccell">
-              <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{expanded[row.mcNumber] ? 'Collapse' : 'Expand'}} {{row.displayId}} work cards" tabindex="-1">{{{icon.rowChevron}}}</button>
+              <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{expanded[row.mcNumber] ? 'Collapse' : 'Expand'}} {{row.displayId}} work cards" tabindex="-1"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
               <span class="mcnum">{{{hl(row.displayId)}}}</span>
             </div></td>
             <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}</td>
             <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{row.assetType}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-            <td class="col-diff">{{#if row.difficulty}}<span class="pbadge d-{{row.difficulty}}" title="Read from the Trello Difficulty label — not editable here"><span>{{row.difficulty}}</span><span class="bchev">{{{icon.badgeChevron}}}</span></span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-diff">{{#if row.difficulty}}<span class="pbadge d-{{row.difficulty}}" title="Read from the Trello Difficulty label — not editable here"><span>{{row.difficulty}}</span><span class="bchev"><svg class="i16"><use href="#i-badgeChevron" /></svg></span></span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-urgency"><div class="ubadge-wrap">
-              <button class="ubadge {{row.urgency === 'Urgent' ? 'urgent' : 'nonurgent'}} {{#if savingUrgency[row.cardId]}}saving{{/if}}"
+              <button class="pbadge ubadge {{row.urgency === 'Urgent' ? 'urgent' : 'nonurgent'}} {{#if savingUrgency[row.cardId]}}saving{{/if}}"
                 on-click="['openUrgencyMenu', row.cardId]" aria-haspopup="listbox" aria-expanded="{{urgencyMenu === row.cardId ? 'true' : 'false'}}"
                 title="Writes the Urgent label to the Trello card (write registry W1)">
-                <span>{{#if savingUrgency[row.cardId]}}saving…{{else}}{{row.urgency}}{{/if}}</span><span class="bchev">{{{icon.badgeChevron}}}</span>
+                <span>{{#if savingUrgency[row.cardId]}}saving…{{else}}{{row.urgency}}{{/if}}</span><span class="bchev"><svg class="i16"><use href="#i-badgeChevron" /></svg></span>
               </button>
               {{#if urgencyMenu === row.cardId}}
                 <div class="selectmenu" role="listbox" aria-label="Urgency">
@@ -162,18 +163,14 @@
                 <input type="date" name="due-{{row.cardId}}" class="dp-input" value="{{row.trelloDue}}" on-change="['setDeadline', row.cardId]" on-blur="['cancelDeadline']" autofocus />
                 {{#if row.trelloDue}}<button class="dp-clear" on-mousedown="['clearDeadline', row.cardId]" title="Clear the Trello due date — the sheet deadline (if any) takes over">✕</button>{{/if}}
               {{else}}
-                {{#if row.deadline}}
-                  <button class="dpicker {{#if row.deadline < todayKey}}overdue{{/if}}" on-click="['editDeadline', row.cardId]" title="Source: {{row.deadlineSource}} — editing writes the Trello due date (write registry W2)"><span class="dpdate">{{fmtLong(row.deadline)}}</span>{{{icon.calendar}}}</button>
-                {{else}}
-                  <button class="dpicker missing" on-click="['editDeadline', row.cardId]" title="No due date — setting one writes the Trello due date (write registry W2)"><span class="dpdate">No Due Date</span>{{{icon.calendar}}}</button>
-                {{/if}}
+                <button class="dpicker {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}}" on-click="['editDeadline', row.cardId]" title="{{row.deadline ? 'Source: ' + row.deadlineSource + ' — editing' : 'No due date — setting one'}} writes the Trello due date (write registry W2)"><span class="dpdate">{{row.deadline ? fmtLong(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></button>
               {{/if}}
             </td>
-            <td class="col-started">{{#if row.workStarted}}<span class="dpicker readonly" title="Earliest work-card start in this MC group"><span class="dpdate">{{fmtLong(row.workStarted)}}</span>{{{icon.calendar}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-started">{{#if row.workStarted}}<span class="dpicker readonly" title="Earliest work-card start in this MC group"><span class="dpdate">{{fmtLong(row.workStarted)}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-done">{{#if row.workDone}}<span class="plaincell nowrap">{{fmtLong(row.workDone)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-links">
-              {{#if row.trelloUrl}}<a class="srclink" href="{{row.trelloUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Trello">{{{icon.trello}}}</a>{{/if}}
-              {{#if row.figmaUrl}}<a class="srclink" href="{{row.figmaUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Figma">{{{icon.figma}}}</a>{{/if}}
+              {{#if row.trelloUrl}}<a class="srclink" href="{{row.trelloUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Trello"><svg class="i18"><use href="#i-trello" /></svg></a>{{/if}}
+              {{#if row.figmaUrl}}<a class="srclink" href="{{row.figmaUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Figma"><svg class="i18"><use href="#i-figma" /></svg></a>{{/if}}
             </td>
           </tr>
           {{#if expanded[row.mcNumber]}}
@@ -183,7 +180,7 @@
                 <td colspan="4">{{w.name}}</td>
                 <td><span class="pbadge s-{{w.status}}">{{w.currentList || w.status}}</span></td>
                 <td colspan="4" class="dimcell"></td>
-                <td>{{#if w.trelloUrl}}<a class="srclink" href="{{w.trelloUrl}}" target="_blank" aria-label="Open task in Trello">{{{icon.trello}}}</a>{{/if}}</td>
+                <td>{{#if w.trelloUrl}}<a class="srclink" href="{{w.trelloUrl}}" target="_blank" aria-label="Open task in Trello"><svg class="i18"><use href="#i-trello" /></svg></a>{{/if}}</td>
               </tr>
             {{/each}}
           {{/if}}

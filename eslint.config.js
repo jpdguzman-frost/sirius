@@ -6,6 +6,11 @@
 import js from '@eslint/js';
 import globals from 'globals';
 
+// Names defined in one frontend script and used in another (build.js
+// concatenates them into one <script>). Drives both the eslint globals map
+// and the unused-vars ignore pattern below — one list, two derivations.
+const FRONTEND_SHARED = ['api', 'fmtDate', 'mondayShift', 'ICONS', 'ICON_SPRITE'];
+
 export default [
   {
     ignores: ['node_modules/', 'public/', 'coverage/', 'docs/', '.specify/', '.claude/', '**/*.ts'],
@@ -25,6 +30,7 @@ export default [
 
   // --- Frontend scripts (browser; build.js concatenates them into ONE
   // <script>, so top-level consts in 00-api.js are shared scope) ---
+  // One list drives both the globals map and the unused-vars ignore pattern.
   {
     files: ['frontend/scripts/**/*.js'],
     languageOptions: {
@@ -33,15 +39,12 @@ export default [
       globals: {
         ...globals.browser,
         Ractive: 'readonly',
-        api: 'readonly',
-        fmtDate: 'readonly',
-        mondayShift: 'readonly',
-        ICONS: 'readonly',
+        ...Object.fromEntries(FRONTEND_SHARED.map((n) => [n, 'readonly'])),
       },
     },
     rules: {
       'no-redeclare': 'off', // the defining file "redeclares" the shared names
-      'no-unused-vars': ['error', { varsIgnorePattern: '^(api|fmtDate|mondayShift|app|ICONS)$' }],
+      'no-unused-vars': ['error', { varsIgnorePattern: `^(${[...FRONTEND_SHARED, 'app'].join('|')})$` }],
     },
   },
 ];

@@ -44,6 +44,7 @@ export interface PipelineRow {
   cycleDays: number | null;
   deadline: string | null;
   deadlineSource: string | null;
+  overdue: boolean; // deadline < today, computed where deadline lives (one 'today' in the system)
   trelloDue: string | null;
   trelloUrl: string | null;
   figmaUrl: string | null;
@@ -87,6 +88,9 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
 
   const workCards = await WorkCard.find({ project_id: projectId, active: true }).lean();
   const workCardsByMc: PipelineResult['workCardsByMc'] = {};
+  // ONE pass per work card: the DTO grouping and the Started/Done span
+  // accumulate together, so a future filter cannot desynchronize them.
+  const spanByMc = new Map<string, { minStart: Date | null; maxDone: Date | null; allDone: boolean }>();
   for (const w of workCards) {
     if (!workCardsByMc[w.mc_number]) workCardsByMc[w.mc_number] = [];
     workCardsByMc[w.mc_number]!.push({
@@ -97,6 +101,22 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
       status: classifyList(w.current_list),
       trelloUrl: w.trello_url ?? null,
       figmaUrl: w.figma_url ?? null,
+    });
+    const span = spanByMc.get(w.mc_number) ?? { minStart: null, maxDone: null, allDone: true };
+    if (w.work_started_at && (!span.minStart || w.work_started_at < span.minStart)) span.minStart = w.work_started_at;
+    if (!w.work_done_at) span.allDone = false;
+    else if (!span.maxDone || w.work_done_at > span.maxDone) span.maxDone = w.work_done_at;
+    spanByMc.set(w.mc_number, span);
+  }
+  // Finalize once per GROUP: earliest start; latest done only when EVERY
+  // task is done; cycle in workdays. Rows just copy their group's result.
+  const groupSpan = new Map<string, { started: string | null; done: string | null; cycleDays: number | null }>();
+  for (const [mc, s] of spanByMc) {
+    const done = s.allDone ? s.maxDone : null;
+    groupSpan.set(mc, {
+      started: s.minStart ? localDate(s.minStart) : null,
+      done: done ? localDate(done) : null,
+      cycleDays: s.minStart && done ? workdaysBetween(s.minStart, done) : null,
     });
   }
 
@@ -110,31 +130,14 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
   for (const r of rows) {
     if (r.mcNumber) rowsByMc.set(r.mcNumber, (rowsByMc.get(r.mcNumber) ?? 0) + 1);
   }
-  // Work Started / Done / Cycle per MC group: earliest start; latest done
-  // only once EVERY task in the group is done; workdays between.
-  const groupTasks = new Map<string, Array<{ started: Date | null; done: Date | null }>>();
-  for (const w of workCards) {
-    const list = groupTasks.get(w.mc_number) ?? [];
-    list.push({ started: w.work_started_at ?? null, done: w.work_done_at ?? null });
-    groupTasks.set(w.mc_number, list);
-  }
-  const spanByMc = new Map<string, { started: Date | null; done: Date | null }>();
-  for (const [mc, list] of groupTasks) {
-    const starts = list.filter((t) => t.started).map((t) => t.started!.getTime());
-    const started = starts.length ? new Date(Math.min(...starts)) : null;
-    const done = list.every((t) => t.done)
-      ? new Date(Math.max(...list.map((t) => t.done!.getTime())))
-      : null;
-    spanByMc.set(mc, { started, done });
-  }
   for (const r of rows) {
     const group = r.mcNumber ? rowsByMc.get(r.mcNumber)! : 0;
     const tasks = r.mcNumber ? (workCardsByMc[r.mcNumber]?.length ?? 0) : 0;
     r.weight = group > 0 ? 1 + tasks / group : 1;
-    const span = r.mcNumber ? spanByMc.get(r.mcNumber) : undefined;
-    r.workStarted = span?.started ? localDate(span.started) : null;
-    r.workDone = span?.done ? localDate(span.done) : null;
-    r.cycleDays = span?.started && span.done ? workdaysBetween(span.started, span.done) : null;
+    const span = r.mcNumber ? groupSpan.get(r.mcNumber) : undefined;
+    r.workStarted = span?.started ?? null;
+    r.workDone = span?.done ?? null;
+    r.cycleDays = span?.cycleDays ?? null;
   }
 
   const corrections = rows
@@ -145,10 +148,11 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
 }
 
 function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string): PipelineRow {
+  // display vocabulary lives with the checks (frame §4.4), not in the UI
   const missing: string[] = [];
-  if (!d.difficulty) missing.push('difficulty');
-  if (!d.deadline) missing.push('deadline');
-  if (!d.figma_url) missing.push('Figma link');
+  if (!d.difficulty) missing.push('difficulty label');
+  if (!d.deadline) missing.push('due date');
+  if (!d.figma_url) missing.push('Figma attachment');
 
   const startDate = (d.slotted_week as string | null) ?? today;
   let fc: PipelineRow['forecast'] = null;
@@ -200,6 +204,7 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
     cycleDays: null,
     deadline: (d.deadline as string) ?? null,
     deadlineSource: (d.deadline_source as string) ?? null,
+    overdue: d.deadline != null && (d.deadline as string) < today,
     trelloDue: (d.trello_due as string) ?? null, // W2 edit target (FR-9.1)
     trelloUrl: (d.trello_url as string) ?? null,
     figmaUrl: (d.figma_url as string) ?? null,

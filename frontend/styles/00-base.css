@@ -1,14 +1,13 @@
 :root {
-  /* legacy aliases — pre-phase-13 tabs still reference these; they now
-     resolve to the token palette (05-tokens.css) */
-  --bg: #ffffff;
-  --card: #ffffff;
-  --ink: #0f172a;
-  --muted: #64748b;
-  --faint: #94a3b8;
-  --border: #e2e8f0;
+  /* legacy aliases — pre-phase-13 tabs still reference these; token-backed
+     names REFERENCE the palette (05-tokens.css) so a retune propagates.
+     Values with no token equivalent stay literal until those tabs migrate. */
+  --ink: var(--slate-900);
+  --muted: var(--slate-500);
+  --faint: var(--slate-400);
+  --border: var(--slate-200);
+  --red: var(--red-500);
   --accent: #111827;
-  --red: #ef4444;
   --red-ink: #b91c1c;
   --amber: #e9a23b;
   --lavender: #c7cbf2;
@@ -26,14 +25,14 @@ body {
   font-size: 14px;
 }
 
-.view { padding: 24px 64px 48px; }
+.view { padding: var(--space-24) var(--page-inset) 48px; }
 
 .banner {
   background: var(--amber-100);
   color: var(--amber-800);
   padding: 0.6rem 1rem;
   border-radius: var(--radius-md);
-  margin: 0 64px;
+  margin: 0 var(--page-inset);
   font-size: 0.85rem;
 }
 

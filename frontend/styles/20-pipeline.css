@@ -3,7 +3,11 @@
    specs/001-sirius-v1/pipeline-frame-notes.md are the spec. */
 
 /* ---- shell: top nav (annotation 17:1438) ---- */
-.shellnav { background: var(--surface-background); padding: 40px 64px 0; }
+.shellnav { background: var(--surface-background); padding: 40px var(--page-inset) 0; }
+
+/* per-row sprite icons */
+.i16 { width: 16px; height: 16px; display: block; }
+.i18 { width: 18px; height: 18px; display: block; }
 .shellrow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-24); min-height: 45px; flex-wrap: wrap; }
 
 .crumbs { display: flex; align-items: center; gap: 12px; }
@@ -86,7 +90,6 @@
   background: var(--amber-50); border: 1px solid var(--amber-300); border-radius: var(--radius-sm);
   color: var(--amber-700); font-size: var(--text-label); font-weight: 600; line-height: 1; padding: 6px 7px 5px;
 }
-.ipanel .imc { font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
 .ipanel .iname { font-size: var(--text-body); line-height: 1.5; color: var(--slate-700); }
 .ipanel .ireason { font-size: var(--text-body); line-height: 1.5; color: var(--amber-700); }
 .ipanel .iopen {
@@ -165,20 +168,18 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .pbadge.s-done { background: var(--emerald-100); border-color: var(--green-500); color: var(--green-600); }
 .pbadge.blocked { background: var(--red-50); border-color: var(--red-300); color: var(--red-600); }
 
-/* urgency pill + select menu (annotations 169:26364/26074) */
+/* urgency pill = the Badge recipe (.pbadge) + interaction chrome
+   (annotations 169:26364/26074) */
 .ubadge-wrap { position: relative; display: inline-block; }
 .ubadge {
-  display: inline-flex; align-items: center; width: 111px; justify-content: space-between;
-  border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font-sans);
-  font-size: var(--text-label); font-weight: 600; line-height: 1; padding: 5px 5px 4px 8px;
+  width: 111px; justify-content: space-between; cursor: pointer;
+  font-family: var(--font-sans); padding: 5px 5px 4px 8px;
 }
-.ubadge.urgent { background: var(--red-500); border: 1px solid var(--red-300); color: var(--red-50); }
-.ubadge.nonurgent { background: var(--slate-50); border: 1px dashed var(--slate-400); color: var(--slate-500); }
+.ubadge.urgent { background: var(--red-500); border-color: var(--red-300); color: var(--red-50); }
+.ubadge.nonurgent { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
 .ubadge.saving { opacity: 0.5; pointer-events: none; }
-.ubadge .bchev { display: inline-flex; }
-.ubadge .bchev svg { display: block; }
 .selectmenu {
-  position: absolute; left: 0; top: 31px; width: 116px; z-index: 30;
+  position: absolute; left: 0; top: calc(100% + 3px); width: 116px; z-index: 30;
   background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
   box-shadow: var(--shadow-xs); padding: var(--space-4); display: flex; flex-direction: column;
 }
