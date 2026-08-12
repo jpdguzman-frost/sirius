@@ -6,6 +6,7 @@
  */
 
 import mongoose, { Types } from 'mongoose';
+import { workdaysBetween } from '../../lib/calendar.ts';
 import { forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { loadProjectModel } from './model-grid.ts';
@@ -36,6 +37,11 @@ export interface PipelineRow {
   urgency: string;
   blocker: string | null;
   requestor: string | null;
+  assetType: string | null; // FR-4.1 type, sheet-joined
+  /** Frame 17:1015 columns — derived from the MC group's work cards (annotation-silent; assumptions in tasks.md phase 13). */
+  workStarted: string | null;
+  workDone: string | null;
+  cycleDays: number | null;
   deadline: string | null;
   deadlineSource: string | null;
   trelloDue: string | null;
@@ -104,10 +110,31 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
   for (const r of rows) {
     if (r.mcNumber) rowsByMc.set(r.mcNumber, (rowsByMc.get(r.mcNumber) ?? 0) + 1);
   }
+  // Work Started / Done / Cycle per MC group: earliest start; latest done
+  // only once EVERY task in the group is done; workdays between.
+  const groupTasks = new Map<string, Array<{ started: Date | null; done: Date | null }>>();
+  for (const w of workCards) {
+    const list = groupTasks.get(w.mc_number) ?? [];
+    list.push({ started: w.work_started_at ?? null, done: w.work_done_at ?? null });
+    groupTasks.set(w.mc_number, list);
+  }
+  const spanByMc = new Map<string, { started: Date | null; done: Date | null }>();
+  for (const [mc, list] of groupTasks) {
+    const starts = list.filter((t) => t.started).map((t) => t.started!.getTime());
+    const started = starts.length ? new Date(Math.min(...starts)) : null;
+    const done = list.every((t) => t.done)
+      ? new Date(Math.max(...list.map((t) => t.done!.getTime())))
+      : null;
+    spanByMc.set(mc, { started, done });
+  }
   for (const r of rows) {
     const group = r.mcNumber ? rowsByMc.get(r.mcNumber)! : 0;
     const tasks = r.mcNumber ? (workCardsByMc[r.mcNumber]?.length ?? 0) : 0;
     r.weight = group > 0 ? 1 + tasks / group : 1;
+    const span = r.mcNumber ? spanByMc.get(r.mcNumber) : undefined;
+    r.workStarted = span?.started ? localDate(span.started) : null;
+    r.workDone = span?.done ? localDate(span.done) : null;
+    r.cycleDays = span?.started && span.done ? workdaysBetween(span.started, span.done) : null;
   }
 
   const corrections = rows
@@ -167,6 +194,10 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
     urgency: (d.urgency as string) ?? 'Non-Urgent',
     blocker: (d.blocker as string) ?? null,
     requestor: (d.requestor as string) ?? null,
+    assetType: (d.asset_type as string) ?? null,
+    workStarted: null, // group spans land after the work-card load in loadPipeline
+    workDone: null,
+    cycleDays: null,
     deadline: (d.deadline as string) ?? null,
     deadlineSource: (d.deadline_source as string) ?? null,
     trelloDue: (d.trello_due as string) ?? null, // W2 edit target (FR-9.1)

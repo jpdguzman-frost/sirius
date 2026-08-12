@@ -79,6 +79,7 @@ export async function syncIntakeRows(
           use_case: r.use_case,
           brief: r.brief,
           requestor: r.requestor,
+          asset_type: r.asset_type, // FR-4.1 type column (phase 13)
           updated_at: now,
         },
       },

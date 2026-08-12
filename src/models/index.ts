@@ -140,6 +140,7 @@ const deliverableSchema = new Schema(
     use_case: String,
     brief: String,
     requestor: String,
+    asset_type: String, // FR-4.1 "type" — joined 2026-08-12 (phase 13)
 
     // ---- owned by Sirius ----
     slotted_week: DATE_ONLY, // Monday; null = unscheduled

@@ -90,13 +90,19 @@ interface HeaderMap {
   in_frost_prod?: number;
 }
 
-/** Gotcha 3: two `Type` columns — first is the asset type; later ones ignored. */
+/**
+ * Gotcha 3: two `Type` columns, disambiguated by position — per AGENTS.md §5
+ * (product, 2026-08-12): col B is the CARD type, col L is the ASSET type.
+ * The LAST `Type` occurrence is therefore the asset type. (Corrects the
+ * phase-5 first-wins guess — the plan never said which; live sheet still
+ * deferred, so nothing real depended on it.)
+ */
 export function mapHeader(header: string[]): HeaderMap {
   const map: HeaderMap = {};
   header.forEach((cell, i) => {
     const n = norm(cell);
     if (n === 'type') {
-      if (map.asset_type === undefined) map.asset_type = i;
+      map.asset_type = i; // last wins
       return;
     }
     const field = HEADER_ALIASES[n];
