@@ -43,7 +43,7 @@ _Last updated: 2026-08-12 · Update at the end of every working session._
 | OD-6 | Which projects in v1 beyond GCash | Seed data |
 | OD-7 | Retention for closed requests | Phase 9 |
 | errata Q | Deadlines count basis | ✅ **answered 2026-08-12** (`docs/sirus_errata-reply-v1.2.md`): §5.4 weight everywhere — built default is final; §6.1 was their doc error |
-| — | Build spec **v1.2** + **AGENTS.md** listed as attached in the errata reply but NOT received — JP to obtain from product | reference docs only; nothing blocks |
+| — | Build spec **v1.2** + **AGENTS.md** | ✅ received 2026-08-12, verified, filed in docs/ (v1.2 renamed to `sirius-build-spec_v1.2.md`). All 6 errata corrections confirmed in the diff. AGENTS.md §2 already says two writes; its §7/§8/§9 are historical (OD-1/OD-8 shown open, "Postgres") — do not treat as current |
 
 ## Acceptance criteria scoreboard
 
