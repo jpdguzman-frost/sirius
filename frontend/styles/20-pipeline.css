@@ -69,10 +69,14 @@
 .metrics .metric .mvalue { font-size: var(--text-display); font-weight: 600; line-height: 1.2; color: var(--surface-foreground); }
 .metrics .metric.red .mlabel, .metrics .metric.red .mvalue { color: var(--status-destructive-strong); }
 
+/* ---- content stack: elements carry 0 margin, the container gaps 16px
+   (frame geometry, confirmed against node 17:2063 child positions) ---- */
+.pipestack { display: flex; flex-direction: column; gap: var(--space-16); }
+
 /* ---- incomplete panel (annotations 70:1358/970/914) ---- */
 .ipanel {
   background: var(--amber-50); border: 1px solid var(--amber-300); border-radius: 6px;
-  display: flex; flex-direction: column; gap: var(--space-8); padding: 17px 17px 13px; margin-bottom: var(--space-24);
+  display: flex; flex-direction: column; gap: var(--space-8); padding: 17px 17px 13px;
 }
 .ipanel .ihead { display: flex; align-items: center; gap: var(--space-8); color: var(--amber-800); font-size: var(--text-body); font-weight: 600; line-height: 1.4; }
 .ipanel .ihead svg { display: block; color: var(--amber-700); }
@@ -95,7 +99,7 @@
 /* ---- search + callout (annotations 17:2057, 70:1211) ---- */
 .searchbar {
   display: flex; align-items: center; gap: var(--space-8);
-  padding: 16px 0 17px; border-bottom: 1px solid var(--slate-100); margin-bottom: var(--space-24);
+  padding: 16px 0 17px; border-bottom: 1px solid var(--slate-100);
 }
 .searchbar svg { display: block; color: var(--slate-400); flex: none; }
 .searchbar input {
@@ -107,7 +111,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 
 .rocallout {
   background: var(--slate-50); border: 1px dashed var(--slate-200); border-radius: 6px;
-  display: flex; align-items: center; padding: 13px 17px; margin-bottom: var(--space-24);
+  display: flex; align-items: center; padding: 13px 17px;
   color: var(--surface-muted-foreground); font-size: var(--text-label); line-height: 1;
 }
 
@@ -115,7 +119,10 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .pscrollwrap { position: relative; }
 .pscroll { overflow-x: auto; scrollbar-width: none; }
 .pscroll::-webkit-scrollbar { display: none; }
-.ptable { border-collapse: collapse; min-width: 1704px; width: 100%; }
+/* Card Name flexes to fill the remaining space (JP 2026-08-12); the other
+   columns keep the frame's fixed widths, so horizontal scroll appears only
+   when the viewport is genuinely too narrow. */
+.ptable { border-collapse: collapse; width: 100%; }
 .ptable th {
   height: 56px; background: var(--slate-100); text-align: left; padding: 0 16px;
   font-size: var(--text-label); font-weight: 600; line-height: 1; letter-spacing: 0.02em;
@@ -126,13 +133,14 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .ptable tr.prow:focus { outline: 2px solid var(--blue-500); outline-offset: -2px; }
 .ptable tr.ptask td { background: var(--slate-50); font-size: var(--text-label); color: var(--slate-700); }
 .ptable .col-mc { width: 132px; min-width: 132px; }
-.ptable .col-name { width: 158px; min-width: 158px; }
+.ptable .col-name { width: auto; min-width: 158px; }
 .ptable .col-type { width: 140px; min-width: 140px; }
 .ptable .col-diff, .ptable .col-urgency { width: 144px; min-width: 144px; }
 .ptable .col-status { width: 228px; min-width: 228px; }
 .ptable .col-client { width: 142px; min-width: 142px; }
 .ptable .col-due, .ptable .col-started { width: 156px; min-width: 156px; }
 .ptable .col-done, .ptable .col-cycle, .ptable .col-weeks { width: 76px; min-width: 76px; }
+.ptable th:last-child { width: 76px; min-width: 76px; }
 
 .ptable .mccell { display: flex; gap: 16px; align-items: flex-start; }
 .ptable .mccell .chevbtn {

@@ -23,6 +23,9 @@ const app = new Ractive({
   template: '#tpl-app',
   data: {
     icon: ICONS,
+    // dynamic member access ({{{icon[t.icon]}}}) renders empty in Ractive
+    // triples — a function call resolves reliably
+    tabIcon: (key) => ICONS[key] || '',
     tabs: [
       { id: 'requests', label: 'Requests', icon: 'tabRequests' },
       { id: 'pipeline', label: 'Pipeline', icon: 'tabPipeline' },
@@ -49,7 +52,7 @@ const app = new Ractive({
     searchQ: '',
     urgencyMenu: null, // cardId whose urgency select is open (annotation 169:26074)
     savingUrgency: {}, // per-card in-flight write chrome (annotation 169:26364)
-    pipeThumb: { left: 0, width: 100 },
+    pipeThumb: { needed: false, left: 0, width: 100 },
     todayKey: todayIso(),
     weekStart: mondayIso(todayIso()),
     suggest: null,
@@ -231,11 +234,16 @@ app.set('hl', (text) => {
 
 /* Custom horizontal scroll for the pipeline table (annotation 251:6758). */
 function updateThumb(el) {
+  const needed = el.scrollWidth > el.clientWidth + 1; // slider only when the table actually overflows
   const width = Math.max(8, (el.clientWidth / el.scrollWidth) * 100);
   const denom = el.scrollWidth - el.clientWidth;
   const left = denom > 0 ? (el.scrollLeft / denom) * (100 - width) : 0;
-  app.set('pipeThumb', { left: Math.round(left * 100) / 100, width: Math.round(width * 100) / 100 });
+  app.set('pipeThumb', { needed, left: Math.round(left * 100) / 100, width: Math.round(width * 100) / 100 });
 }
+window.addEventListener('resize', () => {
+  const el = document.querySelector('.pscroll');
+  if (el) updateThumb(el);
+});
 
 app.set('footClass', (weekKey) => {
   const rows = app.get('schedRows').filter((r) => r.slottedWeek === weekKey);

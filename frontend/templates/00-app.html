@@ -25,7 +25,7 @@
   </div>
   <div class="tabbar" role="tablist">
     {{#each tabs as t}}
-      <button class="tab {{#if t.id === activeTab}}active{{/if}}" role="tab" aria-selected="{{t.id === activeTab ? 'true' : 'false'}}" on-click="['switchTab', t.id]"><span class="ticon">{{{icon[t.icon] || ''}}}</span>{{t.label}}</button>
+      <button class="tab {{#if t.id === activeTab}}active{{/if}}" role="tab" aria-selected="{{t.id === activeTab ? 'true' : 'false'}}" on-click="['switchTab', t.id]"><span class="ticon">{{{tabIcon(t.icon)}}}</span>{{t.label}}</button>
     {{/each}}
     <span class="tabfill"></span>
   </div>
@@ -101,6 +101,7 @@
     <div class="metric red"><span class="mlabel">URGENT</span><span class="mvalue">{{kpi.urgent}}</span></div>
   </div>
 
+  <div class="pipestack">
   {{#if corrections.length}}
     <div class="ipanel">
       <div class="ihead">{{{icon.warning}}} {{corrections.length}} {{corrections.length === 1 ? 'card' : 'cards'}} incomplete in Trello</div>
@@ -194,11 +195,14 @@
         </tbody>
       </table>
     </div>
+    {{#if pipeThumb.needed}}
     <div class="hslider">
       <button class="hnudge" on-click="['nudgeScroll', -1]" aria-label="Scroll table left">{{{icon.sliderLeft}}}</button>
       <div class="htrack" on-click="['trackJump']"><div class="hthumb" style="left:{{pipeThumb.left}}%;width:{{pipeThumb.width}}%;"></div></div>
       <button class="hnudge" on-click="['nudgeScroll', 1]" aria-label="Scroll table right">{{{icon.sliderRight}}}</button>
     </div>
+    {{/if}}
+  </div>
   </div>
 {{/if}}
 
