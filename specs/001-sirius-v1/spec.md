@@ -207,6 +207,7 @@ IDs and text are the BRD's, preserved verbatim. Priority M = must, S = should.
 | FR-4.5 | Cycle time derived from Trello activity timestamps, not date fields | M |
 | FR-4.6 | Urgency is set here and written back to Trello as an `Urgent` label; absence means non-urgent | M |
 | FR-4.7 | A failed write rolls the local change back, so Sirius never shows a state Trello lacks | M |
+| FR-4.8 | Difficulty is editable in the Pipeline and written back to Trello as a `Difficulty: …` label swap (write registry W3; BRD-§9-A1, added 2026-08-12) | M |
 
 #### FR-5 — Sprint Schedules
 
@@ -452,7 +453,7 @@ AC-21–AC-24 added 2026-08-12 (FR-11, FR-12, BR-6c — from build spec v1.1); A
 - **SC-2**: Pipeline deadline coverage rises from ~1/269 to ~169/269 via the sheet join, with no behaviour change asked of the team (AC-8).
 - **SC-3**: The forecast users see derives solely from measured delivery data, with provenance and sample sizes visible (AC-11); the spreadsheet formula — which overstates review waits 2.6–4.6× — is never exposed (BR-2, BR-3). Release-gated on the PM recognising the dates.
 - **SC-4**: Pipeline and Sprint Schedules load in < 2 s at p95 with 5,000 cards; drag feedback < 100 ms; a Trello change reaches Sirius in < 15 min (NFR-1, NFR-2, NFR-3).
-- **SC-5**: Zero writes to any source system except the enumerated write registry — the `Urgent` label and the card due date on Trello (amended 2026-08-04); every write audited; a failed write leaves no divergent state (FR-4.6, FR-4.7, FR-9.1–9.3, FR-2.6).
+- **SC-5**: Zero writes to any source system except the enumerated write registry — the `Urgent` label, the card due date, and the `Difficulty: …` label on Trello (amended 2026-08-04; grown 2026-08-12); every write audited; a failed write leaves no divergent state (FR-4.6, FR-4.7, FR-4.8, FR-9.1–9.3, FR-2.6).
 - **SC-6**: A scheduling week's conflicts are detected, explained, and individually acknowledgeable per BR-6/BR-9a — with card-level indicators never suppressed.
 - **SC-7**: A row can be slotted keyboard-only (AC-20, NFR-9 — WCAG 2.1 AA).
 - **SC-8**: Availability 99.5% during PHT business hours (NFR-4); audit retained 24 months (NFR-7); daily backups with quarterly restore tests (NFR-8).
@@ -518,6 +519,19 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 - **Daily plotting adopted** → FR-12, AC-22/AC-23 (build spec §6.2).
 - **Weighted row load adopted** → BR-6c, AC-24 (build spec §5.4) — resolves the BR-6a caveat by converting deliverable rows to card-equivalents.
 - One question back to the product team (in the errata): the Deadlines count basis — §6.1's example disagrees with §5.4's formula. Default until answered: BR-6c weight everywhere. **Answered 2026-08-12** (`docs/sirus_errata-reply-v1.2.md`): §5.4 weight everywhere — the default stands, no code change; §6.1 was a doc error, fixed in their v1.2.
+
+### Session 2026-08-12 (JP) — W3 difficulty writeback
+
+- Product approved the Pipelines difficulty dropdown writing back to Trello (Miles, amendment
+  BRD-§9-A1, via owl #01–#03); JP authorized the constitution amendment the same day. The
+  write registry grows to three entries (constitution 4.1.0; `contracts/trello-write.md` W3;
+  FR-4.8). Mechanics: `Difficulty: …` label swap, add-first with restore-on-partial-failure —
+  pending Miles's label-vs-custom-field confirmation.
+- The BRD document still needs product's incorporation pass: literal v2.2 §9 says *one* write
+  (the 2026-08-04 W2 amendment was never incorporated), so BRD-§9-A1's "Was: two writes" block
+  cannot paste in as written — flagged back to product.
+- Easy/Medium dropdown colors reuse the phase-13 badge tokens (green/amber); the frame carries
+  no tokens for them (product to confirm or supply).
 
 ## Open Decisions
 

@@ -211,7 +211,7 @@ to cover the due-date write and the webhook receiver. The ARES half is built sep
 
 ## Phase 13 — Pipeline redesign to Figma frame 17:1015 (~4–5d) — added 2026-08-12 (JP; 32 annotations = the spec, `pipeline-frame-notes.md`)
 
-Scope: the Pipeline tab + the shell it carries (top nav, tabs, stats). Other tabs keep today's design inside the new shell. Difficulty stays READ-ONLY (settled by the complete annotation set, 2026-08-12). "Simulate Trello sync" is dev-only — omitted. Success criterion: 1:1 against the frame at 1600px; every value binds to a token.
+Scope: the Pipeline tab + the shell it carries (top nav, tabs, stats). Other tabs keep today's design inside the new shell. Difficulty stays READ-ONLY (settled by the complete annotation set, 2026-08-12 — superseded the same day by BRD-§9-A1; see Phase 13a). "Simulate Trello sync" is dev-only — omitted. Success criterion: 1:1 against the frame at 1600px; every value binds to a token.
 
 - [x] T100 Token layer: `frontend/styles/05-tokens.css` — CSS custom properties named per the Figma variables (slate/red/amber/blue/green scales, text/caption..display, radius, space, shadow) + the semantic aliases the annotations use (`--surface-*`, `--border-border`, `--status-*`, `--font-sans`); Google Sans Flex 400–700 via Google Fonts CDN (JP override of the self-host note) (frame §0; annotations 17:1015, 70:10522)
 - [x] T101 Icon set exported clean from the file via Rex (`exportAsync SVG_STRING`) and inlined as Ractive partials — tab icons, chevrons, search, calendar, warning, external-link, Trello/Figma marks; no runtime Figma dependency (asset-fidelity rule)
@@ -224,6 +224,13 @@ Scope: the Pipeline tab + the shell it carries (top nav, tabs, stats). Other tab
 - [x] T108 Horizontal scroll: custom slider (track/thumb/chevron nudge) — below 1600px the table scrolls, never collapses (annotation 251:6758); task rows restyled to the kit
 - [x] T109 Regression pass: remaining five tabs render correctly inside the new shell; full suite dual-TZ, typecheck, lint, build
 - [x] T110 Fidelity check at 1600px against the frame screenshot; STATE update; deploy on JP go
+
+## Phase 13a — W3 difficulty writeback (~1d) — added 2026-08-12 (JP go; product approval BRD-§9-A1 via Miles, owl #01–#03; build target cell 415:54974)
+
+Scope: the write registry grows two → three (constitution 4.1.0, `contracts/trello-write.md` W3, FR-4.8). The frame's GOVERNANCE BLOCKER annotation is superseded by product's APPROVED one. Label-swap mechanics assumed (`Difficulty: …` taxonomy) pending Miles's label-vs-custom-field confirmation.
+
+- [x] T111 Tests-first write layer + route: `setDifficulty()` label swap in `lib/trello.ts` (add-first ordering, stale-label removal, restore-on-partial-failure, taxonomy bootstrap with cache) + `PATCH /deliverables/:cardId/difficulty` mirroring W1/W2 (no-op guard, audit `difficulty.set`/`set_failed` + sync_runs per attempt, WRITES_DISABLED gate inherited) — 8 new tests, writes-disabled suite extended to all three routes (invariants 2, 8, 17; FR-4.8)
+- [x] T112 Pipeline difficulty dropdown per product's build spec: badge-chip trigger keeps the phase-13 `d-*` recipes (Hard red-50/red-500 = the spec's #fef2f2/#ef4444; Easy green / Medium amber pending product tokens), select menu mirrors urgency (fixed flip-up, unified dismissers, menu mutual exclusion, per-card saving chrome, optimistic set + rollback banner, `loadAll` re-keys forecast + hard-mix), unset chip settable on missing-difficulty rows, disabled with read-only tooltip when `writes_enabled` is false; browser-verified incl. rollback (FR-4.8; cell 415:54974)
 
 **Assumptions taken (annotation-silent, flagged to JP):** Weeks column = slotted week (dash when unscheduled) · Work Started/Done = earliest start / latest done across the MC group's work cards · Cycle Time = workdays between them. Difficulty badge keeps its chevron chrome (1:1 rule) despite being read-only — flagged to the design team.
 

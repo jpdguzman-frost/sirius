@@ -53,9 +53,22 @@ Full-tree walk via Rex confirmed every MCP-extracted annotation **verbatim** and
 4. Tab group: five tabs; v1.2 says six (Admin).
 5. Project selector's rendered label uses the `Semantic/Button` token → **Inter 13.9px**, off-system vs §0 (Google Sans Flex only) — normalising to `--text-body`/600 Google Sans Flex unless the team objects.
 
-## Open item — Difficulty editability (JP decision pending)
+## Difficulty editability — RESOLVED 2026-08-12 (W3 approved and built)
 
-The frame's own annotations say difficulty is **read-only, never an input** (169:26426 and the Callout), agreeing with FR-4.3 and invariant 2. JP's 2026-08-12 instruction said "you can change difficulty" — which would be write-registry entry **W3** (Trello `Difficulty: …` label swap): constitution amendment (MAJOR), `trello-write.md` entry, FR update, and the product team's own governance rule says stop-and-raise. **Held pending JP: follow the annotation (read-only) or open the amendment.** Building read-only does not block anything — the write can be added later without rework (the badge is already a component).
+The frame's read-only annotations (169:26426 and the Callout) were the stale state: product
+approved the difficulty writeback the same day (Miles, BRD-§9-A1, owl #01–#03) and appended an
+**APPROVED** annotation to cell `415:54974` (parent frame `415:18672` Pipeline/Default/v.1.3,
+verified); the stale GOVERNANCE BLOCKER note is theirs to clear. JP authorized the amendment
+(constitution 4.1.0, write registry W3 — `contracts/trello-write.md`), and the dropdown is
+built per Miles's #01 spec: badge-chip trigger + select panel (white, `--slate-200` border,
+head + Easy/Medium/Hard with value dots), phase-13 `d-*` color recipes retained — Hard =
+red-50/red-500, exactly the spec's `#fef2f2`/`#ef4444`; **Easy green / Medium amber are our
+phase-13 tokens, pending product's token confirmation** (the spec's flagged gap). Write
+mechanics assume the `Difficulty: …` **label swap** — pending Miles's label-vs-custom-field
+confirmation; a custom-field answer changes `setDifficulty()` and the contract's W3 semantics
+only. Rows with no difficulty render a dashed unset chip and are settable (the
+missing-difficulty fix path). On projects with `writes_enabled: false` (rt-837 observation
+mode) the dropdown is disabled with the read-only tooltip.
 
 ## Build mechanics
 
