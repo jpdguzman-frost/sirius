@@ -205,7 +205,7 @@ to cover the due-date write and the webhook receiver. The ARES half is built sep
 - [x] T098 BR-6c weighted load in the schedule/deadlines assemblers: weekly footers, over-capacity tint and BR-6 *over capacity* conflict switch to card-equivalents; fixture proves 478 on the mirrored board shape; `lib/planner.ts` untouched (BR-6c; AC-24; FR-5.13, FR-5.17)
 - [x] T099 Sync-strip copy: replace "every 15 minutes" with push-aware wording in `frontend/templates/00-app.html` (FR-8.6, FR-9.6)
 
-**Checkpoint**: AC-21–AC-24 pass as tests. Record the product team's answer on the Deadlines count basis (errata question) here when it arrives; T096/T098 take the BR-6c default until then.
+**Checkpoint**: AC-21–AC-24 pass as tests. Errata answer received 2026-08-12 (`docs/sirus_errata-reply-v1.2.md`): BR-6c weight applies everywhere — the built default is final, their §6.1 was a documentation error. Phase closed.
 
 ---
 

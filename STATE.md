@@ -27,7 +27,7 @@ _Last updated: 2026-08-12 · Update at the end of every working session._
 |---|---|---|---|
 | OD-1 | ARES interface: DB role / read API / replication | Phase 4 | ✅ **Resolved 2026-08-03: ARES read API** (`/api/v1/trello/*`, read-only key; contract in `specs/001-sirius-v1/contracts/ares-read.md`) |
 | OD-8 | Hosting: Frost GCP or elsewhere | Infra work | ✅ **Resolved 2026-08-03: beside ARES, same pattern; shared Mongo server, own `sirius` db** |
-| BRD §9 | Amend "write impossible by permission" — write surface is now the two-entry registry (urgency + due date) | Vendor assessment, v2 | ⬜ open (grew 2026-08-04) |
+| BRD §9 | Amend "write impossible by permission" — write surface is now the two-entry registry (urgency + due date) | Vendor assessment, v2 | ⬜ open (grew 2026-08-04) — product confirmed 2026-08-12 they'll raise it across all THREE docs quoting "one write": BRD §9, pilot security readiness, vendor assessment; not done yet |
 | — | TEST board | Phase 8 | ✅ created: tx8gDsTH (structure-mirroring, 12 synthetic cards) |
 | T085 | Hand `docs/ARES_PUSH_BUILD_SPEC.md` to the ARES build agent + provision `ARES_WEBHOOK_SECRET` on both hosts | T086 (e2e push verify) | ✅ done 2026-08-04 — ARES built it, push LIVE |
 | W2 | Due-write canonical time: 17:00 Asia/Manila, preserve existing time-of-day on edit | — | ✅ confirmed by JP 2026-08-04 |
@@ -42,7 +42,8 @@ _Last updated: 2026-08-12 · Update at the end of every working session._
 | OD-5 | Is `Client Approval` ongoing or done | Phase 4 keyword rules |
 | OD-6 | Which projects in v1 beyond GCash | Seed data |
 | OD-7 | Retention for closed requests | Phase 9 |
-| errata Q | Deadlines count basis: build spec §5.4 weight (4) vs §6.1 example (3) — asked in `docs/sirius-build-spec_v1.1_errata.md`; owner: product team | Deadlines counts' final form (BR-6c weight is live as the default) |
+| errata Q | Deadlines count basis | ✅ **answered 2026-08-12** (`docs/sirus_errata-reply-v1.2.md`): §5.4 weight everywhere — built default is final; §6.1 was their doc error |
+| — | Build spec **v1.2** + **AGENTS.md** listed as attached in the errata reply but NOT received — JP to obtain from product | reference docs only; nothing blocks |
 
 ## Acceptance criteria scoreboard
 
@@ -55,6 +56,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-12 — **Errata reply received** (`docs/sirus_errata-reply-v1.2.md`): all 6 corrections accepted into their v1.2. Count basis: **§5.4 weight everywhere — our built default is final** (their §6.1 was a doc error; rationale recorded in BR-6c: 244/269 deliverables have no tasks, work-cards-only would hide 90% of the board). Their flicker concern checked: **no risk** — the frontend has no auto-refresh loop (data reloads only on user actions; conflict banners are situation-keyed, invariant 13), so a 37 s push freshens server data without any UI oscillation. Attachments (build spec v1.2, AGENTS.md) NOT received with the reply — JP to obtain. Product owns the "one write → two" sweep across BRD §9 + security readiness + vendor assessment (flagged not-done on their side). Phase 12 closed.
 
 - 2026-08-12 — **Phase 12 BUILT same day (T092–T099), 214/214 tests dual-TZ** (+32: dayplan 12, frost-notes 8, dayplan-api 8, weighted-load 4), typecheck/lint/build clean. Frost notes: `frost_notes` collection (one per request), PUT under project scope with REASON_REQUIRED/no-op guards, three-state derived status (In Pipeline / With Clarification / For Filing — pipeline wins over the flag), tiles + inline editor (Escape/Cancel discard, optimistic revert). Daily plotting: `milestone_day_plan` keyed (project, card, phase) with the intended `week` stored — lapse = stored week ≠ computed week (read-side safety net) plus explicit deleteMany on slotted-week changes (PATCH + replot, `dayPlanLapsed` audited); `lib/dayplan.ts` NEW module (largest remainder, calendar-true string-based holiday check — deliberately NOT calendar.ts's quirky isHoliday, which stays verbatim for the port); PUT validates day-inside-week + non-holiday; Deadlines UI week-expand (one at a time), drag + ←/→/Backspace keyboard path. Weighted load: `weight = 1 + tasks÷deliverables` computed in the pipeline assembler (planner untouched — the prototype also weighted only the UI layer), feeds schedule footers, week tint (now over-capacity ONLY per §6.1), capbar, and the BR-6 over-capacity conflict (fires on card-equivalents; proven: 3 rows under cap, 9 equivalents over). AC-21–24 pass as tests. Flake note: one transient supertest failure on a 4-file batch run, gone on rerun and in both full runs — same family as the recorded authz-matrix flake. NOT pushed yet.
 
