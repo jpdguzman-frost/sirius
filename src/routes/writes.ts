@@ -50,6 +50,17 @@ async function writeGuards(
     return null;
   }
 
+  // G7 observation mode (JP, 2026-08-12): a read-only project refuses every
+  // registry write — the real board is watched, never written, until JP
+  // flips writes on. Absent flag = enabled (pre-flag projects keep writes).
+  if (res.locals.project.writes_enabled === false) {
+    res.status(403).json({
+      ok: false,
+      error: { code: 'WRITES_DISABLED', message: 'This project is read-only — Trello writes are disabled while observing the real board.' },
+    });
+    return null;
+  }
+
   const doc = await Deliverable.findOne({ project_id: projectId, trello_card_id: cardId });
   if (!doc) {
     res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });

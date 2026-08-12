@@ -5,8 +5,11 @@
  *
  * Usage:
  *   MONGODB_URI=... ARES_URL=... ARES_API_KEY=... \
- *   CODE=rt-837 BOARD=hLL7WW2V [LABEL="Some Label"] [CAPACITY=120] \
+ *   CODE=rt-837 BOARD=hLL7WW2V [LABEL="Some Label"] [CAPACITY=120] [WRITES=0] \
  *   npx tsx scripts/migrate-open-cards.ts
+ *
+ * WRITES=0 onboards the project READ-ONLY (G7 observation mode): the write
+ * registry refuses W1/W2 for it until JP flips writes_enabled.
  */
 
 import 'dotenv/config';
@@ -37,8 +40,9 @@ if (!project) {
     trello_board_id: BOARD,
     trello_label: process.env.LABEL ?? null,
     weekly_capacity: Number(process.env.CAPACITY ?? 120),
+    writes_enabled: process.env.WRITES !== '0',
   });
-  console.log(`[migrate-open-cards] project ${CODE} created`);
+  console.log(`[migrate-open-cards] project ${CODE} created${process.env.WRITES === '0' ? ' READ-ONLY (G7 observation mode)' : ''}`);
 }
 
 const client = new AresClient({ baseUrl: env.ARES_URL, apiKey: env.ARES_API_KEY });

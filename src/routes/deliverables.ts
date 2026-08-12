@@ -31,6 +31,7 @@ export function deliverablesRouter(): Router {
       res.json({
         ok: true,
         ...pipeline,
+        writesEnabled: res.locals.project.writes_enabled !== false, // G7 observation mode
         sprints: sprints.map((s) => ({ id: String(s._id), name: s.name, start: s.starts_on, end: s.ends_on, position: s.position })),
         capacity: {
           weekly: res.locals.project.weekly_capacity,

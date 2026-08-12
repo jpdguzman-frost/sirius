@@ -144,9 +144,9 @@
             <td class="col-diff">{{#if row.difficulty}}<span class="pbadge d-{{row.difficulty}}" title="Read from the Trello Difficulty label — not editable here"><span>{{row.difficulty}}</span><span class="bchev"><svg class="i16"><use href="#i-badgeChevron" /></svg></span></span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-urgency"><div class="ubadge-wrap">
               <button class="pbadge ubadge {{row.urgency === 'Urgent' ? 'urgent' : 'nonurgent'}} {{#if savingUrgency[row.cardId]}}saving{{/if}}"
-                disabled="{{savingUrgency[row.cardId]}}"
+                disabled="{{savingUrgency[row.cardId] || !writesEnabled}}"
                 on-click="['openUrgencyMenu', row.cardId]" aria-haspopup="listbox" aria-expanded="{{urgencyMenu === row.cardId ? 'true' : 'false'}}"
-                title="Writes the Urgent label to the Trello card (write registry W1)">
+                title="{{writesEnabled ? 'Writes the Urgent label to the Trello card (write registry W1)' : 'Read-only project — Trello writes are disabled'}}">
                 <span>{{#if savingUrgency[row.cardId]}}saving…{{elseif row.urgency === 'Urgent'}}⚡ Urgent{{else}}{{row.urgency}}{{/if}}</span><span class="bchev"><svg class="i16"><use href="#i-badgeChevron" /></svg></span>
               </button>
               {{#if urgencyMenu === row.cardId}}
@@ -163,8 +163,10 @@
               {{#if editingDeadline === row.cardId}}
                 <input type="date" name="due-{{row.cardId}}" class="dp-input" value="{{row.trelloDue}}" on-change="['setDeadline', row.cardId]" on-blur="['cancelDeadline']" autofocus />
                 {{#if row.trelloDue}}<button class="dp-clear" on-mousedown="['clearDeadline', row.cardId]" title="Clear the Trello due date — the sheet deadline (if any) takes over">✕</button>{{/if}}
-              {{else}}
+              {{elseif writesEnabled}}
                 <button class="dpicker {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}}" on-click="['editDeadline', row.cardId]" title="{{row.deadline ? 'Source: ' + row.deadlineSource + ' — editing' : 'No due date — setting one'}} writes the Trello due date (write registry W2)"><span class="dpdate">{{row.deadline ? fmtLong(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></button>
+              {{else}}
+                <span class="dpicker readonly {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{row.deadline ? fmtLong(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
               {{/if}}
             </td>
             <td class="col-started">{{#if row.workStarted}}<span class="dpicker readonly" title="Earliest work-card start in this MC group"><span class="dpdate">{{fmtLong(row.workStarted)}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>{{else}}<span class="dimcell">—</span>{{/if}}</td>

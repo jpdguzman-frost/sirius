@@ -49,6 +49,10 @@ const projectSchema = new Schema(
     intake_sheet_gid: String,
     intake_sheet_tab: String,
 
+    // G7 observation mode (2026-08-12): a project onboarded read-only refuses
+    // the write registry (W1/W2) until JP flips it — absent/true = writes on
+    writes_enabled: { type: Boolean, default: true },
+
     // planning settings — cards/week, seeded from ARES referenceWeeks (BR-6a)
     weekly_capacity: { type: Number, required: true },
     ref_week_least: Number,

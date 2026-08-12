@@ -46,6 +46,7 @@ const app = new Ractive({
     sync: null,
     syncLabel: '…',
     rows: [],
+    writesEnabled: true, // G7 observation mode: false = read-only project, W1/W2 controls disabled
     workCardsByMc: {},
     corrections: [],
     showAllCorrections: false,
@@ -374,6 +375,7 @@ async function loadAll() {
     });
     app.set({
       rows: pipeline.rows,
+      writesEnabled: pipeline.writesEnabled !== false,
       workCardsByMc: pipeline.workCardsByMc,
       corrections: pipeline.corrections,
       sprints: pipeline.sprints,
