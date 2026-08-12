@@ -169,8 +169,9 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .pbadge.s-done { background: var(--emerald-100); border-color: var(--green-500); color: var(--green-600); }
 .pbadge.blocked { background: var(--red-50); border-color: var(--red-300); color: var(--red-600); }
 
-/* urgency pill = the Badge recipe (.pbadge) + interaction chrome
-   (annotations 169:26364/26074) */
+/* select pill = the Badge recipe (.pbadge) + interaction chrome — urgency
+   (annotations 169:26364/26074) and difficulty (W3, cell 415:54974; the
+   d-* recipes above win on specificity, so value colors carry over) */
 .ubadge-wrap { position: relative; display: inline-block; }
 .ubadge {
   width: 111px; justify-content: space-between; cursor: pointer;
@@ -179,7 +180,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 /* annotation 169:26364: destructive-light bg, destructive-strong text,
    solid red-300 border, ⚡ prefix (review finding 12) */
 .ubadge.urgent { background: var(--status-destructive-light); border-color: var(--red-300); color: var(--status-destructive-strong); }
-.ubadge.nonurgent { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
+.ubadge.nonurgent, .ubadge.unset { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
 .ubadge.saving { opacity: 0.5; pointer-events: none; }
 /* fixed so it escapes the .pscroll clip (review finding 3); coords set inline */
 .selectmenu {
@@ -197,6 +198,8 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .selectmenu .dot { width: 6px; height: 6px; border-radius: var(--radius-full); flex: none; }
 .selectmenu .dot.red { background: var(--red-500); }
 .selectmenu .dot.slate { background: var(--slate-400); }
+.selectmenu .dot.green { background: var(--green-500); }
+.selectmenu .dot.amber { background: var(--amber-500); }
 
 /* due / date chrome (annotations 251:7925, 251:23859) */
 .dpicker {

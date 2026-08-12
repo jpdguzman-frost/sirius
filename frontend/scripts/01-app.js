@@ -58,6 +58,9 @@ const app = new Ractive({
     urgencyMenu: null, // cardId whose urgency select is open (annotation 169:26074)
     urgencyMenuPos: { left: 0, top: 0 }, // fixed-position anchor — escapes the scroll clip
     savingUrgency: {}, // per-card in-flight write chrome (annotation 169:26364)
+    diffMenu: null, // cardId whose difficulty select is open (W3 — BRD-§9-A1)
+    diffMenuPos: { left: 0, top: 0 },
+    savingDifficulty: {},
     pipeThumb: { needed: false, left: 0, width: 100 },
     iconSprite: ICON_SPRITE,
     weekStart: mondayIso(todayIso()),
@@ -241,16 +244,22 @@ app.set('hl', (text) => {
     .join('');
 });
 
-/* Anything that invalidates the fixed-position urgency menu's anchor closes
+/* Anything that invalidates a fixed-position select menu's anchor closes
    it; outside click and Escape dismiss it (review findings 3 + 8). */
+function anyMenuOpen() {
+  return app.get('urgencyMenu') || app.get('diffMenu');
+}
+function closeMenus() {
+  app.set({ urgencyMenu: null, diffMenu: null });
+}
 document.addEventListener('click', (e) => {
-  if (app.get('urgencyMenu') && !e.target.closest('.ubadge-wrap, .selectmenu')) app.set('urgencyMenu', null);
+  if (anyMenuOpen() && !e.target.closest('.ubadge-wrap, .selectmenu')) closeMenus();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && app.get('urgencyMenu')) app.set('urgencyMenu', null);
+  if (e.key === 'Escape' && anyMenuOpen()) closeMenus();
 });
 document.addEventListener('scroll', () => {
-  if (app.get('urgencyMenu')) app.set('urgencyMenu', null);
+  if (anyMenuOpen()) closeMenus();
 }, true);
 
 /* Custom horizontal scroll for the pipeline table (annotation 251:6758) —
@@ -488,7 +497,7 @@ async function writeDayPlan(cardId, phase, day) {
 
 /* Shared by click and the tablist arrow keys (WAI tabs pattern). */
 function selectTab(id) {
-  app.set({ activeTab: id, urgencyMenu: null });
+  app.set({ activeTab: id, urgencyMenu: null, diffMenu: null });
   if (id === 'admin' && app.get('isAdmin')) loadAdmin();
   if (id === 'pipeline') {
     // returning to the tab remounts .pscroll at scrollLeft 0 — recompute the
@@ -591,6 +600,7 @@ app.on({
     const up = rect.bottom + menuH + 3 > window.innerHeight;
     app.set({
       urgencyMenu: cardId,
+      diffMenu: null,
       urgencyMenuPos: { left: Math.round(rect.left), top: Math.round(up ? rect.top - menuH - 3 : rect.bottom + 3) },
     });
   },
@@ -615,6 +625,43 @@ app.on({
       setTimeout(() => app.set('banner', ''), 6000);
     } finally {
       app.set(`savingUrgency.${cardId}`, false);
+    }
+  },
+  // W3 (BRD-§9-A1): same optimistic-with-rollback shape as urgency; menuH
+  // differs — head + THREE options
+  openDiffMenu(ctx, cardId) {
+    if (app.get(`savingDifficulty.${cardId}`)) return; // one write in flight per card (invariant 8)
+    if (app.get('diffMenu') === cardId) {
+      app.set('diffMenu', null);
+      return;
+    }
+    const rect = ctx.node.getBoundingClientRect();
+    const menuH = 116;
+    const up = rect.bottom + menuH + 3 > window.innerHeight;
+    app.set({
+      diffMenu: cardId,
+      urgencyMenu: null,
+      diffMenuPos: { left: Math.round(rect.left), top: Math.round(up ? rect.top - menuH - 3 : rect.bottom + 3) },
+    });
+  },
+  async chooseDifficulty(_ctx, cardId, next, current) {
+    app.set('diffMenu', null);
+    if (next === current || app.get(`savingDifficulty.${cardId}`)) return;
+    const setDifficulty = (value) => {
+      const idx = app.get('rows').findIndex((r) => r.cardId === cardId);
+      if (idx >= 0) app.set(`rows.${idx}.difficulty`, value);
+    };
+    setDifficulty(next);
+    app.set(`savingDifficulty.${cardId}`, true);
+    try {
+      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/difficulty`, { difficulty: next });
+      await loadAll(); // difficulty re-keys the forecast (difficulty × lane) and the hard-mix numbers
+    } catch (err) {
+      setDifficulty(current);
+      app.set('banner', `Difficulty write failed — reverted. ${err.detail && err.detail.message ? err.detail.message : err.message}`);
+      setTimeout(() => app.set('banner', ''), 6000);
+    } finally {
+      app.set(`savingDifficulty.${cardId}`, false);
     }
   },
   pipeScrolled(ctx) { updateThumb(ctx.node); },
