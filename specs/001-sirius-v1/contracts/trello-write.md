@@ -53,15 +53,17 @@ shape, unchanged), `setDue(cardId, isoDateTimeOrNull)`, and
 - Difficulty lives on the card as one label from the board taxonomy: `Difficulty: Easy`,
   `Difficulty: Medium`, `Difficulty: Hard` (invariant 17). The write is a **label swap** and
   therefore not atomic: two Trello calls when a difficulty label already exists.
-  *(Assumption pending Miles's confirmation, owl thread 2026-08-12: if product answers that a
-  Trello custom field is the real target, this section and `setDifficulty()` change — nothing
-  else in the registry does.)*
+  *(Confirmed by product — Miles, owl #04, 2026-08-12: label, not a Trello custom field.)*
 - **Order: add first, then remove.** The new label is added before stale `Difficulty: …`
   labels are removed, so the card never passes through a state with *no* difficulty. If a
   stale-label removal fails, the write attempts to remove the just-added label (restoring the
   original state) and reports failure; if even that restore fails, the card is left with two
   difficulty labels — visible in Trello, reconciled by the next ARES read — and the local
   value still rolls back (invariant 8: Sirius never displays a state Trello lacks).
+  *(Deliberate deviation from product's remove-first suggestion in owl #04: both orders keep
+  the displayed value at last-known-good until full success, but remove-first's worst case
+  strands the card with NO difficulty label — silently unforecastable — while add-first's
+  worst case is a visible double label the next sync reconciles. Explained to product.)*
 - Missing labels in the board taxonomy are created on demand (green/yellow/red), mirroring
   the `Urgent` bootstrap — relevant only on test boards; the production taxonomy exists.
 - Changing difficulty re-keys the row's forecast (difficulty × lane — BR keying, model grid);

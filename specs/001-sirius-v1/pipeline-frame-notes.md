@@ -62,11 +62,12 @@ verified); the stale GOVERNANCE BLOCKER note is theirs to clear. JP authorized t
 (constitution 4.1.0, write registry W3 — `contracts/trello-write.md`), and the dropdown is
 built per Miles's #01 spec: badge-chip trigger + select panel (white, `--slate-200` border,
 head + Easy/Medium/Hard with value dots), phase-13 `d-*` color recipes retained — Hard =
-red-50/red-500, exactly the spec's `#fef2f2`/`#ef4444`; **Easy green / Medium amber are our
-phase-13 tokens, pending product's token confirmation** (the spec's flagged gap). Write
-mechanics assume the `Difficulty: …` **label swap** — pending Miles's label-vs-custom-field
-confirmation; a custom-field answer changes `setDifficulty()` and the contract's W3 semantics
-only. Rows with no difficulty render a dashed unset chip and are settable (the
+red-50/red-500, exactly the spec's `#fef2f2`/`#ef4444`; **Easy/Medium tokens supplied and applied** (Miles, owl #04:
+Easy green-50 `#f0fdf4` / green-500 `#22c55e`, Medium amber-50 `#fffbeb` / amber-500
+`#f59e0b` — 50 fill, 500 stroke+text, same shape as Hard). Write mechanics **confirmed label
+swap** (owl #04, not a custom field); we keep add-first ordering over product's remove-first
+suggestion — same last-known-good display guarantee, safer worst case (see
+`contracts/trello-write.md` W3). Rows with no difficulty render a dashed unset chip and are settable (the
 missing-difficulty fix path). On projects with `writes_enabled: false` (rt-837 observation
 mode) the dropdown is disabled with the read-only tooltip.
 
