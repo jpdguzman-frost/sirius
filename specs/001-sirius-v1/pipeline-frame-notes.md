@@ -43,7 +43,7 @@ Full-tree walk via Rex confirmed every MCP-extracted annotation **verbatim** and
 
 **Un-annotated elements** (build from visual + existing FRs): Type cell (badge — UI/Asset/Icon/Spot Illustration), Client cell (`@handle` badge), MC/Card-Name cells, Work Started / Work Done / Cycle Time / Weeks cells (Work Started renders in Date-Picker chrome but carries no annotation — **read-only display per FR-4.5**, cycle fields derive from Trello activity; Weeks = slotted-week display).
 
-**Team corrections after build (2026-08-12, via JP):** content-stack gap is 16px with 0-margin elements (frame geometry confirms; the Content annotation's "24px" is the container's top padding only) · column labels **Started** / **Done** (renamed from Work Started / Work Done in the header annotation) · Card Name flexes to fill remaining width · scroll bar only when the table overflows.
+**Team corrections after build (2026-08-12, via JP):** content-stack gap is 16px with 0-margin elements (frame geometry confirms; the Content annotation's "24px" is the container's top padding only) · column labels **Started** / **Done** (renamed from Work Started / Work Done in the header annotation) · Card Name flexes to fill remaining width · scroll bar only when the table overflows · **Cycle Time + Weeks columns removed, Links 94px, header 44px** (frame re-measured after their edit) · **read-only callout strip removed** (simplification; the read-only rule survives in the difficulty tooltip — annotation 70:1211 superseded).
 
 ## Drift register (frame ↔ decided state) — for the product team
 

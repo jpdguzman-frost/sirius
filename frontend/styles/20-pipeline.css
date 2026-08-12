@@ -109,12 +109,6 @@
 .searchbar input::placeholder { color: var(--slate-400); }
 mark { background: var(--status-warning-light); color: var(--amber-800); border-radius: var(--radius-xs); padding: 0 1px; }
 
-.rocallout {
-  background: var(--slate-50); border: 1px dashed var(--slate-200); border-radius: 6px;
-  display: flex; align-items: center; padding: 13px 17px;
-  color: var(--surface-muted-foreground); font-size: var(--text-label); line-height: 1;
-}
-
 /* ---- table (annotations 70:10008/9/24 + cells) ---- */
 .pscrollwrap { position: relative; }
 .pscroll { overflow-x: auto; scrollbar-width: none; }
