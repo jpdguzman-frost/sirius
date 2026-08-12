@@ -222,8 +222,8 @@ Scope: the Pipeline tab + the shell it carries (top nav, tabs, stats). Other tab
 - [x] T106 Table per the 13-column header annotation (MC # → Links, fixed widths from the frame): expandable rows (chevron + Enter + focusable), Type/Client badges, Difficulty read-only badge, Urgency select-menu write with "saving…" state (opacity .5, pointer-events none) + rollback, Status keyword badge with list name verbatim, Due date-picker chrome on the W2 write-through (annotation 251:7925 carries stale v1.1 precedence — v1.2 governs) with missing/overdue states (251:23859), Work Started/Done/Cycle Time read-only, Weeks display, source-icon links (annotations 70:10008/9/24, 169:26364/26074/26426, 70:10030/10037)
 - [x] T107 Backend: `asset_type` joined onto the MC group (closes the FR-4.1 "type" gap) + row derivations for Work Started / Work Done / Cycle Time (min started / max done across the MC group's work cards; workdays between) + tests
 - [x] T108 Horizontal scroll: custom slider (track/thumb/chevron nudge) — below 1600px the table scrolls, never collapses (annotation 251:6758); task rows restyled to the kit
-- [ ] T109 Regression pass: remaining five tabs render correctly inside the new shell; full suite dual-TZ, typecheck, lint, build
-- [ ] T110 Fidelity check at 1600px against the frame screenshot; STATE update; deploy on JP go
+- [x] T109 Regression pass: remaining five tabs render correctly inside the new shell; full suite dual-TZ, typecheck, lint, build
+- [x] T110 Fidelity check at 1600px against the frame screenshot; STATE update; deploy on JP go
 
 **Assumptions taken (annotation-silent, flagged to JP):** Weeks column = slotted week (dash when unscheduled) · Work Started/Done = earliest start / latest done across the MC group's work cards · Cycle Time = workdays between them. Difficulty badge keeps its chevron chrome (1:1 rule) despite being read-only — flagged to the design team.
 

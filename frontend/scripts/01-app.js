@@ -89,6 +89,9 @@ const app = new Ractive({
     fmt: (iso) => fmtDate(iso),
     // frame date format: '7 Aug 2026' (annotation 251:23859)
     fmtLong: (iso) => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''),
+    // frame vocabulary for the incomplete panel: 'due date', 'Figma attachment'
+    missingText: (missing) =>
+      'Missing ' + missing.map((m) => (m === 'deadline' ? 'due date' : m === 'Figma link' ? 'Figma attachment' : m + ' label')).join(' and '),
     pct: (x) => `${Math.round((x || 0) * 1000) / 10}%`,
     // BR-6c/§5.4 display rule: fractions to one decimal, whole numbers plain
     fmtLoad: (n) => {

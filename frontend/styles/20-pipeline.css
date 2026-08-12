@@ -154,6 +154,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 }
 .pbadge .bchev { display: inline-flex; margin-left: 2px; }
 .pbadge .bchev svg { display: block; }
+.ptable .col-diff .pbadge { width: 111px; justify-content: space-between; }
 .pbadge.d-Easy { background: var(--green-100); border-color: var(--green-500); color: var(--green-600); }
 .pbadge.d-Medium { background: var(--amber-100); border-color: var(--amber-500); color: var(--amber-600); }
 .pbadge.d-Hard { background: var(--red-50); border-color: var(--red-500); color: var(--red-500); }

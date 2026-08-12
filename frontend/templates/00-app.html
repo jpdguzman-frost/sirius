@@ -108,9 +108,8 @@
         <div class="irow">
           <span class="ideets">
             <span class="rowtag">{{c.displayId}}</span>
-            <span class="imc">{{c.displayId}}</span>
             <span class="iname">{{c.name}}</span>
-            <span class="ireason">Missing {{c.missing.join(' and ')}}</span>
+            <span class="ireason">{{missingText(c.missing)}}</span>
           </span>
           {{#if c.trelloUrl}}<a class="iopen" href="{{c.trelloUrl}}" target="_blank">Open Card</a>{{/if}}
         </div>
@@ -120,7 +119,7 @@
     </div>
   {{/if}}
 
-  <div class="searchbar">{{{icon.search}}}<input placeholder="Search cards or MC#" value="{{searchQ}}" aria-label="Search cards or MC number" /></div>
+  <div class="searchbar">{{{icon.search}}}<input name="pipeline-search" placeholder="Search cards or MC#" value="{{searchQ}}" aria-label="Search cards or MC number" /></div>
 
   <div class="rocallout">Difficulty and Current List are read from Trello — they can’t be edited here.</div>
 
@@ -161,7 +160,7 @@
             <td class="col-client">{{#if row.requestor}}<span class="pbadge">{{row.requestor}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-due">
               {{#if editingDeadline === row.cardId}}
-                <input type="date" class="dp-input" value="{{row.trelloDue}}" on-change="['setDeadline', row.cardId]" on-blur="['cancelDeadline']" autofocus />
+                <input type="date" name="due-{{row.cardId}}" class="dp-input" value="{{row.trelloDue}}" on-change="['setDeadline', row.cardId]" on-blur="['cancelDeadline']" autofocus />
                 {{#if row.trelloDue}}<button class="dp-clear" on-mousedown="['clearDeadline', row.cardId]" title="Clear the Trello due date — the sheet deadline (if any) takes over">✕</button>{{/if}}
               {{else}}
                 {{#if row.deadline}}
