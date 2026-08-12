@@ -24,17 +24,17 @@
       </div>
     </div>
   </div>
-  <div class="tabbar" role="tablist">
+  <div class="tabbar" role="tablist" aria-label="Sections" on-keydown="['tabKey']">
     {{#each tabs as t}}
-      <button class="tab {{#if t.id === activeTab}}active{{/if}}" role="tab" aria-selected="{{t.id === activeTab ? 'true' : 'false'}}" on-click="['switchTab', t.id]"><span class="ticon">{{{tabIcon(t.icon)}}}</span>{{t.label}}</button>
+      <button id="tab-{{t.id}}" class="tab {{#if t.id === activeTab}}active{{/if}}" role="tab" aria-selected="{{t.id === activeTab ? 'true' : 'false'}}" aria-controls="view-panel" tabindex="{{t.id === activeTab ? '0' : '-1'}}" on-click="['switchTab', t.id]"><span class="ticon">{{{tabIcon(t.icon)}}}</span>{{t.label}}</button>
     {{/each}}
-    <span class="tabfill"></span>
+    <span class="tabfill" role="presentation"></span>
   </div>
 </header>
 
 {{#if banner}}<div class="banner">{{banner}}</div>{{/if}}
 
-<main class="view">
+<main class="view {{activeTab === 'pipeline' ? '' : 'legacybg'}}" id="view-panel" role="tabpanel" aria-labelledby="tab-{{activeTab}}">
 
 {{#if activeTab === 'requests'}}
   {{#if requests.length || rejects.length || requestCounts.requests}}
@@ -117,7 +117,7 @@
         </div>
       {{/each}}
       {{#if corrections.length > 5}}<button class="iopen" style="align-self:flex-start;" on-click="['toggleCorrections']">{{showAllCorrections ? 'Show fewer' : 'Show all ' + corrections.length}}</button>{{/if}}
-      <div class="iwhy">Without a difficulty label the forecast falls back to Overall; without a due date the card cannot raise a deadline conflict. Fix in Trello and it corrects on the next sync.</div>
+      <div class="iwhy">Without a difficulty label the card cannot forecast; without a due date it cannot raise a deadline conflict. Fix in Trello and it corrects on the next sync.</div>
     </div>
   {{/if}}
 
@@ -134,30 +134,31 @@
         </tr></thead>
         <tbody>
         {{#each pipelineRows as row}}
-          <tr class="prow" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
+          <tr class="prow {{#if row.blocker}}blocked{{/if}}" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
             <td class="col-mc"><div class="mccell">
-              <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{expanded[row.mcNumber] ? 'Collapse' : 'Expand'}} {{row.displayId}} work cards" tabindex="-1"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+              <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{row.displayId}} work cards" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
               <span class="mcnum">{{{hl(row.displayId)}}}</span>
             </div></td>
             <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}</td>
-            <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{row.assetType}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{{hl(row.assetType)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-diff">{{#if row.difficulty}}<span class="pbadge d-{{row.difficulty}}" title="Read from the Trello Difficulty label — not editable here"><span>{{row.difficulty}}</span><span class="bchev"><svg class="i16"><use href="#i-badgeChevron" /></svg></span></span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-urgency"><div class="ubadge-wrap">
               <button class="pbadge ubadge {{row.urgency === 'Urgent' ? 'urgent' : 'nonurgent'}} {{#if savingUrgency[row.cardId]}}saving{{/if}}"
+                disabled="{{savingUrgency[row.cardId]}}"
                 on-click="['openUrgencyMenu', row.cardId]" aria-haspopup="listbox" aria-expanded="{{urgencyMenu === row.cardId ? 'true' : 'false'}}"
                 title="Writes the Urgent label to the Trello card (write registry W1)">
-                <span>{{#if savingUrgency[row.cardId]}}saving…{{else}}{{row.urgency}}{{/if}}</span><span class="bchev"><svg class="i16"><use href="#i-badgeChevron" /></svg></span>
+                <span>{{#if savingUrgency[row.cardId]}}saving…{{elseif row.urgency === 'Urgent'}}⚡ Urgent{{else}}{{row.urgency}}{{/if}}</span><span class="bchev"><svg class="i16"><use href="#i-badgeChevron" /></svg></span>
               </button>
               {{#if urgencyMenu === row.cardId}}
-                <div class="selectmenu" role="listbox" aria-label="Urgency">
+                <div class="selectmenu" role="listbox" aria-label="Urgency" style="left:{{urgencyMenuPos.left}}px;top:{{urgencyMenuPos.top}}px;">
                   <div class="selecthead">Urgency</div>
                   <button class="selectitem {{#if row.urgency === 'Urgent'}}on{{/if}}" role="option" aria-selected="{{row.urgency === 'Urgent' ? 'true' : 'false'}}" on-click="['chooseUrgency', row.cardId, 'Urgent', row.urgency]"><span class="dot red"></span>Urgent</button>
                   <button class="selectitem {{#if row.urgency !== 'Urgent'}}on{{/if}}" role="option" aria-selected="{{row.urgency !== 'Urgent' ? 'true' : 'false'}}" on-click="['chooseUrgency', row.cardId, 'Non-Urgent', row.urgency]"><span class="dot slate"></span>Non-Urgent</button>
                 </div>
               {{/if}}
             </div></td>
-            <td class="col-status">{{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{row.currentList}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-            <td class="col-client">{{#if row.requestor}}<span class="pbadge">{{row.requestor}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-status">{{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{{hl(row.currentList)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-client">{{#if row.requestor}}<span class="pbadge">{{{hl(row.requestor)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-due">
               {{#if editingDeadline === row.cardId}}
                 <input type="date" name="due-{{row.cardId}}" class="dp-input" value="{{row.trelloDue}}" on-change="['setDeadline', row.cardId]" on-blur="['cancelDeadline']" autofocus />

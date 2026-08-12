@@ -3,7 +3,8 @@
  * (Implementation Plan §5.2):
  *   1. pad ragged rows BEFORE positional parsing
  *   2. serial dates convert from the 1899-12-30 epoch
- *   3. two columns named `Type` — disambiguated by position (first = asset type)
+ *   3. two columns named `Type` — disambiguated by position (LAST = asset
+ *      type, per AGENTS.md §5: col B is the card type, col L the asset type)
  *
  * Row classification (FR-3.4, FR-3.5):
  *   - blank id+name                  → skipped silently

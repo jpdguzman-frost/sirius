@@ -55,6 +55,7 @@ const app = new Ractive({
     selected: {},
     searchQ: '',
     urgencyMenu: null, // cardId whose urgency select is open (annotation 169:26074)
+    urgencyMenuPos: { left: 0, top: 0 }, // fixed-position anchor — escapes the scroll clip
     savingUrgency: {}, // per-card in-flight write chrome (annotation 169:26364)
     pipeThumb: { needed: false, left: 0, width: 100 },
     iconSprite: ICON_SPRITE,
@@ -128,8 +129,8 @@ const app = new Ractive({
     },
     pipelineRows() {
       // annotation 17:2057 — the searchable text is precomputed per row in
-      // loadAll (r.blob), so a keystroke costs one includes() per row
-      const q = (this.get('searchQ') || '').toLowerCase();
+      // loadAll (r.blob); trimmed so the filter and highlighter agree
+      const q = (this.get('searchQ') || '').trim().toLowerCase();
       const rows = this.get('rows');
       if (!q) return rows;
       return rows.filter((r) => (r.blob || '').includes(q));
@@ -226,13 +227,30 @@ const escHtml = (s) =>
 let hlCache = { q: '', rx: null };
 app.set('hl', (text) => {
   const q = (app.get('searchQ') || '').trim();
-  const safe = escHtml(text);
-  if (!q) return safe;
+  const raw = String(text ?? '');
+  if (!q) return escHtml(raw);
   if (hlCache.q !== q) {
-    hlCache = { q, rx: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig') };
+    hlCache = { q, rx: new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'ig') };
   }
-  return safe.replace(hlCache.rx, (m) => `<mark>${m}</mark>`);
+  // match on the RAW text, escape each segment — a regex over escaped HTML
+  // splits '&amp;'-style entities (review finding 6)
+  return raw
+    .split(hlCache.rx)
+    .map((part, i) => (i % 2 ? `<mark>${escHtml(part)}</mark>` : escHtml(part)))
+    .join('');
 });
+
+/* Anything that invalidates the fixed-position urgency menu's anchor closes
+   it; outside click and Escape dismiss it (review findings 3 + 8). */
+document.addEventListener('click', (e) => {
+  if (app.get('urgencyMenu') && !e.target.closest('.ubadge-wrap, .selectmenu')) app.set('urgencyMenu', null);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && app.get('urgencyMenu')) app.set('urgencyMenu', null);
+});
+document.addEventListener('scroll', () => {
+  if (app.get('urgencyMenu')) app.set('urgencyMenu', null);
+}, true);
 
 /* Custom horizontal scroll for the pipeline table (annotation 251:6758) —
    rAF-throttled; handlers resolve their scroller from the event node, so a
@@ -282,7 +300,7 @@ async function loadShell() {
   const [me, projects] = await Promise.all([api.get('/api/me'), api.get('/api/projects')]);
   const name = me.user.name || me.user.email || '';
   const tabs = app.get('tabs').filter((t) => t.id !== 'admin');
-  if (me.user.admin) tabs.push({ id: 'admin', label: 'Admin', icon: '🔐' });
+  if (me.user.admin) tabs.push({ id: 'admin', label: 'Admin', icon: 'tabAdmin' });
   app.set({
     projects: projects.projects,
     userName: name,
@@ -466,11 +484,35 @@ async function writeDayPlan(cardId, phase, day) {
 
 /* ---------- events ---------- */
 
+/* Shared by click and the tablist arrow keys (WAI tabs pattern). */
+function selectTab(id) {
+  app.set({ activeTab: id, urgencyMenu: null });
+  if (id === 'admin' && app.get('isAdmin')) loadAdmin();
+  if (id === 'pipeline') {
+    // returning to the tab remounts .pscroll at scrollLeft 0 — recompute the
+    // slider so the affordance is never stale (review finding 5)
+    requestAnimationFrame(() => {
+      const el = document.querySelector('.pscroll');
+      if (el) updateThumb(el);
+    });
+  }
+}
+
 app.on({
   noop(ctx) { ctx.event && ctx.event.stopPropagation(); },
-  switchTab(_ctx, id) {
-    app.set('activeTab', id);
-    if (id === 'admin' && app.get('isAdmin')) loadAdmin();
+  switchTab(_ctx, id) { selectTab(id); },
+  tabKey(ctx) {
+    const key = ctx.event.key;
+    if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
+    ctx.event.preventDefault();
+    const tabs = app.get('tabs');
+    const at = tabs.findIndex((t) => t.id === app.get('activeTab'));
+    const next = tabs[(at + (key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+    selectTab(next.id);
+    requestAnimationFrame(() => {
+      const btn = document.getElementById('tab-' + next.id);
+      if (btn) btn.focus();
+    });
   },
   async switchProject() { await loadAll(); },
   signOut() { api.send('POST', '/auth/logout').then(() => window.location.reload()); },
@@ -534,21 +576,39 @@ app.on({
     ctx.event.preventDefault();
     app.toggle(`expanded.${mcNumber}`);
   },
-  openUrgencyMenu(_ctx, cardId) {
-    app.set('urgencyMenu', app.get('urgencyMenu') === cardId ? null : cardId);
+  openUrgencyMenu(ctx, cardId) {
+    if (app.get(`savingUrgency.${cardId}`)) return; // one write in flight per card (invariant 8)
+    if (app.get('urgencyMenu') === cardId) {
+      app.set('urgencyMenu', null);
+      return;
+    }
+    // fixed positioning escapes the .pscroll clip; flip upward near the
+    // viewport bottom (review finding 3)
+    const rect = ctx.node.getBoundingClientRect();
+    const menuH = 92;
+    const up = rect.bottom + menuH + 3 > window.innerHeight;
+    app.set({
+      urgencyMenu: cardId,
+      urgencyMenuPos: { left: Math.round(rect.left), top: Math.round(up ? rect.top - menuH - 3 : rect.bottom + 3) },
+    });
   },
   // annotations 169:26364/26074: optimistic write with 'saving…' chrome and
-  // rollback — Sirius never shows a state Trello does not hold (FR-4.7)
+  // rollback — Sirius never shows a state Trello does not hold (FR-4.7).
+  // The row is re-found by cardId at every step: loadAll may have replaced
+  // the rows array while the PATCH was in flight (review finding 2).
   async chooseUrgency(_ctx, cardId, next, current) {
     app.set('urgencyMenu', null);
-    if (next === current) return;
-    const idx = app.get('rows').findIndex((r) => r.cardId === cardId);
-    app.set(`rows.${idx}.urgency`, next);
+    if (next === current || app.get(`savingUrgency.${cardId}`)) return;
+    const setUrgency = (value) => {
+      const idx = app.get('rows').findIndex((r) => r.cardId === cardId);
+      if (idx >= 0) app.set(`rows.${idx}.urgency`, value);
+    };
+    setUrgency(next);
     app.set(`savingUrgency.${cardId}`, true);
     try {
       await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/urgency`, { urgent: next === 'Urgent' });
     } catch (err) {
-      app.set(`rows.${idx}.urgency`, current);
+      setUrgency(current);
       app.set('banner', `Urgency write failed — reverted. ${err.detail && err.detail.message ? err.detail.message : err.message}`);
       setTimeout(() => app.set('banner', ''), 6000);
     } finally {

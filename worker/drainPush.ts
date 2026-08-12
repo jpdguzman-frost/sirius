@@ -16,7 +16,7 @@ import { AresClient } from '../src/services/ares.ts';
 import { assignDisplayIds, mapTrello } from '../src/services/mapper.ts';
 import { Deliverable, Project, PushEvent, SyncRun, WorkCard } from '../src/models/index.ts';
 import type { Env } from '../src/config/env.ts';
-import { makeClient, syncProject, upsertDeliverable, upsertWorkCard } from './syncAres.ts';
+import { deriveWorkSpans, makeClient, syncProject, upsertDeliverable, upsertWorkCard } from './syncAres.ts';
 
 const PUSH_HEALTHY_MS = 30 * 60 * 1000;
 const RECONCILE_WHILE_HEALTHY_MS = 60 * 60 * 1000;
@@ -42,6 +42,7 @@ export async function reconcileCard(
   }
   if (mapped.workCards.length > 0) {
     await upsertWorkCard(project._id, mapped.workCards[0]!);
+    await deriveWorkSpans(project._id, [cardId]); // Started/Done follow the list move
     return 'work_card';
   }
   // Scoped out (lost the project label) or an unlinked task: locally known

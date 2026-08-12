@@ -8,15 +8,11 @@ import { Router } from 'express';
 import { ensureAuthenticated } from '../auth/session.ts';
 import { ensureProjectMember } from '../auth/membership.ts';
 import { loadProjectModel } from '../services/model-grid.ts';
-import { loadPipeline, toMilestones } from '../services/pipeline.ts';
+import { loadPipeline, manilaToday, toMilestones } from '../services/pipeline.ts';
 import { detectConflicts, replotList } from '../services/conflicts.ts';
 import { dayCapacities } from '../../lib/dayplan.ts';
 import { ConflictAcknowledgement, MilestoneDayPlan, PushEvent, Sprint, SyncRun } from '../models/index.ts';
 
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 export function deliverablesRouter(): Router {
   const router = Router();
@@ -27,7 +23,7 @@ export function deliverablesRouter(): Router {
     ensureProjectMember,
     async (_req, res) => {
       const projectId = res.locals.project._id;
-      const pipeline = await loadPipeline(projectId, today());
+      const pipeline = await loadPipeline(projectId, manilaToday());
       const sprints = await Sprint.find({ project_id: projectId }).sort({ position: 1 }).lean();
       const lastAres = await SyncRun.findOne({ project_id: projectId, source: 'ares' }).sort({ at: -1 }).lean();
       // FR-8.6 + FR-9.6: push channel freshness beside the poll freshness.
@@ -54,7 +50,7 @@ export function deliverablesRouter(): Router {
     ensureProjectMember,
     async (_req, res) => {
       const projectId = res.locals.project._id;
-      const pipeline = await loadPipeline(projectId, today());
+      const pipeline = await loadPipeline(projectId, manilaToday());
       const milestones = toMilestones(pipeline.rows);
 
       // FR-12: join day placements. A placement is valid only while the

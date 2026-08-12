@@ -6,7 +6,7 @@
  */
 
 import mongoose, { Types } from 'mongoose';
-import { workdaysBetween } from '../../lib/calendar.ts';
+import { parseDate, workdaysBetween } from '../../lib/calendar.ts';
 import { forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { loadProjectModel } from './model-grid.ts';
@@ -16,6 +16,17 @@ import type { Milestone } from './conflicts.ts';
 
 const localDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/* Invariant 11: raw instants convert to MANILA calendar days regardless of
+   the host timezone (en-CA gives YYYY-MM-DD). */
+const MANILA_DAY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Manila',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+export const manilaDate = (d: Date): string => MANILA_DAY.format(d);
+export const manilaToday = (): string => MANILA_DAY.format(new Date());
 
 const mondayOf = (d: Date) => {
   const t = new Date(d);
@@ -109,14 +120,18 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
     spanByMc.set(w.mc_number, span);
   }
   // Finalize once per GROUP: earliest start; latest done only when EVERY
-  // task is done; cycle in workdays. Rows just copy their group's result.
+  // task is done; cycle in workdays. Instants become MANILA calendar days
+  // first (invariant 11), then midnight-normalized dates feed the workday
+  // walk — no host-TZ day shifts, no clock-time off-by-one.
   const groupSpan = new Map<string, { started: string | null; done: string | null; cycleDays: number | null }>();
   for (const [mc, s] of spanByMc) {
     const done = s.allDone ? s.maxDone : null;
+    const startedIso = s.minStart ? manilaDate(s.minStart) : null;
+    const doneIso = done ? manilaDate(done) : null;
     groupSpan.set(mc, {
-      started: s.minStart ? localDate(s.minStart) : null,
-      done: done ? localDate(done) : null,
-      cycleDays: s.minStart && done ? workdaysBetween(s.minStart, done) : null,
+      started: startedIso,
+      done: doneIso,
+      cycleDays: startedIso && doneIso ? workdaysBetween(parseDate(startedIso), parseDate(doneIso)) : null,
     });
   }
 

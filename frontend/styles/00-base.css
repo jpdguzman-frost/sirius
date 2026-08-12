@@ -26,6 +26,9 @@ body {
 }
 
 .view { padding: var(--space-24) var(--page-inset) 48px; }
+/* the five unmigrated tabs keep their pre-phase-13 grey wash so their
+   white cards stay delineated; Pipeline is white per the frame */
+.view.legacybg { background: #f7f8fa; min-height: 60vh; }
 
 .banner {
   background: var(--amber-100);

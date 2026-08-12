@@ -128,6 +128,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 }
 .ptable td { padding: 16px; border-bottom: 1px solid var(--slate-100); vertical-align: top; }
 .ptable tr.prow:focus { outline: 2px solid var(--blue-500); outline-offset: -2px; }
+.ptable tr.blocked td { background: var(--red-50); } /* visible at every scroll position (review finding 10) */
 .ptable tr.ptask td { background: var(--slate-50); font-size: var(--text-label); color: var(--slate-700); }
 .ptable .col-mc { width: 132px; min-width: 132px; }
 .ptable .col-name { width: auto; min-width: 158px; }
@@ -175,11 +176,14 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
   width: 111px; justify-content: space-between; cursor: pointer;
   font-family: var(--font-sans); padding: 5px 5px 4px 8px;
 }
-.ubadge.urgent { background: var(--red-500); border-color: var(--red-300); color: var(--red-50); }
+/* annotation 169:26364: destructive-light bg, destructive-strong text,
+   solid red-300 border, ⚡ prefix (review finding 12) */
+.ubadge.urgent { background: var(--status-destructive-light); border-color: var(--red-300); color: var(--status-destructive-strong); }
 .ubadge.nonurgent { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
 .ubadge.saving { opacity: 0.5; pointer-events: none; }
+/* fixed so it escapes the .pscroll clip (review finding 3); coords set inline */
 .selectmenu {
-  position: absolute; left: 0; top: calc(100% + 3px); width: 116px; z-index: 30;
+  position: fixed; width: 116px; z-index: 30;
   background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
   box-shadow: var(--shadow-xs); padding: var(--space-4); display: flex; flex-direction: column;
 }

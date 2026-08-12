@@ -12,7 +12,7 @@ import { Types } from 'mongoose';
 import { ensureAuthenticated, type SessionUser } from '../auth/session.ts';
 import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
-import { loadPipeline, toMilestones } from '../services/pipeline.ts';
+import { loadPipeline, manilaToday, toMilestones } from '../services/pipeline.ts';
 import { ConflictAcknowledgement, Deliverable, MilestoneDayPlan, Sprint } from '../models/index.ts';
 import { sprintIssues, suggestPlan, type PlannerCard } from '../../lib/planner.ts';
 import { buildWeeks } from '../../lib/calendar.ts';
@@ -20,10 +20,6 @@ import { isHolidayDate, weekDays } from '../../lib/dayplan.ts';
 
 const DATE_ONLY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-const todayLocal = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 const planningPatch = z
   .object({
@@ -273,7 +269,7 @@ export function scheduleRouter(): Router {
       const actor = (req.user as SessionUser).email;
       const { cardId, phase, day } = body.data;
 
-      const pipeline = await loadPipeline(projectId, todayLocal());
+      const pipeline = await loadPipeline(projectId, manilaToday());
       const milestone = toMilestones(pipeline.rows).find((m) => m.cardId === cardId && m.phase === phase);
       if (!milestone) {
         res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } }); // unslotted/unforecastable cards have no milestone
