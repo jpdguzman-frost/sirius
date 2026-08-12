@@ -130,7 +130,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .ptable tr.prow:focus { outline: 2px solid var(--blue-500); outline-offset: -2px; }
 .ptable tr.blocked td { background: var(--red-50); } /* visible at every scroll position (review finding 10) */
 .ptable tr.ptask td { background: var(--slate-50); font-size: var(--text-label); color: var(--slate-700); }
-.ptable .col-mc { width: 132px; min-width: 132px; }
+.ptable .col-mc { width: 150px; min-width: 150px; } /* 132px in frame; 150px team fine-tune 2026-08-12 */
 .ptable .col-name { width: auto; min-width: 158px; }
 .ptable .col-type { width: 140px; min-width: 140px; }
 .ptable .col-diff, .ptable .col-urgency { width: 144px; min-width: 144px; }
