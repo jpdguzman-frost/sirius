@@ -45,7 +45,7 @@ async function fixture(writesEnabled: boolean | undefined) {
 }
 
 describe('G7 observation mode — per-project write switch', () => {
-  it('a read-only project refuses both registry writes with WRITES_DISABLED', async () => {
+  it('a read-only project refuses every registry write with WRITES_DISABLED', async () => {
     const { p, agent } = await fixture(false);
     const urgency = await agent
       .patch(`/api/projects/${p._id}/deliverables/c1/urgency`)
@@ -57,10 +57,16 @@ describe('G7 observation mode — per-project write switch', () => {
       .send({ date: '2026-09-01' })
       .expect(403);
     expect(deadline.body.error.code).toBe('WRITES_DISABLED');
+    const difficulty = await agent
+      .patch(`/api/projects/${p._id}/deliverables/c1/difficulty`)
+      .send({ difficulty: 'Hard' })
+      .expect(403);
+    expect(difficulty.body.error.code).toBe('WRITES_DISABLED');
     // nothing changed locally either
     const doc = await Deliverable.findOne({ trello_card_id: 'c1' }).orFail();
     expect(doc.urgency).toBe('Non-Urgent');
     expect(doc.trello_due ?? null).toBeNull();
+    expect(doc.difficulty ?? null).toBeNull();
   });
 
   it('a pre-flag project (field absent) keeps its writes reachable', async () => {

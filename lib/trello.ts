@@ -1,18 +1,23 @@
 /**
- * lib/trello.ts — THE write path (invariant 2 as amended 2026-08-04).
- * Sirius writes exactly what the write registry enumerates
- * (specs/001-sirius-v1/contracts/trello-write.md) and nothing else:
+ * lib/trello.ts — THE write path (invariant 2 as amended 2026-08-04,
+ * registry grown 2026-08-12). Sirius writes exactly what the write registry
+ * enumerates (specs/001-sirius-v1/contracts/trello-write.md) and nothing else:
  *   W1  add/remove the `Urgent` label — absence means non-urgent
  *   W2  the card due date (set or clear)
+ *   W3  the `Difficulty: …` label (swap; BRD-§9-A1)
  * Credential: dedicated integration account, server-side env only
  * (TRELLO_API_KEY + TRELLO_TOKEN; TRELLO_WRITE_TOKEN accepted).
  */
+
+export type Difficulty = 'Easy' | 'Medium' | 'Hard';
 
 export interface TrelloWriter {
   ensureUrgentLabel(boardId: string): Promise<string>;
   setUrgency(cardId: string, boardId: string, urgent: boolean): Promise<void>;
   /** W2: dueIso is a full ISO instant, or null to clear the due date. */
   setDue(cardId: string, dueIso: string | null): Promise<void>;
+  /** W3: swap the card's `Difficulty: …` label to the given value. */
+  setDifficulty(cardId: string, boardId: string, difficulty: Difficulty): Promise<void>;
 }
 
 /**
@@ -37,6 +42,8 @@ export function composeDueIso(dateOnly: string, preserveFrom?: Date | null): str
 
 const BASE = 'https://api.trello.com/1';
 export const URGENT_LABEL_NAME = 'Urgent';
+export const DIFFICULTY_LABEL_PREFIX = 'Difficulty: ';
+const DIFFICULTY_LABEL_COLOR: Record<Difficulty, string> = { Easy: 'green', Medium: 'yellow', Hard: 'red' };
 
 export class TrelloClient implements TrelloWriter {
   private labelCache = new Map<string, string>();
@@ -93,6 +100,51 @@ export class TrelloClient implements TrelloWriter {
   async setDue(cardId: string, dueIso: string | null): Promise<void> {
     const value = dueIso === null ? 'null' : encodeURIComponent(dueIso);
     await this.call('PUT', `/cards/${cardId}?due=${value}`);
+  }
+
+  /** Find or create one `Difficulty: …` taxonomy label (production boards carry all three — invariant 17). */
+  private async ensureDifficultyLabel(boardId: string, difficulty: Difficulty): Promise<string> {
+    const name = `${DIFFICULTY_LABEL_PREFIX}${difficulty}`;
+    const cacheKey = `${boardId}:${name}`;
+    const cached = this.labelCache.get(cacheKey);
+    if (cached) return cached;
+    const labels = await this.call<Array<{ id: string; name: string }>>('GET', `/boards/${boardId}/labels`);
+    let label = labels.find((l) => l.name === name);
+    if (!label) {
+      label = await this.call<{ id: string; name: string }>(
+        'POST',
+        `/boards/${boardId}/labels?name=${encodeURIComponent(name)}&color=${DIFFICULTY_LABEL_COLOR[difficulty]}`,
+      );
+    }
+    this.labelCache.set(cacheKey, label.id);
+    return label.id;
+  }
+
+  /**
+   * W3 (contracts/trello-write.md): a label SWAP, not atomic. The new label
+   * is added BEFORE stale `Difficulty: …` labels are removed, so the card
+   * never passes through a no-difficulty state; a failed stale removal
+   * restores the just-added label and reports failure.
+   */
+  async setDifficulty(cardId: string, boardId: string, difficulty: Difficulty): Promise<void> {
+    const targetId = await this.ensureDifficultyLabel(boardId, difficulty);
+    const current = await this.call<Array<{ id: string; name: string }>>('GET', `/cards/${cardId}/labels`);
+    const stale = current.filter((l) => l.name.startsWith(DIFFICULTY_LABEL_PREFIX) && l.id !== targetId);
+    const added = !current.some((l) => l.id === targetId);
+    if (added) {
+      await this.call('POST', `/cards/${cardId}/idLabels?value=${targetId}`);
+    }
+    try {
+      for (const l of stale) {
+        await this.call('DELETE', `/cards/${cardId}/idLabels/${l.id}`);
+      }
+    } catch (err) {
+      // restore the original state; if this also fails the card wears two
+      // difficulty labels until the next ARES read reconciles it — the local
+      // value still rolls back (invariant 8)
+      if (added) await this.call('DELETE', `/cards/${cardId}/idLabels/${targetId}`).catch(() => {});
+      throw err;
+    }
   }
 }
 

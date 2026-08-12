@@ -1,7 +1,7 @@
 /**
  * Write-registry routes — THE Trello write paths (invariants 2, 8, 17;
- * contracts/trello-write.md): W1 urgency (T066; FR-4.6, FR-4.7) and
- * W2 deadline (T080; FR-9.1).
+ * contracts/trello-write.md): W1 urgency (T066; FR-4.6, FR-4.7),
+ * W2 deadline (T080; FR-9.1), W3 difficulty (T111; BRD-§9-A1).
  *
  * Order of operations makes the rollback guarantee structural: Trello is
  * written FIRST, and the local field changes only after Trello succeeded —
@@ -152,6 +152,46 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         const message = (err as Error).message;
         await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'due.set_failed', entity: 'deliverable', entity_id: ctx.cardId, before: { trello_due: before }, after: { attempted: after, error: message } });
         await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, due: after } });
+        res.status(502).json({ ok: false, error: { code: 'TRELLO_WRITE_FAILED', message } });
+      }
+    },
+  );
+
+  // W3 — difficulty label swap (BRD-§9-A1, approved 2026-08-12): the
+  // forecast re-keys from the persisted value at read time (difficulty × lane).
+  router.patch(
+    '/api/projects/:projectId/deliverables/:cardId/difficulty',
+    ensureAuthenticated,
+    ensureProjectMember,
+    async (req, res) => {
+      const body = z.object({ difficulty: z.enum(['Easy', 'Medium', 'Hard']) }).strict().safeParse(req.body);
+      if (!body.success) {
+        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
+        return;
+      }
+      const ctx = await writeGuards(env, trello, req, res);
+      if (!ctx) return;
+
+      const before = ctx.doc.difficulty ?? null;
+      const after = body.data.difficulty;
+      if (before === after) {
+        // no-op guard: no Trello call, no audit row
+        res.status(400).json({ ok: false, error: { code: 'NO_OP', message: 'The difficulty already has this value.' } });
+        return;
+      }
+
+      try {
+        await ctx.trello.setDifficulty(ctx.cardId, ctx.boardId, after);
+        ctx.doc.difficulty = after;
+        await ctx.doc.save();
+        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'difficulty.set', entity: 'deliverable', entity_id: ctx.cardId, before: { difficulty: before }, after: { difficulty: after } });
+        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, difficulty: after } });
+        res.json({ ok: true, difficulty: after });
+      } catch (err) {
+        // local state untouched — the UI's optimistic change reverts (invariant 8)
+        const message = (err as Error).message;
+        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'difficulty.set_failed', entity: 'deliverable', entity_id: ctx.cardId, before: { difficulty: before }, after: { attempted: after, error: message } });
+        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, difficulty: after } });
         res.status(502).json({ ok: false, error: { code: 'TRELLO_WRITE_FAILED', message } });
       }
     },

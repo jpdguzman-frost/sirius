@@ -34,6 +34,7 @@ class StubTrello implements TrelloWriter {
     if (this.fail) throw new Error('Trello PUT /cards failed: HTTP 500');
     this.dueCalls.push({ cardId, dueIso });
   }
+  async setDifficulty(): Promise<void> {} // W3 lives in difficulty-write.test.ts
 }
 
 async function setup(envOver: Record<string, string> = {}, deliverable: Record<string, unknown> = {}) {

@@ -34,6 +34,7 @@ class StubTrello implements TrelloWriter {
     this.calls.push({ cardId, boardId, urgent });
   }
   async setDue(): Promise<void> {} // W2 lives in deadline-write.test.ts
+  async setDifficulty(): Promise<void> {} // W3 lives in difficulty-write.test.ts
 }
 
 async function setup(envOver: Record<string, string> = {}) {
