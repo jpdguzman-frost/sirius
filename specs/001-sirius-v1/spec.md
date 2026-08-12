@@ -16,7 +16,7 @@ Frost delivers design work to several clients through Trello boards, tracked in 
 
 Sirius replaces the *planning and forecasting* half of that system: a pipeline register, a sprint schedule, an operations deadline view, and a delivery forecast. Trello remains where work happens. The intake sheet remains where clients file requests. Sirius reads both and owns neither. It is **multi-project from the outset** — GCash: Design Support is the first engagement, not the only one.
 
-Sirius owns only planning decisions: which week a deliverable is slotted, confidence, review SLA overrides, status notes, pins. It writes **one thing** back anywhere: an `Urgent` label on a Trello card.
+Sirius owns only planning decisions: which week a deliverable is slotted, confidence, review SLA overrides, status notes, pins — and, since 2026-08-12, frost notes on intake requests and day placements on Deadlines. It writes back only what the write registry enumerates — the `Urgent` label and the card due date, both on Trello — nothing else, anywhere (amended 2026-08-04; was urgency-only).
 
 The business case is not headcount. It is that a forecast becomes defensible, scheduling conflicts surface before they bite, and the manual reconciliation between two spreadsheets and a board stops consuming PM time.
 
@@ -72,6 +72,7 @@ The Operations Lead opens the read-only Deadlines view for a month and sees, per
 2. **Given** a forecast date after the client deadline, **When** Deadlines renders, **Then** the row flags late, the render bar is red, and the item is listed for replot (AC-18).
 3. **Given** an acknowledged conflict, **When** a card involved is added, removed, replotted or moves phase, **Then** the acknowledgement lapses and the conflict resurfaces (FR-6.7, BR-9a).
 4. **Given** an acknowledged conflict, **When** viewing Deadlines, **Then** card-level indicators (red bar, late flag) remain visible — never suppressed (BR-9a).
+5. **Given** a week expanded to its Mon–Fri days, **When** a milestone is dragged to another day, **Then** the week never changes and the day columns still sum to the weekly capacity — holidays take zero (AC-22, AC-23, FR-12 — added 2026-08-12).
 
 ---
 
@@ -104,6 +105,7 @@ A Frost user opens Requests and sees a read-only mirror of the project's intake 
 1. **Given** the current intake sheet, **When** sync runs, **Then** 495 rows import, 495 are reserved, 8 are rejected (AC-6).
 2. **Given** the deadline join on MC number, **When** Pipeline renders, **Then** deadline coverage rises from ~1/269 to ~169/269 (AC-8).
 3. **Given** a row deleted in the sheet, **When** the next sync runs, **Then** the request is marked inactive with history intact — never deleted (AC-9, FR-8.4).
+4. **Given** a request with only a remark, **When** viewed, **Then** status is unchanged; **Given** the clarification flag set with a reason, **Then** status reads *With Clarification* and the FOR CLARIFICATION tile counts it (AC-21, FR-11 — added 2026-08-12).
 
 ---
 
@@ -150,6 +152,9 @@ A Frost user switches project and every view scopes to it — no data bleeds bet
 - Non-Frost account or Frost account off the allow-list: denied with a clear reason (AC-1, AC-2).
 - Urgency write fails mid-flight: local state rolls back (FR-4.7).
 - Trello list names are free text: classified Pending / Ongoing / Done by configurable keyword rules (BR-10).
+- A multi-deliverable MC (MC-655 × 3) carries **one** frost note — the note attaches to the request row, not to each deliverable (FR-11.1).
+- A deliverable whose MC group has no work cards weighs exactly 1 (BR-6c); the 20 unkeyed cards belong to no group and weigh into none.
+- A week whose Mon–Fri are all holidays: every day takes zero capacity and rejects drops; the week's milestones still render (FR-12.4).
 
 ## Requirements *(mandatory)*
 
@@ -188,6 +193,8 @@ IDs and text are the BRD's, preserved verbatim. Priority M = must, S = should.
 | FR-3.4 | Skip pre-allocated MC rows silently and report the count | M |
 | FR-3.5 | Surface unparseable rows with row number, reason and a link | M |
 | FR-3.6 | Filter by filed / unfiled / missing deadline | S |
+
+*FR-3.1 and FR-3.3 amended 2026-08-12 by FR-11: the mirror itself stays read-only with no write-back, but each request may carry a Sirius-owned frost note stored beside it (never in the sheet), and status becomes three-state per FR-11.3.*
 
 #### FR-4 — Pipeline
 
@@ -285,6 +292,29 @@ IDs and text are the BRD's, preserved verbatim. Priority M = must, S = should.
 
 *Clarified 2026-08-05 (JP): admin flag model (first admin: JP) · core actions only (no role management in UI) · new tab beside the five · built immediately so the WCAG pass covers it. The four sign-in checks are untouched — admin is authorization layered after them; no constitution amendment required.*
 
+#### FR-11 — Frost notes *(added 2026-08-12, JP-directed — adopted from product build spec v1.1 §3.7–3.8; not in BRD v2.2)*
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-11.1 | Each intake request may carry one Sirius-owned frost note — a free-text remark, and a clarification flag with a required reason — keyed `(project_id, mc_number)` | M |
+| FR-11.2 | Notes are never written to the intake sheet; the service account keeps `spreadsheets.readonly`, so the permission enforces the rule (FR-8.2, FR-8.3 unchanged) | M |
+| FR-11.3 | Request status becomes three-state, derived and never stored: Trello card exists → *In Pipeline*; else clarification flag → *With Clarification*; else *For Filing* (amends FR-3.3) | M |
+| FR-11.4 | A remark alone never changes status; only the clarification flag does | M |
+| FR-11.5 | Requests gains a FOR CLARIFICATION tile that counts and filters flagged requests | M |
+| FR-11.6 | Note edits are inline, optimistic with rollback, and every change writes `audit_log` (invariant 10) | M |
+| FR-11.7 | Routes live under the project scope (`/api/projects/:projectId/…`) behind session + membership like every other route (NFR-6) — the build spec's bare `/api/frost-notes` path is illustrative only | M |
+
+#### FR-12 — Deadlines daily plotting *(added 2026-08-12, JP-directed — adopted from product build spec v1.1 §6.2; not in BRD v2.2)*
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-12.1 | A week header on Deadlines expands to a Mon–Fri day grid; one week open at a time | M |
+| FR-12.2 | Milestones (deliverable × phase) drag between days with pointer events; a keyboard equivalent exists (NFR-9) | M |
+| FR-12.3 | Day placement never changes the week; stored per `(project_id, deliverable, phase)`; absent means *follow the forecast* | M |
+| FR-12.4 | Day capacity distributes the week's capacity across non-holiday weekdays by largest remainder — day columns sum exactly to the weekly capacity; holidays take zero and reject drops | M |
+| FR-12.5 | Day placements are optimistic with rollback and audited (invariant 10) | M |
+| FR-12.6 | When a milestone's week changes — drag, suggest apply, or deadline change — its day placement lapses back to the forecast default | M |
+
 ### Business Rules
 
 Preserved verbatim from BRD §7.
@@ -312,6 +342,8 @@ Preserved verbatim from BRD §7.
 *Caveat:* those reference weeks count every card on the board, including work cards and ops cards, while Sirius plans deliverables. Expect the deliverable-level typical to be lower, and revise once ARES can report it.
 
 **BR-6b — Hard mix ceiling.** Card count alone cannot distinguish a week of 120 easy cards from 120 hard ones, so a second axis applies. Difficulty weights (Easy 1, Medium 2, Hard 4) are used *only* for this test. Measured across 27 weeks on board `hLL7WW2V`: hard share median **8.3%** (ideal), p85 **12.9%** (ceiling), observed max 20.4%. Weeks above the median ran a median cycle of **24.1 h against 19.4 h** — roughly 24% slower per card. A week over the ideal is flagged amber, over the ceiling red.
+
+**BR-6c — Row weight converts rows to card-equivalents.** *(Added 2026-08-12 from build spec v1.1 §5.4; resolves the BR-6a caveat.)* A schedule row is a deliverable, but capacity (BR-6a) counts every card. Each row therefore weighs `1 + (its MC group's work cards ÷ the group's deliverables)`: MC-805, with 13 deliverables and 40 work cards, weighs 4.08 per row and 53 as a group; the verified board sums to **478 = 269 deliverables + 209 work cards** (the 20 unkeyed cards weigh into no group). The weight feeds the weekly footer, the over-capacity tint and the BR-6 *over capacity* conflict. It does **not** feed the hard-mix test (BR-6b keeps its own difficulty weights) and does **not** alter Suggest plan's validated placement arithmetic (`lib/planner.ts` counts rows, golden-locked — invariant 5). *Pending product-team clarification via the v1.1 errata: the count basis on Deadlines — build spec §6.1's example ("3 work cards counts 3") disagrees with this formula (4); until answered, Deadlines uses this same weight.*
 
 **BR-7 — Smart plan.** Order by urgency, then deadline, then difficulty descending. A week fills at the empirical throughput ceiling for its difficulty mix. Blocked cards are not scheduled into the current week. Pinned rows are immovable. Nothing applies without explicit acceptance.
 
@@ -354,6 +386,8 @@ NFR-3 amended 2026-08-04: with ARES push live (FR-9.4) the working target is **<
 - **Intake request**: One row of the project's intake sheet — MC #, name, requestor, type, use case, brief, deadline. Read-only mirror; vanished rows go inactive, never deleted.
 - **Card event**: A single Trello lane movement with its timestamp — the raw material for cycle times and the empirical model.
 - **Model grid / throughput grid**: Per-project percentiles (Average / 70 / 85 / 95) of design and review time keyed on difficulty × lane, and cards-per-week throughput per difficulty, recomputed on a schedule from a rolling window, each with visible sample sizes.
+- **Frost note**: A Sirius-owned annotation on an intake request — remark, clarification flag and reason — keyed (project, MC number); one per request, never written to the sheet (added 2026-08-12, FR-11).
+- **Milestone day placement**: A Mon–Fri day choice for one deliverable phase inside its slotted week; absent means follow the forecast; lapses when the week changes (added 2026-08-12, FR-12).
 - **Conflict acknowledgement**: A dismissal keyed on week + rule + the exact cards involved; lapses when the situation changes.
 - **Audit log entry**: Immutable record of every state change — who, what, before, after, when.
 - **Sync run**: One execution of an ingestion or write job — source, outcome, stats, error.
@@ -403,16 +437,22 @@ Preserved verbatim from BRD §10. These define "done" for v1.
 | AC-18 | Forecast past deadline | Row late, bar red, listed for replot |
 | AC-19 | Sync service unavailable | Last good data shown; error surfaced; app usable |
 | AC-20 | Keyboard-only scheduling | A row can be slotted without a pointer |
+| AC-21 | Frost note: remark vs flag | A remark alone leaves status unchanged; the clarification flag flips it to *With Clarification*; both audited |
+| AC-22 | 4-day week (one holiday) expanded to days | Day columns sum exactly to the weekly capacity; the holiday takes zero and rejects drops |
+| AC-23 | Day drag, then week replot | Day drag never changes the week; the week change lapses the day placement |
+| AC-24 | Weekly load on the verified board shape | Rows weigh 1 + tasks ÷ deliverables; the board totals 478 card-equivalents |
+
+AC-21–AC-24 added 2026-08-12 (FR-11, FR-12, BR-6c — from build spec v1.1); AC-1–AC-20 remain the BRD's verbatim.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-1**: All 20 acceptance criteria (AC-1–AC-20) pass — as automated tests where testable.
+- **SC-1**: All acceptance criteria (AC-1–AC-24: 20 from the BRD, 4 added 2026-08-12) pass — as automated tests where testable.
 - **SC-2**: Pipeline deadline coverage rises from ~1/269 to ~169/269 via the sheet join, with no behaviour change asked of the team (AC-8).
 - **SC-3**: The forecast users see derives solely from measured delivery data, with provenance and sample sizes visible (AC-11); the spreadsheet formula — which overstates review waits 2.6–4.6× — is never exposed (BR-2, BR-3). Release-gated on the PM recognising the dates.
 - **SC-4**: Pipeline and Sprint Schedules load in < 2 s at p95 with 5,000 cards; drag feedback < 100 ms; a Trello change reaches Sirius in < 15 min (NFR-1, NFR-2, NFR-3).
-- **SC-5**: Zero writes to any source system except the `Urgent` label on Trello cards; every write audited; a failed write leaves no divergent state (FR-4.6, FR-4.7, FR-2.6).
+- **SC-5**: Zero writes to any source system except the enumerated write registry — the `Urgent` label and the card due date on Trello (amended 2026-08-04); every write audited; a failed write leaves no divergent state (FR-4.6, FR-4.7, FR-9.1–9.3, FR-2.6).
 - **SC-6**: A scheduling week's conflicts are detected, explained, and individually acknowledgeable per BR-6/BR-9a — with card-level indicators never suppressed.
 - **SC-7**: A row can be slotted keyboard-only (AC-20, NFR-9 — WCAG 2.1 AA).
 - **SC-8**: Availability 99.5% during PHT business hours (NFR-4); audit retained 24 months (NFR-7); daily backups with quarterly restore tests (NFR-8).
@@ -437,7 +477,7 @@ Preserved verbatim from BRD §10. These define "done" for v1.
 | Client login and any client-visible surface | v2 |
 | Request filing inside the platform | v3 |
 | Google Chat notifications | v2 (they address clients) |
-| Any write-back to Trello or Sheets — except the `Urgent` label (§Data Protection) | Not planned |
+| Any write-back to Trello or Sheets — except the enumerated write registry: `Urgent` label + card due date (amended 2026-08-04; §Data Protection) | Not planned |
 | Per-designer resource assignment | Later |
 | Manual time tracking | Not planned — derived from Trello activity |
 | Native mobile apps | Not planned |
@@ -450,7 +490,7 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 
 - Frost staff only; all under NDA. No external users until v2, which changes the risk profile materially.
 - ARES and Google Sheets are read-only by scope.
-- **One exception: urgency.** Sirius adds or removes a single label named `Urgent` on a single Trello card, and writes nothing else anywhere. This requires a Trello token with write scope. Trello cannot scope a token per board, so it must be a **dedicated integration account** holding membership of the Design Support boards only — never a personal admin token. Every write is recorded in the audit log, and a failure rolls the local change back.
+- **One exception class: the write registry.** Sirius adds or removes a single label named `Urgent` and sets or clears the card due date on a single Trello card (amended 2026-08-04 — registry W1 + W2), and writes nothing else anywhere. This requires a Trello token with write scope. Trello cannot scope a token per board, so it must be a **dedicated integration account** holding membership of the Design Support boards only — never a personal admin token. Every write is recorded in the audit log, and a failure rolls the local change back.
 - Encryption in transit and at rest; audit logging; automatic offboarding.
 - *Note carried from the BRD:* §9's statement that "write is impossible by permission" predates the urgency write and awaits amendment (tracked in STATE.md).
 
@@ -469,6 +509,15 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 - **ARES push chosen over polling (NFR-3 → < 1 min target)**: ARES gains an outbound webhook feature (built by a separate agent from `docs/ARES_PUSH_BUILD_SPEC.md`); Sirius consumes it per `contracts/ares-push.md` on the notification-then-read pattern. The 15-min poll remains as reconcile fallback.
 - **Sequencing**: build now — the pilot ships with deadline writes and push, widening the pre-pilot security review accordingly (phase 10, T077–T086).
 - **Truth for Trello-owned fields**: Trello, always — manual Trello changes flow back via push and reconcile into Sirius, including the two written fields (FR-9.5).
+
+### Session 2026-08-12 (JP) — build spec v1.1 alignment
+
+- The product team's build spec v1.1 (`docs/sirius-build-spec_v1.1.md`) was reviewed against the live system; corrections returned as `docs/sirius-build-spec_v1.1_errata.md`.
+- **W2 confirmed standing**: the doc's §4.2 "open decision" on writing the Trello due date predates the 2026-08-04 amendment. The decision holds — a Sirius deadline edit writes the Trello due date; no Sirius-local override layer exists or will be built.
+- **Frost notes adopted** → FR-11, AC-21 (build spec §3.7–3.8).
+- **Daily plotting adopted** → FR-12, AC-22/AC-23 (build spec §6.2).
+- **Weighted row load adopted** → BR-6c, AC-24 (build spec §5.4) — resolves the BR-6a caveat by converting deliverable rows to card-equivalents.
+- One question back to the product team (in the errata): the Deadlines count basis — §6.1's example disagrees with §5.4's formula. Default until answered: BR-6c weight everywhere.
 
 ## Open Decisions
 

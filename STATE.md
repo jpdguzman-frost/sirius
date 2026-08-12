@@ -1,6 +1,6 @@
 # STATE.md — Sirius Build State
 
-_Last updated: 2026-08-04 · Update at the end of every working session._
+_Last updated: 2026-08-12 · Update at the end of every working session._
 
 ## Phase status
 
@@ -19,6 +19,7 @@ _Last updated: 2026-08-04 · Update at the end of every working session._
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 backup/restore ✅, T086 ✅; T073/T091 ⏸ (team UI update), T075 sweep pending, non-member 403 parked | G7 = real board, JP gate |
 | 10 | Two-way sync (due-date write + ARES push) | **DONE 2026-08-04** — push LIVE, 37s Trello→Sirius, fallback drill passed (T077–T086) | FR-9.6 observed live |
 | 11 | Admin panel (FR-10) | **DONE 2026-08-04** (T087–T090); T091 ⏸ with T073 | JP first admin; live |
+| 12 | Build-spec v1.1 adoptions (frost notes FR-11, daily plotting FR-12, weighted load BR-6c) | **specced 2026-08-12** (T092–T099) — awaiting JP build go | errata sent to product team; count-basis answer pending |
 
 ## Decisions needed from JP (blocking)
 
@@ -41,6 +42,8 @@ _Last updated: 2026-08-04 · Update at the end of every working session._
 | OD-5 | Is `Client Approval` ongoing or done | Phase 4 keyword rules |
 | OD-6 | Which projects in v1 beyond GCash | Seed data |
 | OD-7 | Retention for closed requests | Phase 9 |
+| errata Q | Deadlines count basis: build spec §5.4 weight (4) vs §6.1 example (3) — asked in `docs/sirius-build-spec_v1.1_errata.md`; owner: product team | T096/T098 final form (BR-6c default until answered) |
+| — | Phase 12 build go | T092–T099 |
 
 ## Acceptance criteria scoreboard
 
@@ -53,6 +56,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-12 — **Build spec v1.1 processed (documents-first)**. Product team's `docs/sirius-build-spec_v1.1.md` diffed against the live system. Verified consistent: `trello_label` dual-key, every measured constant, urgency semantics, conflict keying, sprint rules, BR-7a/BR-8. JP decisions: (1) W2 stands — the doc's §4.2 "open decision"/local-override design is stale, corrected via errata; (2) adopt frost notes → **FR-11** + AC-21 and daily plotting → **FR-12** + AC-22/23 (specced, NOT built — phase 12, T092–T099, awaiting go); (3) adopt weighted row load → **BR-6c** + AC-24 (resolves the BR-6a caveat; `lib/planner.ts` stays golden-locked — weight lives in the assemblers). Spec artifacts updated: spec.md (FR-11/FR-12/BR-6c, AC-21–24, Clarifications session, entities, edge cases + three pre-existing stale "one write" lines fixed in Overview/SC-5/Out-of-Scope/Data-Protection), data-model.md (`frost_notes`, `milestone_day_plan`, registry fields line), tasks.md (phase 12). **Errata written for the product team: `docs/sirius-build-spec_v1.1_errata.md`** (6 corrections, 3 adoptions confirmed, 1 question — Deadlines count basis §5.4 vs §6.1, BR-6c default until answered; AGENTS.md companion never received). JP to forward the errata. No code touched.
 
 - 2026-08-04 — **GO-LIVE SESSION**: G3–G6 executed gated (dir+env provisioned, Apache vhost + LE cert on platforms.frostdesigngroup.com, first deploy, SSO live via reused ARES OAuth client). Found+fixed live: connect-redis v9 needs node-redis (ioredis ERR syntax on session writes); BASE_PATH=/sirius support built (174→ tests). Port 3955 (3950 was osiris's). TEST board registered in ARES by JP → 12 cards synced; reconcile proven live (manual Trello change → Sirius ~5s+sync); due round-trip live. Backup drill T072 passed + nightly whole-box Mongo backups installed (host had NONE). Admin panel FR-10 specced→built→shipped same day (T087–T090; JP admin, Miles member). ARES push built by their agent, verified against my receiver, switched on by JP: **T086 passed — 37s Trello→Sirius push-driven; fallback drill passed** (one alert, bounded staleness, auto-recovery). Owl message-drop convention established with the ARES agent (authority stays with JP; notes are context). Users: JP (admin), Miles. T073/T091 WCAG ⏸ per JP (team UI update in flight). Next: T075 AC sweep → G7 real-board onboarding (JP gate).
 

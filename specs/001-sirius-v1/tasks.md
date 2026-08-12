@@ -194,6 +194,21 @@ to cover the due-date write and the webhook receiver. The ARES half is built sep
 
 ---
 
+## Phase 12 — Build-spec v1.1 adoptions (~6d) — added 2026-08-12 (JP; FR-11, FR-12, BR-6c) — SPECCED, awaiting JP go
+
+- [ ] T092 Migration 004: `frost_notes` + `milestone_day_plan` collections with unique indexes, both carrying `project_id` (invariant 1; FR-11.1, FR-12.3)
+- [ ] T093 [P] Day-capacity tests FIRST in `test/dayplan.test.ts` (largest-remainder exact sum incl. 22-over-4-days, holiday zero + redistribute + reject, all-holiday week) then `lib/dayplan.ts` — a NEW module over `lib/calendar.ts` holidays; calendar and planner untouched (invariant 5; FR-12.4; AC-22)
+- [ ] T094 [P] Frost-notes route under `/api/projects/:projectId` (Zod-strict, audit rows) + three-state status derivation in the requests assembler; tests: remark-only invariance, flag flip, membership 403, audit both ways (FR-11.1–11.4, 11.6–11.7; AC-21)
+- [ ] T095 Requests UI: FOR CLARIFICATION tile + inline note editor (remark → checkbox → reason; Escape/Cancel discard; optimistic with revert) + three-state pills (FR-11.3–11.6)
+- [ ] T096 Day-plan routes: GET week plan, PUT placement (day inside the milestone's week, non-holiday; audit) + lapse-on-week-change in schedule writes; tests (FR-12.3–12.6; AC-23)
+- [ ] T097 Deadlines UI: week expand to Mon–Fri (one open at a time), pointer drag between days + keyboard equivalent, day-capacity footers and tints (FR-12.1–12.2; NFR-9 basics — the full WCAG audit stays with T073)
+- [ ] T098 BR-6c weighted load in the schedule/deadlines assemblers: weekly footers, over-capacity tint and BR-6 *over capacity* conflict switch to card-equivalents; fixture proves 478 on the mirrored board shape; `lib/planner.ts` untouched (BR-6c; AC-24; FR-5.13, FR-5.17)
+- [ ] T099 Sync-strip copy: replace "every 15 minutes" with push-aware wording in `frontend/templates/00-app.html` (FR-8.6, FR-9.6)
+
+**Checkpoint**: AC-21–AC-24 pass as tests. Record the product team's answer on the Deadlines count basis (errata question) here when it arrives; T096/T098 take the BR-6c default until then.
+
+---
+
 ## Dependencies
 
 ```
@@ -221,4 +236,4 @@ First demonstrable value = **US1 Pipeline read-only** on real data: phases 0–2
 
 ## Day-count sanity check
 
-0: ~4 · 1: ~3 · 2: ~4 · 3: ~4 · 4: ~6 · 5: ~4 · 6: ~4 · 7: ~15–18 · 8: ~2 · 8a: ~1 · 9: ~13 → **~60–63 days** — matches the amended plan bound; phase 7 is the biggest block, as expected. Phase 10 (added 2026-08-04) adds ~5–6 Sirius-side days; the ARES half is a separate build outside this bound.
+0: ~4 · 1: ~3 · 2: ~4 · 3: ~4 · 4: ~6 · 5: ~4 · 6: ~4 · 7: ~15–18 · 8: ~2 · 8a: ~1 · 9: ~13 → **~60–63 days** — matches the amended plan bound; phase 7 is the biggest block, as expected. Phase 10 (added 2026-08-04) adds ~5–6 Sirius-side days; the ARES half is a separate build outside this bound. Phase 12 (added 2026-08-12) adds ~6 days.
