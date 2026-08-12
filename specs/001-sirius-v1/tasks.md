@@ -209,6 +209,26 @@ to cover the due-date write and the webhook receiver. The ARES half is built sep
 
 ---
 
+## Phase 13 — Pipeline redesign to Figma frame 17:1015 (~4–5d) — added 2026-08-12 (JP; 32 annotations = the spec, `pipeline-frame-notes.md`)
+
+Scope: the Pipeline tab + the shell it carries (top nav, tabs, stats). Other tabs keep today's design inside the new shell. Difficulty stays READ-ONLY (settled by the complete annotation set, 2026-08-12). "Simulate Trello sync" is dev-only — omitted. Success criterion: 1:1 against the frame at 1600px; every value binds to a token.
+
+- [ ] T100 Token layer: `frontend/styles/05-tokens.css` — CSS custom properties named per the Figma variables (slate/red/amber/blue/green scales, text/caption..display, radius, space, shadow) + the semantic aliases the annotations use (`--surface-*`, `--border-border`, `--status-*`, `--font-sans`); Google Sans Flex 400–700 via Google Fonts CDN (JP override of the self-host note) (frame §0; annotations 17:1015, 70:10522)
+- [ ] T101 Icon set exported clean from the file via Rex (`exportAsync SVG_STRING`) and inlined as Ractive partials — tab icons, chevrons, search, calendar, warning, external-link, Trello/Figma marks; no runtime Figma dependency (asset-fidelity rule)
+- [ ] T102 Shell rebuild app-wide: breadcrumb (`nav aria-label="Breadcrumb"`, aria-current), PROJECT selector + board link, Last Synced stamp, user chip, tab bar with icons + `role="tab"`/`aria-selected`/tabindex + hover states; Admin tab styled to match (annotations 17:1438, 19:920–949; v1.2 six-tab note)
+- [ ] T103 Stats row: four equal columns, overline+display type, URGENT red; OPEN WORK = incomplete-card count (mirrors the panel) (annotations 28:3683, 31:2736–2744)
+- [ ] T104 Incomplete panel: Row-N chip + bold MC + name + amber reason + right-aligned Open Card (new tab) + consequence copy; hidden when empty (annotations 70:1358, 70:970, 70:914)
+- [ ] T105 Search + callout: realtime substring over MC #, name, type, client, status with `<mark>` amber highlight; callout copy verbatim; NO simulate button (annotations 17:2057, 70:1211)
+- [ ] T106 Table per the 13-column header annotation (MC # → Links, fixed widths from the frame): expandable rows (chevron + Enter + focusable), Type/Client badges, Difficulty read-only badge, Urgency select-menu write with "saving…" state (opacity .5, pointer-events none) + rollback, Status keyword badge with list name verbatim, Due date-picker chrome on the W2 write-through (annotation 251:7925 carries stale v1.1 precedence — v1.2 governs) with missing/overdue states (251:23859), Work Started/Done/Cycle Time read-only, Weeks display, source-icon links (annotations 70:10008/9/24, 169:26364/26074/26426, 70:10030/10037)
+- [ ] T107 Backend: `asset_type` joined onto the MC group (closes the FR-4.1 "type" gap) + row derivations for Work Started / Work Done / Cycle Time (min started / max done across the MC group's work cards; workdays between) + tests
+- [ ] T108 Horizontal scroll: custom slider (track/thumb/chevron nudge) — below 1600px the table scrolls, never collapses (annotation 251:6758); task rows restyled to the kit
+- [ ] T109 Regression pass: remaining five tabs render correctly inside the new shell; full suite dual-TZ, typecheck, lint, build
+- [ ] T110 Fidelity check at 1600px against the frame screenshot; STATE update; deploy on JP go
+
+**Assumptions taken (annotation-silent, flagged to JP):** Weeks column = slotted week (dash when unscheduled) · Work Started/Done = earliest start / latest done across the MC group's work cards · Cycle Time = workdays between them. Difficulty badge keeps its chevron chrome (1:1 rule) despite being read-only — flagged to the design team.
+
+---
+
 ## Dependencies
 
 ```
