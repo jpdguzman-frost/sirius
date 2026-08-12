@@ -19,7 +19,7 @@ _Last updated: 2026-08-12 · Update at the end of every working session._
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 backup/restore ✅, T086 ✅; T073/T091 ⏸ (team UI update), T075 sweep pending, non-member 403 parked | G7 = real board, JP gate |
 | 10 | Two-way sync (due-date write + ARES push) | **DONE 2026-08-04** — push LIVE, 37s Trello→Sirius, fallback drill passed (T077–T086) | FR-9.6 observed live |
 | 11 | Admin panel (FR-10) | **DONE 2026-08-04** (T087–T090); T091 ⏸ with T073 | JP first admin; live |
-| 12 | Build-spec v1.1 adoptions (frost notes FR-11, daily plotting FR-12, weighted load BR-6c) | **specced 2026-08-12** (T092–T099) — awaiting JP build go | errata sent to product team; count-basis answer pending |
+| 12 | Build-spec v1.1 adoptions (frost notes FR-11, daily plotting FR-12, weighted load BR-6c) | **BUILT 2026-08-12** (T092–T099; 214/214 dual-TZ) | errata with product team; count-basis answer pending (BR-6c default in force) |
 
 ## Decisions needed from JP (blocking)
 
@@ -42,12 +42,11 @@ _Last updated: 2026-08-12 · Update at the end of every working session._
 | OD-5 | Is `Client Approval` ongoing or done | Phase 4 keyword rules |
 | OD-6 | Which projects in v1 beyond GCash | Seed data |
 | OD-7 | Retention for closed requests | Phase 9 |
-| errata Q | Deadlines count basis: build spec §5.4 weight (4) vs §6.1 example (3) — asked in `docs/sirius-build-spec_v1.1_errata.md`; owner: product team | T096/T098 final form (BR-6c default until answered) |
-| — | Phase 12 build go | T092–T099 |
+| errata Q | Deadlines count basis: build spec §5.4 weight (4) vs §6.1 example (3) — asked in `docs/sirius-build-spec_v1.1_errata.md`; owner: product team | Deadlines counts' final form (BR-6c weight is live as the default) |
 
 ## Acceptance criteria scoreboard
 
-AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ✅ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ✅ (fixture-scale; literal at staging) · AC-9 ✅ · AC-10 ✅ · AC-11 ✅ (data side; UI at phase 7) · AC-12 ✅ · AC-13 ✅ (API+UI) · AC-14 ✅ (API) · AC-15 ✅ · AC-16 ✅ · AC-17 ✅ · AC-18 ✅ · AC-19 ⬜ · AC-20 ⬜
+AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ✅ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ✅ (fixture-scale; literal at staging) · AC-9 ✅ · AC-10 ✅ · AC-11 ✅ (data side; UI at phase 7) · AC-12 ✅ · AC-13 ✅ (API+UI) · AC-14 ✅ (API) · AC-15 ✅ · AC-16 ✅ · AC-17 ✅ · AC-18 ✅ · AC-19 ⬜ · AC-20 ⬜ · AC-21 ✅ · AC-22 ✅ · AC-23 ✅ · AC-24 ✅ (added 2026-08-12, phase 12)
 
 ## Deviations proposed by the agent, awaiting JP
 
@@ -56,6 +55,8 @@ _None awaiting. Approved:_
 - **2026-08-03 — Port source is the compiled bundle, not the JSX.** The original `frost-sirius-v1.jsx` is not available; the team supplied only the built prototype `docs/frost-sirius-v1.html` (single minified 272 KB script block, identifiers mangled). JP approved inferring `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` from the bundle. Consequence: Invariant 5's "verbatim port" becomes a faithful reconstruction, and the AC-10 golden tests are the sole proof of fidelity — they gate Phase 3 exactly as before. If the original `.jsx` surfaces, it supersedes the bundle.
 
 ## Session log
+
+- 2026-08-12 — **Phase 12 BUILT same day (T092–T099), 214/214 tests dual-TZ** (+32: dayplan 12, frost-notes 8, dayplan-api 8, weighted-load 4), typecheck/lint/build clean. Frost notes: `frost_notes` collection (one per request), PUT under project scope with REASON_REQUIRED/no-op guards, three-state derived status (In Pipeline / With Clarification / For Filing — pipeline wins over the flag), tiles + inline editor (Escape/Cancel discard, optimistic revert). Daily plotting: `milestone_day_plan` keyed (project, card, phase) with the intended `week` stored — lapse = stored week ≠ computed week (read-side safety net) plus explicit deleteMany on slotted-week changes (PATCH + replot, `dayPlanLapsed` audited); `lib/dayplan.ts` NEW module (largest remainder, calendar-true string-based holiday check — deliberately NOT calendar.ts's quirky isHoliday, which stays verbatim for the port); PUT validates day-inside-week + non-holiday; Deadlines UI week-expand (one at a time), drag + ←/→/Backspace keyboard path. Weighted load: `weight = 1 + tasks÷deliverables` computed in the pipeline assembler (planner untouched — the prototype also weighted only the UI layer), feeds schedule footers, week tint (now over-capacity ONLY per §6.1), capbar, and the BR-6 over-capacity conflict (fires on card-equivalents; proven: 3 rows under cap, 9 equivalents over). AC-21–24 pass as tests. Flake note: one transient supertest failure on a 4-file batch run, gone on rerun and in both full runs — same family as the recorded authz-matrix flake. NOT pushed yet.
 
 - 2026-08-12 — **Build spec v1.1 processed (documents-first)**. Product team's `docs/sirius-build-spec_v1.1.md` diffed against the live system. Verified consistent: `trello_label` dual-key, every measured constant, urgency semantics, conflict keying, sprint rules, BR-7a/BR-8. JP decisions: (1) W2 stands — the doc's §4.2 "open decision"/local-override design is stale, corrected via errata; (2) adopt frost notes → **FR-11** + AC-21 and daily plotting → **FR-12** + AC-22/23 (specced, NOT built — phase 12, T092–T099, awaiting go); (3) adopt weighted row load → **BR-6c** + AC-24 (resolves the BR-6a caveat; `lib/planner.ts` stays golden-locked — weight lives in the assemblers). Spec artifacts updated: spec.md (FR-11/FR-12/BR-6c, AC-21–24, Clarifications session, entities, edge cases + three pre-existing stale "one write" lines fixed in Overview/SC-5/Out-of-Scope/Data-Protection), data-model.md (`frost_notes`, `milestone_day_plan`, registry fields line), tasks.md (phase 12). **Errata written for the product team: `docs/sirius-build-spec_v1.1_errata.md`** (6 corrections, 3 adoptions confirmed, 1 question — Deadlines count basis §5.4 vs §6.1, BR-6c default until answered; AGENTS.md companion never received). JP to forward the errata. No code touched.
 
