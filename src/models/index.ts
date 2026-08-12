@@ -338,6 +338,45 @@ pushEventSchema.index({ event_id: 1 }, { unique: true });
 pushEventSchema.index({ project_id: 1, status: 1, received_at: 1 });
 pushEventSchema.index({ received_at: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 }); // TTL 7d
 
+// ============ frost notes (FR-11, added 2026-08-12) ============
+// One Sirius-owned annotation per intake request, keyed (project_id,
+// mc_number) — a multi-deliverable MC carries ONE note. Never written to the
+// intake sheet (FR-11.2): no Sheets write path exists anywhere (invariant 2).
+
+const frostNoteSchema = new Schema(
+  {
+    project_id: projectRef,
+    mc_number: { type: String, required: true },
+    remark: String,
+    clarify: { type: Boolean, required: true, default: false },
+    clarify_reason: String,
+    updated_by: { type: String, required: true, lowercase: true, trim: true },
+    updated_at: { type: Date, required: true, default: Date.now },
+  },
+  { collection: 'frost_notes' },
+);
+frostNoteSchema.index({ project_id: 1, mc_number: 1 }, { unique: true });
+
+// ============ milestone day plan (FR-12, added 2026-08-12) ============
+// A Mon–Fri day choice for one deliverable phase. `week` records the Monday
+// the placement was made for: day placement never changes the week (FR-12.3),
+// and when the milestone's computed week no longer matches, the placement has
+// lapsed and reads as absent — follow the forecast (FR-12.6).
+
+const milestoneDayPlanSchema = new Schema(
+  {
+    project_id: projectRef,
+    trello_card_id: { type: String, required: true },
+    phase: { type: String, required: true, enum: ['sketch', 'render'] },
+    day: { ...DATE_ONLY, required: true },
+    week: { ...DATE_ONLY, required: true },
+    set_by: { type: String, required: true, lowercase: true, trim: true },
+    set_at: { type: Date, required: true, default: Date.now },
+  },
+  { collection: 'milestone_day_plan' },
+);
+milestoneDayPlanSchema.index({ project_id: 1, trello_card_id: 1, phase: 1 }, { unique: true });
+
 const syncRunSchema = new Schema(
   {
     project_id: { type: ObjectId, ref: 'Project' }, // nullable per source schema
@@ -369,6 +408,8 @@ export const ConflictAcknowledgement = mongoose.model('ConflictAcknowledgement',
 export const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 export const SyncRun = mongoose.model('SyncRun', syncRunSchema);
 export const PushEvent = mongoose.model('PushEvent', pushEventSchema);
+export const FrostNote = mongoose.model('FrostNote', frostNoteSchema);
+export const MilestoneDayPlan = mongoose.model('MilestoneDayPlan', milestoneDayPlanSchema);
 
 export const ALL_MODELS = [
   Project,
@@ -387,4 +428,6 @@ export const ALL_MODELS = [
   AuditLog,
   SyncRun,
   PushEvent,
+  FrostNote,
+  MilestoneDayPlan,
 ];

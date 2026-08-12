@@ -67,6 +67,18 @@ export const MIGRATIONS: Migration[] = [
       await PushEvent.syncIndexes();
     },
   },
+  {
+    // frost_notes (FR-11) + milestone_day_plan (FR-12), phase 12 — both keyed
+    // with project_id (invariant 1), unique per request / per milestone.
+    id: '004-frost-notes-day-plan',
+    up: async () => {
+      const { FrostNote, MilestoneDayPlan } = await import('../../src/models/index.ts');
+      await FrostNote.createCollection();
+      await FrostNote.syncIndexes();
+      await MilestoneDayPlan.createCollection();
+      await MilestoneDayPlan.syncIndexes();
+    },
+  },
 ];
 
 /** Applies pending migrations in order; records each in `migrations`. */

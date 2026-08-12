@@ -33,7 +33,7 @@
 | `throughput_grid` | project_id, difficulty, p25, p50, p70, computed_at | (project_id, difficulty) | — |
 | `conflict_acknowledgements` | project_id, conflict_key (week\|rule\|sorted card:phase pairs — invariant 13), acknowledged_by(lowercase), reason, at | (project_id, conflict_key) | — |
 | `frost_notes` *(added 2026-08-12, FR-11)* | project_id, mc_number, remark, clarify(false), clarify_reason, updated_by(lowercase), updated_at · one per request; never written to the sheet | (project_id, mc_number) | — |
-| `milestone_day_plan` *(added 2026-08-12, FR-12)* | project_id, trello_card_id, phase(sketch\|render), day(DATE_ONLY, must sit inside the milestone's slotted week, non-holiday), set_by(lowercase), set_at · absent row = follow the forecast; lapses on week change | (project_id, trello_card_id, phase) | — |
+| `milestone_day_plan` *(added 2026-08-12, FR-12)* | project_id, trello_card_id, phase(sketch\|render), day(DATE_ONLY, must sit inside the milestone's week, non-holiday), week(DATE_ONLY — the Monday the placement was made for; a mismatch with the milestone's computed week = lapsed, reads as absent), set_by(lowercase), set_at · absent row = follow the forecast | (project_id, trello_card_id, phase) | — |
 | `audit_log` *(append-only)* | project_id, actor(lowercase), action, entity, entity_id, before, after, at | — | (project_id, entity, entity_id, at desc) |
 | `sync_runs` | project_id, source(ares\|sheet\|trello_write), ok, stats, error, at | — | (project_id, at desc) |
 
