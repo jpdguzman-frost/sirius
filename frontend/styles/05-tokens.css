@@ -1,0 +1,68 @@
+/* Design tokens — generated from the Figma working file variables (frame
+   17:1015, extracted 2026-08-12). Names preserved 1:1 with the file, plus the
+   semantic aliases the annotations reference. Per the frame's success
+   criterion, a raw hex or px in component CSS is a defect — the token exists,
+   use it. Font: Google Sans Flex via Google Fonts CDN (JP call 2026-08-12,
+   overriding the self-host note). */
+
+:root {
+  --font-sans: 'Google Sans Flex', system-ui, sans-serif;
+
+  /* palette */
+  --white: #ffffff;
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-700: #334155;
+  --slate-900: #0f172a;
+  --red-50: #fef2f2;
+  --red-300: #fca5a5;
+  --red-500: #ef4444;
+  --red-600: #dc2626;
+  --amber-50: #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-300: #fcd34d;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+  --amber-600: #d97706;
+  --amber-700: #b45309;
+  --amber-800: #92400e;
+  --blue-100: #dbeafe;
+  --blue-500: #3b82f6;
+  --blue-700: #1d4ed8;
+  --green-100: #dcfce7;
+  --green-500: #22c55e;
+  --green-600: #16a34a;
+  --emerald-100: #d1fae5;
+
+  /* type scale */
+  --text-caption: 10px;
+  --text-label: 12px;
+  --text-body: 14px;
+  --text-title: 24px;
+  --text-display: 32px;
+
+  /* radius · space · shadow */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-full: 9999px;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-24: 24px;
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+  /* semantic aliases used by the annotations */
+  --surface-background: var(--white);
+  --surface-foreground: var(--slate-900);
+  --surface-muted-foreground: var(--slate-500);
+  --surface-secondary: var(--slate-100);
+  --border-border: var(--slate-300);
+  --status-warning: var(--amber-500);
+  --status-warning-light: var(--amber-100);
+  --status-destructive-strong: var(--red-600);
+  --status-destructive-light: var(--red-50);
+}

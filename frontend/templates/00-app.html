@@ -1,22 +1,35 @@
 <script id="tpl-app" type="text/ractive">
-<header class="topbar">
-  <span class="brand">Frost: Sirius <span class="crumb">›</span> <span class="crumbtab">{{tabLabel}}</span></span>
-  <span class="projectlabel">PROJECT</span>
-  <select class="project-switcher" value="{{activeProjectId}}" on-change="['switchProject']">
-    {{#each projects as p}}<option value="{{p._id}}">{{p.name}}</option>{{/each}}
-  </select>
-  {{#if boardId}}<a class="boardlink" href="https://trello.com/b/{{boardId}}" target="_blank">{{boardId}} ↗</a>{{/if}}
-  <span class="sync {{#if sync && !sync.ok}}bad{{/if}}">{{syncLabel}}</span>
-  <span class="userchip"><span class="avatar">{{userInitial}}</span>
-    <span class="who"><span class="name">{{userName}}</span><br /><button class="sub" on-click="['signOut']">Sign out</button></span>
-  </span>
+<header class="shellnav">
+  <div class="shellrow">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <span class="crumb-root">Frost: Sirius</span>
+      <span class="crumb-sep">{{{icon.crumbChevron}}}</span>
+      <span class="crumb-here" aria-current="page">{{tabLabel}}</span>
+    </nav>
+    <div class="shellctl">
+      <div class="proj">
+        <span class="projlabel">PROJECT</span>
+        {{#if boardId}}<a class="boardlink" href="https://trello.com/b/{{boardId}}" target="_blank">{{boardId}} {{{icon.extLink}}}</a>{{/if}}
+      </div>
+      <div class="projselect">
+        <select class="project-switcher" value="{{activeProjectId}}" on-change="['switchProject']" aria-label="Project">
+          {{#each projects as p}}<option value="{{p._id}}">{{p.name}}</option>{{/each}}
+        </select>
+      </div>
+      <span class="synced {{#if sync && !sync.ok}}bad{{/if}}">{{syncLabel}}</span>
+      <div class="userchip">
+        <span class="avatar">{{userInitial}}</span>
+        <span class="who"><span class="name">{{userName}}</span><button class="sub" on-click="['signOut']">Sign out</button></span>
+      </div>
+    </div>
+  </div>
+  <div class="tabbar" role="tablist">
+    {{#each tabs as t}}
+      <button class="tab {{#if t.id === activeTab}}active{{/if}}" role="tab" aria-selected="{{t.id === activeTab ? 'true' : 'false'}}" on-click="['switchTab', t.id]"><span class="ticon">{{{icon[t.icon] || ''}}}</span>{{t.label}}</button>
+    {{/each}}
+    <span class="tabfill"></span>
+  </div>
 </header>
-
-<nav class="tabs">
-  {{#each tabs as t}}
-    <button class="tab {{#if t.id === activeTab}}active{{/if}}" on-click="['switchTab', t.id]"><span class="ticon">{{t.icon}}</span>{{t.label}}</button>
-  {{/each}}
-</nav>
 
 {{#if banner}}<div class="banner">{{banner}}</div>{{/if}}
 
@@ -81,65 +94,113 @@
 {{/if}}
 
 {{#if activeTab === 'pipeline'}}
-  <div class="kpis">
-    <div class="kpi"><div class="klabel">Main cards</div><div class="kvalue">{{kpi.main}}</div></div>
-    <div class="kpi"><div class="klabel">Work cards</div><div class="kvalue">{{kpi.work}}</div></div>
-    <div class="kpi"><div class="klabel">Open work</div><div class="kvalue">{{kpi.open}}</div></div>
-    <div class="kpi red"><div class="klabel">Urgent</div><div class="kvalue">{{kpi.urgent}}</div></div>
-    <div class="kpi red"><div class="klabel">At risk</div><div class="kvalue">{{kpi.atRisk}}</div></div>
+  <div class="metrics">
+    <div class="metric"><span class="mlabel">MAIN CARDS</span><span class="mvalue">{{kpi.main}}</span></div>
+    <div class="metric"><span class="mlabel">WORK CARDS</span><span class="mvalue">{{kpi.work}}</span></div>
+    <div class="metric"><span class="mlabel">OPEN WORK</span><span class="mvalue">{{kpi.open}}</span></div>
+    <div class="metric red"><span class="mlabel">URGENT</span><span class="mvalue">{{kpi.urgent}}</span></div>
   </div>
 
-  <div class="note">🔒 Difficulty, list, due date and Figma links are read from Trello and can’t be edited here.
-    <span class="dim">{{syncLabel}} · Trello changes arrive within a minute; a 15-minute check backs it up</span></div>
-  <div class="note soft">Sirius writes exactly two things back to Trello (the write registry): the <strong>Urgent</strong> label — absence means non-urgent — and the card <strong>due date</strong>, editable in the Due column. Everything else is read-only.</div>
-
   {{#if corrections.length}}
-    <div class="callout">
-      <div class="ctitle">⚠ {{corrections.length}} cards incomplete in Trello</div>
+    <div class="ipanel">
+      <div class="ihead">{{{icon.warning}}} {{corrections.length}} {{corrections.length === 1 ? 'card' : 'cards'}} incomplete in Trello</div>
       {{#each visibleCorrections as c}}
-        <div class="crow"><span class="mono">{{c.displayId}}</span><span>{{c.name}}</span><span class="dim">— missing {{c.missing.join(', ')}}</span>
-          {{#if c.trelloUrl}}<a href="{{c.trelloUrl}}" target="_blank">Open card</a>{{/if}}</div>
+        <div class="irow">
+          <span class="ideets">
+            <span class="rowtag">{{c.displayId}}</span>
+            <span class="imc">{{c.displayId}}</span>
+            <span class="iname">{{c.name}}</span>
+            <span class="ireason">Missing {{c.missing.join(' and ')}}</span>
+          </span>
+          {{#if c.trelloUrl}}<a class="iopen" href="{{c.trelloUrl}}" target="_blank">Open Card</a>{{/if}}
+        </div>
       {{/each}}
-      {{#if corrections.length > 5}}<button class="chip" on-click="['toggleCorrections']">{{showAllCorrections ? 'Show fewer' : 'Show all ' + corrections.length}}</button>{{/if}}
-      <div class="dim" style="margin-top:0.4rem;">Without a difficulty label the card cannot forecast; without a due date it cannot raise a deadline conflict. Fix in Trello and it corrects on the next sync.</div>
+      {{#if corrections.length > 5}}<button class="iopen" style="align-self:flex-start;" on-click="['toggleCorrections']">{{showAllCorrections ? 'Show fewer' : 'Show all ' + corrections.length}}</button>{{/if}}
+      <div class="iwhy">Without a difficulty label the forecast falls back to Overall; without a due date the card cannot raise a deadline conflict. Fix in Trello and it corrects on the next sync.</div>
     </div>
   {{/if}}
 
-  <input class="search" placeholder="🔍  Search cards or MC#" value="{{searchQ}}" />
+  <div class="searchbar">{{{icon.search}}}<input placeholder="Search cards or MC#" value="{{searchQ}}" aria-label="Search cards or MC number" /></div>
 
-  <div class="scroll"><table class="grid">
-    <thead><tr><th></th><th>MC #</th><th>Card name</th><th>Difficulty</th><th>Urgency</th><th>Current list</th><th>Status</th><th>Requestor</th><th>Due</th><th>Links</th></tr></thead>
-    <tbody>
-    {{#each pipelineRows as row}}
-      <tr class="{{#if row.blocker}}blocked{{/if}}">
-        <td><button class="chev" on-click="['toggleGroup', row.mcNumber]">{{#if expanded[row.mcNumber]}}▾{{else}}▸{{/if}}</button></td>
-        <td class="mono">{{row.displayId}}</td>
-        <td class="clip">{{row.name}} {{#if row.blocker}}<span class="badge bad">🛑 {{row.blocker}}</span>{{/if}}</td>
-        <td><span class="badge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span> <span class="dim">{{row.lane}}</span></td>
-        <td><button class="badge togglable {{#if row.urgency === 'Urgent'}}urgentchip{{/if}}" on-click="['toggleUrgency', row.cardId, row.urgency]" title="Writes an Urgent label to the Trello card — the one write">{{#if row.urgency === 'Urgent'}}⚡ {{/if}}{{row.urgency}}</button></td>
-        <td><span class="badge s-{{row.status}}">{{row.currentList || '—'}}</span></td>
-        <td><span class="badge s-{{row.status}}">{{row.statusNote ? 'manual' : row.status}}</span></td>
-        <td class="dim">{{row.requestor || '—'}}</td>
-        <td class="nowrap">
-          {{#if editingDeadline === row.cardId}}
-            <input type="date" class="dl-input" value="{{row.trelloDue}}" on-change="['setDeadline', row.cardId]" on-blur="['cancelDeadline']" autofocus />
-            {{#if row.trelloDue}}<button class="badge togglable" on-mousedown="['clearDeadline', row.cardId]" title="Clear the Trello due date — the sheet deadline (if any) takes over">✕</button>{{/if}}
-          {{else}}
-            <button class="dl-edit" on-click="['editDeadline', row.cardId]" title="Edit the deadline — writes the Trello due date (write registry W2)">{{#if row.deadline}}{{fmt(row.deadline)}}{{else}}<span class="dim">— set</span>{{/if}}</button>
-            {{#if row.deadlineSource}}<span class="dim">({{row.deadlineSource}})</span>{{/if}}
+  <div class="rocallout">Difficulty and Current List are read from Trello — they can’t be edited here.</div>
+
+  <div class="pscrollwrap">
+    <div class="pscroll" on-scroll="['pipeScrolled']">
+      <table class="ptable">
+        <thead><tr>
+          <th class="col-mc">MC #</th><th class="col-name">Card Name</th><th class="col-type">Type</th>
+          <th class="col-diff">Difficulty</th><th class="col-urgency">Urgency</th><th class="col-status">Status</th>
+          <th class="col-client">Client</th><th class="col-due">Due</th><th class="col-started">Work Started</th>
+          <th class="col-done">Work Done</th><th class="col-cycle">Cycle Time</th><th class="col-weeks">Weeks</th><th>Links</th>
+        </tr></thead>
+        <tbody>
+        {{#each pipelineRows as row}}
+          <tr class="prow" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
+            <td class="col-mc"><div class="mccell">
+              <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{expanded[row.mcNumber] ? 'Collapse' : 'Expand'}} {{row.displayId}} work cards" tabindex="-1">{{{icon.rowChevron}}}</button>
+              <span class="mcnum">{{{hl(row.displayId)}}}</span>
+            </div></td>
+            <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}</td>
+            <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{row.assetType}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-diff">{{#if row.difficulty}}<span class="pbadge d-{{row.difficulty}}" title="Read from the Trello Difficulty label — not editable here"><span>{{row.difficulty}}</span><span class="bchev">{{{icon.badgeChevron}}}</span></span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-urgency"><div class="ubadge-wrap">
+              <button class="ubadge {{row.urgency === 'Urgent' ? 'urgent' : 'nonurgent'}} {{#if savingUrgency[row.cardId]}}saving{{/if}}"
+                on-click="['openUrgencyMenu', row.cardId]" aria-haspopup="listbox" aria-expanded="{{urgencyMenu === row.cardId ? 'true' : 'false'}}"
+                title="Writes the Urgent label to the Trello card (write registry W1)">
+                <span>{{#if savingUrgency[row.cardId]}}saving…{{else}}{{row.urgency}}{{/if}}</span><span class="bchev">{{{icon.badgeChevron}}}</span>
+              </button>
+              {{#if urgencyMenu === row.cardId}}
+                <div class="selectmenu" role="listbox" aria-label="Urgency">
+                  <div class="selecthead">Urgency</div>
+                  <button class="selectitem {{#if row.urgency === 'Urgent'}}on{{/if}}" role="option" aria-selected="{{row.urgency === 'Urgent' ? 'true' : 'false'}}" on-click="['chooseUrgency', row.cardId, 'Urgent', row.urgency]"><span class="dot red"></span>Urgent</button>
+                  <button class="selectitem {{#if row.urgency !== 'Urgent'}}on{{/if}}" role="option" aria-selected="{{row.urgency !== 'Urgent' ? 'true' : 'false'}}" on-click="['chooseUrgency', row.cardId, 'Non-Urgent', row.urgency]"><span class="dot slate"></span>Non-Urgent</button>
+                </div>
+              {{/if}}
+            </div></td>
+            <td class="col-status">{{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{row.currentList}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-client">{{#if row.requestor}}<span class="pbadge">{{row.requestor}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-due">
+              {{#if editingDeadline === row.cardId}}
+                <input type="date" class="dp-input" value="{{row.trelloDue}}" on-change="['setDeadline', row.cardId]" on-blur="['cancelDeadline']" autofocus />
+                {{#if row.trelloDue}}<button class="dp-clear" on-mousedown="['clearDeadline', row.cardId]" title="Clear the Trello due date — the sheet deadline (if any) takes over">✕</button>{{/if}}
+              {{else}}
+                {{#if row.deadline}}
+                  <button class="dpicker {{#if row.deadline < todayKey}}overdue{{/if}}" on-click="['editDeadline', row.cardId]" title="Source: {{row.deadlineSource}} — editing writes the Trello due date (write registry W2)"><span class="dpdate">{{fmtLong(row.deadline)}}</span>{{{icon.calendar}}}</button>
+                {{else}}
+                  <button class="dpicker missing" on-click="['editDeadline', row.cardId]" title="No due date — setting one writes the Trello due date (write registry W2)"><span class="dpdate">No Due Date</span>{{{icon.calendar}}}</button>
+                {{/if}}
+              {{/if}}
+            </td>
+            <td class="col-started">{{#if row.workStarted}}<span class="dpicker readonly" title="Earliest work-card start in this MC group"><span class="dpdate">{{fmtLong(row.workStarted)}}</span>{{{icon.calendar}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-done">{{#if row.workDone}}<span class="plaincell nowrap">{{fmtLong(row.workDone)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-cycle">{{#if row.cycleDays != null}}<span class="plaincell">{{row.cycleDays}}d</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-weeks">{{#if row.slottedWeek}}<span class="plaincell nowrap">{{fmt(row.slottedWeek)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td>
+              {{#if row.trelloUrl}}<a class="srclink" href="{{row.trelloUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Trello">{{{icon.trello}}}</a>{{/if}}
+              {{#if row.figmaUrl}}<a class="srclink" href="{{row.figmaUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Figma">{{{icon.figma}}}</a>{{/if}}
+            </td>
+          </tr>
+          {{#if expanded[row.mcNumber]}}
+            {{#each workCardsByMc[row.mcNumber] as w}}
+              <tr class="ptask">
+                <td class="dimcell">task</td>
+                <td colspan="4">{{w.name}}</td>
+                <td><span class="pbadge s-{{w.status}}">{{w.currentList || w.status}}</span></td>
+                <td colspan="6" class="dimcell"></td>
+                <td>{{#if w.trelloUrl}}<a class="srclink" href="{{w.trelloUrl}}" target="_blank" aria-label="Open task in Trello">{{{icon.trello}}}</a>{{/if}}</td>
+              </tr>
+            {{/each}}
           {{/if}}
-        </td>
-        <td class="nowrap">{{#if row.trelloUrl}}<a href="{{row.trelloUrl}}" target="_blank">Trello</a>{{/if}} {{#if row.figmaUrl}}<a href="{{row.figmaUrl}}" target="_blank">Figma</a>{{/if}}</td>
-      </tr>
-      {{#if expanded[row.mcNumber]}}
-        {{#each workCardsByMc[row.mcNumber] as w}}
-          <tr class="task"><td></td><td class="dim mono">task</td><td colspan="4">{{w.name}}</td><td><span class="badge s-{{w.status}}">{{w.status}}</span></td><td colspan="2" class="dim">{{w.currentList}}</td>
-          <td>{{#if w.trelloUrl}}<a href="{{w.trelloUrl}}" target="_blank">Trello</a>{{/if}}</td></tr>
         {{/each}}
-      {{/if}}
-    {{/each}}
-    </tbody>
-  </table></div>
+        </tbody>
+      </table>
+    </div>
+    <div class="hslider">
+      <button class="hnudge" on-click="['nudgeScroll', -1]" aria-label="Scroll table left">{{{icon.sliderLeft}}}</button>
+      <div class="htrack" on-click="['trackJump']"><div class="hthumb" style="left:{{pipeThumb.left}}%;width:{{pipeThumb.width}}%;"></div></div>
+      <button class="hnudge" on-click="['nudgeScroll', 1]" aria-label="Scroll table right">{{{icon.sliderRight}}}</button>
+    </div>
+  </div>
 {{/if}}
 
 {{#if activeTab === 'schedules'}}

@@ -22,12 +22,13 @@ const app = new Ractive({
   target: '#app',
   template: '#tpl-app',
   data: {
+    icon: ICONS,
     tabs: [
-      { id: 'requests', label: 'Requests', icon: '🗂' },
-      { id: 'pipeline', label: 'Pipeline', icon: '▦' },
-      { id: 'schedules', label: 'Sprint Schedules', icon: '🗓' },
-      { id: 'deadlines', label: 'Deadlines', icon: '⏰' },
-      { id: 'forecast', label: 'Forecast', icon: '📈' },
+      { id: 'requests', label: 'Requests', icon: 'tabRequests' },
+      { id: 'pipeline', label: 'Pipeline', icon: 'tabPipeline' },
+      { id: 'schedules', label: 'Sprint Schedules', icon: 'tabSchedules' },
+      { id: 'deadlines', label: 'Deadlines', icon: 'tabDeadlines' },
+      { id: 'forecast', label: 'Forecast', icon: 'tabForecast' },
     ],
     activeTab: 'pipeline',
     projects: [],
@@ -46,6 +47,10 @@ const app = new Ractive({
     expanded: {},
     selected: {},
     searchQ: '',
+    urgencyMenu: null, // cardId whose urgency select is open (annotation 169:26074)
+    savingUrgency: {}, // per-card in-flight write chrome (annotation 169:26364)
+    pipeThumb: { left: 0, width: 100 },
+    todayKey: todayIso(),
     weekStart: mondayIso(todayIso()),
     suggest: null,
     suggestCount: 0,
@@ -82,6 +87,8 @@ const app = new Ractive({
     modelProvenance: null,
     modelReview: null,
     fmt: (iso) => fmtDate(iso),
+    // frame date format: '7 Aug 2026' (annotation 251:23859)
+    fmtLong: (iso) => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''),
     pct: (x) => `${Math.round((x || 0) * 1000) / 10}%`,
     // BR-6c/§5.4 display rule: fractions to one decimal, whole numbers plain
     fmtLoad: (n) => {
@@ -105,20 +112,24 @@ const app = new Ractive({
       const rows = this.get('rows');
       const byMc = this.get('workCardsByMc');
       const work = Object.values(byMc).reduce((a, l) => a + l.length, 0);
-      const open = Object.values(byMc).reduce((a, l) => a + l.filter((w) => w.status !== 'done').length, 0);
       return {
         main: rows.length,
         work,
-        open,
+        // OPEN WORK mirrors the incomplete panel (annotation 31:2740)
+        open: this.get('corrections').length,
         urgent: rows.filter((r) => r.urgency === 'Urgent').length,
-        atRisk: rows.filter((r) => r.forecast && r.forecast.late).length,
       };
     },
     pipelineRows() {
+      // annotation 17:2057: MC #, card name, type, client, status and other loaded fields
       const q = (this.get('searchQ') || '').toLowerCase();
       const rows = this.get('rows');
       if (!q) return rows;
-      return rows.filter((r) => `${r.displayId} ${r.mcNumber} ${r.name}`.toLowerCase().includes(q));
+      return rows.filter((r) =>
+        `${r.displayId} ${r.mcNumber} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`
+          .toLowerCase()
+          .includes(q),
+      );
     },
     visibleCorrections() {
       const c = this.get('corrections');
@@ -202,6 +213,26 @@ app.set('ghostLeft', (row) => {
 /* BR-6c: a row carries its MC group's work-card share, so the footer speaks
    the same unit as capacity (cards). Hard mix stays BR-6b's own test. */
 const rowLoad = (rows) => rows.reduce((a, r) => a + (r.weight || 1), 0);
+
+/* Search-match highlight (annotation 17:2057): escape first, then wrap the
+   matches in <mark> — rendered via triple-mustache, so escaping is mandatory. */
+const escHtml = (s) =>
+  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+app.set('hl', (text) => {
+  const q = (app.get('searchQ') || '').trim();
+  const safe = escHtml(text);
+  if (!q) return safe;
+  const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig');
+  return safe.replace(rx, (m) => `<mark>${m}</mark>`);
+});
+
+/* Custom horizontal scroll for the pipeline table (annotation 251:6758). */
+function updateThumb(el) {
+  const width = Math.max(8, (el.clientWidth / el.scrollWidth) * 100);
+  const denom = el.scrollWidth - el.clientWidth;
+  const left = denom > 0 ? (el.scrollLeft / denom) * (100 - width) : 0;
+  app.set('pipeThumb', { left: Math.round(left * 100) / 100, width: Math.round(width * 100) / 100 });
+}
 
 app.set('footClass', (weekKey) => {
   const rows = app.get('schedRows').filter((r) => r.slottedWeek === weekKey);
@@ -304,7 +335,7 @@ async function loadAll() {
       sync: pipeline.sync,
       syncLabel: pipeline.sync
         ? pipeline.sync.ok
-          ? `synced ${new Date(pipeline.sync.at).toLocaleTimeString()}${pipeline.sync.push_at && Date.now() - new Date(pipeline.sync.push_at).getTime() < 30 * 60 * 1000 ? ' · push live' : ''}`
+          ? `Last Synced ${new Date(pipeline.sync.at).toLocaleTimeString()}${pipeline.sync.push_at && Date.now() - new Date(pipeline.sync.push_at).getTime() < 30 * 60 * 1000 ? ' · push live' : ''}`
           : 'sync failing — showing last good data'
         : 'no sync yet',
       banner: pipeline.sync && !pipeline.sync.ok ? `Sync error: ${pipeline.sync.error || 'unknown'} — data below is the last good state.` : '',
@@ -316,6 +347,10 @@ async function loadAll() {
       modelReview: model.model.review,
     });
     computeDeadlines();
+    requestAnimationFrame(() => {
+      const el = document.querySelector('.pscroll');
+      if (el) updateThumb(el);
+    });
   } catch (err) {
     app.set('banner', `Load failed: ${err.message} — the app stays usable with what it has.`);
   }
@@ -465,17 +500,47 @@ app.on({
     }
   },
   toggleGroup(_ctx, mc) { app.toggle(`expanded.${mc}`); },
-  async toggleUrgency(_ctx, cardId, current) {
+  // annotation 70:10024: row focusable, Enter toggles the MC group's tasks
+  pipeRowKey(ctx, mcNumber) {
+    if (ctx.event.key !== 'Enter' || ctx.event.target !== ctx.node) return;
+    ctx.event.preventDefault();
+    app.toggle(`expanded.${mcNumber}`);
+  },
+  openUrgencyMenu(_ctx, cardId) {
+    app.set('urgencyMenu', app.get('urgencyMenu') === cardId ? null : cardId);
+  },
+  // annotations 169:26364/26074: optimistic write with 'saving…' chrome and
+  // rollback — Sirius never shows a state Trello does not hold (FR-4.7)
+  async chooseUrgency(_ctx, cardId, next, current) {
+    app.set('urgencyMenu', null);
+    if (next === current) return;
     const idx = app.get('rows').findIndex((r) => r.cardId === cardId);
-    const next = current === 'Urgent' ? 'Non-Urgent' : 'Urgent';
-    app.set(`rows.${idx}.urgency`, next); // optimistic — reverts on failure (FR-4.7)
+    app.set(`rows.${idx}.urgency`, next);
+    app.set(`savingUrgency.${cardId}`, true);
     try {
       await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/urgency`, { urgent: next === 'Urgent' });
     } catch (err) {
       app.set(`rows.${idx}.urgency`, current);
       app.set('banner', `Urgency write failed — reverted. ${err.detail && err.detail.message ? err.detail.message : err.message}`);
       setTimeout(() => app.set('banner', ''), 6000);
+    } finally {
+      app.set(`savingUrgency.${cardId}`, false);
     }
+  },
+  pipeScrolled(ctx) { updateThumb(ctx.node); },
+  nudgeScroll(_ctx, dir) {
+    const el = document.querySelector('.pscroll');
+    if (!el) return;
+    el.scrollLeft += dir * 240;
+    updateThumb(el);
+  },
+  trackJump(ctx) {
+    const el = document.querySelector('.pscroll');
+    if (!el) return;
+    const rect = ctx.node.getBoundingClientRect();
+    const frac = (ctx.event.clientX - rect.left) / rect.width;
+    el.scrollLeft = Math.max(0, frac * el.scrollWidth - el.clientWidth / 2);
+    updateThumb(el);
   },
   /* ---- Admin tab (FR-10): allow-listing from a screen ---- */
   adminDismiss() { app.set('adminError', ''); },

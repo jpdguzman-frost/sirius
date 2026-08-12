@@ -36,11 +36,12 @@ export default [
         api: 'readonly',
         fmtDate: 'readonly',
         mondayShift: 'readonly',
+        ICONS: 'readonly',
       },
     },
     rules: {
       'no-redeclare': 'off', // the defining file "redeclares" the shared names
-      'no-unused-vars': ['error', { varsIgnorePattern: '^(api|fmtDate|mondayShift|app)$' }],
+      'no-unused-vars': ['error', { varsIgnorePattern: '^(api|fmtDate|mondayShift|app|ICONS)$' }],
     },
   },
 ];

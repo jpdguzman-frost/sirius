@@ -1,5 +1,7 @@
 :root {
-  --bg: #f7f8fa;
+  /* legacy aliases — pre-phase-13 tabs still reference these; they now
+     resolve to the token palette (05-tokens.css) */
+  --bg: #ffffff;
   --card: #ffffff;
   --ink: #0f172a;
   --muted: #64748b;
@@ -18,64 +20,22 @@
 
 body {
   margin: 0;
-  font-family: 'Poppins', system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--ink);
+  font-family: var(--font-sans, 'Google Sans Flex', system-ui, sans-serif);
+  background: var(--surface-background, #fff);
+  color: var(--surface-foreground, #0f172a);
   font-size: 14px;
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1.4rem 2rem 0.9rem;
-  background: var(--bg);
-  flex-wrap: wrap;
-}
-
-.brand { font-weight: 700; font-size: 1.7rem; letter-spacing: -0.02em; white-space: nowrap; }
-.brand .crumb { color: var(--faint); font-weight: 500; margin: 0 0.35rem; }
-.brand .crumbtab { font-weight: 700; }
-
-.projectlabel { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; margin-left: auto; }
-.project-switcher {
-  font: inherit; font-weight: 500; padding: 0.55rem 0.9rem;
-  border: 1px solid var(--border); border-radius: 10px; background: #fff;
-}
-.boardlink { font-weight: 600; font-size: 0.85rem; color: var(--blue); text-decoration: none; }
-
-.userchip {
-  display: flex; align-items: center; gap: 0.6rem;
-  background: #fff; border-radius: 14px; padding: 0.45rem 0.9rem; border: 1px solid var(--border);
-}
-.userchip .avatar {
-  width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff;
-  display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.8rem;
-}
-.userchip .who { line-height: 1.15; }
-.userchip .who .name { font-weight: 600; font-size: 0.8rem; }
-.userchip .who .sub { color: var(--muted); font-size: 0.72rem; cursor: pointer; background: none; border: none; padding: 0; font-family: inherit; }
-
-.sync { font-size: 0.75rem; color: var(--muted); }
-.sync.bad { color: var(--red-ink); font-weight: 600; }
-
-.tabs {
-  display: flex; gap: 2rem; padding: 0 2rem; border-bottom: 1px solid var(--border); background: var(--bg);
-}
-.tab {
-  border: none; background: none; font: inherit; font-weight: 600; font-size: 0.95rem;
-  color: var(--faint); padding: 0.8rem 0.1rem; cursor: pointer;
-  border-bottom: 2.5px solid transparent; margin-bottom: -1px; display: flex; align-items: center; gap: 0.45rem;
-}
-.tab.active { color: var(--ink); border-bottom-color: var(--ink); }
-.tab .ticon { font-size: 1rem; }
-
-.view { padding: 1.4rem 2rem 3rem; }
+.view { padding: 24px 64px 48px; }
 
 .banner {
-  background: #fef3c7; color: #92400e; padding: 0.6rem 1rem;
-  border-radius: 10px; margin: 0 2rem; font-size: 0.85rem;
+  background: var(--amber-100);
+  color: var(--amber-800);
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-md);
+  margin: 0 64px;
+  font-size: 0.85rem;
 }
 
-a { color: var(--blue); }
+a { color: var(--blue-700); }
 h3 { margin: 1.4rem 0 0.5rem; font-size: 1rem; font-weight: 600; }
