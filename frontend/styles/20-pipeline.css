@@ -124,7 +124,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    when the viewport is genuinely too narrow. */
 .ptable { border-collapse: collapse; width: 100%; }
 .ptable th {
-  height: 56px; background: var(--slate-100); text-align: left; padding: 0 16px;
+  height: 44px; background: var(--slate-100); text-align: left; padding: 0 16px;
   font-size: var(--text-label); font-weight: 600; line-height: 1; letter-spacing: 0.02em;
   text-transform: uppercase; color: var(--surface-muted-foreground); white-space: nowrap;
   position: sticky; top: 0; z-index: 2;
@@ -139,8 +139,8 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .ptable .col-status { width: 228px; min-width: 228px; }
 .ptable .col-client { width: 142px; min-width: 142px; }
 .ptable .col-due, .ptable .col-started { width: 156px; min-width: 156px; }
-.ptable .col-done, .ptable .col-cycle, .ptable .col-weeks { width: 76px; min-width: 76px; }
-.ptable th:last-child { width: 76px; min-width: 76px; }
+.ptable .col-done { width: 76px; min-width: 76px; }
+.ptable .col-links { width: 94px; min-width: 94px; }
 
 .ptable .mccell { display: flex; gap: 16px; align-items: flex-start; }
 .ptable .mccell .chevbtn {

@@ -131,7 +131,7 @@
           <th class="col-mc">MC #</th><th class="col-name">Card Name</th><th class="col-type">Type</th>
           <th class="col-diff">Difficulty</th><th class="col-urgency">Urgency</th><th class="col-status">Status</th>
           <th class="col-client">Client</th><th class="col-due">Due</th><th class="col-started">Started</th>
-          <th class="col-done">Done</th><th class="col-cycle">Cycle Time</th><th class="col-weeks">Weeks</th><th>Links</th>
+          <th class="col-done">Done</th><th class="col-links">Links</th>
         </tr></thead>
         <tbody>
         {{#each pipelineRows as row}}
@@ -173,9 +173,7 @@
             </td>
             <td class="col-started">{{#if row.workStarted}}<span class="dpicker readonly" title="Earliest work-card start in this MC group"><span class="dpdate">{{fmtLong(row.workStarted)}}</span>{{{icon.calendar}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-done">{{#if row.workDone}}<span class="plaincell nowrap">{{fmtLong(row.workDone)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-            <td class="col-cycle">{{#if row.cycleDays != null}}<span class="plaincell">{{row.cycleDays}}d</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-            <td class="col-weeks">{{#if row.slottedWeek}}<span class="plaincell nowrap">{{fmt(row.slottedWeek)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-            <td>
+            <td class="col-links">
               {{#if row.trelloUrl}}<a class="srclink" href="{{row.trelloUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Trello">{{{icon.trello}}}</a>{{/if}}
               {{#if row.figmaUrl}}<a class="srclink" href="{{row.figmaUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Figma">{{{icon.figma}}}</a>{{/if}}
             </td>
@@ -186,7 +184,7 @@
                 <td class="dimcell">task</td>
                 <td colspan="4">{{w.name}}</td>
                 <td><span class="pbadge s-{{w.status}}">{{w.currentList || w.status}}</span></td>
-                <td colspan="6" class="dimcell"></td>
+                <td colspan="4" class="dimcell"></td>
                 <td>{{#if w.trelloUrl}}<a class="srclink" href="{{w.trelloUrl}}" target="_blank" aria-label="Open task in Trello">{{{icon.trello}}}</a>{{/if}}</td>
               </tr>
             {{/each}}
