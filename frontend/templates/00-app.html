@@ -23,19 +23,46 @@
 <main class="view">
 
 {{#if activeTab === 'requests'}}
-  {{#if requests.length || rejects.length}}
-    <div class="toolbar">
-      {{#each requestFilters as f}}<button class="chip {{#if f === requestFilter}}on{{/if}}" on-click="['setRequestFilter', f]">{{f}}</button>{{/each}}
+  {{#if requests.length || rejects.length || requestCounts.requests}}
+    <div class="tiles">
+      <button class="tile {{#if tileOff('all')}}off{{/if}}" on-click="['setRequestFilter', 'all']"><span class="tlabel">Requests</span><span class="tvalue">{{requestCounts.requests}}</span></button>
+      <button class="tile green {{#if tileOff('filed')}}off{{/if}}" on-click="['setRequestFilter', 'filed']"><span class="tlabel">In Pipeline</span><span class="tvalue">{{requestCounts.inPipeline}}</span></button>
+      <button class="tile amber {{#if tileOff('filing')}}off{{/if}}" on-click="['setRequestFilter', 'filing']"><span class="tlabel">To File</span><span class="tvalue">{{requestCounts.forFiling}}</span></button>
+      <button class="tile red {{#if tileOff('clarification')}}off{{/if}}" on-click="['setRequestFilter', 'clarification']"><span class="tlabel">For Clarification</span><span class="tvalue">{{requestCounts.forClarification}}</span></button>
+      <button class="chip {{#if requestFilter === 'missing-deadline'}}on{{/if}}" style="align-self:center;" on-click="['setRequestFilter', 'missing-deadline']">missing deadline</button>
     </div>
     <div class="scroll"><table class="grid">
-      <thead><tr><th>MC #</th><th>Deliverable</th><th>Type</th><th>Use case</th><th>Requestor</th><th>Deadline</th><th>Status</th><th>Brief</th></tr></thead>
+      <thead><tr><th>MC #</th><th>Deliverable</th><th>Type</th><th>Use case</th><th>Requestor</th><th>Deadline</th><th>Brief</th><th>Status</th><th>Frost notes</th></tr></thead>
       <tbody>
       {{#each requests as r}}
         <tr>
           <td class="mono">{{r.mc_number}}</td><td>{{r.name}}</td><td>{{r.asset_type}}</td><td>{{r.use_case}}</td>
           <td class="dim">{{r.requestor}}</td><td>{{fmt(r.deadline)}}</td>
-          <td><span class="badge {{#if r.status === 'In pipeline'}}ok{{else}}warn{{/if}}">{{r.status}}</span></td>
           <td class="dim clip">{{r.brief}}</td>
+          <td><span class="badge {{r.status === 'In Pipeline' ? 'ok' : r.status === 'With Clarification' ? 'bad' : 'warn'}}">{{r.status}}</span></td>
+          <td class="notecell">
+            {{#if noteEditing === r.mc_number}}
+              <div class="note-editor" on-keydown="['noteKeydown']">
+                <textarea rows="3" placeholder="Remark" value="{{noteDraft.remark}}" autofocus></textarea>
+                <label class="chk"><input type="checkbox" checked="{{noteDraft.clarify}}" /> With Clarification</label>
+                <div class="dim subline">Marks the request as not fileable yet</div>
+                {{#if noteDraft.clarify}}<textarea rows="2" class="reason" placeholder="Reason (required)" value="{{noteDraft.reason}}"></textarea>{{/if}}
+                {{#if noteError}}<span class="badge bad">{{noteError}}</span>{{/if}}
+                <div class="editbtns"><button class="chip" on-click="['cancelNote']">Cancel</button><button class="chip primary" on-click="['submitNote', r.mc_number]">Submit</button></div>
+              </div>
+            {{else}}
+              {{#if r.note && r.note.clarify}}
+                <span class="badge bad">With Clarification</span>
+                <button class="chev" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}">✎</button>
+                <div class="clarify-reason">{{r.note.clarify_reason}}</div>
+                {{#if r.note.remark}}<div class="remarkbox">{{r.note.remark}}</div>{{/if}}
+              {{elseif r.note && r.note.remark}}
+                <div class="remarkbox">{{r.note.remark}} <button class="chev" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}">✎</button></div>
+              {{else}}
+                <button class="addremark" on-click="['openNote', r.mc_number]">Add Remarks</button>
+              {{/if}}
+            {{/if}}
+          </td>
         </tr>
       {{/each}}
       </tbody>
@@ -63,7 +90,7 @@
   </div>
 
   <div class="note">🔒 Difficulty, list, due date and Figma links are read from Trello and can’t be edited here.
-    <span class="dim">{{syncLabel}} · every 15 minutes</span></div>
+    <span class="dim">{{syncLabel}} · Trello changes arrive within a minute; a 15-minute check backs it up</span></div>
   <div class="note soft">Sirius writes exactly two things back to Trello (the write registry): the <strong>Urgent</strong> label — absence means non-urgent — and the card <strong>due date</strong>, editable in the Due column. Everything else is read-only.</div>
 
   {{#if corrections.length}}
@@ -181,7 +208,7 @@
       {{/each}}
     {{/each}}
     </tbody>
-    <tfoot><tr><td colspan="5" class="dim">cards vs capacity {{capacity.weekly}} · hard share amber >{{pct(hardIdeal)}} red >{{pct(hardCeiling)}}</td>
+    <tfoot><tr><td colspan="5" class="dim">cards vs capacity {{capacity.weekly}} — a row carries its work cards (1 + tasks÷deliverables) · hard share amber >{{pct(hardIdeal)}} red >{{pct(hardCeiling)}}</td>
       <td class="ganttcell"><div class="footcells">{{#each weekCols as wk}}<div class="footcell {{footClass(wk.key)}}">{{footLabel(wk.key)}}</div>{{/each}}</div></td>
     </tr></tfoot>
   </table></div>
@@ -241,23 +268,49 @@
     </div>
   {{/if}}
 
+  <div class="dim" style="margin-top:0.6rem;">Click a week to plan its days. Drag an entry between days, or focus it and use ←/→; Backspace returns it to the forecast day. Day moves never change the week — replotting happens on Sprint Schedules.</div>
   <div class="weekgrid">
     {{#each deadlineWeeks as w}}
-      <div class="weekcard {{#if w.flagged}}flagged{{/if}}">
-        <div class="whead"><span class="wtitle">{{w.label}}</span><span class="wmeta">{{w.items.length}} due{{#if w.urgent}} · {{w.urgent}} urgent{{/if}}</span></div>
+      <div class="weekcard {{#if w.flagged}}flagged{{/if}} {{#if expandedWeek === w.key}}expanded{{/if}}">
+        <div class="whead">
+          <button class="wtitle wexpand" on-click="['toggleWeek', w.key]" aria-label="{{expandedWeek === w.key ? 'Collapse' : 'Expand'}} {{w.label}} to days">{{expandedWeek === w.key ? '▾' : '▸'}} {{w.label}}</button>
+          <span class="wmeta">{{fmtLoad(w.load)}} cards' worth due{{#if w.urgent}} · {{w.urgent}} urgent{{/if}}</span>
+        </div>
         <div class="wsub">{{w.sub}}</div>
         <div class="capbar"><div class="fill" style="width:{{w.capPct}}%;"></div></div>
-        <div class="capnote">{{w.items.length}} / {{capacity.weekly}} cards</div>
-        {{#each w.items as m}}
-          <div class="entry {{#if m.late}}late{{elseif m.urgent}}urgent{{/if}}">
-            <span class="who">{{m.displayId}}</span>
-            <span class="badge {{m.phase}}">{{m.phase}}</span>
-            {{#if m.urgent}}<span class="badge urgentchip">⚡</span>{{/if}}
-            {{#if m.late}}<span class="badge bad">late</span>{{/if}}
-            <span class="edate">{{fmt(m.date)}}</span>
-            {{#if m.trelloUrl}}<a href="{{m.trelloUrl}}" target="_blank">↗</a>{{/if}}
+        <div class="capnote">{{fmtLoad(w.load)}} / {{capacity.weekly}} cards</div>
+        {{#if expandedWeek === w.key}}
+          <div class="daygrid">
+            {{#each dayCols(w.key) as d}}
+              <div class="daycol {{#if d.holiday}}holiday{{/if}} {{#if d.load > d.capacity}}over{{/if}}"
+                   on-dragover="['dayDragOver', d.holiday]" on-drop="['dropOnDay', d.day, d.holiday]">
+                <div class="dhead">{{dayName(d.day)}} <span class="dcap">{{#if d.holiday}}holiday{{else}}{{fmtLoad(d.load)}}/{{d.capacity}}{{/if}}</span></div>
+                {{#each d.items as m}}
+                  <div class="entry {{#if m.late}}late{{elseif m.urgent}}urgent{{/if}}" draggable="true" tabindex="0"
+                       on-dragstart="['dragMilestone', m.cardId, m.phase]"
+                       on-keydown="['milestoneKey', m.cardId, m.phase, d.day, w.key]"
+                       aria-label="{{m.displayId}} {{m.phase}} on {{dayName(d.day)}} — arrows move the day">
+                    <span class="who">{{m.displayId}}</span>
+                    <span class="badge {{m.phase}}">{{m.phase}}</span>
+                    {{#if m.plannedDay}}<button class="chev" on-click="['clearDayPlan', m.cardId, m.phase]" title="Back to the forecast day">✕</button>{{/if}}
+                  </div>
+                {{/each}}
+              </div>
+            {{/each}}
           </div>
-        {{/each}}
+        {{else}}
+          {{#each w.items as m}}
+            <div class="entry {{#if m.late}}late{{elseif m.urgent}}urgent{{/if}}">
+              <span class="who">{{m.displayId}}</span>
+              <span class="badge {{m.phase}}">{{m.phase}}</span>
+              {{#if m.urgent}}<span class="badge urgentchip">⚡</span>{{/if}}
+              {{#if m.late}}<span class="badge bad">late</span>{{/if}}
+              {{#if m.plannedDay}}<span class="badge" title="Day set by hand — the forecast day is {{fmt(m.date)}}">📍 {{dayName(m.plannedDay)}}</span>{{/if}}
+              <span class="edate">{{fmt(m.plannedDay || m.date)}}</span>
+              {{#if m.trelloUrl}}<a href="{{m.trelloUrl}}" target="_blank">↗</a>{{/if}}
+            </div>
+          {{/each}}
+        {{/if}}
       </div>
     {{/each}}
   </div>

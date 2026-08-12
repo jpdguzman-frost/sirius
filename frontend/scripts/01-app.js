@@ -1,7 +1,7 @@
 /* Sirius frontend — one Ractive instance, ARES conventions.
-   Weighted-load constants mirror lib/planner.constants (WEIGHTS, HARD_MIX). */
+   Hard-mix constants mirror lib/planner.constants (HARD_MIX); load is BR-6c
+   card-equivalents (row.weight from the server). */
 
-const WEIGHTS = { Easy: 1, Medium: 2, Hard: 4, '': 2 };
 const HARD_IDEAL = 0.083;
 const HARD_CEILING = 0.129;
 const WEEK_COUNT = 8;
@@ -56,6 +56,11 @@ const app = new Ractive({
     hardCeiling: HARD_CEILING,
     requests: [],
     rejects: [],
+    requestCounts: { requests: 0, inPipeline: 0, forFiling: 0, forClarification: 0 },
+    noteEditing: null,
+    noteDraft: { remark: '', clarify: false, reason: '' },
+    noteError: '',
+    expandedWeek: null,
     isAdmin: false,
     adminUsers: [],
     adminProjects: [],
@@ -78,6 +83,12 @@ const app = new Ractive({
     modelReview: null,
     fmt: (iso) => fmtDate(iso),
     pct: (x) => `${Math.round((x || 0) * 1000) / 10}%`,
+    // BR-6c/§5.4 display rule: fractions to one decimal, whole numbers plain
+    fmtLoad: (n) => {
+      const r = Math.round((n || 0) * 1000) / 1000;
+      return Number.isInteger(r) ? String(r) : r.toFixed(1);
+    },
+    dayName: (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }),
     ruleLabel: (r) =>
       r === 'urgent-overlap' ? '⚡ Urgent overlap' : r === 'past-deadline' ? '🛡 Past deadline' : '▤ Over capacity',
   },
@@ -188,20 +199,26 @@ app.set('ghostLeft', (row) => {
   if (!s || !s.plan[row.cardId]) return 0;
   return clamp(pctOf(s.plan[row.cardId])).toFixed(2);
 });
+/* BR-6c: a row carries its MC group's work-card share, so the footer speaks
+   the same unit as capacity (cards). Hard mix stays BR-6b's own test. */
+const rowLoad = (rows) => rows.reduce((a, r) => a + (r.weight || 1), 0);
+
 app.set('footClass', (weekKey) => {
   const rows = app.get('schedRows').filter((r) => r.slottedWeek === weekKey);
   const cap = app.get('capacity').weekly || 1;
   const hard = rows.filter((r) => r.difficulty === 'Hard').length;
   const share = rows.length ? hard / rows.length : 0;
-  if (rows.length > cap || share > HARD_CEILING) return 'red';
+  if (rowLoad(rows) > cap || share > HARD_CEILING) return 'red';
   if (share > HARD_IDEAL) return 'amber';
   return '';
 });
 app.set('footLabel', (weekKey) => {
   const rows = app.get('schedRows').filter((r) => r.slottedWeek === weekKey);
-  const pts = rows.reduce((a, r) => a + (WEIGHTS[r.difficulty || ''] || 2), 0);
+  const cap = app.get('capacity').weekly || 0;
   const hard = rows.filter((r) => r.difficulty === 'Hard').length;
-  return rows.length ? `${rows.length} (${pts}pt · ${hard}H)` : '';
+  const share = rows.length ? hard / rows.length : 0;
+  const fmtLoad = app.get('fmtLoad');
+  return rows.length ? `${fmtLoad(rowLoad(rows))}/${cap} · ${hard}H · ${Math.round(share * 1000) / 10}%` : '';
 });
 
 /* ---------- data loading ---------- */
@@ -232,6 +249,12 @@ async function loadAdmin() {
     app.set('adminError', (err.detail && err.detail.message) || err.message);
   }
 }
+
+/* §3.1 tiles: unselected tiles drop to 45% opacity, never an underline */
+app.set('tileOff', (f) => {
+  const cur = app.get('requestFilter');
+  return cur !== 'all' && cur !== f;
+});
 
 app.set('projCode', (pid) => {
   const p = (app.get('adminProjects') || []).find((x) => x.id === pid);
@@ -287,6 +310,7 @@ async function loadAll() {
       banner: pipeline.sync && !pipeline.sync.ok ? `Sync error: ${pipeline.sync.error || 'unknown'} — data below is the last good state.` : '',
       requests: requests.requests,
       rejects: requests.rejects,
+      requestCounts: requests.counts || app.get('requestCounts'),
       deadlinePayload: deadlines,
       modelProvenance: model.provenance,
       modelReview: model.model.review,
@@ -323,14 +347,17 @@ function computeDeadlines() {
     deadlineWeeks: keys.map((key, i) => {
       const items = byWeek[key];
       const urgent = items.filter((x) => x.urgent).length;
+      const load = rowLoad(items); // BR-6c card-equivalents
       return {
         key,
         label: `Week ${i + 1}`,
         sub: fmtDate(key),
         items,
         urgent,
-        flagged: urgent >= 2 || items.some((x) => x.late),
-        capPct: Math.min(100, (items.length / cap) * 100).toFixed(1),
+        load,
+        // §6.1: the week tints ONLY when over capacity — warnings have banners
+        flagged: load > cap,
+        capPct: Math.min(100, (load / cap) * 100).toFixed(1),
       };
     }),
     deadlineConflicts: payload.conflicts.filter((c) => keys.includes(c.week)),
@@ -339,6 +366,39 @@ function computeDeadlines() {
     dueThisMonth: inMonth.length,
     urgentThisMonth: inMonth.filter((x) => x.urgent).length,
   });
+}
+
+/* FR-12: day columns for an expanded week — capacities from the server
+   (largest remainder, exact sum), entries placed on plannedDay ?? forecast. */
+app.set('dayCols', (weekKey) => {
+  const payload = app.get('deadlinePayload');
+  const cols = (payload.days && payload.days[weekKey]) || [];
+  const weekItems = (payload.milestones || []).filter((m) => m.week === weekKey);
+  return cols.map((c) => {
+    const items = weekItems.filter((m) => (m.plannedDay || m.date) === c.day);
+    return { ...c, items, load: rowLoad(items) };
+  });
+});
+
+/* FR-12.5: optimistic with rollback, same shape as the W2 deadline write. */
+async function writeDayPlan(cardId, phase, day) {
+  const payload = app.get('deadlinePayload');
+  const idx = (payload.milestones || []).findIndex((m) => m.cardId === cardId && m.phase === phase);
+  if (idx < 0) return;
+  const prev = payload.milestones[idx].plannedDay || null;
+  if ((day || null) === prev) return; // no-op — no call, no audit
+  app.set(`deadlinePayload.milestones.${idx}.plannedDay`, day);
+  computeDeadlines();
+  try {
+    await api.send('PUT', `/api/projects/${app.get('activeProjectId')}/deadlines/day`, { cardId, phase, day });
+  } catch (err) {
+    app.set(`deadlinePayload.milestones.${idx}.plannedDay`, prev);
+    computeDeadlines();
+    const code = err.detail && err.detail.error && err.detail.error.code;
+    const why = code === 'HOLIDAY' ? 'that day is a holiday — it takes no work' : code === 'DAY_OUTSIDE_WEEK' ? 'that day is outside the milestone’s week' : err.message;
+    app.set('banner', `Day move failed — reverted. ${why}`);
+    setTimeout(() => app.set('banner', ''), 6000);
+  }
 }
 
 /* ---------- events ---------- */
@@ -353,9 +413,56 @@ app.on({
   signOut() { api.send('POST', '/auth/logout').then(() => window.location.reload()); },
   toggleCorrections() { app.toggle('showAllCorrections'); },
   async setRequestFilter(_ctx, f) {
-    app.set('requestFilter', f);
+    app.set('requestFilter', f === app.get('requestFilter') && f !== 'all' ? 'all' : f); // clicking the active tile clears it
     const res = await api.get(`/api/projects/${app.get('activeProjectId')}/requests${filterQuery()}`);
-    app.set({ requests: res.requests, rejects: res.rejects });
+    app.set({ requests: res.requests, rejects: res.rejects, requestCounts: res.counts || app.get('requestCounts') });
+  },
+
+  /* ---- frost notes (FR-11): inline editor, only Submit persists ---- */
+  openNote(_ctx, mc) {
+    const r = app.get('requests').find((x) => x.mc_number === mc);
+    const n = (r && r.note) || {};
+    app.set({
+      noteEditing: mc,
+      noteDraft: { remark: n.remark || '', clarify: !!n.clarify, reason: n.clarify_reason || '' },
+      noteError: '',
+    });
+  },
+  noteKeydown(ctx) {
+    ctx.event.stopPropagation(); // textareas own their keys
+    if (ctx.event.key === 'Escape') app.set({ noteEditing: null, noteError: '' });
+  },
+  cancelNote() { app.set({ noteEditing: null, noteError: '' }); },
+  async submitNote(_ctx, mc) {
+    const d = app.get('noteDraft');
+    const remark = (d.remark || '').trim() || null;
+    const reason = (d.reason || '').trim() || null;
+    if (d.clarify && !reason) {
+      app.set('noteError', 'The flag needs a reason');
+      return;
+    }
+    const idx = app.get('requests').findIndex((x) => x.mc_number === mc);
+    const row = app.get(`requests.${idx}`);
+    const prev = { note: row.note, status: row.status };
+    const note = remark === null && !d.clarify ? null : { remark, clarify: d.clarify, clarify_reason: reason };
+    // optimistic: status is derived — mirror the server's derivation (FR-11.3)
+    app.set(`requests.${idx}.note`, note);
+    if (row.status !== 'In Pipeline') {
+      app.set(`requests.${idx}.status`, d.clarify ? 'With Clarification' : 'For Filing');
+    }
+    app.set({ noteEditing: null, noteError: '' });
+    try {
+      await api.send('PUT', `/api/projects/${app.get('activeProjectId')}/requests/${mc}/note`, {
+        remark, clarify: d.clarify, ...(d.clarify ? { clarify_reason: reason } : {}),
+      });
+      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/requests${filterQuery()}`);
+      app.set({ requests: res.requests, requestCounts: res.counts || app.get('requestCounts') });
+    } catch (err) {
+      app.set(`requests.${idx}.note`, prev.note);
+      app.set(`requests.${idx}.status`, prev.status);
+      app.set('banner', `Note save failed — reverted. ${(err.detail && err.detail.message) || err.message}`);
+      setTimeout(() => app.set('banner', ''), 6000);
+    }
   },
   toggleGroup(_ctx, mc) { app.toggle(`expanded.${mc}`); },
   async toggleUrgency(_ctx, cardId, current) {
@@ -488,8 +595,43 @@ app.on({
 
   monthShift(_ctx, dir) {
     app.set('monthOffset', app.get('monthOffset') + dir);
+    app.set('expandedWeek', null);
     computeDeadlines();
   },
+
+  /* ---- daily plotting (FR-12): one week open at a time ---- */
+  toggleWeek(_ctx, key) {
+    app.set('expandedWeek', app.get('expandedWeek') === key ? null : key);
+  },
+  dragMilestone(ctx, cardId, phase) {
+    ctx.event.dataTransfer.setData('text/plain', `${cardId}|${phase}`);
+    ctx.event.dataTransfer.effectAllowed = 'move';
+  },
+  dayDragOver(ctx, holiday) {
+    if (!holiday) ctx.event.preventDefault(); // holidays reject drops (FR-12.4)
+  },
+  async dropOnDay(ctx, day, holiday) {
+    ctx.event.preventDefault();
+    if (holiday) return;
+    const [cardId, phase] = ctx.event.dataTransfer.getData('text/plain').split('|');
+    if (cardId && phase) await writeDayPlan(cardId, phase, day);
+  },
+  async milestoneKey(ctx, cardId, phase, currentDay, weekKey) {
+    const key = ctx.event.key;
+    if (key === 'Backspace' || key === 'Delete') {
+      ctx.event.preventDefault();
+      await writeDayPlan(cardId, phase, null);
+      return;
+    }
+    if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
+    ctx.event.preventDefault();
+    const cols = app.get('dayCols')(weekKey);
+    const open = cols.filter((c) => !c.holiday).map((c) => c.day); // arrows skip holidays
+    const at = open.indexOf(currentDay);
+    const next = open[(at < 0 ? 0 : at) + (key === 'ArrowRight' ? 1 : -1)];
+    if (next) await writeDayPlan(cardId, phase, next);
+  },
+  async clearDayPlan(_ctx, cardId, phase) { await writeDayPlan(cardId, phase, null); },
   async ackConflict(_ctx, key) {
     const reason = window.prompt('Acknowledge this conflict — optional reason (it goes to the audit log):', '');
     if (reason === null) return;
