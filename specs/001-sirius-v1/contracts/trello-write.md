@@ -1,9 +1,10 @@
 # Contract — Trello writes: the write registry
 
-Amended 2026-08-04 (JP): the write surface grew from one entry to two. The principle is
-unchanged and constitutional (invariant 2): **the write surface is enumerable** — it is this
-table, exhaustively. Growing it is a constitution amendment, never a code change. No other
-write to any source system exists; Google Sheets has no write path, ever.
+Amended 2026-08-04 (JP): the write surface grew from one entry to two. Amended 2026-08-12
+(JP, per product's BRD-§9-A1 — Miles): grown from two to three. The principle is unchanged
+and constitutional (invariant 2): **the write surface is enumerable** — it is this table,
+exhaustively. Growing it is a constitution amendment, never a code change. No other write
+to any source system exists; Google Sheets has no write path, ever.
 
 ## The registry
 
@@ -11,9 +12,11 @@ write to any source system exists; Google Sheets has no write path, ever.
 |---|---|---|---|---|---|
 | W1 | `Urgent` label | `POST /cards/{id}/idLabels` · `DELETE /cards/{id}/idLabels/{labelId}` | Pipeline urgency toggle | `urgency.set` | v1 (FR-4.6) |
 | W2 | Due date | `PUT /cards/{id}` with `{due}`; `{due: null}` clears | Deadline edit in Pipeline | `due.set` | 2026-08-04 (FR-9.1) |
+| W3 | `Difficulty: …` label | `POST /cards/{id}/idLabels` (new value) · `DELETE /cards/{id}/idLabels/{labelId}` (stale values) | Pipeline difficulty dropdown | `difficulty.set` | 2026-08-12 (BRD-§9-A1) |
 
 Interfaces live in `lib/trello.ts` only: `setUrgency(cardId, boardId, urgent)` (§5.3 verbatim
-shape, unchanged) and `setDue(cardId, isoDateTimeOrNull)`.
+shape, unchanged), `setDue(cardId, isoDateTimeOrNull)`, and
+`setDifficulty(cardId, boardId, 'Easy' | 'Medium' | 'Hard')`.
 
 ## Rules binding every registry entry (invariant 8, FR-9.3)
 
@@ -45,7 +48,29 @@ shape, unchanged) and `setDue(cardId, isoDateTimeOrNull)`.
 - **Precedence preserved by construction**: Sirius edits the deadline *by writing the Trello
   due date*, so "Trello due wins" remains true and the sheet is never written.
 
+## W3 semantics — difficulty label
+
+- Difficulty lives on the card as one label from the board taxonomy: `Difficulty: Easy`,
+  `Difficulty: Medium`, `Difficulty: Hard` (invariant 17). The write is a **label swap** and
+  therefore not atomic: two Trello calls when a difficulty label already exists.
+  *(Assumption pending Miles's confirmation, owl thread 2026-08-12: if product answers that a
+  Trello custom field is the real target, this section and `setDifficulty()` change — nothing
+  else in the registry does.)*
+- **Order: add first, then remove.** The new label is added before stale `Difficulty: …`
+  labels are removed, so the card never passes through a state with *no* difficulty. If a
+  stale-label removal fails, the write attempts to remove the just-added label (restoring the
+  original state) and reports failure; if even that restore fails, the card is left with two
+  difficulty labels — visible in Trello, reconciled by the next ARES read — and the local
+  value still rolls back (invariant 8: Sirius never displays a state Trello lacks).
+- Missing labels in the board taxonomy are created on demand (green/yellow/red), mirroring
+  the `Urgent` bootstrap — relevant only on test boards; the production taxonomy exists.
+- Changing difficulty re-keys the row's forecast (difficulty × lane — BR keying, model grid);
+  Sirius recomputes at read time, so persistence is sufficient.
+
 ## Recorded consequence
 
 BRD §9's "write is impossible by permission" is no longer true, and the write surface is now
-two fields, not one. Amend BRD §9 before the vendor assessment (JP-owned, tracked in STATE.md).
+three fields, not one. Product's amendment text (BRD-§9-A1, Miles 2026-08-12) still needs
+incorporation into the BRD document — and the literal BRD v2.2 §9 still says *one* write, so
+the incorporation must go one → three (or land the pending v2.3 "one → two" sweep first).
+Product-owned, tracked in STATE.md.

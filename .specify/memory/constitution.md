@@ -1,16 +1,17 @@
 <!--
 Sync Impact Report
-- Version change: 3.0.0 -> 4.0.0 (MAJOR: invariants 2 and 8 redefined)
-- Change: CLAUDE.md amended by JP on 2026-08-04 (two-way sync decision).
-  Invariant 2: the Trello write surface is now the enumerated write
-  registry in specs/001-sirius-v1/contracts/trello-write.md — today the
-  Urgent label AND the card due date; growth requires amendment.
-  Invariant 8: generalized from urgency-only to every Trello write;
-  written fields reconcile back from ARES reads.
-  Invariant 14: note added — Sirius deadline edits write the Trello due
-  date, preserving precedence. Stack section: ARES push webhooks added
-  (notification-then-read; poll remains the reconcile fallback).
-- Invariants: 17 count unchanged; #2 and #8 redefined, #14 clarified.
+- Version change: 4.0.0 -> 4.1.0 (MINOR: write registry grown W2 -> W3;
+  invariant 2's principle unchanged — the enumeration it points at grew)
+- Change: CLAUDE.md amended by JP on 2026-08-12 (difficulty writeback,
+  BRD-§9-A1, requested by Miles/product). Invariant 2: the registry now
+  holds exactly three entries — Urgent label, card due date, and the
+  Difficulty: … label (setDifficulty()). All other rules (registry growth
+  = amendment, optimistic+rollback per invariant 8, audit per invariant
+  10, observation-mode gate per project) bind W3 identically.
+- Prior: 3.0.0 -> 4.0.0 (MAJOR, 2026-08-04): invariants 2 and 8 redefined
+  from urgency-only to the enumerated write registry; invariant 14
+  clarified; ARES push webhooks added to the stack section.
+- Invariants: 17 count unchanged; #2 enumeration expanded.
 - Deferred TODOs: none.
 -->
 
@@ -25,12 +26,12 @@ You are building **Sirius**, Frost Design Group's internal delivery pipeline and
 
 ## What Sirius is, in three lines
 
-Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning decisions: which week a deliverable is slotted, confidence, SLA overrides, pins, status notes. It writes back only what the write registry enumerates — today the `Urgent` label and the card due date — nothing else, anywhere. It is multi-project from the first migration.
+Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning decisions: which week a deliverable is slotted, confidence, SLA overrides, pins, status notes. It writes back only what the write registry enumerates — today the `Urgent` label, the card due date, and the card difficulty label — nothing else, anywhere. It is multi-project from the first migration.
 
 ## Invariants — never violate, never "improve"
 
 1. **Every collection carries `project_id`. Every query filters on it.** No exceptions, including audit and sync collections where the schema defines it.
-2. **Read-only everywhere except the write registry.** (Amended 2026-08-04.) No write path to Google Sheets, ever. No write to Trello except the enumerated write registry in `specs/001-sirius-v1/contracts/trello-write.md` — today exactly two entries, both via `lib/trello.ts`: the `Urgent` label (`setUrgency()`) and the card due date (`setDue()`). Growing the registry is a constitution amendment, never a code change. If you find yourself writing anything else to a source system, you have misread the task — stop.
+2. **Read-only everywhere except the write registry.** (Amended 2026-08-04; registry grown 2026-08-12.) No write path to Google Sheets, ever. No write to Trello except the enumerated write registry in `specs/001-sirius-v1/contracts/trello-write.md` — today exactly three entries, all via `lib/trello.ts`: the `Urgent` label (`setUrgency()`), the card due date (`setDue()`), and the `Difficulty: …` label (`setDifficulty()`, approved by JP 2026-08-12 per BRD-§9-A1). Growing the registry is a constitution amendment, never a code change. If you find yourself writing anything else to a source system, you have misread the task — stop.
 3. **`mc_number` is NOT a unique key.** Identity is `(project_id, trello_card_id)`. MC-825 carries 99 deliverables. `display_id` (e.g. `MC-655.3`) is for humans.
 4. **Work cards attach to the MC group, not to a single deliverable.** There is no reliable task→deliverable edge (1 of 27 titles matched). Do not model one.
 5. **`lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` are ported verbatim from `frost-sirius-v1.jsx`.** They are validated. Do not refactor, rename, or "clean up" their logic. Golden tests prove the port before anything else uses them.
@@ -103,4 +104,4 @@ A phase is done when: its acceptance criteria (AC-1 to AC-20, as mapped in the p
 - **Open decisions.** OD items (BRD §13) are resolved by JP, recorded in the spec's
   clarifications, and only then do blocked tasks unblock. No defaults picked silently.
 
-**Version**: 4.0.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-04
+**Version**: 4.1.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-12
