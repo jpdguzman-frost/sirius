@@ -10,7 +10,8 @@ import { ensureProjectMember } from '../auth/membership.ts';
 import { loadProjectModel } from '../services/model-grid.ts';
 import { loadPipeline, toMilestones } from '../services/pipeline.ts';
 import { detectConflicts, replotList } from '../services/conflicts.ts';
-import { ConflictAcknowledgement, PushEvent, Sprint, SyncRun } from '../models/index.ts';
+import { dayCapacities } from '../../lib/dayplan.ts';
+import { ConflictAcknowledgement, MilestoneDayPlan, PushEvent, Sprint, SyncRun } from '../models/index.ts';
 
 const today = () => {
   const d = new Date();
@@ -55,6 +56,23 @@ export function deliverablesRouter(): Router {
       const projectId = res.locals.project._id;
       const pipeline = await loadPipeline(projectId, today());
       const milestones = toMilestones(pipeline.rows);
+
+      // FR-12: join day placements. A placement is valid only while the
+      // milestone still lands in the week it was made for — a moved week
+      // means the placement has LAPSED and reads as absent (FR-12.6).
+      const plans = await MilestoneDayPlan.find({ project_id: projectId }).lean();
+      const planByKey = new Map(plans.map((p) => [`${p.trello_card_id}:${p.phase}`, p]));
+      for (const m of milestones) {
+        const plan = planByKey.get(`${m.cardId}:${m.phase}`);
+        m.plannedDay = plan && plan.week === m.week ? plan.day : null;
+      }
+      // Day capacities per distinct milestone week (FR-12.4) — columns always
+      // sum exactly to the weekly capacity; holidays take zero.
+      const days: Record<string, ReturnType<typeof dayCapacities>> = {};
+      for (const week of new Set(milestones.map((m) => m.week))) {
+        days[week] = dayCapacities(week, res.locals.project.weekly_capacity);
+      }
+
       const all = detectConflicts(milestones, res.locals.project.weekly_capacity);
       // BR-9a: an acknowledgement silences ONE situation — its key carries the
       // exact cards, so any change re-surfaces the conflict (invariant 13).
@@ -66,6 +84,7 @@ export function deliverablesRouter(): Router {
       res.json({
         ok: true,
         milestones,
+        days,
         conflicts: active,
         acknowledged: acknowledged.map((c) => ({
           ...c,

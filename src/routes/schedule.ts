@@ -12,12 +12,18 @@ import { Types } from 'mongoose';
 import { ensureAuthenticated, type SessionUser } from '../auth/session.ts';
 import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
-import { loadPipeline } from '../services/pipeline.ts';
-import { ConflictAcknowledgement, Deliverable, Sprint } from '../models/index.ts';
+import { loadPipeline, toMilestones } from '../services/pipeline.ts';
+import { ConflictAcknowledgement, Deliverable, MilestoneDayPlan, Sprint } from '../models/index.ts';
 import { sprintIssues, suggestPlan, type PlannerCard } from '../../lib/planner.ts';
 import { buildWeeks } from '../../lib/calendar.ts';
+import { isHolidayDate, weekDays } from '../../lib/dayplan.ts';
 
 const DATE_ONLY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 const planningPatch = z
   .object({
@@ -62,6 +68,12 @@ export function scheduleRouter(): Router {
         }
       }
       await doc.save();
+      // FR-12.6: a moved week lapses the card's day placements — the read
+      // side also week-checks, so this is the explicit-trigger half.
+      if ('slotted_week' in parsed.data && before.slotted_week !== after.slotted_week) {
+        const lapsed = await MilestoneDayPlan.deleteMany({ project_id: projectId, trello_card_id: cardId });
+        if (lapsed.deletedCount > 0) after.dayPlanLapsed = lapsed.deletedCount;
+      }
       await audit({
         project_id: projectId,
         actor: (req.user as SessionUser).email,
@@ -100,9 +112,13 @@ export function scheduleRouter(): Router {
         const before = doc.slotted_week ?? null;
         doc.slotted_week = move.week;
         await doc.save();
+        const lapsed = before === move.week
+          ? { deletedCount: 0 }
+          : await MilestoneDayPlan.deleteMany({ project_id: projectId, trello_card_id: move.cardId }); // FR-12.6
         await audit({
           project_id: projectId, actor, action: 'schedule.replot', entity: 'deliverable',
-          entity_id: move.cardId, before: { slotted_week: before }, after: { slotted_week: move.week },
+          entity_id: move.cardId, before: { slotted_week: before },
+          after: { slotted_week: move.week, ...(lapsed.deletedCount > 0 ? { dayPlanLapsed: lapsed.deletedCount } : {}) },
         });
         moved++;
       }
@@ -230,6 +246,79 @@ export function scheduleRouter(): Router {
       await ConflictAcknowledgement.deleteOne({ project_id: projectId, conflict_key: body.data.conflict_key });
       await audit({ project_id: projectId, actor, action: 'conflict.restore', entity: 'conflict', entity_id: body.data.conflict_key });
       res.json({ ok: true });
+    },
+  );
+
+  // FR-12: day placement on Deadlines. Never changes the week (FR-12.3) —
+  // the day must sit inside the milestone's CURRENT week and off holidays
+  // (FR-12.4 rejects drops). null clears back to the forecast default.
+  router.put(
+    '/api/projects/:projectId/deadlines/day',
+    ensureAuthenticated,
+    ensureProjectMember,
+    async (req, res) => {
+      const body = z
+        .object({
+          cardId: z.string().min(1),
+          phase: z.enum(['sketch', 'render']),
+          day: DATE_ONLY.nullable(),
+        })
+        .strict()
+        .safeParse(req.body);
+      if (!body.success) {
+        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY', issues: body.error.issues } });
+        return;
+      }
+      const projectId = res.locals.project._id as Types.ObjectId;
+      const actor = (req.user as SessionUser).email;
+      const { cardId, phase, day } = body.data;
+
+      const pipeline = await loadPipeline(projectId, todayLocal());
+      const milestone = toMilestones(pipeline.rows).find((m) => m.cardId === cardId && m.phase === phase);
+      if (!milestone) {
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } }); // unslotted/unforecastable cards have no milestone
+        return;
+      }
+
+      const existing = await MilestoneDayPlan.findOne({ project_id: projectId, trello_card_id: cardId, phase }).lean();
+      const beforeDay = existing && existing.week === milestone.week ? existing.day : null;
+
+      if (day === null) {
+        if (!existing) {
+          res.json({ ok: true, plannedDay: null, noop: true });
+          return;
+        }
+        await MilestoneDayPlan.deleteOne({ project_id: projectId, trello_card_id: cardId, phase });
+        await audit({
+          project_id: projectId, actor, action: 'deadline.day_cleared', entity: 'deliverable',
+          entity_id: cardId, before: { phase, day: beforeDay }, after: { phase, day: null },
+        });
+        res.json({ ok: true, plannedDay: null });
+        return;
+      }
+
+      if (!weekDays(milestone.week).includes(day)) {
+        res.status(400).json({ ok: false, error: { code: 'DAY_OUTSIDE_WEEK', week: milestone.week } });
+        return;
+      }
+      if (isHolidayDate(day)) {
+        res.status(400).json({ ok: false, error: { code: 'HOLIDAY' } }); // holidays take zero and reject drops
+        return;
+      }
+      if (beforeDay === day) {
+        res.json({ ok: true, plannedDay: day, noop: true });
+        return;
+      }
+      await MilestoneDayPlan.updateOne(
+        { project_id: projectId, trello_card_id: cardId, phase },
+        { $set: { day, week: milestone.week, set_by: actor, set_at: new Date() } },
+        { upsert: true },
+      );
+      await audit({
+        project_id: projectId, actor, action: 'deadline.day_set', entity: 'deliverable',
+        entity_id: cardId, before: { phase, day: beforeDay }, after: { phase, day, week: milestone.week },
+      });
+      res.json({ ok: true, plannedDay: day });
     },
   );
 
