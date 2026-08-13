@@ -95,10 +95,45 @@ export async function upsertWorkCard(projectId: Types.ObjectId, w: MappedWorkCar
   );
 }
 
+const SPAN_FIELDS = 'trello_card_id current_list work_started_at work_done_at';
+
+interface SpanCard {
+  trello_card_id: string;
+  current_list?: string | null;
+  work_started_at?: Date | null;
+  work_done_at?: Date | null;
+}
+
+interface Span {
+  started: Date | null;
+  done: Date | null;
+}
+
+/** Cards whose stored span differs from the derived one — the only writes. */
+function pendingSpans(cards: SpanCard[], byCard: Map<string, Span>): Array<SpanCard & Span> {
+  const out: Array<SpanCard & Span> = [];
+  for (const c of cards) {
+    const s = byCard.get(c.trello_card_id) ?? { started: null, done: null };
+    // done is HELD only while the card sits in a done list today
+    const done = classifyList(c.current_list ?? '') === 'done' ? s.done : null;
+    if (
+      (c.work_started_at?.getTime() ?? null) === (s.started?.getTime() ?? null) &&
+      (c.work_done_at?.getTime() ?? null) === (done?.getTime() ?? null)
+    ) {
+      continue;
+    }
+    out.push({ ...c, started: s.started, done });
+  }
+  return out;
+}
+
 /**
- * Derive work_started_at / work_done_at from card movements (JP go
- * 2026-08-12; closes the review's top finding — nothing populated these).
- * Started = the card's FIRST move into an ongoing-or-done list; done = the
+ * Derive work_started_at / work_done_at from a card's OWN movements (JP go
+ * 2026-08-12; extended to deliverable cards 2026-08-13 — the row's Started /
+ * Done columns are the deliverable's own span, never its MC group's).
+ * Started = the card's FIRST move into an ongoing-or-done list, so a card
+ * that skipped straight to done still counts as started, and a card that
+ * bounced back to backlog and returned keeps its original start; done = the
  * LATEST move into a done list, kept only while the card currently sits in a
  * done list (moving it back out clears it). Idempotent: same-value spans
  * write nothing. Shared by the full board sync and the push drain.
@@ -106,14 +141,16 @@ export async function upsertWorkCard(projectId: Types.ObjectId, w: MappedWorkCar
 export async function deriveWorkSpans(projectId: Types.ObjectId, cardIds?: string[]): Promise<number> {
   const filter: Record<string, unknown> = { project_id: projectId, active: true };
   if (cardIds) filter.trello_card_id = { $in: cardIds };
-  const cards = await WorkCard.find(filter).select('trello_card_id current_list work_started_at work_done_at');
-  if (cards.length === 0) return 0;
+  const workCards = await WorkCard.find(filter).select(SPAN_FIELDS).lean<SpanCard[]>();
+  const mainCards = await Deliverable.find(filter).select(SPAN_FIELDS).lean<SpanCard[]>();
+  if (workCards.length === 0 && mainCards.length === 0) return 0;
+
   const events = await CardEvent.find({
     project_id: projectId,
-    trello_card_id: { $in: cards.map((c) => c.trello_card_id) },
+    trello_card_id: { $in: [...workCards, ...mainCards].map((c) => c.trello_card_id) },
   }).select('trello_card_id to_list occurred_at');
 
-  const byCard = new Map<string, { started: Date | null; done: Date | null }>();
+  const byCard = new Map<string, Span>();
   for (const e of events) {
     const cls = classifyList(e.to_list ?? '');
     if (cls !== 'ongoing' && cls !== 'done') continue;
@@ -124,18 +161,17 @@ export async function deriveWorkSpans(projectId: Types.ObjectId, cardIds?: strin
   }
 
   let updated = 0;
-  for (const c of cards) {
-    const s = byCard.get(c.trello_card_id) ?? { started: null, done: null };
-    const done = classifyList(c.current_list ?? '') === 'done' ? s.done : null;
-    if (
-      (c.work_started_at?.getTime() ?? null) === (s.started?.getTime() ?? null) &&
-      (c.work_done_at?.getTime() ?? null) === (done?.getTime() ?? null)
-    ) {
-      continue;
-    }
+  for (const c of pendingSpans(workCards, byCard)) {
     await WorkCard.updateOne(
       { project_id: projectId, trello_card_id: c.trello_card_id },
-      { $set: { work_started_at: s.started, work_done_at: done } },
+      { $set: { work_started_at: c.started, work_done_at: c.done } },
+    );
+    updated++;
+  }
+  for (const c of pendingSpans(mainCards, byCard)) {
+    await Deliverable.updateOne(
+      { project_id: projectId, trello_card_id: c.trello_card_id },
+      { $set: { work_started_at: c.started, work_done_at: c.done } },
     );
     updated++;
   }

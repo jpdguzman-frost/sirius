@@ -6,7 +6,6 @@
  */
 
 import mongoose, { Types } from 'mongoose';
-import { parseDate, workdaysBetween } from '../../lib/calendar.ts';
 import { forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { loadProjectModel } from './model-grid.ts';
@@ -38,6 +37,8 @@ const mondayOf = (d: Date) => {
 export interface PipelineRow {
   cardId: string;
   displayId: string;
+  /** Bare MC number for the table cell; display_id where the card has none. */
+  mcLabel: string;
   mcNumber: string | null;
   name: string;
   currentList: string | null;
@@ -49,10 +50,11 @@ export interface PipelineRow {
   blocker: string | null;
   requestor: string | null;
   assetType: string | null; // FR-4.1 type, sheet-joined
-  /** Frame 17:1015 columns — derived from the MC group's work cards (annotation-silent; assumptions in tasks.md phase 13). */
+  /** Figma 431:17015/17016 — Manila day of THIS card's own span; Ts keeps the raw instant for the tooltip. */
   workStarted: string | null;
   workDone: string | null;
-  cycleDays: number | null;
+  workStartedTs: string | null;
+  workDoneTs: string | null;
   deadline: string | null;
   deadlineSource: string | null;
   overdue: boolean; // deadline < today, computed where deadline lives (one 'today' in the system)
@@ -99,9 +101,6 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
 
   const workCards = await WorkCard.find({ project_id: projectId, active: true }).lean();
   const workCardsByMc: PipelineResult['workCardsByMc'] = {};
-  // ONE pass per work card: the DTO grouping and the Started/Done span
-  // accumulate together, so a future filter cannot desynchronize them.
-  const spanByMc = new Map<string, { minStart: Date | null; maxDone: Date | null; allDone: boolean }>();
   for (const w of workCards) {
     if (!workCardsByMc[w.mc_number]) workCardsByMc[w.mc_number] = [];
     workCardsByMc[w.mc_number]!.push({
@@ -112,26 +111,6 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
       status: classifyList(w.current_list),
       trelloUrl: w.trello_url ?? null,
       figmaUrl: w.figma_url ?? null,
-    });
-    const span = spanByMc.get(w.mc_number) ?? { minStart: null, maxDone: null, allDone: true };
-    if (w.work_started_at && (!span.minStart || w.work_started_at < span.minStart)) span.minStart = w.work_started_at;
-    if (!w.work_done_at) span.allDone = false;
-    else if (!span.maxDone || w.work_done_at > span.maxDone) span.maxDone = w.work_done_at;
-    spanByMc.set(w.mc_number, span);
-  }
-  // Finalize once per GROUP: earliest start; latest done only when EVERY
-  // task is done; cycle in workdays. Instants become MANILA calendar days
-  // first (invariant 11), then midnight-normalized dates feed the workday
-  // walk — no host-TZ day shifts, no clock-time off-by-one.
-  const groupSpan = new Map<string, { started: string | null; done: string | null; cycleDays: number | null }>();
-  for (const [mc, s] of spanByMc) {
-    const done = s.allDone ? s.maxDone : null;
-    const startedIso = s.minStart ? manilaDate(s.minStart) : null;
-    const doneIso = done ? manilaDate(done) : null;
-    groupSpan.set(mc, {
-      started: startedIso,
-      done: doneIso,
-      cycleDays: startedIso && doneIso ? workdaysBetween(parseDate(startedIso), parseDate(doneIso)) : null,
     });
   }
 
@@ -149,10 +128,6 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
     const group = r.mcNumber ? rowsByMc.get(r.mcNumber)! : 0;
     const tasks = r.mcNumber ? (workCardsByMc[r.mcNumber]?.length ?? 0) : 0;
     r.weight = group > 0 ? 1 + tasks / group : 1;
-    const span = r.mcNumber ? groupSpan.get(r.mcNumber) : undefined;
-    r.workStarted = span?.started ?? null;
-    r.workDone = span?.done ?? null;
-    r.cycleDays = span?.cycleDays ?? null;
   }
 
   const corrections = rows
@@ -200,9 +175,13 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
   }
 
   const manualStatus = (d.status_note as string) ?? null;
+  // The row's own span (2026-08-13 spec) — never the MC group's aggregate.
+  const startedAt = (d.work_started_at as Date | null) ?? null;
+  const doneAt = (d.work_done_at as Date | null) ?? null;
   return {
     cardId: d.trello_card_id as string,
     displayId: d.display_id as string,
+    mcLabel: (d.mc_number as string) ?? (d.display_id as string),
     mcNumber: (d.mc_number as string) ?? null,
     name: d.name as string,
     currentList: (d.current_list as string) ?? null,
@@ -214,9 +193,10 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
     blocker: (d.blocker as string) ?? null,
     requestor: (d.requestor as string) ?? null,
     assetType: (d.asset_type as string) ?? null,
-    workStarted: null, // group spans land after the work-card load in loadPipeline
-    workDone: null,
-    cycleDays: null,
+    workStarted: startedAt ? manilaDate(startedAt) : null,
+    workDone: doneAt ? manilaDate(doneAt) : null,
+    workStartedTs: startedAt ? startedAt.toISOString() : null,
+    workDoneTs: doneAt ? doneAt.toISOString() : null,
     deadline: (d.deadline as string) ?? null,
     deadlineSource: (d.deadline_source as string) ?? null,
     overdue: d.deadline != null && (d.deadline as string) < today,

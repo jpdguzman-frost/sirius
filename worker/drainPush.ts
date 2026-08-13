@@ -38,11 +38,12 @@ export async function reconcileCard(
     const existing = await Deliverable.find({ project_id: project._id }).select('trello_card_id display_id');
     const ids = assignDisplayIds(new Map(existing.map((x) => [x.trello_card_id, x.display_id])), [d]);
     await upsertDeliverable(project._id, d, ids.get(d.trello_card_id));
+    await deriveWorkSpans(project._id, [cardId]); // Started/Done follow the list move
     return 'deliverable';
   }
   if (mapped.workCards.length > 0) {
     await upsertWorkCard(project._id, mapped.workCards[0]!);
-    await deriveWorkSpans(project._id, [cardId]); // Started/Done follow the list move
+    await deriveWorkSpans(project._id, [cardId]);
     return 'work_card';
   }
   // Scoped out (lost the project label) or an unlinked task: locally known

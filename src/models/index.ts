@@ -135,6 +135,11 @@ const deliverableSchema = new Schema(
     trello_due_at: Date, // raw due instant from ARES — preserves time-of-day on W2 writes
     trello_synced_at: { type: Date, required: true, default: Date.now },
 
+    // Derived from THIS card's movements (worker/syncAres.deriveWorkSpans),
+    // never the MC group's — the row's Started/Done columns (2026-08-13 spec).
+    work_started_at: Date,
+    work_done_at: Date,
+
     // ---- written back by Sirius (write registry W1), reconciled from the
     // ---- Urgent label on every sync (FR-9.5) — Trello is the truth
     urgency: { type: String, required: true, default: 'Non-Urgent' },
