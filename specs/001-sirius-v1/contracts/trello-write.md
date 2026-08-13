@@ -63,7 +63,9 @@ shape, unchanged), `setDue(cardId, isoDateTimeOrNull)`, and
   *(Deliberate deviation from product's remove-first suggestion in owl #04: both orders keep
   the displayed value at last-known-good until full success, but remove-first's worst case
   strands the card with NO difficulty label — silently unforecastable — while add-first's
-  worst case is a visible double label the next sync reconciles. Explained to product.)*
+  worst case is a visible double label the next sync reconciles. Accepted by product —
+  Miles, owl #05, 2026-08-13: add-first is final; label target final; BRD incorporation
+  proceeding on their side. W3 fully closed.)*
 - Missing labels in the board taxonomy are created on demand (green/yellow/red), mirroring
   the `Urgent` bootstrap — relevant only on test boards; the production taxonomy exists.
 - Changing difficulty re-keys the row's forecast (difficulty × lane — BR keying, model grid);
