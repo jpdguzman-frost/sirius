@@ -43,6 +43,7 @@
   --text-caption: 10px;
   --text-label: 12px;
   --text-body: 14px;
+  --text-subtitle: 16px; /* due-date popover month header (node 415:54979) */
   --text-title: 24px;
   --text-display: 32px;
 

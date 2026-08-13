@@ -5,21 +5,66 @@
 const HARD_IDEAL = 0.083;
 const HARD_CEILING = 0.129;
 const WEEK_COUNT = 8;
+/* due-date popover box (node 415:54979) — used to decide flip-up and the
+   horizontal clamp before the element exists to measure */
+const DUE_POP_W = 354;
+const DUE_POP_H = 420;
+
+const isoOf = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 function todayIso() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return isoOf(new Date());
 }
 
-/* frame date format: '7 Aug 2026' (annotation 251:23859) — one formatter,
-   not one per call */
-const LONG_DATE = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+/* frame date format: '4 Aug 2026' (annotation 251:23859). A fixed month table,
+   NOT Intl: every English locale renders September as 'Sept', which the frame
+   forbids. Pure string math, so no Date and no timezone can shift the day. */
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function fmtLongIso(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  return `${Number(d)} ${MONTHS_SHORT[Number(m) - 1]} ${y}`;
+}
+
+/* Invariant 11: the today-marker, the shortcuts and the Started/Done tooltips
+   are MANILA days whatever the browser's timezone (en-CA gives YYYY-MM-DD). */
+const MANILA_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' });
+const MANILA_TIME = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
+const manilaToday = () => MANILA_DAY.format(new Date());
+/* tooltip for the read-only Started/Done cells: the exact source instant, in
+   the timezone the whole app computes in */
+function fmtInstant(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? '' : `${fmtLongIso(MANILA_DAY.format(d))}, ${MANILA_TIME.format(d)} PHT`;
+}
+
+/* calendar arithmetic on 'YYYY-MM-DD' — local midnight, so only the calendar
+   fields move and the string round-trips unchanged */
+function isoAddDays(iso, n) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return isoOf(d);
+}
+function isoNextMonday(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); // strictly after today
+  return isoOf(d);
+}
+const monthOf = (iso) => iso.slice(0, 7);
+function monthShiftYm(ym, delta) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 function mondayIso(base) {
   const d = new Date(base + 'T00:00:00');
   const day = d.getDay() === 0 ? 7 : d.getDay();
   d.setDate(d.getDate() - (day - 1));
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return isoOf(d);
 }
 
 const app = new Ractive({
@@ -61,6 +106,13 @@ const app = new Ractive({
     diffMenu: null, // cardId whose difficulty select is open (W3 — BRD-§9-A1)
     diffMenuPos: { left: 0, top: 0 },
     savingDifficulty: {},
+    duePopover: null, // cardId whose due-date popover is open (node 415:54979)
+    duePopPos: { left: 0, top: 0 }, // fixed-position anchor, flipped and clamped on open
+    dueMonth: '', // 'YYYY-MM' the calendar is showing
+    dueStaged: null, // clicked day — STAGED only; Apply is what writes (W2)
+    dueBaseline: null, // value the popover opened on — the Apply no-op guard
+    savingDeadline: {},
+    dowNames: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
     pipeThumb: { needed: false, left: 0, width: 100 },
     iconSprite: ICON_SPRITE,
     weekStart: mondayIso(todayIso()),
@@ -99,7 +151,8 @@ const app = new Ractive({
     modelProvenance: null,
     modelReview: null,
     fmt: (iso) => fmtDate(iso),
-    fmtLong: (iso) => (iso ? LONG_DATE.format(new Date(iso + 'T00:00:00')) : ''),
+    fmtLong: fmtLongIso,
+    fmtInstant,
     pct: (x) => `${Math.round((x || 0) * 1000) / 10}%`,
     // BR-6c/§5.4 display rule: fractions to one decimal, whole numbers plain
     fmtLoad: (n) => {
@@ -244,16 +297,19 @@ app.set('hl', (text) => {
     .join('');
 });
 
-/* Anything that invalidates a fixed-position select menu's anchor closes
-   it; outside click and Escape dismiss it (review findings 3 + 8). */
+/* Anything that invalidates a fixed-position overlay's anchor closes it;
+   outside click and Escape dismiss it (review findings 3 + 8). The due-date
+   popover rides the same dismissers, which is also what makes it and the
+   select menus mutually exclusive — opening either closes the other.
+   Dismissing DISCARDS the staged date: only Apply writes (W2). */
 function anyMenuOpen() {
-  return app.get('urgencyMenu') || app.get('diffMenu');
+  return app.get('urgencyMenu') || app.get('diffMenu') || app.get('duePopover');
 }
 function closeMenus() {
-  app.set({ urgencyMenu: null, diffMenu: null });
+  app.set({ urgencyMenu: null, diffMenu: null, duePopover: null });
 }
 document.addEventListener('click', (e) => {
-  if (anyMenuOpen() && !e.target.closest('.ubadge-wrap, .selectmenu')) closeMenus();
+  if (anyMenuOpen() && !e.target.closest('.ubadge-wrap, .selectmenu, .duewrap, .duepop')) closeMenus();
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && anyMenuOpen()) closeMenus();
@@ -345,26 +401,59 @@ app.set('projCode', (pid) => {
 });
 app.set('fmtWhen', (iso) => (iso ? new Date(iso).toLocaleString() : 'never'));
 
-/* W2 deadline write (FR-9.1): optimistic with revert, same pattern as
-   urgency; Trello is written first server-side, so a failure reverts here. */
+/* Calendar cells for the visible month — a fixed 6×7 grid including the
+   leading and trailing days, so the popover never changes height. month and
+   staged arrive as ARGUMENTS so Ractive registers them as dependencies and
+   re-renders the grid when either moves; a closure read would not. */
+app.set('dueGrid', (month, staged) => {
+  if (!month) return [];
+  const [y, m] = month.split('-').map(Number);
+  const today = manilaToday();
+  const lead = new Date(y, m - 1, 1).getDay(); // 0 = Sunday, matching dowNames
+  const start = new Date(y, m - 1, 1 - lead);
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const iso = isoOf(d);
+    return { iso, day: d.getDate(), out: d.getMonth() !== m - 1, today: iso === today, on: iso === staged };
+  });
+});
+app.set('dueMonthLabel', (month) => {
+  if (!month) return '';
+  const [y, m] = month.split('-').map(Number);
+  return `${MONTHS_LONG[m - 1]} ${y}`;
+});
+
+/* W2 deadline write (FR-9.1): optimistic with revert, same pattern as urgency
+   and difficulty; Trello is written first server-side, so a failure reverts
+   here. The row is re-found by cardId at every step — loadAll may have
+   replaced the rows array while the PATCH was in flight (review finding 2).
+   The cell shows 'saving…' meanwhile, so no unconfirmed date is ever on
+   screen (invariant 8). */
 async function writeDeadline(cardId, value) {
-  const idx = app.get('rows').findIndex((r) => r.cardId === cardId);
+  const rowAt = () => app.get('rows').findIndex((r) => r.cardId === cardId);
+  const idx = rowAt();
+  if (idx < 0) return;
   const row = app.get(`rows.${idx}`);
-  app.set('editingDeadline', null);
   if ((value || null) === (row.trelloDue || null)) return; // no-op guard — no call, no audit
   const prev = { deadline: row.deadline, deadlineSource: row.deadlineSource, trelloDue: row.trelloDue };
-  app.set(`rows.${idx}.deadline`, value);
-  app.set(`rows.${idx}.deadlineSource`, value ? 'trello' : null);
-  app.set(`rows.${idx}.trelloDue`, value);
+  const apply = (state) => {
+    const i = rowAt();
+    if (i < 0) return;
+    app.set(`rows.${i}.deadline`, state.deadline);
+    app.set(`rows.${i}.deadlineSource`, state.deadlineSource);
+    app.set(`rows.${i}.trelloDue`, state.trelloDue);
+  };
+  apply({ deadline: value, deadlineSource: value ? 'trello' : null, trelloDue: value });
+  app.set(`savingDeadline.${cardId}`, true);
   try {
     await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/deadline`, { date: value });
     await loadAll(); // precedence may fall back to the sheet deadline (BR-9)
   } catch (err) {
-    app.set(`rows.${idx}.deadline`, prev.deadline);
-    app.set(`rows.${idx}.deadlineSource`, prev.deadlineSource);
-    app.set(`rows.${idx}.trelloDue`, prev.trelloDue);
+    apply(prev);
     app.set('banner', `Deadline write failed — reverted. ${err.detail && err.detail.message ? err.detail.message : err.message}`);
     setTimeout(() => app.set('banner', ''), 6000);
+  } finally {
+    app.set(`savingDeadline.${cardId}`, false);
   }
 }
 
@@ -378,9 +467,12 @@ async function loadAll() {
       api.get(`/api/projects/${pid}/deadlines`),
       api.get(`/api/projects/${pid}/model`),
     ]);
-    // searchable text per row, computed once per load (annotation 17:2057)
+    // searchable text per row, computed once per load (annotation 17:2057).
+    // displayId stays in the blob even though the MC# cell now shows the bare
+    // mcLabel (JP ruling 2026-08-13) — typing 'MC-655.3' must still find its
+    // row; mcLabel is here too so the VISIBLE text is always searchable.
     pipeline.rows.forEach((r) => {
-      r.blob = `${r.displayId} ${r.mcNumber} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
+      r.blob = `${r.displayId} ${r.mcLabel || ''} ${r.mcNumber} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
     });
     app.set({
       rows: pipeline.rows,
@@ -497,7 +589,8 @@ async function writeDayPlan(cardId, phase, day) {
 
 /* Shared by click and the tablist arrow keys (WAI tabs pattern). */
 function selectTab(id) {
-  app.set({ activeTab: id, urgencyMenu: null, diffMenu: null });
+  closeMenus();
+  app.set('activeTab', id);
   if (id === 'admin' && app.get('isAdmin')) loadAdmin();
   if (id === 'pipeline') {
     // returning to the tab remounts .pscroll at scrollLeft 0 — recompute the
@@ -601,6 +694,7 @@ app.on({
     app.set({
       urgencyMenu: cardId,
       diffMenu: null,
+      duePopover: null,
       urgencyMenuPos: { left: Math.round(rect.left), top: Math.round(up ? rect.top - menuH - 3 : rect.bottom + 3) },
     });
   },
@@ -641,6 +735,7 @@ app.on({
     app.set({
       diffMenu: cardId,
       urgencyMenu: null,
+      duePopover: null,
       diffMenuPos: { left: Math.round(rect.left), top: Math.round(up ? rect.top - menuH - 3 : rect.bottom + 3) },
     });
   },
@@ -720,11 +815,56 @@ app.on({
     }
   },
 
-  editDeadline(_ctx, cardId) { app.set('editingDeadline', cardId); },
-  // the clear button fires on mousedown, before this blur handler lands
-  cancelDeadline() { setTimeout(() => app.set('editingDeadline', null), 150); },
-  async setDeadline(ctx, cardId) { await writeDeadline(cardId, ctx.node.value || null); },
-  async clearDeadline(_ctx, cardId) { await writeDeadline(cardId, null); },
+  /* ---- due-date popover (node 415:54979, write registry W2) ----
+     Commit-on-Apply: clicking a day only stages it. The popover opens on the
+     value the CELL shows (BR-9 precedence — Trello due first, else the sheet)
+     and remembers it as dueBaseline, so Apply on an untouched popover writes
+     nothing — including the case where the shown date came from the sheet. */
+  openDuePopover(ctx, cardId) {
+    if (app.get(`savingDeadline.${cardId}`)) return; // one write in flight per card (invariant 8)
+    if (app.get('duePopover') === cardId) {
+      app.set('duePopover', null);
+      return;
+    }
+    const row = app.get('rows').find((r) => r.cardId === cardId);
+    const current = (row && row.deadline) || null;
+    // fixed positioning escapes the .pscroll clip; flip up near the viewport
+    // bottom and clamp horizontally — 354px stays fully on screen
+    const rect = ctx.node.getBoundingClientRect();
+    const up = rect.bottom + DUE_POP_H + 4 > window.innerHeight;
+    app.set({
+      duePopover: cardId,
+      urgencyMenu: null,
+      diffMenu: null,
+      dueStaged: current,
+      dueBaseline: current,
+      dueMonth: monthOf(current || manilaToday()),
+      duePopPos: {
+        left: Math.round(Math.max(4, Math.min(rect.left, window.innerWidth - DUE_POP_W - 4))),
+        top: Math.round(up ? Math.max(4, rect.top - DUE_POP_H - 4) : rect.bottom + 4),
+      },
+    });
+  },
+  duePick(_ctx, iso) { app.set('dueStaged', iso); }, // stages only — Apply writes
+  dueNav(_ctx, dir) { app.set('dueMonth', monthShiftYm(app.get('dueMonth'), dir)); },
+  // shortcuts are Manila-relative (invariant 11) and move the visible month
+  // so the staged day is always in view
+  dueShortcut(_ctx, which) {
+    const today = manilaToday();
+    const iso = which === 'week' ? isoAddDays(today, 7) : which === 'monday' ? isoNextMonday(today) : today;
+    app.set({ dueStaged: iso, dueMonth: monthOf(iso) });
+  },
+  async dueApply(_ctx, cardId) {
+    const staged = app.get('dueStaged') || null;
+    const baseline = app.get('dueBaseline') || null;
+    app.set('duePopover', null);
+    if (staged === baseline) return; // nothing staged — no call, no audit
+    await writeDeadline(cardId, staged);
+  },
+  async dueClear(_ctx, cardId) {
+    app.set('duePopover', null);
+    await writeDeadline(cardId, null); // confirm-free; the sheet deadline (if any) takes over
+  },
 
   weekShiftView(_ctx, dir) { app.set('weekStart', mondayShift(app.get('weekStart'), dir)); },
   dragRow(ctx, cardId) {

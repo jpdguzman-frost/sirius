@@ -137,7 +137,7 @@
           <tr class="prow {{#if row.blocker}}blocked{{/if}}" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
             <td class="col-mc"><div class="mccell">
               <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{row.displayId}} work cards" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
-              <span class="mcnum">{{{hl(row.displayId)}}}</span>
+              <span class="mcnum">{{{hl(row.mcLabel)}}}</span>
             </div></td>
             <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}</td>
             <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{{hl(row.assetType)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
@@ -174,21 +174,49 @@
             </div></td>
             <td class="col-status">{{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{{hl(row.currentList)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-client">{{#if row.requestor}}<span class="pbadge">{{{hl(row.requestor)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-            <td class="col-due">
-              {{#if editingDeadline === row.cardId}}
-                <input type="date" name="due-{{row.cardId}}" class="dp-input" value="{{row.trelloDue}}" on-change="['setDeadline', row.cardId]" on-blur="['cancelDeadline']" autofocus />
-                {{#if row.trelloDue}}<button class="dp-clear" on-mousedown="['clearDeadline', row.cardId]" title="Clear the Trello due date — the sheet deadline (if any) takes over">✕</button>{{/if}}
-              {{elseif writesEnabled}}
-                <button class="dpicker {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}}" on-click="['editDeadline', row.cardId]" title="{{row.deadline ? 'Source: ' + row.deadlineSource + ' — editing' : 'No due date — setting one'}} writes the Trello due date (write registry W2)"><span class="dpdate">{{row.deadline ? fmtLong(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></button>
+            <td class="col-due"><div class="duewrap">
+              {{#if writesEnabled}}
+                <button class="datefield {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}} {{#if savingDeadline[row.cardId]}}saving{{/if}}"
+                  disabled="{{savingDeadline[row.cardId]}}"
+                  on-click="['openDuePopover', row.cardId]" aria-haspopup="dialog" aria-expanded="{{duePopover === row.cardId ? 'true' : 'false'}}"
+                  title="{{row.deadline ? 'Source: ' + row.deadlineSource : 'No due date'}} — Apply writes the Trello due date (write registry W2)">
+                  <span class="dpdate">{{#if savingDeadline[row.cardId]}}saving…{{elseif row.deadline}}{{fmtLong(row.deadline)}}{{else}}Select Date{{/if}}</span><svg class="i16"><use href="#i-calendar" /></svg>
+                </button>
+                {{#if duePopover === row.cardId}}
+                  <div class="duepop" role="dialog" aria-label="Due date" style="left:{{duePopPos.left}}px;top:{{duePopPos.top}}px;">
+                    <div class="duehead">
+                      <button class="duenav prev" on-click="['dueNav', -1]" aria-label="Previous month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+                      <span class="duemonth">{{dueMonthLabel(dueMonth)}}</span>
+                      <button class="duenav" on-click="['dueNav', 1]" aria-label="Next month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+                    </div>
+                    <div class="duedow" aria-hidden="true">{{#each dowNames as d}}<span>{{d}}</span>{{/each}}</div>
+                    <div class="duegrid">
+                      {{#each dueGrid(dueMonth, dueStaged) as c}}
+                        <button class="dueday {{#if c.out}}out{{/if}} {{#if c.today}}today{{/if}} {{#if c.on}}on{{/if}}" on-click="['duePick', c.iso]" aria-pressed="{{c.on ? 'true' : 'false'}}" aria-label="{{fmtLong(c.iso)}}">{{c.day}}</button>
+                      {{/each}}
+                    </div>
+                    <div class="dueshort">
+                      <button on-click="['dueShortcut', 'today']">Today</button>
+                      <button on-click="['dueShortcut', 'week']">In 1 Week</button>
+                      <button on-click="['dueShortcut', 'monday']">Next Monday</button>
+                    </div>
+                    <div class="dueact">
+                      <button class="dueclear" on-click="['dueClear', row.cardId]" title="Clear the Trello due date — the sheet deadline (if any) takes over">Clear Due Date</button>
+                      <button class="dueapply" on-click="['dueApply', row.cardId]">Apply</button>
+                    </div>
+                  </div>
+                {{/if}}
               {{else}}
-                <span class="dpicker readonly {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{row.deadline ? fmtLong(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
+                <span class="datefield readonly {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{row.deadline ? fmtLong(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
               {{/if}}
-            </td>
-            <td class="col-started">{{#if row.workStarted}}<span class="dpicker readonly" title="Earliest work-card start in this MC group"><span class="dpdate">{{fmtLong(row.workStarted)}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-            <td class="col-done">{{#if row.workDone}}<span class="plaincell nowrap">{{fmtLong(row.workDone)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            </div></td>
+            <td class="col-started">{{#if row.workStarted}}<span class="plaincell nowrap" title="{{fmtInstant(row.workStartedTs)}}">{{fmtLong(row.workStarted)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-done">{{#if row.workDone}}<span class="plaincell nowrap" title="{{fmtInstant(row.workDoneTs)}}">{{fmtLong(row.workDone)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-links">
-              {{#if row.trelloUrl}}<a class="srclink" href="{{row.trelloUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Trello"><svg class="i18"><use href="#i-trello" /></svg></a>{{/if}}
-              {{#if row.figmaUrl}}<a class="srclink" href="{{row.figmaUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Figma"><svg class="i18"><use href="#i-figma" /></svg></a>{{/if}}
+              {{#if row.trelloUrl}}<a class="srclink" href="{{row.trelloUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Trello"><svg class="i18"><use href="#i-trello" /></svg></a>
+              {{else}}<span class="srclink off" aria-disabled="true"><svg class="i18"><use href="#i-trello" /></svg></span>{{/if}}
+              {{#if row.figmaUrl}}<a class="srclink" href="{{row.figmaUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Figma"><svg class="i18"><use href="#i-figma" /></svg></a>
+              {{else}}<span class="srclink off" aria-disabled="true"><svg class="i18"><use href="#i-figma" /></svg></span>{{/if}}
             </td>
           </tr>
           {{#if expanded[row.mcNumber]}}

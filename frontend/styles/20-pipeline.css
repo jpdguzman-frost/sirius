@@ -202,25 +202,88 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .selectmenu .dot.green { background: var(--green-500); }
 .selectmenu .dot.amber { background: var(--amber-500); }
 
-/* due / date chrome (annotations 251:7925, 251:23859) */
-.dpicker {
-  display: inline-flex; align-items: center; gap: var(--space-8); width: 124px; justify-content: space-between;
-  background: var(--slate-50); border: 1px solid var(--slate-300); border-radius: var(--radius-sm);
-  padding: 4px 8px 4px 9px; cursor: pointer; font-family: var(--font-sans);
+/* due date field — the popover's trigger (node 415:54979, write registry W2;
+   annotations 251:7925, 251:23859) */
+.duewrap { position: relative; display: inline-block; }
+.datefield {
+  display: inline-flex; align-items: center; gap: var(--space-8); justify-content: space-between;
+  width: 124px; height: 25px; box-sizing: border-box;
+  background: var(--slate-50); border: 1px solid var(--slate-500); border-radius: var(--radius-sm);
+  padding: 0 8px 0 9px; cursor: pointer; font-family: var(--font-sans);
   font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--slate-500);
 }
-.dpicker svg { display: block; flex: none; color: var(--slate-500); }
-.dpicker .dpdate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dpicker.missing { border-color: var(--amber-400); color: var(--amber-600); }
-.dpicker.missing svg { color: var(--amber-600); }
-.dpicker.overdue { border-color: var(--amber-500); background: var(--status-warning-light); color: var(--amber-700); }
-.dpicker.readonly { cursor: default; }
-.dp-input { font-family: var(--font-sans); font-size: var(--text-label); padding: 4px 6px; border: 1px solid var(--slate-300); border-radius: var(--radius-sm); }
-.dp-clear { border: none; background: none; cursor: pointer; color: var(--slate-500); font: inherit; padding: 2px 4px; }
+.datefield svg { display: block; flex: none; color: var(--slate-500); }
+.datefield .dpdate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.datefield:hover:not(.readonly) { border-color: var(--surface-foreground); color: var(--surface-foreground); }
+.datefield:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.datefield.missing { border-color: var(--amber-400); color: var(--amber-600); }
+.datefield.missing svg { color: var(--amber-600); }
+.datefield.overdue { border-color: var(--amber-500); background: var(--status-warning-light); color: var(--amber-700); }
+.datefield.readonly { cursor: default; }
+.datefield.saving { opacity: 0.5; pointer-events: none; }
 
-/* links */
-.srclink { display: inline-flex; padding: 2px 0; margin-right: var(--space-8); }
+/* fixed so it escapes the .pscroll clip and outranks the sticky header;
+   coords (flipped + clamped) set inline */
+.duepop {
+  position: fixed; width: 354px; z-index: 40; box-sizing: border-box;
+  background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs); padding: var(--space-16); font-family: var(--font-sans);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.duepop button:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.duepop .duehead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }
+.duepop .duemonth { font-size: var(--text-subtitle); font-weight: 600; line-height: 1.2; color: var(--surface-foreground); }
+.duepop .duenav {
+  display: inline-flex; border: none; background: none; cursor: pointer;
+  padding: var(--space-4); border-radius: var(--radius-sm); color: var(--slate-500);
+}
+.duepop .duenav:hover { background: var(--slate-100); color: var(--surface-foreground); }
+.duepop .duenav.prev svg { transform: rotate(180deg); } /* one chevron, both directions */
+.duepop .duedow, .duepop .duegrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.duepop .duedow span {
+  text-align: center; padding: var(--space-4) 0;
+  font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--surface-muted-foreground);
+}
+.duepop .dueday {
+  height: 36px; border: none; background: none; cursor: pointer; border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; color: var(--surface-foreground);
+}
+.duepop .dueday.out { color: var(--slate-400); } /* leading / trailing days */
+.duepop .dueday:hover { background: var(--slate-100); }
+.duepop .dueday.today { box-shadow: inset 0 0 0 1px var(--slate-400); } /* the Manila day */
+.duepop .dueday.on { background: var(--surface-foreground); color: var(--white); font-weight: 600; } /* staged, not yet written */
+.duepop .dueday.on:hover { background: var(--slate-700); }
+.duepop .dueshort { display: flex; flex-wrap: wrap; gap: var(--space-8); padding-top: 12px; border-top: 1px solid var(--slate-100); }
+.duepop .dueshort button {
+  border: 1px solid var(--slate-200); background: var(--white); border-radius: var(--radius-sm); cursor: pointer;
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; line-height: 1;
+  color: var(--slate-700); padding: 7px 10px 6px;
+}
+.duepop .dueshort button:hover { background: var(--slate-50); border-color: var(--slate-300); }
+.duepop .dueact { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }
+.duepop .dueclear {
+  border: none; background: none; cursor: pointer; border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; line-height: 1;
+  color: var(--status-destructive-strong); padding: 8px var(--space-4) 7px;
+}
+.duepop .dueclear:hover { background: var(--status-destructive-light); }
+.duepop .dueapply {
+  border: 1px solid var(--surface-foreground); background: var(--surface-foreground); color: var(--white);
+  border-radius: var(--radius-sm); cursor: pointer;
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 600; line-height: 1; padding: 8px 16px 7px;
+}
+.duepop .dueapply:hover { background: var(--slate-700); border-color: var(--slate-700); }
+
+/* links (node 431:17017) — both icons always render; the absent one is a
+   non-interactive span at 30% */
+.srclink {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 22px; border-radius: var(--radius-sm); margin-right: var(--space-8);
+}
 .srclink svg { display: block; }
+a.srclink:hover { background: var(--slate-100); }
+a.srclink:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.srclink.off { opacity: 0.3; cursor: default; }
 
 /* horizontal slider (annotation 251:6758) */
 .hslider { display: flex; align-items: center; gap: var(--space-4); padding: 6px 0; }
