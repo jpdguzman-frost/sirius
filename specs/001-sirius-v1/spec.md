@@ -533,6 +533,20 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 - Easy/Medium dropdown colors reuse the phase-13 badge tokens (green/amber); the frame carries
   no tokens for them (product to confirm or supply).
 
+### Session 2026-08-13 (JP) — batch-2 pipeline cells
+
+- **Started/Done are per-card** (the row card's own movement events), superseding the phase-13
+  group-derived assumption: started = first transition into a working/done state (survives a
+  backlog bounce), done = latest entry into a done list, held only while the card currently
+  sits there. Product spec (Figma 431:17015/16), JP: "proceed as defined from Miles".
+- **MC# never shows decimals on the pipeline table** (JP ruling on product's DATA FIX,
+  432:17733): the cell renders the bare `mc_number`; `display_id` (invariant 3) is unchanged —
+  still assigned, stable, searchable, and shown on all other surfaces.
+- **Due edits commit on Apply** (product spec 415:54979): date clicks stage; Apply writes W2;
+  a baseline guard ensures an untouched popover never writes (so a sheet-sourced deadline is
+  never silently promoted to a Trello due). Display precedence unchanged: Trello due wins where
+  present, else sheet (invariant 14) — the annotation claiming sheet-first is a recorded drift.
+
 ## Open Decisions
 
 From BRD §13. Marked, not resolved — each is answered by its owner and recorded in Clarifications before dependent work proceeds. (The BRD's numbering has no OD-3.)

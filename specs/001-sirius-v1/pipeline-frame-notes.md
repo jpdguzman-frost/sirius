@@ -45,6 +45,18 @@ Full-tree walk via Rex confirmed every MCP-extracted annotation **verbatim** and
 
 **Team corrections after build (2026-08-12, via JP):** content-stack gap is 16px with 0-margin elements (frame geometry confirms; the Content annotation's "24px" is the container's top padding only) · column labels **Started** / **Done** (renamed from Work Started / Work Done in the header annotation) · Card Name flexes to fill remaining width · scroll bar only when the table overflows · **Cycle Time + Weeks columns removed, Links 94px, header 44px** (frame re-measured after their edit) · **read-only callout strip removed** (simplification; the read-only rule survives in the difficulty tooltip — annotation 70:1211 superseded).
 
+## Batch-2 cell specs (2026-08-13, owl #06–#10; Rex-verified 1:1 against the owls)
+
+Five nodes: `415:54979` Due popover · `431:17015` start-date-cell · `431:17016` done-date-cell ·
+`431:17017` Links · `432:17733` mc-cell (DATA FIX). All built 2026-08-13 (tasks T113–T115).
+Decisions folded in: **per-card Started/Done** (the row card's own transitions — supersedes the
+phase-13 group-derived assumption; JP "proceed as defined from Miles"); done = latest entry into
+done, held only while the card sits there (our rule, told to product); **MC# decimal ruling**
+(JP): the table shows the bare MC number, `display_id` survives internally, in search, and on
+every other surface; commit-on-Apply on the Due popover; links off-state truly disabled at 30%.
+Read-only Due field (observation mode) says "No Due Date" rather than "Select Date" — it is not
+a selectable field there.
+
 ## Drift register (frame ↔ decided state) — for the product team
 
 1. Due cell annotation carries v1.1 §4.2 (local override) — v1.2 + errata already corrected this; annotation needs the same fix.
@@ -52,6 +64,8 @@ Full-tree walk via Rex confirmed every MCP-extracted annotation **verbatim** and
 3. User chip: "sign out clears imported data" — prototype-era.
 4. Tab group: five tabs; v1.2 says six (Admin).
 5. Project selector's rendered label uses the `Semantic/Button` token → **Inter 13.9px**, off-system vs §0 (Google Sans Flex only) — normalising to `--text-body`/600 Google Sans Flex unless the team objects.
+6. **Due popover annotation (415:54979 Functionality) states display precedence backwards** — "deadlines-first: intake sheet then Trello". The constitution (invariant 14) and BRD BR-note say a Trello due date, where present, WINS (set deliberately), else sheet. The write-target description (Trello only) is correct. Flagged to Miles 2026-08-13; annotation needs the fix.
+7. mc-cell frame (432:17733) draws the MC# column at 132px — superseded by JP's 150px fine-tune (2026-08-12 team correction).
 
 ## Difficulty editability — RESOLVED 2026-08-12 (W3 approved and built)
 
