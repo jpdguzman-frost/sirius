@@ -20,6 +20,7 @@ import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { CardEvent, Deliverable, ModelGrid, Project, ThroughputGrid, User, UserProject } from '../src/models/index.ts';
 import { EMPIRICAL } from '../lib/model.ts';
+import { forecast } from '../lib/forecast.ts';
 
 const env = validateEnv({ NODE_ENV: 'test' });
 
@@ -159,6 +160,36 @@ describe('refresh + loader (integration)', () => {
     expect(after.model.design.Medium?.design?.['0.7']).toBe(1.5); // 36h dwell
     expect(after.model.review['0.7']).toBe(2.5); // 60h dwell
     expect(after.provenance.sampleSizes['Medium/design/design']).toBe(1);
+  });
+
+  it('a sparse young grid snapshot-fills missing difficulties — designCell must never dereference undefined (live 500, 2026-08-13)', async () => {
+    // history for ONE Easy/assets card only → the refreshed grid carries no
+    // Medium or Hard design cells; lib/model's verbatim fallback walk
+    // (difficulty → Medium → lane → 'design') assumes those keys exist
+    const p = await Project.create({ code: 'rt-test', name: 'Fx', trello_board_id: 'fxB', weekly_capacity: 3 });
+    await Deliverable.create({
+      project_id: p._id, mc_number: 'MC-9', display_id: 'MC-9', trello_card_id: 'c9',
+      name: 'D9', difficulty: 'Easy', lane: 'assets', labels: ['Assets'],
+    });
+    await CardEvent.insertMany([
+      { project_id: p._id, trello_card_id: 'c9', source_event_id: 'e9a', to_list: 'Design', occurred_at: at(0) },
+      { project_id: p._id, trello_card_id: 'c9', source_event_id: 'e9b', to_list: 'Sent for Client Review', occurred_at: at(12) },
+      { project_id: p._id, trello_card_id: 'c9', source_event_id: 'e9c', to_list: 'Done', occurred_at: at(12 + 24) },
+    ]);
+    await refreshProjectModel(p._id);
+    expect(await ModelGrid.countDocuments({ project_id: p._id, metric: 'design', difficulty: 'Medium' })).toBe(0); // grid IS sparse
+
+    const { model, provenance } = await loadProjectModel(p._id);
+    expect(provenance.fallback).toBe(false); // refreshed grid, not the whole-model fallback
+    expect(model.design.Medium).toBeDefined(); // snapshot-filled
+    expect(model.design.Hard).toBeDefined();
+    // the exact live crash: a Hard/design row forecast against the sparse model
+    expect(() =>
+      forecast(
+        { difficulty: 'Hard', currentList: 'Design', labels: [], startDate: '2026-08-13', confidence: '0.7', slaSketch: null, slaRender: null },
+        model,
+      ),
+    ).not.toThrow();
   });
 
   it('serves the model with provenance over HTTP (T043; AC-11 data side)', async () => {

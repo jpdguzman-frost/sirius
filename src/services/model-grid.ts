@@ -64,9 +64,22 @@ export async function loadProjectModel(
     throughput[t.difficulty as Difficulty] = { p25: t.p25 ?? 0, p50: t.p50 ?? 0, p70: t.p70 ?? 0 };
   }
 
+  // Per-difficulty snapshot fill: lib/model's verbatim designCell walks
+  // difficulty → Medium → lane → 'design' and dereferences without guards,
+  // so a sparse young grid (e.g. only Easy cells) must still carry every
+  // difficulty key — review and throughput above already fill per-key
+  // (live 500 on rt-test, 2026-08-13).
+  let filled = 0;
+  for (const d of Object.keys(EMPIRICAL.design) as Difficulty[]) {
+    if (!design[d]) {
+      design[d] = EMPIRICAL.design[d];
+      filled++;
+    }
+  }
+
   const model: EmpiricalModel = {
-    source: `ARES · refreshed grid · computed ${computedAt?.toISOString().slice(0, 10) ?? 'n/a'}`,
-    design: Object.keys(design).length > 0 ? design : EMPIRICAL.design,
+    source: `ARES · refreshed grid · computed ${computedAt?.toISOString().slice(0, 10) ?? 'n/a'}${filled ? ` · ${filled} difficulty tier${filled === 1 ? '' : 's'} from snapshot (sparse grid)` : ''}`,
+    design,
     review: {
       Average: review.Average ?? EMPIRICAL.review.Average,
       '0.7': review['0.7'] ?? EMPIRICAL.review['0.7'],
