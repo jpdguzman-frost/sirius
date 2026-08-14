@@ -12,6 +12,7 @@ import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { AuditLog, Project, User, UserProject } from '../src/models/index.ts';
+import { HARD_MIX } from '../lib/planner.constants.ts';
 
 const env = validateEnv({ NODE_ENV: 'test' });
 
@@ -46,11 +47,16 @@ describe('capacity write (BR-6a)', () => {
     expect(res.body.ok).toBe(true);
     expect(res.body.capacity).toEqual({
       weekly: 120, least: 40, typical: 92, most: 160, effectiveWeeklyRate: 88,
+      hardIdeal: HARD_MIX.ideal, hardCeiling: HARD_MIX.ceiling,
     });
     expect((await Project.findById(project._id).orFail()).weekly_capacity).toBe(120);
     // the planner reads it back from the same place (deliverables.ts capacity)
     const read = await agent.get(`/api/projects/${project._id}/deliverables`).expect(200);
     expect(read.body.capacity.weekly).toBe(120);
+    // the echo must be shape-identical to the GET: the client re-seats the
+    // whole object, so a missing key here silently strips the planner footer's
+    // ceiling label.
+    expect(res.body.capacity).toEqual(read.body.capacity);
   });
 
   it('writes a capacity.set audit row with before/after (invariant 10)', async () => {

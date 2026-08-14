@@ -16,6 +16,7 @@ import { audit } from '../services/audit.ts';
 import { loadPipeline, manilaToday, toMilestones } from '../services/pipeline.ts';
 import { ConflictAcknowledgement, Deliverable, MilestoneDayPlan, Sprint } from '../models/index.ts';
 import { sprintIssues, suggestPlan, type PlannerCard } from '../../lib/planner.ts';
+import { HARD_MIX } from '../../lib/planner.constants.ts';
 import { buildWeeks } from '../../lib/calendar.ts';
 import { isHolidayDate, weekDays } from '../../lib/dayplan.ts';
 
@@ -270,7 +271,7 @@ export function scheduleRouter(): Router {
       const actor = (req.user as SessionUser).email;
       const { cardId, phase, day } = body.data;
 
-      const pipeline = await loadPipeline(projectId, manilaToday());
+      const pipeline = await loadPipeline(projectId, manilaToday(), res.locals.project.weekly_capacity);
       const milestone = toMilestones(pipeline.rows).find((m) => m.cardId === cardId && m.phase === phase);
       if (!milestone) {
         res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } }); // unslotted/unforecastable cards have no milestone
@@ -349,12 +350,16 @@ export function scheduleRouter(): Router {
       });
       res.json({
         ok: true,
+        // Same shape GET /deliverables emits — the client re-seats this
+        // wholesale, so dropping a key here would strip it from the planner.
         capacity: {
           weekly: project.weekly_capacity,
           least: project.ref_week_least ?? null,
           typical: project.ref_week_typical ?? null,
           most: project.ref_week_most ?? null,
           effectiveWeeklyRate: project.effective_weekly_rate ?? null,
+          hardIdeal: HARD_MIX.ideal,
+          hardCeiling: HARD_MIX.ceiling,
         },
       });
     },
@@ -376,7 +381,7 @@ export function scheduleRouter(): Router {
         return;
       }
       const projectId = res.locals.project._id as Types.ObjectId;
-      const pipeline = await loadPipeline(projectId, body.data.from);
+      const pipeline = await loadPipeline(projectId, body.data.from, res.locals.project.weekly_capacity);
       const cards: PlannerCard[] = pipeline.rows
         .filter((r) => r.status !== 'done')
         .map((r) => ({

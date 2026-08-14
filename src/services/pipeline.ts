@@ -8,6 +8,7 @@
 import mongoose, { Types } from 'mongoose';
 import { forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
+import { HARD_MIX } from '../../lib/planner.constants.ts';
 import { loadProjectModel } from './model-grid.ts';
 import { classifyList } from './status-rules.ts';
 import { WorkCard } from '../models/index.ts';
@@ -33,6 +34,35 @@ const mondayOf = (d: Date) => {
   t.setDate(t.getDate() - (day - 1));
   return localDate(t);
 };
+
+/** Gantt segment kinds. `renderOverdue` is `render` drawn late (BR-9). */
+export type PlannerPhaseName = 'sketch' | 'review' | 'render' | 'renderOverdue';
+
+export interface PlannerPhase {
+  phase: PlannerPhaseName;
+  /** 'YYYY-MM-DD', INCLUSIVE first day. Always a Mon–Fri Manila calendar day. */
+  startIso: string;
+  /** 'YYYY-MM-DD', EXCLUSIVE — the first day NOT covered. Always a Mon–Fri day. */
+  endIso: string;
+}
+
+/** One capacity-footer column. Absent from `perWeek` entirely when the week is empty. */
+export interface PlannerWeekTotal {
+  /** Σ row.weight — BR-6c card-equivalents. Rounded to 3 decimals. */
+  cards: number;
+  /** plain row count in the week */
+  rows: number;
+  /** rows whose difficulty === 'Hard' */
+  hard: number;
+  /** hard / rows; 0 when rows === 0 */
+  hardShare: number;
+  /** cards > the project's weekly_capacity (BR-6a) */
+  over: boolean;
+  /** hardShare > HARD_MIX.ceiling (BR-6b) */
+  hardOver: boolean;
+  /** hardShare > HARD_MIX.ideal && hardShare <= HARD_MIX.ceiling */
+  hardWarn: boolean;
+}
 
 export interface PipelineRow {
   cardId: string;
@@ -68,6 +98,8 @@ export interface PipelineRow {
   slaRender: number | null;
   /** BR-6c: card-equivalents — 1 + (MC group's work cards ÷ group's deliverables); 1 outside any group. */
   weight: number;
+  /** Gantt bar segments, absolute dates. [] when the row is unslotted or unforecastable. */
+  phases: PlannerPhase[];
   forecast: {
     sketchDelivery: string;
     sketchApproved: string;
@@ -88,9 +120,22 @@ export interface PipelineResult {
   workCardsByMc: Record<string, Array<{ cardId: string; name: string; taskPrefix: string | null; currentList: string | null; status: string; trelloUrl: string | null; figmaUrl: string | null }>>;
   corrections: Array<{ cardId: string; displayId: string; name: string; missing: string[]; trelloUrl: string | null }>;
   model: { provenance: unknown };
+  /**
+   * Capacity-footer totals, keyed by slotted week Monday 'YYYY-MM-DD'. Weeks
+   * with no rows are ABSENT (no zero entries) — the planner window is pure
+   * client-side calendar arithmetic, so the server never guesses which weeks
+   * are on screen.
+   */
+  perWeek: Record<string, PlannerWeekTotal>;
 }
 
-export async function loadPipeline(projectId: Types.ObjectId, today: string): Promise<PipelineResult> {
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+export async function loadPipeline(
+  projectId: Types.ObjectId,
+  today: string,
+  weeklyCapacity: number,
+): Promise<PipelineResult> {
   const { model, provenance } = await loadProjectModel(projectId);
   const view = await mongoose.connection.db!
     .collection('deliverables_v')
@@ -134,7 +179,48 @@ export async function loadPipeline(projectId: Types.ObjectId, today: string): Pr
     .filter((r) => r.missing.length > 0)
     .map((r) => ({ cardId: r.cardId, displayId: r.displayId, name: r.name, missing: r.missing, trelloUrl: r.trelloUrl }));
 
-  return { rows, workCardsByMc, corrections, model: { provenance } };
+  // Planner capacity footer: one entry per week that actually holds work —
+  // over ALL slotted rows, not just the ones the client happens to be showing.
+  // Runs after the BR-6c pass above so `cards` speaks card-equivalents.
+  const perWeek: PipelineResult['perWeek'] = {};
+  for (const r of rows) {
+    if (r.status === 'done' || !r.slottedWeek) continue; // same filter the planner's row list uses
+    const t = (perWeek[r.slottedWeek] ??= {
+      cards: 0, rows: 0, hard: 0, hardShare: 0, over: false, hardOver: false, hardWarn: false,
+    });
+    t.cards += r.weight;
+    t.rows += 1;
+    if (r.difficulty === 'Hard') t.hard += 1;
+  }
+  for (const t of Object.values(perWeek)) {
+    t.cards = round3(t.cards);
+    t.hardShare = t.rows > 0 ? t.hard / t.rows : 0;
+    t.over = t.cards > weeklyCapacity; // BR-6a
+    // BR-6b thresholds come from lib/planner.constants.ts — the 12.9% ceiling
+    // is measured, never retyped.
+    t.hardOver = t.hardShare > HARD_MIX.ceiling;
+    t.hardWarn = t.hardShare > HARD_MIX.ideal && t.hardShare <= HARD_MIX.ceiling;
+  }
+
+  return { rows, workCardsByMc, corrections, model: { provenance }, perWeek };
+}
+
+/**
+ * Gantt bar = the gaps BETWEEN the forecast's four dates (R3) — no new
+ * forecast math, no lib/ edit. Half-open [startIso, endIso) so the segments
+ * are contiguous and non-overlapping by construction; zero- and
+ * negative-width segments are dropped rather than drawn.
+ * An unslotted row still carries a forecast (keyed on today), so the bar is
+ * suppressed on the missing WEEK, not on the missing forecast.
+ */
+function buildPhases(slottedWeek: string | null, fc: PipelineRow['forecast']): PlannerPhase[] {
+  if (!slottedWeek || !fc) return [];
+  const segments: PlannerPhase[] = [
+    { phase: 'sketch', startIso: slottedWeek, endIso: fc.sketchDelivery },
+    { phase: 'review', startIso: fc.sketchDelivery, endIso: fc.sketchApproved },
+    { phase: fc.late ? 'renderOverdue' : 'render', startIso: fc.sketchApproved, endIso: fc.renderDelivery },
+  ];
+  return segments.filter((s) => s.startIso < s.endIso);
 }
 
 function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string): PipelineRow {
@@ -177,6 +263,7 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
   const manualStatus = (d.status_note as string) ?? null;
   const startedAt = (d.work_started_at as Date | null) ?? null;
   const doneAt = (d.work_done_at as Date | null) ?? null;
+  const slottedWeek = (d.slotted_week as string) ?? null;
   return {
     cardId: d.trello_card_id as string,
     displayId: d.display_id as string,
@@ -202,12 +289,13 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
     trelloDue: (d.trello_due as string) ?? null, // W2 edit target (FR-9.1)
     trelloUrl: (d.trello_url as string) ?? null,
     figmaUrl: (d.figma_url as string) ?? null,
-    slottedWeek: (d.slotted_week as string) ?? null,
+    slottedWeek,
     pinned: Boolean(d.pinned),
     confidence: (d.confidence as string) ?? '0.7',
     slaSketch: (d.sla_sketch as number) ?? null,
     slaRender: (d.sla_render as number) ?? null,
     weight: 1, // BR-6c weight lands after the work-card load in loadPipeline
+    phases: buildPhases(slottedWeek, fc),
     forecast: fc,
     missing,
   };

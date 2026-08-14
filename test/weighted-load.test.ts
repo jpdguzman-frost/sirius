@@ -43,7 +43,7 @@ describe('BR-6c row weight', () => {
   it('MC-805 shape: 13 deliverables + 40 tasks → 4.08 per row, 53 for the group', async () => {
     const p = await project();
     await group(p._id, 'MC-805', 13, 40, 0);
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     expect(rows).toHaveLength(13);
     for (const r of rows) expect(r.weight).toBeCloseTo(1 + 40 / 13, 10);
     expect(fmtLoad(rows[0]!.weight)).toBe('4.1'); // one decimal for fractions
@@ -65,7 +65,7 @@ describe('BR-6c row weight', () => {
     expect(await Deliverable.countDocuments({})).toBe(269);
     expect(await WorkCard.countDocuments({})).toBe(209);
 
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     expect(rows.reduce((s, r) => s + r.weight, 0)).toBeCloseTo(478, 6);
   });
 
@@ -76,7 +76,7 @@ describe('BR-6c row weight', () => {
     // a task whose MC has no deliverable weighs into nothing
     await WorkCard.create({ project_id: p._id, mc_number: 'MC-ORPHAN', trello_card_id: 'orphan-t', name: 'Orphan task' });
 
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     expect(rows.map((r) => r.weight)).toEqual([1, 1, 1]);
   });
 
@@ -96,7 +96,7 @@ describe('BR-6c row weight', () => {
         { project_id: p._id, mc_number: `MC-${i}`, trello_card_id: `w${i}b`, name: 't' },
       ]);
 
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     const milestones = toMilestones(rows).filter((m) => m.phase === 'sketch');
     // 3 sketch milestones in one week: row count (3) is under capacity (5),
     // weighted load (9) is over — BR-6c is what trips the rule.

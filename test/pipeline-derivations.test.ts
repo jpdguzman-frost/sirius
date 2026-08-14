@@ -36,7 +36,7 @@ describe('phase-13 row derivations', () => {
       HEADER,
       ['MC-655', 'Landing hero', 'Static', 'Campaign', 'UI', 'r@c.example', '2026-08-28', 'brief', 'TRUE'],
     ]);
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     expect(rows.map((r) => r.assetType)).toEqual(['UI', 'UI']);
   });
 
@@ -59,7 +59,7 @@ describe('phase-13 row derivations', () => {
       work_started_at: new Date('2026-07-01T02:00:00Z'), work_done_at: new Date('2026-07-02T02:00:00Z'),
     });
 
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     const byId = new Map(rows.map((r) => [r.cardId, r]));
     expect(byId.get('c1')!.workStarted).toBe('2026-08-03');
     expect(byId.get('c1')!.workDone).toBe('2026-08-10');
@@ -74,7 +74,7 @@ describe('phase-13 row derivations', () => {
       current_list: 'Done',
       work_started_at: new Date('2026-08-03T02:15:30Z'), work_done_at: new Date('2026-08-10T09:45:00Z'),
     });
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     expect(rows[0]!.workStartedTs).toBe('2026-08-03T02:15:30.000Z');
     expect(rows[0]!.workDoneTs).toBe('2026-08-10T09:45:00.000Z');
   });
@@ -88,7 +88,7 @@ describe('phase-13 row derivations', () => {
       work_started_at: new Date('2026-08-02T23:00:00Z'),
       work_done_at: new Date('2026-08-06T23:30:00Z'), // Manila Aug 7 (Fri)
     });
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     expect(rows[0]!.workStarted).toBe('2026-08-03'); // Manila day, not the host's
     expect(rows[0]!.workDone).toBe('2026-08-07');
     expect(rows[0]!.workStartedTs).toBe('2026-08-02T23:00:00.000Z'); // tooltip keeps the instant
@@ -98,7 +98,7 @@ describe('phase-13 row derivations', () => {
     const p = await newProject();
     await Deliverable.create({ project_id: p._id, mc_number: 'MC-837', display_id: 'MC-837.2', trello_card_id: 'c1', name: 'D1' });
     await Deliverable.create({ project_id: p._id, display_id: 'UNLINKED-1', trello_card_id: 'c2', name: 'D2' });
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     const byId = new Map(rows.map((r) => [r.cardId, r]));
     expect(byId.get('c1')!.mcLabel).toBe('MC-837');
     expect(byId.get('c1')!.displayId).toBe('MC-837.2'); // search + other surfaces still use it
@@ -150,7 +150,7 @@ describe('phase-13 row derivations', () => {
     expect(card.work_started_at?.toISOString()).toBe('2026-08-04T01:00:00.000Z');
     expect(card.work_done_at).toBeNull();
 
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     expect(rows[0]!.workStarted).toBe('2026-08-04');
     expect(rows[0]!.workDone).toBeNull();
   });
@@ -190,7 +190,7 @@ describe('phase-13 row derivations', () => {
     const p = await newProject();
     await Deliverable.create({ project_id: p._id, mc_number: 'MC-7', display_id: 'MC-7', trello_card_id: 'c9', name: 'Solo' });
     expect(await deriveWorkSpans(p._id)).toBe(0);
-    const { rows } = await loadPipeline(p._id, '2026-08-03');
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
     expect(rows[0]!.workStarted).toBeNull();
     expect(rows[0]!.workDone).toBeNull();
     expect(rows[0]!.workStartedTs).toBeNull();

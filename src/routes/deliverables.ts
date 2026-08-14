@@ -11,6 +11,7 @@ import { loadProjectModel } from '../services/model-grid.ts';
 import { loadPipeline, manilaToday, toMilestones } from '../services/pipeline.ts';
 import { detectConflicts, replotList } from '../services/conflicts.ts';
 import { dayCapacities } from '../../lib/dayplan.ts';
+import { HARD_MIX } from '../../lib/planner.constants.ts';
 import { ConflictAcknowledgement, MilestoneDayPlan, PushEvent, Sprint, SyncRun } from '../models/index.ts';
 
 
@@ -23,7 +24,7 @@ export function deliverablesRouter(): Router {
     ensureProjectMember,
     async (_req, res) => {
       const projectId = res.locals.project._id;
-      const pipeline = await loadPipeline(projectId, manilaToday());
+      const pipeline = await loadPipeline(projectId, manilaToday(), res.locals.project.weekly_capacity);
       const sprints = await Sprint.find({ project_id: projectId }).sort({ position: 1 }).lean();
       const lastAres = await SyncRun.findOne({ project_id: projectId, source: 'ares' }).sort({ at: -1 }).lean();
       // FR-8.6: `at`/`ok` describe the last ATTEMPT — that is what the header
@@ -48,6 +49,10 @@ export function deliverablesRouter(): Router {
           typical: res.locals.project.ref_week_typical ?? null,
           most: res.locals.project.ref_week_most ?? null,
           effectiveWeeklyRate: res.locals.project.effective_weekly_rate ?? null,
+          // BR-6b hard-mix thresholds ride along so the planner footer renders
+          // the measured ceiling instead of a second hardcoded copy.
+          hardIdeal: HARD_MIX.ideal,
+          hardCeiling: HARD_MIX.ceiling,
         },
         sync: lastAres
           ? {
@@ -68,7 +73,7 @@ export function deliverablesRouter(): Router {
     ensureProjectMember,
     async (_req, res) => {
       const projectId = res.locals.project._id;
-      const pipeline = await loadPipeline(projectId, manilaToday());
+      const pipeline = await loadPipeline(projectId, manilaToday(), res.locals.project.weekly_capacity);
       const milestones = toMilestones(pipeline.rows);
 
       // FR-12: join day placements. A placement is valid only while the
