@@ -42,9 +42,9 @@
     <!-- §3 breakdown stat bar — counts always from the UNFILTERED set; the
          segments are the single-select status filter (click again clears).
          Real buttons: Enter/Space activation is the platform's job -->
-    <div class="rstats" role="group" aria-label="Request breakdown">
+    <div class="metrics rstats" role="group" aria-label="Request breakdown">
       {{#each reqStats as s}}
-        <button type="button" class="rstat {{s.cls}} {{#if statOff(s.key)}}off{{/if}}" aria-pressed="{{requestFilter === s.key ? 'true' : 'false'}}" on-click="['setRequestFilter', s.key]"><span class="rlabel">{{s.label}}</span><span class="rvalue">{{s.value}}</span></button>
+        <button type="button" class="metric rstat {{s.cls}} {{#if statOff(s.key)}}off{{/if}}" aria-pressed="{{requestFilter === s.key ? 'true' : 'false'}}" on-click="['setRequestFilter', s.key]"><span class="mlabel">{{s.label}}</span><span class="mvalue">{{s.value}}</span></button>
       {{/each}}
     </div>
 

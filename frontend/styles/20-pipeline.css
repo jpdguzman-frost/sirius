@@ -72,6 +72,8 @@
 .metrics .metric .mlabel { font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--surface-foreground); }
 .metrics .metric .mvalue { font-size: var(--text-display); font-weight: 600; line-height: 1.2; color: var(--surface-foreground); }
 .metrics .metric.red .mlabel, .metrics .metric.red .mvalue { color: var(--status-destructive-strong); }
+.metrics .metric.green .mlabel, .metrics .metric.green .mvalue { color: var(--green-600); }
+.metrics .metric.amber .mlabel, .metrics .metric.amber .mvalue { color: var(--amber-500); }
 
 /* ---- content stack: elements carry 0 margin, the container gaps 16px
    (frame geometry, confirmed against node 17:2063 child positions) ---- */

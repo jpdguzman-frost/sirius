@@ -261,11 +261,12 @@ const app = new Ractive({
     // click wiring live in ONE place in the template
     reqStats() {
       const c = this.get('requestCounts');
+      // labels literal-uppercase like the Pipeline metrics — one shared recipe
       return [
-        { key: 'all', cls: 'all', label: 'Requests', value: c.requests },
-        { key: 'filed', cls: 'green', label: 'In Pipeline', value: c.inPipeline },
-        { key: 'filing', cls: 'amber', label: 'To File', value: c.forFiling },
-        { key: 'clarification', cls: 'red', label: 'For Clarification', value: c.forClarification },
+        { key: 'all', cls: 'all', label: 'REQUESTS', value: c.requests },
+        { key: 'filed', cls: 'green', label: 'IN PIPELINE', value: c.inPipeline },
+        { key: 'filing', cls: 'amber', label: 'TO FILE', value: c.forFiling },
+        { key: 'clarification', cls: 'red', label: 'FOR CLARIFICATION', value: c.forClarification },
       ];
     },
     reqPageCount() {

@@ -8,27 +8,20 @@
 
 .reqstack { display: flex; flex-direction: column; gap: var(--space-16); }
 
-/* ---- A. breakdown stat bar — 4 equal borderless segments (JP revision
-   2026-08-14: no boxes; a hairline closes the bar), single-select filter ---- */
-.rstats { display: flex; width: 100%; padding-top: var(--space-8); border-bottom: 1px solid var(--slate-200); }
-/* a real <button>, so align-items is stated rather than left to the UA sheet
-   (which gives buttons flex-start, not the stretch a plain box would have) */
+/* ---- A. breakdown stat bar — the Pipeline .metrics recipe VERBATIM (one
+   spacing source for both tabs' KPI rows; JP 2026-08-14: unify to prevent
+   structural drift). Only the requests deltas live here: the segments are
+   real <button>s and a single-select filter ---- */
+.rstats { margin-bottom: var(--space-8); } /* + the reqstack 16px gap = the pipeline's 24px below the hairline */
 .rstat {
-  flex: 1 0 0; min-width: 1px; height: 82px; box-sizing: border-box;
-  display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; gap: var(--space-8);
-  padding: 0 var(--space-16) var(--space-24) 0;
-  background: transparent; border: 0;
+  /* button reset that PRESERVES .metric's bottom hairline; UA buttons also
+     default align-items to flex-start where a div would stretch */
+  background: transparent; border-top: 0; border-left: 0; border-right: 0;
+  padding: 0 0 var(--space-24); align-items: stretch;
   font-family: var(--font-sans); text-align: left; cursor: pointer;
 }
 .rstat:hover { background: var(--slate-50); }
 .rstat:focus-visible { outline: 2px solid var(--blue-500); outline-offset: -2px; }
-.rstat .rlabel { font-size: var(--text-label); font-weight: 600; line-height: 1; text-transform: uppercase; letter-spacing: 0.02em; }
-.rstat .rvalue { font-size: var(--text-display); font-weight: 600; line-height: 1; }
-/* label AND value share the segment's colour */
-.rstat.all { color: var(--surface-foreground); }
-.rstat.green { color: var(--green-600); }
-.rstat.amber { color: var(--amber-500); }
-.rstat.red { color: var(--status-destructive-strong); }
 /* a status filter is on: the unpicked segments recede (build-spec §3.1) */
 .rstat.off { opacity: 0.45; }
 
