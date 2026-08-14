@@ -123,7 +123,9 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    when the viewport is genuinely too narrow. */
 .ptable { border-collapse: collapse; width: 100%; }
 .ptable th {
-  height: 44px; background: var(--slate-100); text-align: left; padding: 0 16px;
+  /* header cells are --slate-50 in BOTH table frames (432:18587 / 452:23570,
+     drift fix JP 2026-08-14) — this is the one shared header recipe */
+  height: 44px; background: var(--slate-50); text-align: left; padding: 0 16px;
   font-size: var(--text-label); font-weight: 600; line-height: 1; letter-spacing: 0.02em;
   text-transform: uppercase; color: var(--surface-muted-foreground); white-space: nowrap;
   position: sticky; top: 0; z-index: 2;
