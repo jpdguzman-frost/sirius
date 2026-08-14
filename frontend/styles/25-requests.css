@@ -78,8 +78,10 @@
 /* ---- F. table — the element is class="ptable rtable", so the 44px header
    height and top cell alignment come from .ptable; only the deltas here ---- */
 .rtable { min-width: 1420px; table-layout: fixed; }
-/* th styling comes ENTIRELY from the shared .ptable recipe — no override here */
-.rtable td { padding: 20px var(--space-16); border-bottom: 1px solid var(--slate-200); background: var(--white); }
+/* th styling AND the row border come ENTIRELY from the shared .ptable recipe
+   (row 432:18601: 1px --slate-100 bottom, no vertical rules — JP 2026-08-14);
+   only the requests-frame cell padding is a delta here */
+.rtable td { padding: 20px var(--space-16); background: var(--white); }
 .rtable .col-rmc { width: 120px; }
 .rtable .col-rname { width: 200px; }
 .rtable .col-rtype { width: 120px; }
