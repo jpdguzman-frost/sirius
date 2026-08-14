@@ -5,13 +5,16 @@
 const HARD_IDEAL = 0.083;
 const HARD_CEILING = 0.129;
 const WEEK_COUNT = 8;
-/* Requests tab (build-spec v1.2 §3): the stat cards are a single-select
+/* Requests tab (build-spec v1.2 §3): the stat segments are a single-select
    filter on the DERIVED status (FR-11.3), the table pages ten rows at a
    time, and every filter runs client-side over one fetch. */
 const REQUEST_STATUS = { filed: 'In Pipeline', filing: 'For Filing', clarification: 'With Clarification' };
-const REQ_FILTER_KEYS = { year: 'reqYear', month: 'reqMonth', type: 'reqType', requestor: 'reqRequestor' };
 const REQ_PAGE_SIZE = 10;
-const REQ_MENU_H = 240; // estimated select box, for the flip-up decision
+/* the filter select box (25-requests.css .selectmenu.reqmenu) — its WIDTH is
+   fixed but its height is content-derived, so 264 is the max-height cap, not
+   the box: the opener measures the rendered element and places it again */
+const REQ_MENU_W = 180;
+const REQ_MENU_H = 264;
 /* due-date popover box (node 415:54979) — used to decide flip-up and the
    horizontal clamp before the element exists to measure */
 const DUE_POP_W = 354;
@@ -35,6 +38,28 @@ function fmtLongIso(iso) {
   const [y, m, d] = iso.slice(0, 10).split('-');
   return `${Number(d)} ${MONTHS_SHORT[Number(m) - 1]} ${y}`;
 }
+
+/* ONE table for the four Requests selects — the Ractive state key IS the def
+   key, so nothing has to translate between them. Everything that would
+   otherwise enumerate the four (initial data, the filter predicate, the
+   option lists, the observer that resets the pager, the project-switch
+   reset) is driven from here: a fifth filter is one row, not five edits that
+   silently drift out of step. Options are always derived from the LOADED
+   rows, never hardcoded, so a sheet that gains a type needs no code change. */
+const alphaSort = (a, b) => String(a).localeCompare(String(b));
+// months sort by CALENDAR order; a name the sheet invents falls to the end
+const monthRank = (m) => {
+  const i = MONTHS_LONG.indexOf(m);
+  return i < 0 ? MONTHS_LONG.length : i;
+};
+const REQ_FILTERS = [
+  { key: 'reqYear', label: 'Year', pick: (r) => r.year, sort: (a, b) => a - b },
+  { key: 'reqMonth', label: 'Month', pick: (r) => r.month, sort: (a, b) => monthRank(a) - monthRank(b) || alphaSort(a, b) },
+  { key: 'reqType', label: 'Type', pick: (r) => r.asset_type, sort: alphaSort },
+  { key: 'reqRequestor', label: 'Requestor', pick: (r) => r.requestor, sort: alphaSort },
+];
+const reqFilterKeys = REQ_FILTERS.map((f) => f.key);
+const reqFiltersCleared = () => Object.fromEntries(reqFilterKeys.map((k) => [k, '']));
 
 /* Invariant 11: the today-marker, the shortcuts and the Started/Done tooltips
    are MANILA days whatever the browser's timezone (en-CA gives YYYY-MM-DD). */
@@ -146,12 +171,9 @@ const app = new Ractive({
     adminEditing: null,
     adminEditSel: {},
     adminError: '',
-    requestFilter: 'all', // 'all' | key of REQUEST_STATUS — the stat cards
+    requestFilter: 'all', // 'all' | key of REQUEST_STATUS — the stat segments
     reqQ: '',
-    reqYear: '', // '' = All, for all four selects
-    reqMonth: '',
-    reqType: '',
-    reqRequestor: '',
+    ...reqFiltersCleared(), // reqYear / reqMonth / reqType / reqRequestor, '' = All
     reqMenu: null, // which select's overlay is open — shares the Pipeline recipe
     reqMenuPos: { left: 0, top: 0 },
     reqPage: 1,
@@ -218,25 +240,33 @@ const app = new Ractive({
       const c = this.get('corrections');
       return this.get('showAllCorrections') ? c : c.slice(0, 5);
     },
-    /* ---- Requests §3: card + search + four selects, AND-combined, all
+    /* ---- Requests §3: segment + search + four selects, AND-combined, all
        client-side over the single unfiltered payload. The counts stay on
        requestCounts, which the server derives from the same unfiltered set. */
     reqFiltered() {
       const status = REQUEST_STATUS[this.get('requestFilter')] || null;
       const q = (this.get('reqQ') || '').trim().toLowerCase();
-      const year = this.get('reqYear');
-      const month = this.get('reqMonth');
-      const type = this.get('reqType');
-      const who = this.get('reqRequestor');
+      // '' = All. Every other value came out of the option list built from
+      // these same rows, so comparing string forms is the same test as
+      // comparing the raw values — and it covers the numeric year too.
+      const picks = REQ_FILTERS.map((f) => ({ pick: f.pick, want: this.get(f.key) })).filter((p) => p.want !== '');
       return this.get('requests').filter(
         (r) =>
           (!status || r.status === status) &&
           (!q || (r.blob || '').includes(q)) &&
-          (year === '' || String(r.year) === String(year)) &&
-          (month === '' || r.month === month) &&
-          (type === '' || r.asset_type === type) &&
-          (who === '' || r.requestor === who),
+          picks.every((p) => String(p.pick(r)) === String(p.want)),
       );
+    },
+    // the four stat segments — one row each, so the a11y attributes and the
+    // click wiring live in ONE place in the template
+    reqStats() {
+      const c = this.get('requestCounts');
+      return [
+        { key: 'all', cls: 'all', label: 'Requests', value: c.requests },
+        { key: 'filed', cls: 'green', label: 'In Pipeline', value: c.inPipeline },
+        { key: 'filing', cls: 'amber', label: 'To File', value: c.forFiling },
+        { key: 'clarification', cls: 'red', label: 'For Clarification', value: c.forClarification },
+      ];
     },
     reqPageCount() {
       return Math.max(1, Math.ceil(this.get('reqFiltered').length / REQ_PAGE_SIZE));
@@ -261,23 +291,14 @@ const app = new Ractive({
       });
       return out;
     },
-    // options come from the LOADED rows only — never a hardcoded list, so a
-    // sheet that gains a type or a requestor needs no code change
     reqFilterDefs() {
       const rows = this.get('requests');
-      const uniq = (pick) => [...new Set(rows.map(pick).filter((v) => v !== null && v !== undefined && v !== ''))];
-      const alpha = (a, b) => String(a).localeCompare(String(b));
-      // months sort by CALENDAR order; a name the sheet invents falls to the end
-      const monthRank = (m) => {
-        const i = MONTHS_LONG.indexOf(m);
-        return i < 0 ? MONTHS_LONG.length : i;
-      };
-      return [
-        { key: 'year', label: 'Year', value: this.get('reqYear'), options: uniq((r) => r.year).sort((a, b) => a - b) },
-        { key: 'month', label: 'Month', value: this.get('reqMonth'), options: uniq((r) => r.month).sort((a, b) => monthRank(a) - monthRank(b) || alpha(a, b)) },
-        { key: 'type', label: 'Type', value: this.get('reqType'), options: uniq((r) => r.asset_type).sort(alpha) },
-        { key: 'requestor', label: 'Requestor', value: this.get('reqRequestor'), options: uniq((r) => r.requestor).sort(alpha) },
-      ];
+      return REQ_FILTERS.map((f) => ({
+        key: f.key,
+        label: f.label,
+        value: this.get(f.key),
+        options: [...new Set(rows.map(f.pick).filter((v) => v !== null && v !== undefined && v !== ''))].sort(f.sort),
+      }));
     },
     weekCols() {
       const from = this.get('weekStart');
@@ -420,11 +441,26 @@ document.addEventListener('wheel', (e) => {
   if (pop && pop.scrollHeight <= pop.clientHeight) e.preventDefault();
 }, { passive: false });
 
-/* One opener for all three row overlays. They differ only in state keys, box
+/* Fixed-position placement for a box of KNOWN size: fixed positioning escapes
+   the .pscroll clip, so the flip-up near the viewport bottom (review finding
+   3) and the on-screen clamp are ours to do. `h`/`clampW` are the box, not
+   the trigger. */
+function placeBox(rect, opts) {
+  const up = rect.bottom + opts.h + opts.gap > window.innerHeight;
+  let left = rect.left;
+  let top = up ? rect.top - opts.h - opts.gap : rect.bottom + opts.gap;
+  if (opts.clampW) {
+    left = Math.max(4, Math.min(left, window.innerWidth - opts.clampW - 4));
+    top = Math.max(4, Math.min(top, window.innerHeight - opts.h - 4));
+  }
+  return { left: Math.round(left), top: Math.round(top) };
+}
+
+/* One opener for all four overlays. They differ only in state keys, box
    height and gap, and whether the box is big enough to need clamping: the two
-   select menus are one-click lists, the due popover is a 354×420 dialog that
-   must stay fully on screen. Mutual exclusion lives here — opening any one
-   nulls the other two. */
+   row select menus are fixed-length lists, the due popover is a 354×420
+   dialog that must stay fully on screen. Mutual exclusion lives here —
+   opening any one nulls the others. */
 function openOverlay(ctx, cardId, opts) {
   // one write in flight per card (invariant 8); the read-only Requests
   // selects have no write to guard, so they pass no `saving` key
@@ -433,16 +469,6 @@ function openOverlay(ctx, cardId, opts) {
     app.set(opts.key, null);
     return;
   }
-  // fixed positioning escapes the .pscroll clip; flip up near the viewport
-  // bottom (review finding 3)
-  const rect = ctx.node.getBoundingClientRect();
-  const up = rect.bottom + opts.h + opts.gap > window.innerHeight;
-  let left = rect.left;
-  let top = up ? rect.top - opts.h - opts.gap : rect.bottom + opts.gap;
-  if (opts.clampW) {
-    left = Math.max(4, Math.min(left, window.innerWidth - opts.clampW - 4));
-    top = Math.max(4, Math.min(top, window.innerHeight - opts.h - 4));
-  }
   app.set({
     urgencyMenu: null,
     diffMenu: null,
@@ -450,8 +476,22 @@ function openOverlay(ctx, cardId, opts) {
     reqMenu: null,
     ...opts.extra,
     [opts.key]: cardId,
-    [opts.posKey]: { left: Math.round(left), top: Math.round(top) },
+    [opts.posKey]: placeBox(ctx.node.getBoundingClientRect(), opts),
   });
+}
+
+/* The Requests select is the one overlay whose height is DATA-derived (1..N
+   options, capped by CSS), so the constant can only ever be its cap: place it
+   a second time against the box that actually rendered. Without this a short
+   menu flips up to a spot 150px above its trigger, and a capped one opens 24px
+   past the viewport edge. Returns false only if the element is not in the DOM
+   yet, which is the caller's cue to retry on the next frame. */
+function placeReqMenu(trigger, key) {
+  if (app.get('reqMenu') !== key) return true; // the click closed it — nothing to place
+  const el = document.querySelector('.selectmenu.reqmenu');
+  if (!el) return false;
+  app.set('reqMenuPos', placeBox(trigger.getBoundingClientRect(), { h: el.offsetHeight, gap: 4, clampW: el.offsetWidth }));
+  return true;
 }
 
 /* loadAll may have replaced the rows array while a PATCH was in flight, so a
@@ -673,7 +713,7 @@ function blobRequests(rows) {
 
 /* Any filter change starts the pager over; a reload only clamps it, so
    saving a note does not yank the reader back to page 1. */
-app.observe('reqQ reqYear reqMonth reqType reqRequestor requestFilter', () => app.set('reqPage', 1), { init: false });
+app.observe(`reqQ requestFilter ${reqFilterKeys.join(' ')}`, () => app.set('reqPage', 1), { init: false });
 app.observe('requests', () => {
   const last = app.get('reqPageCount');
   if (app.get('reqPage') > last) app.set('reqPage', last);
@@ -767,7 +807,7 @@ function selectTab(id) {
   }
 }
 
-/* clicking the active card clears it; REQUESTS is always the show-all */
+/* clicking the active segment clears it; REQUESTS is always the show-all */
 function applyRequestFilter(f) {
   app.set('requestFilter', f === app.get('requestFilter') && f !== 'all' ? 'all' : f);
 }
@@ -789,25 +829,34 @@ app.on({
     });
   },
   async switchProject() {
-    // Requests view state is per-project — a Type/Requestor value from the old
-    // project may not exist in the new one, leaving an unclearable empty table.
-    app.set({ requestFilter: 'all', reqQ: '', reqYear: '', reqMonth: '', reqType: '', reqRequestor: '', reqPage: 1, reqMenu: null });
+    // Requests view state is per-project. A Type/Requestor value from the old
+    // project may not exist in the new one, leaving an unclearable empty
+    // table — and an open note editor is keyed on mc_number ALONE, which is
+    // unique per project and NOT globally (invariant 3), so leaving it open
+    // re-attaches project A's draft to project B's same-numbered row and
+    // Submit would write it there.
+    app.set({
+      ...reqFiltersCleared(),
+      requestFilter: 'all',
+      reqQ: '',
+      reqPage: 1,
+      reqMenu: null,
+      noteEditing: null,
+      noteDraft: { remark: '', clarify: false, reason: '' },
+      noteError: '',
+    });
     await loadAll();
   },
   signOut() { api.send('POST', '/auth/logout').then(() => window.location.reload()); },
   toggleCorrections() { app.toggle('showAllCorrections'); },
-  /* ---- Requests §3: stat cards, selects, pager — no round-trip ---- */
+  /* ---- Requests §3: stat segments, selects, pager — no round-trip ---- */
   setRequestFilter(_ctx, f) { applyRequestFilter(f); },
-  statKey(ctx, f) {
-    if (ctx.event.key !== 'Enter' && ctx.event.key !== ' ') return;
-    ctx.event.preventDefault(); // Space would scroll the page
-    applyRequestFilter(f);
-  },
   openReqMenu(ctx, key) {
-    openOverlay(ctx, key, { key: 'reqMenu', posKey: 'reqMenuPos', h: REQ_MENU_H, gap: 4 });
+    openOverlay(ctx, key, { key: 'reqMenu', posKey: 'reqMenuPos', h: REQ_MENU_H, gap: 4, clampW: REQ_MENU_W });
+    if (!placeReqMenu(ctx.node, key)) requestAnimationFrame(() => placeReqMenu(ctx.node, key));
   },
   pickReqFilter(_ctx, key, value) {
-    app.set({ reqMenu: null, [REQ_FILTER_KEYS[key]]: value }); // '' = All, which clears that filter
+    app.set({ reqMenu: null, [key]: value }); // '' = All, which clears that filter
   },
   reqGoPage(_ctx, n) { app.set('reqPage', n); },
   reqPageStep(_ctx, dir) {
@@ -848,16 +897,24 @@ app.on({
       app.set(`requests.${idx}.status`, d.clarify ? 'With Clarification' : 'For Filing');
     }
     app.set({ noteEditing: null, noteError: '' });
+    // ONLY the write is inside the rollback: once the PUT resolves the server
+    // holds the note and has audited it (invariant 10), so a failed refresh is
+    // staleness, never a reason to revert a row the database already has.
     try {
       await api.send('PUT', `/api/projects/${app.get('activeProjectId')}/requests/${mc}/note`, {
         remark, clarify: d.clarify, ...(d.clarify ? { clarify_reason: reason } : {}),
       });
-      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/requests`);
-      app.set({ requests: blobRequests(res.requests), requestCounts: res.counts || app.get('requestCounts') });
     } catch (err) {
       app.set(`requests.${idx}.note`, prev.note);
       app.set(`requests.${idx}.status`, prev.status);
       flashBanner(`Note save failed — reverted. ${errText(err)}`);
+      return;
+    }
+    try {
+      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/requests`);
+      app.set({ requests: blobRequests(res.requests), requestCounts: res.counts || app.get('requestCounts') });
+    } catch (err) {
+      flashBanner(`Note saved. The refresh failed, so the counts may be stale until the next load. ${errText(err)}`);
     }
   },
   toggleGroup(_ctx, mc) { app.toggle(`expanded.${mc}`); },

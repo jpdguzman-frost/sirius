@@ -7,14 +7,10 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import request from 'supertest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
-import { createApp } from '../src/app.ts';
-import { validateEnv } from '../src/config/env.ts';
+import { loggedInProjectFixture, type TestAgent } from './helpers/fixtures.ts';
 import type { Types } from 'mongoose';
-import { Deliverable, IntakeRequest, Project, User, UserProject } from '../src/models/index.ts';
-
-const env = validateEnv({ NODE_ENV: 'test' });
+import { Deliverable, IntakeRequest, Project } from '../src/models/index.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -34,22 +30,9 @@ interface Row {
   month: string | null;
 }
 
-async function fixture() {
-  const p = await Project.create({
-    code: 'rt-837',
-    name: 'Fx',
-    trello_board_id: 'fxA',
-    weekly_capacity: 120,
-  });
-  const user = await User.create({ email: 'member@frostdesigngroup.com' });
-  await UserProject.create({ user_id: user._id, project_id: p._id });
-  const app = createApp({ env, redis: null, mongo: null });
-  const agent = request.agent(app);
-  await agent.post('/__test/login').send({ userId: String(user._id), email: user.email }).expect(200);
-  return { p, agent };
-}
+const fixture = loggedInProjectFixture;
 
-const intake = (projectId: Types.ObjectId, mc: string, sheet_row: number, over: Record<string, unknown> = {}) =>
+const intake =(projectId: Types.ObjectId, mc: string, sheet_row: number, over: Record<string, unknown> = {}) =>
   IntakeRequest.create({ project_id: projectId, mc_number: mc, sheet_row, name: `Req ${mc}`, ...over });
 
 const card = (projectId: Types.ObjectId, mc: string, id: string, over: Record<string, unknown> = {}) =>
@@ -62,9 +45,7 @@ const card = (projectId: Types.ObjectId, mc: string, id: string, over: Record<st
     ...over,
   });
 
-type Agent = ReturnType<typeof request.agent>;
-
-const rowsOf = async (agent: Agent, projectId: Types.ObjectId, query = ''): Promise<Row[]> => {
+const rowsOf = async (agent: TestAgent, projectId: Types.ObjectId, query = ''): Promise<Row[]> => {
   const res = await agent.get(`/api/projects/${projectId}/requests${query}`).expect(200);
   return res.body.requests as Row[];
 };

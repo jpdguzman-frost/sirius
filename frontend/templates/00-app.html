@@ -37,15 +37,15 @@
 <main class="view {{activeTab === 'pipeline' || activeTab === 'requests' ? '' : 'legacybg'}}" id="view-panel" role="tabpanel" aria-labelledby="tab-{{activeTab}}">
 
 {{#if activeTab === 'requests'}}
-  {{#if requests.length || rejects.length || requestCounts.requests}}
+  {{#if requests.length || rejects.length}}
   <div class="reqstack">
     <!-- §3 breakdown stat bar — counts always from the UNFILTERED set; the
-         cards are the single-select status filter (click again clears) -->
+         segments are the single-select status filter (click again clears).
+         Real buttons: Enter/Space activation is the platform's job -->
     <div class="rstats" role="group" aria-label="Request breakdown">
-      <div class="rstat all {{#if statOff('all')}}off{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'all' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'all']" on-keydown="['statKey', 'all']"><span class="rlabel">Requests</span><span class="rvalue">{{requestCounts.requests}}</span></div>
-      <div class="rstat green {{#if statOff('filed')}}off{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'filed' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'filed']" on-keydown="['statKey', 'filed']"><span class="rlabel">In Pipeline</span><span class="rvalue">{{requestCounts.inPipeline}}</span></div>
-      <div class="rstat amber {{#if statOff('filing')}}off{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'filing' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'filing']" on-keydown="['statKey', 'filing']"><span class="rlabel">To File</span><span class="rvalue">{{requestCounts.forFiling}}</span></div>
-      <div class="rstat red {{#if statOff('clarification')}}off{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'clarification' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'clarification']" on-keydown="['statKey', 'clarification']"><span class="rlabel">For Clarification</span><span class="rvalue">{{requestCounts.forClarification}}</span></div>
+      {{#each reqStats as s}}
+        <button type="button" class="rstat {{s.cls}} {{#if statOff(s.key)}}off{{/if}}" aria-pressed="{{requestFilter === s.key ? 'true' : 'false'}}" on-click="['setRequestFilter', s.key]"><span class="rlabel">{{s.label}}</span><span class="rvalue">{{s.value}}</span></button>
+      {{/each}}
     </div>
 
     <div class="searchbar reqsearch">{{{icon.search}}}<input name="requests-search" placeholder="Search cards or MC#" value="{{reqQ}}" lazy="250" aria-label="Search requests by card or MC number" /></div>
@@ -85,6 +85,7 @@
       {{/if}}
     </div>
 
+    {{#if reqFiltered.length}}
     <div class="pscrollwrap reqwrap">
       <div class="pscroll" on-scroll="['reqScrolled']">
         <table class="ptable rtable">
@@ -133,7 +134,7 @@
                 {{elseif r.note && r.note.remark}}
                   <button class="notebox" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}">{{{hlr(r.note.remark)}}}</button>
                 {{else}}
-                  <button class="addremark2" on-click="['openNote', r.mc_number]">Add Remarks</button>
+                  <button class="addremark" on-click="['openNote', r.mc_number]">Add Remarks</button>
                 {{/if}}
               </div></td>
             </tr>
@@ -149,17 +150,15 @@
       </div>
       {{/if}}
     </div>
-
-    <!-- the empty state names the real cause: filters only when rows exist to
-         hide, otherwise the sheet itself (every parsed row landed in rejects) -->
-    {{#if !reqFiltered.length}}
-      {{#if requests.length}}
-        <div class="rempty"><strong>No requests match</strong><span>Clear the search, the status card or a filter to see the other rows.</span></div>
-      {{elseif rejects.length}}
-        <div class="rempty"><strong>No usable requests</strong><span>Every row the sync read needs correction in the sheet — it corrects on the next sync.</span></div>
-      {{else}}
-        <div class="rempty"><strong>No requests loaded</strong><span>Nothing came back for this project on the last intake sync.</span></div>
-      {{/if}}
+    <!-- the empty state REPLACES the table — a header-only table over its own
+         scroll slider is not an empty state — and names the real cause:
+         filters only when rows exist to hide, otherwise the sheet itself.
+         The outer gate owns the no-data case, so the last branch here can
+         only mean every parsed row landed in rejects. -->
+    {{elseif requests.length}}
+      <div class="rempty"><strong>No requests match</strong><span>Clear the search, the status card or a filter to see the other rows.</span></div>
+    {{else}}
+      <div class="rempty"><strong>No usable requests</strong><span>Every row the sync read needs correction in the sheet — it corrects on the next sync.</span></div>
     {{/if}}
   </div>
   {{else}}

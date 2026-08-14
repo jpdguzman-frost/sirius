@@ -1,17 +1,21 @@
 /* Requests tab v2 — restyle to the Figma frame + build-spec v1.2 §3. Every
-   value binds to a token (05-tokens.css); the legacy .tiles/.grid/.notecell
+   value binds to a token (05-tokens.css); the legacy .grid/.scroll/.chk
    recipes in 10-ui.css stay untouched because the unmigrated tabs still use
-   them. Shared chrome (.searchbar, .pscrollwrap, .hslider, .selectmenu) is
-   reused from 20-pipeline.css — only the deltas live here. */
+   them — the .tiles/.notecell/.callout set THIS tab replaced is deleted, not
+   kept. Shared chrome (.searchbar, .pscrollwrap, .hslider, .selectmenu, and
+   .ptable's th/td geometry) is reused from 20-pipeline.css — only the deltas
+   live here. */
 
 .reqstack { display: flex; flex-direction: column; gap: var(--space-16); }
 
 /* ---- A. breakdown stat bar — 4 equal borderless segments (JP revision
    2026-08-14: no boxes; a hairline closes the bar), single-select filter ---- */
 .rstats { display: flex; width: 100%; padding-top: var(--space-8); border-bottom: 1px solid var(--slate-200); }
+/* a real <button>, so align-items is stated rather than left to the UA sheet
+   (which gives buttons flex-start, not the stretch a plain box would have) */
 .rstat {
   flex: 1 0 0; min-width: 1px; height: 82px; box-sizing: border-box;
-  display: flex; flex-direction: column; justify-content: flex-end; gap: var(--space-8);
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; gap: var(--space-8);
   padding: 0 var(--space-16) var(--space-24) 0;
   background: transparent; border: 0;
   font-family: var(--font-sans); text-align: left; cursor: pointer;
@@ -78,10 +82,11 @@
 .pager .pgap { padding: 0 var(--space-4); color: var(--slate-400); font-size: var(--text-label); }
 .pager .pbtn:focus-visible, .pager .pnav:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
 
-/* ---- F. table ---- */
+/* ---- F. table — the element is class="ptable rtable", so the 44px header
+   height and top cell alignment come from .ptable; only the deltas here ---- */
 .rtable { min-width: 1420px; table-layout: fixed; }
-.rtable th { height: 44px; background: var(--slate-50); }
-.rtable td { padding: 20px var(--space-16); border-bottom: 1px solid var(--slate-200); background: var(--white); vertical-align: top; }
+.rtable th { background: var(--slate-50); }
+.rtable td { padding: 20px var(--space-16); border-bottom: 1px solid var(--slate-200); background: var(--white); }
 .rtable .col-rmc { width: 120px; }
 .rtable .col-rname { width: 200px; }
 .rtable .col-rtype { width: 120px; }
@@ -105,34 +110,34 @@
 .rtable a.sheetrow:hover { color: var(--blue-700); text-decoration: underline; }
 .rtable .sheetrow svg { display: block; flex: none; }
 
+/* one badge geometry for the four read-only pills on this tab — colour,
+   border and padding are the only per-recipe deltas below */
+.rtable .rbadge, .rtable .nopill, .rtable .sbadge, .notewrap .clarpill {
+  display: inline-flex; align-items: center; border-radius: var(--radius-sm);
+  font-size: var(--text-label); font-weight: 600; line-height: 1.2;
+}
+
 /* TYPE / REQUESTOR chips — the Badge recipe, no interaction chrome */
 .rtable .rbadge {
-  display: inline-flex; align-items: center; border-radius: var(--radius-sm);
   background: var(--slate-100); border: 1px solid var(--border-border); color: var(--surface-muted-foreground);
-  font-size: var(--text-label); font-weight: 600; line-height: 1.2; padding: var(--space-4) var(--space-8);
-  max-width: 100%; overflow-wrap: anywhere;
+  padding: var(--space-4) var(--space-8); max-width: 100%; overflow-wrap: anywhere;
 }
 
 /* DEADLINE — read-only here; the Pipeline tab owns the W2 write */
 .rtable .nopill {
-  display: inline-flex; align-items: center; border-radius: var(--radius-sm);
   background: transparent; border: 1px solid var(--status-destructive-strong); color: var(--status-destructive-strong);
-  font-size: var(--text-label); font-weight: 600; line-height: 1.2; padding: var(--space-4) var(--space-8);
+  padding: var(--space-4) var(--space-8);
 }
 
 /* STATUS (FR-11.3 derivation, one recipe per derived value) */
-.rtable .sbadge {
-  display: inline-flex; align-items: center; border-radius: var(--radius-sm);
-  font-size: var(--text-label); font-weight: 600; line-height: 1.2; padding: var(--space-4) 10px;
-  white-space: nowrap;
-}
+.rtable .sbadge { padding: var(--space-4) 10px; white-space: nowrap; }
 .rtable .sbadge.file { background: var(--amber-100); border: 1px solid var(--amber-500); color: var(--amber-600); }
 .rtable .sbadge.pipe { background: var(--green-50); border: 1px solid var(--green-600); color: var(--green-600); }
 .rtable .sbadge.clar { background: var(--status-destructive-light); border: 1px solid var(--status-destructive-strong); color: var(--status-destructive-strong); }
 
 /* ---- FROST NOTES (FR-11) — three display states + the inline editor ---- */
 .rtable .col-rnote .notewrap { width: 288px; max-width: 100%; }
-.notewrap .addremark2 {
+.notewrap .addremark {
   width: 100%; height: 36px; box-sizing: border-box; padding: 0 var(--space-8); text-align: left;
   background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
   cursor: pointer; font-family: var(--font-sans); font-size: var(--text-label); line-height: 1; color: var(--slate-400);
@@ -144,18 +149,17 @@
   padding: var(--space-8); color: var(--surface-foreground);
 }
 .notewrap .notebox.flagged { background: transparent; border: none; padding: 0; }
-.notewrap .addremark2:hover, .notewrap .notebox:not(.flagged):hover { border-color: var(--slate-300); }
-.notewrap .addremark2:focus-visible, .notewrap .notebox:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
-.notewrap .clarpill {
-  display: inline-flex; align-items: center; border-radius: var(--radius-sm);
-  border: 1px solid var(--red-500); color: var(--red-500);
-  font-size: var(--text-label); font-weight: 600; line-height: 1.2; padding: var(--space-4) var(--space-8);
-}
+.notewrap .addremark:hover, .notewrap .notebox:not(.flagged):hover { border-color: var(--slate-300); }
+.notewrap .addremark:focus-visible, .notewrap .notebox:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.notewrap .clarpill { border: 1px solid var(--red-500); color: var(--red-500); padding: var(--space-4) var(--space-8); }
+/* the flagged cell's three parts are SPANs (they live inside a <button>), so
+   each has to be told to be a block — inline boxes drop margin-top and paint
+   the quote rule on the first line fragment only */
 .notewrap .clarwhy {
-  margin-top: 6px; padding-left: var(--space-8); border-left: 2px solid var(--status-destructive-strong);
+  display: block; margin-top: 6px; padding-left: var(--space-8); border-left: 2px solid var(--status-destructive-strong);
   font-size: var(--text-label); line-height: 1.4; color: var(--status-destructive-strong); overflow-wrap: anywhere;
 }
-.notewrap .clarremark { margin-top: 6px; font-size: var(--text-label); line-height: 1.4; color: var(--surface-muted-foreground); overflow-wrap: anywhere; }
+.notewrap .clarremark { display: block; margin-top: 6px; font-size: var(--text-label); line-height: 1.4; color: var(--surface-muted-foreground); overflow-wrap: anywhere; }
 
 .noteedit { display: flex; flex-direction: column; gap: 6px; }
 .noteedit textarea {

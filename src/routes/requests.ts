@@ -53,12 +53,14 @@ export function requestsRouter(): Router {
       const projectId = res.locals.project._id;
       const filter = String(req.query.filter ?? '');
 
-      const requests = await IntakeRequest.find({ project_id: projectId, active: true }).sort({
-        sheet_row: 1,
-      });
-      const deliverables = await Deliverable.find({ project_id: projectId, active: true }).select(
-        'mc_number trello_due',
-      );
+      // every read here is flattened into plain literals below — no document
+      // methods, no virtuals, no save — so all of them are .lean()
+      const requests = await IntakeRequest.find({ project_id: projectId, active: true })
+        .sort({ sheet_row: 1 })
+        .lean();
+      const deliverables = await Deliverable.find({ project_id: projectId, active: true })
+        .select('mc_number trello_due')
+        .lean();
       const filedMcs = new Set(deliverables.map((d) => d.mc_number));
       // invariant 14: earliest Trello due per MC group — date-only strings
       // compare lexicographically (mapper stores them YYYY-MM-DD)
@@ -107,15 +109,18 @@ export function requestsRouter(): Router {
       };
       if (filter === 'filed') rows = rows.filter((r) => r.status === 'In Pipeline');
       if (filter === 'unfiled') rows = rows.filter((r) => r.status !== 'In Pipeline');
-      if (filter === 'filing') rows = rows.filter((r) => r.status === 'For Filing');
       if (filter === 'clarification') rows = rows.filter((r) => r.status === 'With Clarification');
       if (filter === 'missing-deadline') rows = rows.filter((r) => !r.deadline);
 
-      const rejects = await IntakeReject.find({ project_id: projectId }).sort({ sheet_row: 1 });
-      const lastRun = await SyncRun.findOne({ project_id: projectId, source: 'sheet' }).sort({ at: -1 });
+      const rejects = await IntakeReject.find({ project_id: projectId }).sort({ sheet_row: 1 }).lean();
+      const lastRun = await SyncRun.findOne({ project_id: projectId, source: 'sheet' })
+        .sort({ at: -1 })
+        .lean();
       const lastGood = lastRun?.ok
         ? lastRun
-        : await SyncRun.findOne({ project_id: projectId, source: 'sheet', ok: true }).sort({ at: -1 });
+        : await SyncRun.findOne({ project_id: projectId, source: 'sheet', ok: true })
+            .sort({ at: -1 })
+            .lean();
 
       res.json({
         ok: true,

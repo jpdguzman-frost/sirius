@@ -8,21 +8,9 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import request from 'supertest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
-import { createApp } from '../src/app.ts';
-import { validateEnv } from '../src/config/env.ts';
-import {
-  AuditLog,
-  Deliverable,
-  FrostNote,
-  IntakeRequest,
-  Project,
-  User,
-  UserProject,
-} from '../src/models/index.ts';
-
-const env = validateEnv({ NODE_ENV: 'test' });
+import { loggedInProjectFixture } from './helpers/fixtures.ts';
+import { AuditLog, Deliverable, FrostNote, IntakeRequest } from '../src/models/index.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -35,9 +23,7 @@ beforeEach(async () => {
 });
 
 async function fixture() {
-  const p = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'fxA', weekly_capacity: 120 });
-  const user = await User.create({ email: 'member@frostdesigngroup.com' });
-  await UserProject.create({ user_id: user._id, project_id: p._id });
+  const { p, agent } = await loggedInProjectFixture();
   await IntakeRequest.create({
     project_id: p._id, mc_number: 'MC-702', sheet_row: 3, name: 'Unfiled thing',
   });
@@ -47,9 +33,6 @@ async function fixture() {
   await Deliverable.create({
     project_id: p._id, mc_number: 'MC-655', display_id: 'MC-655', trello_card_id: 'c1', name: 'Filed one',
   });
-  const app = createApp({ env, redis: null, mongo: null });
-  const agent = request.agent(app);
-  await agent.post('/__test/login').send({ userId: String(user._id), email: user.email }).expect(200);
   return { p, agent };
 }
 
