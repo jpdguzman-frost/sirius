@@ -33,7 +33,10 @@ build per the standing Rex-first rule.
 | 14 | Status model (owl #14 supersedes #11) | Trello presence drives it: In Pipeline (filed, wins over flag) · To File (unfiled) · For Clarification (unfiled + flag, Sirius-internal). Counts cross-cut: REQUESTS = IN PIPELINE + TO FILE; FOR CLARIFICATION ⊂ TO FILE. Card filters are predicates, not string matches. |
 | 15 | Filed row with a stale clarify flag | Not in the "For Clarification state" (owl #13's render condition) — shows In Pipeline + the plain remark box, excluded from the clarification count/filter. **CONFIRMED by JP 2026-08-14** ("Correct. A" — filed wins, red block clears). |
 | 16 | Single-box notes (owl #15) | The reason field is gone; clarify requires the remark (`REMARK_REQUIRED`). Legacy rows keep their text via `noteText()` = remark ‖ clarify_reason. Keying stays `(project_id, mc_number)` — owl #15 said `(project_id, trello_card_id)`, but a For-Clarification request has no Trello card by definition. |
-| 17 | Breakdown annotation drift | The moved node `470:21130` still describes **bordered** cards; JP's borderless revision (ruling #1) stands — annotation refresh requested from product. |
+| 17 | Breakdown annotation drift | ~~Annotation refresh requested~~ **RESOLVED — product refreshed it to borderless (owl #17)**; the `415:54979` precedence annotation was also corrected to Trello-due-first (closes pipeline drift #6). |
+| 18 | Year/Month basis (final) | Owl #16 supersedes ruling #3: two NEW leading table columns hold the **filed** year/month (nodes 470:21145/452:24773/470:21178/470:21206); the dropdowns key on them. Source month encoding unknown until the sheet credential — `monthShort()` canonicalizes name/number/Sep/Sept → MMM everywhere. |
+| 19 | Sorting (owl #18) | All columns except Brief + Frost Notes; asc→desc→clear; default newest-filed, nulls last; page-1 reset. The annotation's "server-side over the full dataset" is implemented client-side over the full filtered set — identical semantics, the client holds every row from the one fetch. Row-click and cell links: **closed as none.** |
+| 20 | Status badge tokens (owl #17) | For Clarification red-50/**red-500** (was inferred red-600); In Pipeline green-50/**#22c55e** (product-derived); To File amber confirmed as built. Breakdown segment colors unchanged (frame-pinned green-600). |
 
 ## Data reality
 

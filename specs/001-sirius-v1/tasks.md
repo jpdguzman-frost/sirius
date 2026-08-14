@@ -261,6 +261,13 @@ Scope: Requests tab restyled 1:1 to the frame + client-side search/filters/pagin
 
 ---
 
+## Phase 13e — Requests sorting + filed Year/Month columns (~0.5d) — added 2026-08-14 (JP "run workflow"; owls #16–#18, Rex-verified on 470:21145 / 452:24773 / 470:21178 / 470:21206 + refreshed 452:23561 interaction annotation)
+
+- [x] T121 Frontend: YEAR + MONTH leading columns (filed year/month; 4-digit int, MMM via `monthShort` canonicalization — name/number/Sep/Sept all map, used in cell + dropdown labels + filter matching + calendar order); header sort asc→desc→clear on all columns except Brief/Frost Notes (default = newest-filed, nulls last, page-1 reset, project-switch reset, aria-sort + keyboard); client-side sort over the full filtered set (= the annotation's "server-side over the full dataset" semantic — client holds all rows); badge tokens per product ruling (For Clarification red-500, In Pipeline green-50/500); min-width 1660; row-click + cell links CLOSED as none (owl #18)
+- [x] T122 Quality: 256/256 dual-TZ held (frontend-only), 209-assertion comparator sweep + 23-case month-encoding harness, two Fable lenses zero actionable findings; verified live (sort cycle, natural MC order, cleared state, token colors)
+
+---
+
 ## Dependencies
 
 ```
