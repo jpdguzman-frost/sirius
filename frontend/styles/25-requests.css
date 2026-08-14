@@ -31,10 +31,7 @@
 /* ---- C/D. search + filter bar ---- */
 .reqsearch { padding-top: 0; }
 
-.filterbar {
-  display: flex; align-items: center; gap: var(--space-24); flex-wrap: wrap;
-  height: 72px; box-sizing: border-box;
-}
+.filterbar { display: flex; align-items: center; gap: var(--space-24); flex-wrap: wrap; }
 .rfilter { display: flex; align-items: center; gap: var(--space-8); }
 .rfilter .flabel {
   font-size: var(--text-label); font-weight: 600; line-height: 1;
