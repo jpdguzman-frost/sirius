@@ -4,10 +4,30 @@
  * expectations (AC-12 logic: SLA cascades).
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // @ts-expect-error verbatim minified extract, untyped by design
 import * as O from './golden/original.mjs';
+import { HOLIDAYS, setHolidays } from '../lib/calendar.ts';
 import { forecast, type ForecastCard } from '../lib/forecast.ts';
+
+/**
+ * Amendment 2026-08-15: the port now excludes the holiday's LOCAL date in
+ * EVERY timezone. The oracle's quirk east of UTC (toISOString on a local
+ * midnight) makes it exclude the day AFTER each holiday instead. To keep
+ * the matrix a pure COMPOSITION parity, we feed the port the oracle's
+ * effective set for the host TZ: shifted +1 day east of UTC, unchanged at
+ * or west of UTC (where the oracle is correct). The amended calendar's own
+ * correctness is proven in calendar.test.ts against a TZ-true reference.
+ */
+const OFFSET_MIN = new Date('2026-06-12T00:00:00').getTimezoneOffset();
+const plusOne = (s: string): string => {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(Date.UTC(y!, (m ?? 1) - 1, (d ?? 1) + 1)).toISOString().slice(0, 10);
+};
+beforeAll(() => {
+  if (OFFSET_MIN < 0) setHolidays(HOLIDAYS.map(plusOne)); // east of UTC
+});
+afterAll(() => setHolidays(HOLIDAYS));
 import { CONFIDENCE_LEVELS, EMPIRICAL, designCell, laneOf } from '../lib/model.ts';
 
 const DIFFICULTIES = ['Easy', 'Medium', 'Hard', undefined, 'Unknown'];

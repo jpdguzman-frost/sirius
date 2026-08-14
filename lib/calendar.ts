@@ -3,17 +3,24 @@
  * (invariant 5; port source per the approved STATE.md deviation).
  * Golden parity tests against test/golden/original.mjs prove the port.
  *
- * DO NOT refactor, rename, or "clean up" the logic. Two quirks are
+ * DO NOT refactor, rename, or "clean up" the logic. One quirk is
  * load-bearing and preserved deliberately:
  *  - toFriday(): Mon–Thu roll forward to that week's Friday; Fri/Sat/Sun
  *    roll to the NEXT MONDAY (8-a arithmetic in the source).
- *  - isHoliday() compares a LOCAL calendar date against toISOString() (UTC).
- *    In any timezone ahead of UTC (Asia/Manila included) the comparison
- *    shifts a day, so PH holidays effectively do not exclude. This matches
- *    the validated artifact byte-for-byte; flagged to JP at the T026 gate.
+ *
+ * AMENDED 2026-08-15 (approved by JP; supersedes the T026 keep-as-is call):
+ *  - isHoliday() previously compared a LOCAL calendar date against
+ *    toISOString() (UTC), so east of UTC (Asia/Manila — production) PH
+ *    holidays never excluded. It now compares the LOCAL calendar date, and
+ *    the active holiday set is injectable via setHolidays() — the ARES
+ *    working-day calendar is canonical (JP 2026-08-15); HOLIDAYS below is
+ *    only the offline seed.
+ *  - buildWeeks()/monthWeeks() previously derived `key` via toISOString(),
+ *    yielding the SUNDAY before east of UTC. Keys are now the local Monday.
+ *  - Everything else is byte-identical to the port.
  */
 
-/** PH holidays 2026 — as shipped in the prototype. */
+/** PH holidays 2026 — as shipped in the prototype. SEED ONLY (see amendment). */
 export const HOLIDAYS: string[] = [
   '2026-01-01',
   '2026-04-02',
@@ -29,11 +36,27 @@ export const HOLIDAYS: string[] = [
 /** ISO date of a Date via UTC (source: Qh). */
 export const iso = (d: Date): string => d.toISOString().slice(0, 10);
 
+/** ISO date of a Date via the LOCAL calendar (amendment 2026-08-15). */
+export const localIso = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 /** Parse a YYYY-MM-DD string to a LOCAL-midnight Date (source: V). */
 export const parseDate = (s: string): Date => new Date(s + 'T00:00:00');
 
-/** Holiday check (source: np) — carries the documented UTC/local quirk. */
-export const isHoliday = (d: Date): boolean => HOLIDAYS.includes(iso(d));
+let ACTIVE_HOLIDAYS: ReadonlySet<string> = new Set(HOLIDAYS);
+
+/** Replace the active holiday calendar (ARES-canonical feed; amendment 2026-08-15). */
+export function setHolidays(dates: string[]): void {
+  ACTIVE_HOLIDAYS = new Set(dates);
+}
+
+/** The active holiday dates (seed until the ARES calendar loads). */
+export function getHolidays(): string[] {
+  return [...ACTIVE_HOLIDAYS].sort();
+}
+
+/** Holiday check (source: np) — local calendar date since the 2026-08-15 amendment. */
+export const isHoliday = (d: Date): boolean => ACTIVE_HOLIDAYS.has(localIso(d));
 
 /** WORKDAY(start, n) — add n working days, skipping weekends and holidays (source: on). */
 export function workday(start: Date | string, days: number): Date {
@@ -90,7 +113,7 @@ export function buildWeeks(from: string, count: number): Week[] {
     const s = new Date(r);
     s.setDate(s.getDate() + 4);
     a.push({
-      key: r.toISOString().slice(0, 10),
+      key: localIso(r),
       monday: r,
       friday: s,
       month: r.toLocaleDateString('en-US', { month: 'long' }),
@@ -116,7 +139,7 @@ export function monthWeeks(year: number, month: number): Week[] {
       continue;
     }
     o.push({
-      key: r.toISOString().slice(0, 10),
+      key: localIso(r),
       monday: new Date(r),
       friday: s,
       label: `Week ${o.length + 1}`,

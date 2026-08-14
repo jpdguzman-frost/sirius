@@ -3,17 +3,16 @@
  * NEW module, added 2026-08-12 (phase 12) — NOT part of the verbatim port.
  * calendar.ts and planner.ts stay untouched (invariant 5).
  *
- * Deliberate deviation from calendar.ts: isHoliday() there compares a
- * local-midnight Date against toISOString() and shifts a day east of UTC —
- * a quirk preserved for port fidelity. Day capacity needs the calendar-true
- * answer in every timezone, so this module works on date-only STRINGS and
- * never converts through a local Date.
+ * This module works on date-only STRINGS and never converts through a local
+ * Date, so it is calendar-true in every timezone. (calendar.ts itself was
+ * amended 2026-08-15 to the same property; the default holiday list here now
+ * follows the ACTIVE set — ARES-canonical once synced.)
  */
 
-import { HOLIDAYS } from './calendar.ts';
+import { getHolidays } from './calendar.ts';
 
 /** Calendar-true holiday check on the date-only string. */
-export const isHolidayDate = (day: string, holidays: string[] = HOLIDAYS): boolean =>
+export const isHolidayDate = (day: string, holidays: string[] = getHolidays()): boolean =>
   holidays.includes(day);
 
 /** Mon–Fri date strings of the week whose Monday key is given (UTC math — timezone-proof). */
@@ -39,7 +38,7 @@ export interface DayCapacity {
 export function dayCapacities(
   mondayKey: string,
   weeklyCapacity: number,
-  holidays: string[] = HOLIDAYS,
+  holidays: string[] = getHolidays(),
 ): DayCapacity[] {
   const days = weekDays(mondayKey);
   const out: DayCapacity[] = days.map((day) => ({
