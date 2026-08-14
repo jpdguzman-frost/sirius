@@ -43,9 +43,9 @@
          cards are the single-select status filter (click again clears) -->
     <div class="rstats" role="group" aria-label="Request breakdown">
       <div class="rstat all {{#if statOff('all')}}off{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'all' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'all']" on-keydown="['statKey', 'all']"><span class="rlabel">Requests</span><span class="rvalue">{{requestCounts.requests}}</span></div>
-      <div class="rstat green {{#if statOff('filed')}}off{{/if}} {{#if requestFilter === 'filed'}}on{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'filed' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'filed']" on-keydown="['statKey', 'filed']"><span class="rlabel">In Pipeline</span><span class="rvalue">{{requestCounts.inPipeline}}</span></div>
-      <div class="rstat amber {{#if statOff('filing')}}off{{/if}} {{#if requestFilter === 'filing'}}on{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'filing' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'filing']" on-keydown="['statKey', 'filing']"><span class="rlabel">To File</span><span class="rvalue">{{requestCounts.forFiling}}</span></div>
-      <div class="rstat red {{#if statOff('clarification')}}off{{/if}} {{#if requestFilter === 'clarification'}}on{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'clarification' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'clarification']" on-keydown="['statKey', 'clarification']"><span class="rlabel">For Clarification</span><span class="rvalue">{{requestCounts.forClarification}}</span></div>
+      <div class="rstat green {{#if statOff('filed')}}off{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'filed' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'filed']" on-keydown="['statKey', 'filed']"><span class="rlabel">In Pipeline</span><span class="rvalue">{{requestCounts.inPipeline}}</span></div>
+      <div class="rstat amber {{#if statOff('filing')}}off{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'filing' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'filing']" on-keydown="['statKey', 'filing']"><span class="rlabel">To File</span><span class="rvalue">{{requestCounts.forFiling}}</span></div>
+      <div class="rstat red {{#if statOff('clarification')}}off{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'clarification' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'clarification']" on-keydown="['statKey', 'clarification']"><span class="rlabel">For Clarification</span><span class="rvalue">{{requestCounts.forClarification}}</span></div>
     </div>
 
     <div class="searchbar reqsearch">{{{icon.search}}}<input name="requests-search" placeholder="Search cards or MC#" value="{{reqQ}}" lazy="250" aria-label="Search requests by card or MC number" /></div>
@@ -156,17 +156,10 @@
       {{#if requests.length}}
         <div class="rempty"><strong>No requests match</strong><span>Clear the search, the status card or a filter to see the other rows.</span></div>
       {{elseif rejects.length}}
-        <div class="rempty"><strong>No usable requests</strong><span>Every row the sync read needs correction in the sheet — see the list below.</span></div>
+        <div class="rempty"><strong>No usable requests</strong><span>Every row the sync read needs correction in the sheet — it corrects on the next sync.</span></div>
       {{else}}
         <div class="rempty"><strong>No requests loaded</strong><span>Nothing came back for this project on the last intake sync.</span></div>
       {{/if}}
-    {{/if}}
-
-    {{#if rejects.length}}
-      <div class="rcallout">
-        <div class="ctitle">{{{icon.warning}}} {{rejects.length}} rows need correction in the sheet</div>
-        {{#each rejects as x}}<div class="crow"><span class="rowtag">row {{x.sheet_row}}</span><span>{{x.raw}}</span><span class="creason">{{x.reason}}</span></div>{{/each}}
-      </div>
     {{/if}}
   </div>
   {{else}}

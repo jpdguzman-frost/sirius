@@ -6,26 +6,26 @@
 
 .reqstack { display: flex; flex-direction: column; gap: var(--space-16); }
 
-/* ---- A. breakdown stat bar — 4-up, no gap, single-select status filter ---- */
-.rstats { display: flex; width: 100%; }
+/* ---- A. breakdown stat bar — 4 equal borderless segments (JP revision
+   2026-08-14: no boxes; a hairline closes the bar), single-select filter ---- */
+.rstats { display: flex; width: 100%; padding-top: var(--space-8); border-bottom: 1px solid var(--slate-200); }
 .rstat {
   flex: 1 0 0; min-width: 1px; height: 82px; box-sizing: border-box;
   display: flex; flex-direction: column; justify-content: flex-end; gap: var(--space-8);
-  padding: 0 var(--space-16) var(--space-24);
-  background: transparent; border: 1px solid var(--border-border); border-radius: 0;
+  padding: 0 var(--space-16) var(--space-24) 0;
+  background: transparent; border: 0;
   font-family: var(--font-sans); text-align: left; cursor: pointer;
 }
 .rstat:hover { background: var(--slate-50); }
 .rstat:focus-visible { outline: 2px solid var(--blue-500); outline-offset: -2px; }
 .rstat .rlabel { font-size: var(--text-label); font-weight: 600; line-height: 1; text-transform: uppercase; letter-spacing: 0.02em; }
 .rstat .rvalue { font-size: var(--text-display); font-weight: 600; line-height: 1; }
-/* label AND value share the card's colour */
+/* label AND value share the segment's colour */
 .rstat.all { color: var(--surface-foreground); }
 .rstat.green { color: var(--green-600); }
 .rstat.amber { color: var(--amber-500); }
 .rstat.red { color: var(--status-destructive-strong); }
-/* a status filter is on: the picked card thickens, the rest recede */
-.rstat.on { border-width: 2px; border-color: var(--surface-foreground); }
+/* a status filter is on: the unpicked segments recede (build-spec §3.1) */
 .rstat.off { opacity: 0.45; }
 
 /* ---- C/D. search + filter bar ---- */
@@ -184,16 +184,7 @@
 .noteedit .nsubmit { border: 1px solid var(--neutral-950); background: var(--neutral-950); color: var(--white); font-weight: 600; }
 .noteedit .nsubmit:hover { background: var(--slate-700); border-color: var(--slate-700); }
 
-/* ---- G. rejects callout + empty states, tokenised ---- */
-.rcallout {
-  background: var(--amber-50); border: 1px solid var(--amber-300); border-radius: 6px;
-  display: flex; flex-direction: column; gap: 6px; padding: 17px 17px 13px;
-}
-.rcallout .ctitle { display: flex; align-items: center; gap: var(--space-8); color: var(--amber-800); font-size: var(--text-body); font-weight: 600; line-height: 1.4; }
-.rcallout .ctitle svg { display: block; color: var(--amber-700); flex: none; }
-.rcallout .crow { display: flex; gap: var(--space-8); align-items: baseline; flex-wrap: wrap; font-size: var(--text-label); line-height: 1.4; color: var(--slate-700); }
-.rcallout .crow .rowtag { font-weight: 600; color: var(--amber-700); white-space: nowrap; }
-.rcallout .crow .creason { color: var(--surface-muted-foreground); }
+/* ---- G. empty states, tokenised (rejects banner removed — JP 2026-08-14) ---- */
 
 .rempty {
   display: flex; flex-direction: column; align-items: center; gap: var(--space-8);
