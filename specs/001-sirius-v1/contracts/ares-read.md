@@ -22,6 +22,8 @@
 | `/healthz` | public | Freshness gate before trusting a sync run |
 | `/api/projects/index` | stable | The **only** legitimate source of `rowKey` — never construct one |
 | `/api/project/{rowKey}/steering` | **internal** | `steering.deliveryForecast.referenceWeeks` + `effectiveWeeklyRate` (BR-6a) — consume behind Sirius's adapter only |
+| `/api/workload?mode=daily` | **session** | Working-day calendar (amendment 2026-08-15, ARES-canonical per JP): `columns[]` contain ONLY working days — weekends/holidays absent. Behind the adapter (`workingDayColumns`), verified live 2026-08-15 |
+| `/api/portfolio/capacity?from&to` | **session** | `workingDays[]` per Monday-keyed week — cross-check for the daily derivation. Behind the adapter (`workingDaysPerWeek`). Params are `from`/`to`, NOT `dateFrom`/`dateTo` |
 
 ## Response shapes & traps (from the guide — each has cost someone a day)
 

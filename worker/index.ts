@@ -77,8 +77,28 @@ async function healthTick() {
   console.log('[sirius-worker] health tick ok');
 }
 
+async function calendarTick() {
+  try {
+    const { syncCalendarFromAres } = await import('../src/services/calendar-sync.ts');
+    const { manilaToday } = await import('../src/services/pipeline.ts');
+    const res = await syncCalendarFromAres(mongoose.connection, makeClient(env), manilaToday());
+    if (!res) {
+      console.warn('[sirius-worker] calendar sync: ARES daily surface unavailable — previous calendar kept');
+    } else {
+      console.log(
+        `[sirius-worker] calendar sync: ${res.dates.length} non-working weekdays` +
+          (res.mismatches.length ? ` — CROSS-CHECK MISMATCH weeks: ${res.mismatches.join(', ')}` : ''),
+      );
+    }
+  } catch (err) {
+    console.error('[sirius-worker] calendar sync failed:', (err as Error).message);
+  }
+}
+
+await calendarTick(); // before the first forecast-consuming sync
 await aresTick();
 await intakeTick().catch((err) => console.error('[sirius-worker] intake sync failed:', err.message));
+setInterval(calendarTick, DAY);
 setInterval(aresTick, FIFTEEN_MIN);
 // Push drain: cheap indexed check every 15 s — the < 1 min NFR-3 target
 // (contracts/ares-push.md) lives or dies on this cadence.

@@ -211,4 +211,44 @@ export class AresClient {
       return { least: null, typical: null, most: null, effectiveWeeklyRate: null };
     }
   }
+
+  /**
+   * Working-day calendar (amendment 2026-08-15 — ARES is canonical, JP).
+   * Session-tier endpoints behind this adapter ONLY, same pattern as
+   * referenceWeeks. Two independent surfaces:
+   *  - /api/workload?mode=daily — columns[] contain ONLY working days
+   *    (weekends and holidays are absent), verified live 2026-08-15.
+   *  - /api/portfolio/capacity — workingDays[] per Monday-keyed week,
+   *    used as a cross-check.
+   * Defensive on drift: any failure returns null and the caller keeps the
+   * previous calendar rather than crashing or blanking it.
+   */
+  async workingDayColumns(from: string, to: string): Promise<string[] | null> {
+    try {
+      const w = await this.get<{ columns?: Array<{ key?: string }> }>(
+        `/api/workload?dateFrom=${from}&dateTo=${to}&mode=daily`,
+      );
+      const days = (w?.columns ?? []).map((c) => c.key).filter((k): k is string => !!k);
+      return days.length ? days : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async workingDaysPerWeek(
+    from: string,
+    to: string,
+  ): Promise<Array<{ monday: string; workingDays: number }> | null> {
+    try {
+      const c = await this.get<{ columns?: Array<{ monday?: string }>; workingDays?: number[] }>(
+        `/api/portfolio/capacity?from=${from}&to=${to}`,
+      );
+      const cols = c?.columns ?? [];
+      const wd = c?.workingDays ?? [];
+      if (!cols.length || cols.length !== wd.length) return null;
+      return cols.map((col, i) => ({ monday: col.monday ?? '', workingDays: wd[i] ?? 0 }));
+    } catch {
+      return null;
+    }
+  }
 }

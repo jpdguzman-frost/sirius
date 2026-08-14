@@ -15,11 +15,19 @@ import { validateEnv } from './src/config/env.ts';
 import { connectMongo, disconnectMongo } from './src/db/mongo.ts';
 import { connectRedis, disconnectRedis } from './src/db/redis.ts';
 import { createApp } from './src/app.ts';
+import { loadCalendar } from './src/services/calendar-sync.ts';
 
 const env = validateEnv(process.env);
 
 const mongo = await connectMongo(env);
 const redis = await connectRedis(env);
+
+// ARES-canonical working-day calendar (amendment 2026-08-15): the worker
+// writes it; the web process loads it at boot and refreshes on an interval.
+if (mongo) {
+  await loadCalendar(mongo.connection).catch(() => {});
+  setInterval(() => loadCalendar(mongo.connection).catch(() => {}), 15 * 60 * 1000);
+}
 
 const app = createApp({ env, redis, mongo });
 
