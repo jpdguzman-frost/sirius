@@ -547,6 +547,27 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
   never silently promoted to a Trello due). Display precedence unchanged: Trello due wins where
   present, else sheet (invariant 14) — the annotation claiming sheet-first is a recorded drift.
 
+### Session 2026-08-14 (JP) — Requests tab v2
+
+- **Requests tab rebuilt to the Figma frame** (product owls #11/#12; annotated instances
+  `452:23559` Breakdown + `452:23561` Request Tab Table — the owls cited the source-component
+  ids, which carry no annotations; counts and content verified 1:1 via Rex). JP standing
+  directive: build on arrival, end-to-end workflow, report when testable.
+- **The requests route now serves the resolved deadline** (invariant 14): earliest `trello_due`
+  among the MC's active deliverables where any exists (source `trello`), else the intake sheet
+  deadline (source `sheet`), else null — fixing the same-MC-two-dates drift between tabs and the
+  `missing-deadline` filter, which now tests the resolved value.
+- **YEAR/MONTH filter on the sheet's own Year/Month columns** (build-spec §3.4 "Year parses
+  `2026.0`"), not on any derived date — new optional intake chain (parser → schema → sync →
+  API), dormant until `GOOGLE_SHEETS_CREDENTIALS` is provisioned. Requests carry no
+  request/filed date field; if product wants one it is a new sheet column.
+- **Defaults pending product confirm** (flagged in owl): stat cards are single-select toggles,
+  REQUESTS acts as show-all; page size 10 (build-spec §3.5); no column sort, row-click detail,
+  or MC#/BRIEF click-through (frame shows none — "flag rather than assume"); In Pipeline /
+  With Clarification badge recipes inferred from the Breakdown palette (frame shows only
+  For Filing). Frost notes stay the existing FR-11 feature (Sirius-owned, audit-logged) —
+  the frame's editor states restyle it, no semantics change.
+
 ## Open Decisions
 
 From BRD §13. Marked, not resolved — each is answered by its owner and recorded in Clarifications before dependent work proceeds. (The BRD's numbering has no OD-3.)

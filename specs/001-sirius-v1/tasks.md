@@ -244,6 +244,16 @@ Scope: five cell specs, zero new writes. Built via end-to-end workflow (Opus bui
 
 ---
 
+## Phase 13c — Requests tab v2 (~1–2d) — added 2026-08-14 (JP standing go; product specs via owl #11–#12, Rex-verified on nodes 452:23559 / 452:23561)
+
+Scope: Requests tab restyled 1:1 to the frame + client-side search/filters/pagination; one bug fix (resolved deadline, invariant 14); zero new writes. Built via end-to-end workflow (Opus build/test, Fable verification), JP-directed.
+
+- [x] T116 Backend: requests GET serves resolved deadline + `deadline_source` (earliest trello_due of the MC's deliverables, else sheet — invariant 14; `missing-deadline` filter follows); year/month intake chain (optional sheet columns: parser `parseYear` → schema → sync upsert → API), dormant until the Sheets credential lands; 12 new tests incl. cross-project isolation (FR-3.6, FR-11)
+- [x] T117 Frontend: Breakdown stat bar (4 bordered cards, single-select toggle, REQUESTS=show-all), full-width search (250ms, `<mark>`), YEAR/MONTH/TYPE/REQUESTOR selects (options from loaded data, calendar month order, blue active tint), 10/page windowed pagination, 9-column table at frame widths in h-scroll wrapper (2-instance slider), badge chips, "17 Jan 2026" deadline + source tooltip + red `none` pill, 180-char brief, frost-notes 3-state cell + inline editor restyle (handlers untouched), tokenized empty/rejects states, per-project filter reset (452:23559/452:23561; build-spec §3)
+- [x] T118 Quality: 253/253 dual-TZ, typecheck/lint/build clean; seeded E2E probe through real `parseIntake → syncIntakeRows` + live-server curl asserting resolved deadline + year/month; three-lens verification (constitution / spec fidelity / correctness) — 1 should-fix (rejects-only empty state) fixed in-workflow
+
+---
+
 ## Dependencies
 
 ```
