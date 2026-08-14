@@ -26,6 +26,15 @@ export function deliverablesRouter(): Router {
       const pipeline = await loadPipeline(projectId, manilaToday());
       const sprints = await Sprint.find({ project_id: projectId }).sort({ position: 1 }).lean();
       const lastAres = await SyncRun.findOne({ project_id: projectId, source: 'ares' }).sort({ at: -1 }).lean();
+      // FR-8.6: `at`/`ok` describe the last ATTEMPT — that is what the header
+      // chip reports ("sync failing — showing last good data"). The Requests
+      // strip names when the data on screen was actually read, which is the
+      // last SUCCESSFUL run: a failed attempt does not un-sync the good data
+      // still being displayed. Same lastGood shape the requests route emits
+      // for the sheet sync.
+      const lastAresGood = lastAres?.ok
+        ? lastAres
+        : await SyncRun.findOne({ project_id: projectId, source: 'ares', ok: true }).sort({ at: -1 }).lean();
       // FR-8.6 + FR-9.6: push channel freshness beside the poll freshness.
       const lastPush = await PushEvent.findOne({ project_id: projectId }).sort({ received_at: -1 }).select('received_at').lean();
       res.json({
@@ -40,7 +49,15 @@ export function deliverablesRouter(): Router {
           most: res.locals.project.ref_week_most ?? null,
           effectiveWeeklyRate: res.locals.project.effective_weekly_rate ?? null,
         },
-        sync: lastAres ? { at: lastAres.at, ok: lastAres.ok, error: lastAres.error ?? null, push_at: lastPush?.received_at ?? null } : null,
+        sync: lastAres
+          ? {
+              at: lastAres.at,
+              ok: lastAres.ok,
+              error: lastAres.error ?? null,
+              push_at: lastPush?.received_at ?? null,
+              lastSuccessAt: lastAresGood?.at ?? null,
+            }
+          : null,
       });
     },
   );

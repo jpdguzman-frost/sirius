@@ -5,6 +5,30 @@
 const HARD_IDEAL = 0.083;
 const HARD_CEILING = 0.129;
 const WEEK_COUNT = 8;
+/* how recent a push receipt has to be for the app to claim the push channel is
+   live (FR-8.6). The header chip and the Requests sync strip read the same
+   window from here — two numbers would let the two disagree on screen. */
+const PUSH_LIVE_MS = 30 * 60 * 1000;
+/* Cards / week slider (build-spec §5.4). Bounds come from ARES
+   deliveryForecast.referenceWeeks; these are the fallbacks for a project whose
+   reference weeks have not landed yet. */
+const CAP_MIN_FALLBACK = 1;
+const CAP_MAX_FALLBACK = 367;
+/* §5.4's five-band scale, computed against the reference weeks, not the
+   slider's own ends: 'typical' is ±10% of the typical week, and the two outer
+   bands are the bottom/top 5% of the least→most span. Any missing reference
+   returns '' — the descriptor hides rather than name a band it cannot know. */
+const CAP_TYPICAL_TOLERANCE = 0.1;
+const CAP_EDGE_SHARE = 0.05;
+function capacityBand(value, { least, typical, most }) {
+  if (!Number.isFinite(value) || !Number.isFinite(least) || !Number.isFinite(typical) || !Number.isFinite(most)) return '';
+  const span = most - least;
+  if (span <= 0 || typical <= 0) return '';
+  if (value <= least + CAP_EDGE_SHARE * span) return 'light';
+  if (value >= most - CAP_EDGE_SHARE * span) return 'peak';
+  if (Math.abs(value - typical) <= CAP_TYPICAL_TOLERANCE * typical) return 'typical';
+  return value < typical ? 'below typical' : 'above typical';
+}
 /* Requests tab (build-spec v1.2 §3): the stat segments are a single-select
    filter on the DERIVED status (FR-11.3), the table pages ten rows at a
    time, and every filter runs client-side over one fetch. */
@@ -60,6 +84,27 @@ function fmtLongIso(iso) {
   if (!iso) return '';
   const [y, m, d] = iso.slice(0, 10).split('-');
   return `${Number(d)} ${MONTHS_SHORT[Number(m) - 1]} ${y}`;
+}
+
+/* Planner range picker (node 94:4828): 'Aug 3' — month-first, no year, same
+   fixed table and the same pure string math as fmtLongIso. fmtDate's
+   toLocaleDateString stays where it is (the gantt tooltips and sprint metas
+   use it); the toolbar label is the one place the frame fixes the wording, so
+   it does not go through a locale that could render 'Sept' or reorder it. */
+function fmtMonthDay(iso) {
+  if (!iso) return '';
+  const [, m, d] = iso.slice(0, 10).split('-');
+  return `${MONTHS_SHORT[Number(m) - 1]} ${Number(d)}`;
+}
+/* 'Aug 3 – Oct 23, 2026' when the window stays inside one year, and
+   'Dec 28, 2026 – Feb 22, 2027' when it straddles two — a single trailing
+   year would name the wrong one for the left end. En dash, per the frame. */
+function fmtRange(fromIso, toIso) {
+  const fy = fromIso.slice(0, 4);
+  const ty = toIso.slice(0, 4);
+  const left = fmtMonthDay(fromIso);
+  const right = `${fmtMonthDay(toIso)}, ${ty}`;
+  return fy === ty ? `${left} – ${right}` : `${left}, ${fy} – ${right}`;
 }
 
 /* The intake sheet's MONTH encoding is not known until the credential lands —
@@ -261,6 +306,11 @@ const app = new Ractive({
     showAllCorrections: false,
     sprints: [],
     capacity: { weekly: 0 },
+    /* the slider's LIVE position (build-spec §5.4). It tracks the thumb on
+       every input event so the value and the descriptor move while dragging;
+       capacity.weekly is the committed number and only changes on release. */
+    capDraft: 0,
+    savingCapacity: false,
     expanded: {},
     selected: {},
     searchQ: '',
@@ -463,10 +513,53 @@ const app = new Ractive({
       const from = this.get('weekStart');
       return Array.from({ length: WEEK_COUNT }, (_, i) => ({ key: mondayShift(from, i) }));
     },
+    /* the window the gantt actually draws: WEEK_COUNT weeks starting at
+       weekStart, so the label's right end is the LAST day shown (day 55), not
+       the Monday after it — the old label named a week the board never drew. */
     rangeLabel() {
       const from = this.get('weekStart');
-      const to = mondayShift(from, WEEK_COUNT - 1);
-      return `${fmtDate(from)} – ${fmtDate(mondayShift(to, 1))}, ${new Date(from + 'T00:00:00').getFullYear()}`;
+      return fmtRange(from, isoAddDays(from, WEEK_COUNT * 7 - 1));
+    },
+    /* §5.4: bounded by the reference weeks. A committed capacity outside those
+       bounds widens the end it exceeds — a slider that cannot reach the number
+       printed beside it would be lying about where the thumb sits. */
+    capMin() {
+      const c = this.get('capacity');
+      const least = Number.isFinite(c.least) ? c.least : CAP_MIN_FALLBACK;
+      return Math.min(least, c.weekly || least);
+    },
+    capMax() {
+      const c = this.get('capacity');
+      const most = Number.isFinite(c.most) ? c.most : CAP_MAX_FALLBACK;
+      return Math.max(most, c.weekly || most, this.get('capMin') + 1);
+    },
+    /* the filled portion of the rail, as a percentage — WebKit has no native
+       ::-moz-range-progress, so the track paints it from this custom property */
+    capFill() {
+      const min = this.get('capMin');
+      const max = this.get('capMax');
+      const v = this.get('capDraft');
+      if (!(max > min) || !Number.isFinite(v)) return 0;
+      return Math.round(Math.max(0, Math.min(1, (v - min) / (max - min))) * 1000) / 10;
+    },
+    capBand() {
+      return capacityBand(this.get('capDraft'), this.get('capacity'));
+    },
+    /* Requests sync strip (owl #20 §3.2) — the SAME sync state the header chip
+       renders, in Manila time (invariant 11). It reads lastSuccessAt, not the
+       last ATTEMPT: the chip owns the failure state ("sync failing — showing
+       last good data"), and the strip says when that last good data was read.
+       Keying off the attempt instead would print 'not yet synced' beside a
+       screenful of synced data the moment one poll blipped. 'not yet synced'
+       is reserved for what it claims — no successful read, ever, so there is
+       no time to name and no channel to call live. */
+    syncStripLabel() {
+      const s = this.get('sync');
+      if (!s || !s.lastSuccessAt) return 'not yet synced';
+      const at = new Date(s.lastSuccessAt);
+      if (Number.isNaN(at.getTime())) return 'not yet synced';
+      const live = s.push_at && Date.now() - new Date(s.push_at).getTime() < PUSH_LIVE_MS;
+      return `synced ${MANILA_TIME.format(at)}${live ? ' · push live' : ''}`;
     },
     schedRows() {
       const sprints = this.get('sprints');
@@ -814,6 +907,65 @@ async function writeDeadline(cardId, value) {
   }
 }
 
+/* Cards / week (build-spec §5.4). Sirius-INTERNAL planning data — no source
+   system is touched, so this is not a registry write; it is the same class as
+   a slotted week or a pin, and the server audits it. Optimistic all the same:
+   capacity.weekly drives the footer's over-capacity tint and the suggester's
+   quota, so the whole board must move with the thumb or not at all.
+
+   Commits are SERIALISED: one PATCH in flight at a time, the newest value
+   queued behind it. A held arrow key fires a 'change' per step and a drag can
+   be released twice in a second, so parallel commits are the normal case, not
+   the exotic one — and two in flight race. The loser's rollback would revert
+   the winner's value, an out-of-order response would re-seat the thumb from a
+   stale echo, and every intermediate step would bank its own capacity.set
+   audit row. The queue collapses a burst to at most two writes and leaves the
+   last value the user asked for as the one that lands.
+
+   capServer is the last value the SERVER confirmed. It is the only safe
+   rollback target: capacity.weekly is optimistic mid-burst, so reverting to it
+   would restore another pending commit's guess. */
+let capServer = null;
+let capQueued = null;
+let capFlushing = false;
+
+async function writeCapacity(next) {
+  const prev = app.get('capacity').weekly;
+  if (!Number.isInteger(next) || next === prev) {
+    app.set('capDraft', prev); // snap the thumb back to the committed number
+    return;
+  }
+  app.set({ 'capacity.weekly': next, capDraft: next });
+  capQueued = next;
+  if (capFlushing) return; // the running flush picks the new value up
+  capFlushing = true;
+  app.set('savingCapacity', true);
+  try {
+    while (capQueued !== null) {
+      const want = capQueued;
+      capQueued = null;
+      if (want === capServer) continue; // the server already holds it
+      try {
+        const res = await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/capacity`, { weekly: want });
+        if (res.capacity) {
+          capServer = res.capacity.weekly;
+          // a newer value is already queued: re-seating here would flash the
+          // superseded number, so let the next pass land the server's shape
+          if (capQueued === null) app.set({ capacity: res.capacity, capDraft: res.capacity.weekly });
+        }
+      } catch (err) {
+        capQueued = null; // the queue is void once a commit fails
+        const revert = Number.isInteger(capServer) ? capServer : prev;
+        app.set({ 'capacity.weekly': revert, capDraft: revert });
+        flashBanner(`Capacity write failed — reverted. ${errText(err)}`);
+      }
+    }
+  } finally {
+    capFlushing = false;
+    app.set('savingCapacity', false);
+  }
+}
+
 async function loadAll() {
   const pid = app.get('activeProjectId');
   if (!pid) return;
@@ -831,6 +983,7 @@ async function loadAll() {
     pipeline.rows.forEach((r) => {
       r.blob = `${r.displayId} ${r.mcNumber || ''} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
     });
+    capServer = pipeline.capacity.weekly; // server truth — the capacity rollback target
     app.set({
       rows: pipeline.rows,
       writesEnabled: pipeline.writesEnabled !== false,
@@ -838,10 +991,11 @@ async function loadAll() {
       corrections: pipeline.corrections,
       sprints: pipeline.sprints,
       capacity: pipeline.capacity,
+      capDraft: pipeline.capacity.weekly, // server truth re-seats the thumb
       sync: pipeline.sync,
       syncLabel: pipeline.sync
         ? pipeline.sync.ok
-          ? `Last Synced ${new Date(pipeline.sync.at).toLocaleTimeString()}${pipeline.sync.push_at && Date.now() - new Date(pipeline.sync.push_at).getTime() < 30 * 60 * 1000 ? ' · push live' : ''}`
+          ? `Last Synced ${new Date(pipeline.sync.at).toLocaleTimeString()}${pipeline.sync.push_at && Date.now() - new Date(pipeline.sync.push_at).getTime() < PUSH_LIVE_MS ? ' · push live' : ''}`
           : 'sync failing — showing last good data'
         : 'no sync yet',
       banner: pipeline.sync && !pipeline.sync.ok ? `Sync error: ${pipeline.sync.error || 'unknown'} — data below is the last good state.` : '',
@@ -1282,6 +1436,12 @@ app.on({
   },
 
   weekShiftView(_ctx, dir) { app.set('weekStart', mondayShift(app.get('weekStart'), dir)); },
+  /* the slider reads its own node rather than a two-way binding: 'input' is
+     the live drag (value + descriptor only, no call) and 'change' is the
+     release, which is the ONE event that writes. Keyboard arrows fire both,
+     so they commit too. */
+  capSlide(ctx) { app.set('capDraft', Number(ctx.node.value)); },
+  async capCommit(ctx) { await writeCapacity(Number(ctx.node.value)); },
   dragRow(ctx, cardId) {
     ctx.event.dataTransfer.setData('text/plain', cardId);
     ctx.event.dataTransfer.effectAllowed = 'move';

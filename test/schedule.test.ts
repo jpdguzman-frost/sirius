@@ -10,7 +10,7 @@ import request, { type Agent } from 'supertest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
-import { AuditLog, Deliverable, Project, Sprint, User, UserProject } from '../src/models/index.ts';
+import { AuditLog, Deliverable, Project, Sprint, SyncRun, User, UserProject } from '../src/models/index.ts';
 
 const env = validateEnv({ NODE_ENV: 'test' });
 
@@ -194,5 +194,34 @@ describe('pipeline read (FR-4.1–4.4)', () => {
     const corrections = res.body.corrections.map((c: { cardId: string }) => c.cardId);
     expect(corrections).toContain('c2');
     expect(res.body.capacity.weekly).toBe(3);
+  });
+
+  // FR-8.6: a failed latest attempt does not un-sync the last good data the
+  // header chip says is on screen — the Requests strip needs the last SUCCESS,
+  // or it prints 'not yet synced' beside a screenful of synced rows.
+  it('reports the last SUCCESSFUL ares run beside the last attempt (FR-8.6)', async () => {
+    const { project, agent } = await setup();
+    const good = new Date('2026-08-14T07:05:00Z');
+    await SyncRun.create({ project_id: project._id, source: 'ares', ok: true, at: good });
+    await SyncRun.create({
+      project_id: project._id, source: 'ares', ok: false,
+      error: 'ARES unavailable', at: new Date('2026-08-14T07:20:00Z'),
+    });
+
+    const res = await agent.get(`/api/projects/${project._id}/deliverables`).expect(200);
+    expect(res.body.sync.ok).toBe(false); // the attempt state the chip renders
+    expect(res.body.sync.error).toBe('ARES unavailable');
+    expect(new Date(res.body.sync.lastSuccessAt).toISOString()).toBe(good.toISOString());
+  });
+
+  it('has no lastSuccessAt when no ares run has ever succeeded (FR-8.6)', async () => {
+    const { project, agent } = await setup();
+    await SyncRun.create({ project_id: project._id, source: 'ares', ok: false, error: 'boom' });
+    // another project's success must not leak across the boundary (invariant 1)
+    const other = await Project.create({ code: 'zz-1', name: 'Other', trello_board_id: 'zzB', weekly_capacity: 3 });
+    await SyncRun.create({ project_id: other._id, source: 'ares', ok: true });
+
+    const res = await agent.get(`/api/projects/${project._id}/deliverables`).expect(200);
+    expect(res.body.sync.lastSuccessAt).toBeNull();
   });
 });

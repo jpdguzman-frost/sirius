@@ -1,5 +1,16 @@
 <script id="tpl-app" type="text/ractive">
 {{{iconSprite}}}
+{{! §3.2 sync strip — the Requests tab is read-only and this is the sentence
+    that says WHY, so it renders on the populated view and on the empty state
+    alike. Defined once as an inline partial (Ractive requires partial
+    definitions at the top level of the template) and used in both branches. }}
+{{#partial reqSyncStrip}}
+  <div class="syncstrip">
+    <svg class="i18" aria-hidden="true"><use href="#i-trello" /></svg>
+    <span class="sstext">Difficulty, list and Figma links are read from Trello and can't be edited here.</span>
+    <span class="ssmeta">{{syncStripLabel}}</span>
+  </div>
+{{/partial}}
 <header class="shellnav">
   <div class="shellrow">
     <nav class="crumbs" aria-label="Breadcrumb">
@@ -47,6 +58,8 @@
         <button type="button" class="metric rstat {{s.cls}} {{#if statOff(s.key)}}off{{/if}}" aria-pressed="{{requestFilter === s.key ? 'true' : 'false'}}" on-click="['setRequestFilter', s.key]"><span class="mlabel">{{s.label}}</span><span class="mvalue">{{s.value}}</span></button>
       {{/each}}
     </div>
+
+    {{>reqSyncStrip}}
 
     <div class="searchbar reqsearch">{{{icon.search}}}<input name="requests-search" placeholder="Search cards or MC#" value="{{reqQ}}" lazy="250" aria-label="Search requests by card or MC number" /></div>
 
@@ -187,9 +200,12 @@
     {{/if}}
   </div>
   {{else}}
-    <div class="rempty">
-      <strong>No requests loaded</strong>
-      <span>The intake sheet mirror is deferred until the sheet stabilises. The sync service reads it server-side — nothing is edited here, ever.</span>
+    <div class="reqstack">
+      {{>reqSyncStrip}}
+      <div class="rempty">
+        <strong>No requests loaded</strong>
+        <span>The intake sheet mirror is deferred until the sheet stabilises. The sync service reads it server-side — nothing is edited here, ever.</span>
+      </div>
     </div>
   {{/if}}
 {{/if}}
@@ -346,17 +362,46 @@
 {{/if}}
 
 {{#if activeTab === 'schedules'}}
+  {{! Planner toolbar — owl #21 / node 94:4828. Three sections in one row:
+      the time range picker, cards-per-week, and the functionality container.
+      Every handler here is the one that was already wired; only the chrome is
+      new. The phase legend and the unavoidable-mix banner below stay on the
+      legacy recipe — this pass tokenises the toolbar and nothing else. }}
+  <div class="ptoolbar">
+    <div class="trpicker">
+      <button class="rangenav" on-click="['weekShiftView', -1]" aria-label="Previous week"><svg class="i16 flipx" aria-hidden="true"><use href="#i-rowChevron" /></svg></button>
+      <span class="rangelabel">{{rangeLabel}}</span>
+      <button class="rangenav" on-click="['weekShiftView', 1]" aria-label="Next week"><svg class="i16" aria-hidden="true"><use href="#i-rowChevron" /></svg></button>
+    </div>
+
+    {{! §5.4: a real range input — bounded by the reference weeks, live while
+        dragging, committed on release. twoway="false" keeps the model out of
+        the drag loop: capSlide owns the live value, capCommit owns the write. }}
+    <div class="cardsweek">
+      <svg class="i16 cwicon" aria-hidden="true"><use href="#i-sliders" /></svg>
+      <label class="cwlabel" for="cards-per-week">Cards / week</label>
+      <input id="cards-per-week" class="cwrange" type="range" twoway="false"
+             min="{{capMin}}" max="{{capMax}}" step="1" value="{{capDraft}}"
+             style="--cwfill:{{capFill}}%;"
+             on-input="['capSlide']" on-change="['capCommit']"
+             aria-valuetext="{{capDraft}}{{#if capBand}} — {{capBand}}{{/if}}" />
+      <span class="cwvalue">{{capDraft}}</span>
+      {{#if capBand}}<span class="cwband">{{capBand}}</span>{{/if}}
+      {{#if savingCapacity}}<span class="cwband">saving…</span>{{/if}}
+    </div>
+
+    <div class="fnbox">
+      <button class="fnbtn primary" on-click="['runSuggest']"><svg class="i16" aria-hidden="true"><use href="#i-sparkle" /></svg>Suggest plan</button>
+      <button class="fnbtn ghost" on-click="['openSprints']"><svg class="i16" aria-hidden="true"><use href="#i-calendar" /></svg>Sprints</button>
+      {{#if suggest}}
+        <button class="fnbtn accept" on-click="['acceptSuggest']">Accept {{suggestCount}} moves</button>
+        <button class="fnbtn discard" on-click="['clearSuggest']">Discard</button>
+      {{/if}}
+      <span class="fnnote">Grab a row to reslot it. Pinned rows are never moved by a suggestion.</span>
+    </div>
+  </div>
+
   <div class="toolbar">
-    <button class="navbtn" on-click="['weekShiftView', -1]">‹</button>
-    <span class="rangetitle">{{rangeLabel}}</span>
-    <button class="navbtn" on-click="['weekShiftView', 1]">›</button>
-    <span class="dim">Cards / week <strong>{{capacity.weekly}}</strong> {{#if capacity.typical}}<span class="dim">(typical {{capacity.typical}})</span>{{/if}}</span>
-    <button class="chip primary" on-click="['runSuggest']">✦ Suggest plan</button>
-    <button class="chip" on-click="['openSprints']">🗓 Sprints</button>
-    {{#if suggest}}
-      <button class="chip on" on-click="['acceptSuggest']">Accept {{suggestCount}} moves</button>
-      <button class="chip" on-click="['clearSuggest']">Discard</button>
-    {{/if}}
     <span class="legend">
       <span><span class="sw sketch"></span>Sketch</span>
       <span><span class="sw review"></span>Review</span>
@@ -368,7 +413,6 @@
   {{#if suggest && suggest.unavoidable}}
     <div class="conflict over-capacity"><span class="ctag">Unachievable mix</span> — {{pct(suggest.backlogHardShare)}} of unpinned deliverables are Hard, against a historical ceiling of {{pct(hardCeiling)}}. No arrangement of these weeks can stay under it, so the plan spreads hard work as evenly as possible instead.</div>
   {{/if}}
-  <div class="dim" style="margin-bottom:0.6rem;">Grab a row to reslot it, or focus a row and use ←/→. Pinned rows are never moved by a suggestion. The gantt is output, not a control.</div>
 
   <div class="scroll"><table class="grid sched">
     <thead>

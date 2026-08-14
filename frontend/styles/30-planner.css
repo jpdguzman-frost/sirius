@@ -1,0 +1,128 @@
+/* Sprint Schedules — planner toolbar, tokenised to the Figma frame
+   (owl #21, node 94:4828; 7 Rex-verified annotations). Scope is the TOOLBAR
+   only: the phase legend, the unavoidable-mix banner, the gantt grid and the
+   sprints modal still ride the legacy 10-ui.css recipes, which stay in place
+   because the unmigrated tabs use them too. Every value binds to a token
+   (05-tokens.css) — a raw hex here is a defect. */
+
+/* ---- 1. the row: three sections, 24px apart, no surface of its own ---- */
+.ptoolbar {
+  display: flex; align-items: center; gap: var(--space-24); flex-wrap: wrap;
+  background: transparent; margin: 0 0 var(--space-16);
+  font-family: var(--font-sans);
+}
+
+/* ---- 2. time range picker (prev / label / next) ----
+   No click-to-open range picker: the annotation asks to confirm one, so it is
+   flagged, not built. Prev/next drive the same weekShiftView the board had. */
+.trpicker { display: flex; align-items: center; gap: var(--space-8); }
+.ptoolbar .rangenav {
+  width: 32px; height: 32px; flex: none; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: var(--radius-sm);
+  background: var(--slate-100); color: var(--surface-foreground);
+  cursor: pointer;
+}
+.ptoolbar .rangenav:hover { background: var(--slate-200); }
+.ptoolbar .rangenav:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
+/* one chevron in the sprite, pointed both ways */
+.ptoolbar .rangenav .flipx { transform: rotate(180deg); }
+.rangelabel {
+  font-size: var(--text-body); font-weight: 600; line-height: 1;
+  color: var(--neutral-950); white-space: nowrap;
+}
+
+/* ---- 3. cards per week (build-spec §5.4) ---- */
+.cardsweek { display: flex; align-items: center; gap: var(--space-8); }
+.cardsweek .cwicon { color: var(--surface-muted-foreground); flex: none; }
+.cardsweek .cwlabel {
+  font-size: var(--text-body); font-weight: 400; line-height: 1;
+  color: var(--surface-muted-foreground); white-space: nowrap;
+}
+.cardsweek .cwvalue {
+  font-size: var(--text-body); font-weight: 400; line-height: 1;
+  color: var(--surface-foreground); font-variant-numeric: tabular-nums;
+  min-width: 3ch; text-align: right;
+}
+/* the five-band descriptor. Absent whenever a reference week is missing —
+   the markup drops it rather than name a band the data cannot support. */
+.cardsweek .cwband {
+  font-size: var(--text-label); font-weight: 400; line-height: 1;
+  color: var(--slate-400); white-space: nowrap;
+}
+
+/* The slider is a real <input type="range"> — no library, no re-implemented
+   pointer maths, so keyboard, touch and assistive tech all work by default.
+   The filled portion is painted by the track itself: Firefox has a native
+   ::-moz-range-progress, WebKit/Blink has none, so there the track carries a
+   two-stop gradient whose split point is the --cwfill custom property the
+   template sets from the live value. The pseudo-elements cannot be grouped in
+   one selector list — an unknown pseudo drops the whole rule — so each engine
+   gets its own block. */
+.cwrange {
+  -webkit-appearance: none; appearance: none;
+  width: 162px; height: 16px; flex: none; margin: 0; padding: 0;
+  background: transparent; cursor: pointer;
+}
+.cwrange:focus { outline: none; }
+.cwrange:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 4px; border-radius: var(--radius-full); }
+
+.cwrange::-webkit-slider-runnable-track {
+  height: 8px; border-radius: var(--radius-full);
+  background: linear-gradient(
+    to right,
+    var(--blue-600) 0 var(--cwfill, 0%),
+    var(--blue-100) var(--cwfill, 0%) 100%
+  );
+}
+/* box-sizing is PINNED on both thumbs rather than left to the UA. The
+   `* { box-sizing: border-box }` reset (00-base.css) is a universal ELEMENT
+   selector and never reaches these pseudo-elements, so whatever they get comes
+   from the engine's own stylesheet — and the -4px offset below is only correct
+   for a border-box thumb (a content-box one measures 20px outer and rides 2px
+   low on the 8px rail). Measured in Chrome 151: the UA already applies
+   border-box, so this declaration changes nothing there — it is here so the
+   geometry cannot drift with a UA default we do not control, and because
+   Safari and Firefox were not measured. Cost is one line; the failure it
+   prevents is a silently off-centre thumb. */
+.cwrange::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  box-sizing: border-box;
+  width: 16px; height: 16px; border-radius: var(--radius-full);
+  background: var(--blue-600); border: 2px solid var(--white);
+  box-shadow: var(--shadow-xs);
+  margin-top: -4px; /* centres the 16px thumb on the 8px rail */
+}
+.cwrange::-moz-range-track { height: 8px; border-radius: var(--radius-full); background: var(--blue-100); }
+.cwrange::-moz-range-progress { height: 8px; border-radius: var(--radius-full); background: var(--blue-600); }
+.cwrange::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 16px; height: 16px; border-radius: var(--radius-full);
+  background: var(--blue-600); border: 2px solid var(--white);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ---- 4. functionality container ---- */
+.fnbox { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ptoolbar .fnbtn {
+  height: 36px; flex: none;
+  display: inline-flex; align-items: center; gap: var(--space-8);
+  padding: 0 14px; border: 1px solid transparent; border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: var(--text-body); font-weight: 600; line-height: 1;
+  white-space: nowrap; cursor: pointer;
+}
+.ptoolbar .fnbtn:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
+.ptoolbar .fnbtn.primary { background: var(--neutral-950); color: var(--white); }
+.ptoolbar .fnbtn.primary:hover { background: var(--slate-700); }
+.ptoolbar .fnbtn.ghost { background: var(--slate-100); color: var(--slate-700); }
+.ptoolbar .fnbtn.ghost:hover { background: var(--slate-200); }
+/* a pending suggestion is a proposal, not a state — Accept commits it, */
+/* Discard drops it, and neither is the resting look of the toolbar */
+.ptoolbar .fnbtn.accept { background: var(--green-600); color: var(--white); }
+.ptoolbar .fnbtn.accept:hover { background: var(--green-500); }
+.ptoolbar .fnbtn.discard { background: transparent; color: var(--slate-700); border-color: var(--border-border); }
+.ptoolbar .fnbtn.discard:hover { background: var(--slate-100); }
+.fnbox .fnnote {
+  font-size: var(--text-body); font-weight: 400; line-height: 1.4;
+  color: var(--slate-400); max-width: 420px;
+}

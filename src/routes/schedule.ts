@@ -1,6 +1,7 @@
 /**
  * Schedule routes — the ONLY write surface for Sirius-owned planning fields
- * (slotted week, pin, confidence, SLA overrides, status note; FR-5.x).
+ * (slotted week, pin, confidence, SLA overrides, status note, weekly
+ * capacity; FR-5.x).
  * Zod-strict bodies refuse anything Sirius doesn't own (§1.2). Every state
  * change writes the audit log (invariant 10). Sprint CRUD rejects overlaps
  * on save (FR-5.15, BR-5). Suggest plan proposes only (FR-5.8, BR-7).
@@ -315,6 +316,47 @@ export function scheduleRouter(): Router {
         entity_id: cardId, before: { phase, day: beforeDay }, after: { phase, day, week: milestone.week },
       });
       res.json({ ok: true, plannedDay: day });
+    },
+  );
+
+  // Cards/week (BR-6a): Sirius-internal planning data, the same class as
+  // slotted_week and pins — no source system is touched, so this is NOT gated
+  // by writes_enabled (which guards the Trello write registry alone). Audited
+  // like every other state change (invariant 10).
+  router.patch(
+    '/api/projects/:projectId/capacity',
+    ensureAuthenticated,
+    ensureProjectMember,
+    async (req, res) => {
+      const body = z.object({ weekly: z.number().int().min(1).max(2000) }).strict().safeParse(req.body);
+      if (!body.success) {
+        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY', issues: body.error.issues } });
+        return;
+      }
+      const project = res.locals.project;
+      const projectId = project._id as Types.ObjectId;
+      const before = project.weekly_capacity;
+      project.weekly_capacity = body.data.weekly;
+      await project.save();
+      await audit({
+        project_id: projectId,
+        actor: (req.user as SessionUser).email,
+        action: 'capacity.set',
+        entity: 'project',
+        entity_id: String(projectId),
+        before: { weekly_capacity: before },
+        after: { weekly_capacity: body.data.weekly },
+      });
+      res.json({
+        ok: true,
+        capacity: {
+          weekly: project.weekly_capacity,
+          least: project.ref_week_least ?? null,
+          typical: project.ref_week_typical ?? null,
+          most: project.ref_week_most ?? null,
+          effectiveWeeklyRate: project.effective_weekly_rate ?? null,
+        },
+      });
     },
   );
 

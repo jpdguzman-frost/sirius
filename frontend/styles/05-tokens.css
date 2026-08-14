@@ -34,6 +34,7 @@
   --blue-100: #dbeafe;
   --blue-200: #bfdbfe;
   --blue-500: #3b82f6;
+  --blue-600: #2563eb; /* planner cards-per-week slider fill + thumb (node 94:4828) */
   --blue-700: #1d4ed8;
   --neutral-950: #0a0a0a; /* Requests note-editor Submit fill */
   --green-50: #f0fdf4;

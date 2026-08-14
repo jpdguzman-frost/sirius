@@ -27,6 +27,23 @@
 /* a status filter is on: the unpicked segments recede (build-spec §3.1) */
 .rstat.off { opacity: 0.45; }
 
+/* ---- B. sync strip (build-spec §3.2, owl #20) — the tab is read-only and
+   this is the line that says why, so it sits above the search on the
+   populated view AND on the empty state. The time is the header chip's own
+   ares sync state rendered in Manila, not a second clock. ---- */
+.syncstrip {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 11px var(--space-16);
+  background: var(--slate-50);
+  border: 1px solid var(--border-border); border-radius: var(--radius-md);
+}
+.syncstrip svg { flex: none; }
+.syncstrip .sstext { font-size: var(--text-body); line-height: 1.5; color: var(--slate-700); }
+.syncstrip .ssmeta {
+  margin-left: auto; font-size: var(--text-label); line-height: 1.5;
+  color: var(--slate-400); white-space: nowrap;
+}
+
 /* ---- C/D. search + filter bar ---- */
 .reqsearch { padding-top: 0; }
 
