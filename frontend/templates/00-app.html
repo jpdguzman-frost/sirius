@@ -89,14 +89,32 @@
     <div class="pscrollwrap reqwrap">
       <div class="pscroll" on-scroll="['reqScrolled']">
         <table class="ptable rtable">
+          <!-- owl #18: every column sorts except Brief and Frost Notes, which
+               carry no sort key in reqCols and so render as plain headers. The
+               sortable ones are real <button>s — Enter/Space activation is the
+               platform's job, as with the stat segments above. -->
           <thead><tr>
-            <th class="col-rmc">MC #</th><th class="col-rname">Deliverable</th><th class="col-rtype">Type</th>
-            <th class="col-rcase">Use Case</th><th class="col-rwho">Requestor</th><th class="col-rdue">Deadline</th>
-            <th class="col-rbrief">Brief</th><th class="col-rstatus">Status</th><th class="col-rnote">Frost Notes</th>
+            {{#each reqCols as c}}
+              {{#if c.sort}}
+                <th class="{{c.cls}}" aria-sort="{{reqSortKey === c.sort ? (reqSortDir === 'desc' ? 'descending' : 'ascending') : 'none'}}">
+                  <button type="button" class="sortbtn {{#if reqSortKey === c.sort}}on{{/if}}" on-click="['reqSortBy', c.sort]" aria-label="Sort by {{c.label}}">
+                    <span>{{c.label}}</span>
+                    {{#if reqSortKey === c.sort}}<svg class="i16 sarrow {{reqSortDir}}" aria-hidden="true"><use href="#i-badgeChevron" /></svg>{{/if}}
+                  </button>
+                </th>
+              {{else}}
+                <th class="{{c.cls}}">{{c.label}}</th>
+              {{/if}}
+            {{/each}}
           </tr></thead>
           <tbody>
           {{#each reqRows as r}}
             <tr>
+              <!-- YEAR / MONTH ride the payload as-is; monthShort is the ONE
+                   place the sheet's month encoding is normalised (a full name,
+                   1-12 or an abbreviation all render 'Aug') -->
+              <td class="col-ryear">{{#if r.year}}<span class="rtext nowrap">{{r.year}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
+              <td class="col-rmonth">{{#if r.month}}<span class="rtext nowrap">{{monthShort(r.month)}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
               <td class="col-rmc"><div class="mcstack">
                 <span class="mcval">{{{hlr(r.mc_number)}}}</span>
                 {{#if r.sheet_row}}

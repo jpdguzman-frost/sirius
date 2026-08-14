@@ -77,11 +77,13 @@
 
 /* ---- F. table — the element is class="ptable rtable", so the 44px header
    height and top cell alignment come from .ptable; only the deltas here ---- */
-.rtable { min-width: 1420px; table-layout: fixed; }
+.rtable { min-width: 1660px; table-layout: fixed; } /* 1420 + the 240 the Year and Month columns add */
 /* th styling AND the row border come ENTIRELY from the shared .ptable recipe
    (row 432:18601: 1px --slate-100 bottom, no vertical rules — JP 2026-08-14);
    only the requests-frame cell padding is a delta here */
 .rtable td { padding: 20px var(--space-16); background: var(--white); }
+.rtable .col-ryear { width: 120px; }
+.rtable .col-rmonth { width: 120px; }
 .rtable .col-rmc { width: 120px; }
 .rtable .col-rname { width: 200px; }
 .rtable .col-rtype { width: 120px; }
@@ -91,6 +93,22 @@
 .rtable .col-rbrief { width: 320px; }
 .rtable .col-rstatus { width: 136px; }
 .rtable .col-rnote { width: 320px; }
+
+/* ---- sortable headers (owl #18). The shared .ptable th recipe still owns the
+   44px height, the fill, the padding and the type — the button inherits ALL of
+   it rather than restating any of it, so a header that sorts and one that does
+   not are pixel-identical until the arrow appears ---- */
+.rtable th .sortbtn {
+  display: inline-flex; align-items: center; gap: var(--space-4);
+  padding: 0; margin: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; white-space: nowrap;
+}
+.rtable th .sortbtn:hover { color: var(--surface-foreground); }
+.rtable th .sortbtn:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; border-radius: var(--radius-xs); }
+/* ONE chevron for both directions, as the pager does — the sprite's badge
+   chevron points DOWN, which is descending; ascending flips it */
+.rtable th .sarrow { flex: none; }
+.rtable th .sarrow.asc { transform: rotate(180deg); }
 
 .rtable .rtext { font-size: var(--text-body); line-height: 1.5; color: var(--surface-foreground); overflow-wrap: anywhere; }
 .rtable .emdash { font-size: var(--text-body); line-height: 1.5; color: var(--slate-400); }
@@ -124,11 +142,14 @@
   padding: var(--space-4) var(--space-8);
 }
 
-/* STATUS (FR-11.3 derivation, one recipe per derived value) */
+/* STATUS (FR-11.3 derivation, one recipe per derived value). Owl #17 corrected
+   two of the three to the 500 weights — these are the TABLE badges only; the
+   breakdown segment above keeps green-600, which is a different element and
+   pinned to its own frame. */
 .rtable .sbadge { padding: var(--space-4) 10px; white-space: nowrap; }
 .rtable .sbadge.file { background: var(--amber-100); border: 1px solid var(--amber-500); color: var(--amber-600); }
-.rtable .sbadge.pipe { background: var(--green-50); border: 1px solid var(--green-600); color: var(--green-600); }
-.rtable .sbadge.clar { background: var(--status-destructive-light); border: 1px solid var(--status-destructive-strong); color: var(--status-destructive-strong); }
+.rtable .sbadge.pipe { background: var(--green-50); border: 1px solid var(--green-500); color: var(--green-500); }
+.rtable .sbadge.clar { background: var(--red-50); border: 1px solid var(--red-500); color: var(--red-500); }
 
 /* ---- FROST NOTES (FR-11) — three display states + the inline editor ---- */
 .rtable .col-rnote .notewrap { width: 100%; }

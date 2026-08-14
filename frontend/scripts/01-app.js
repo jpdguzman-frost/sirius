@@ -55,6 +55,33 @@ function fmtLongIso(iso) {
   return `${Number(d)} ${MONTHS_SHORT[Number(m) - 1]} ${y}`;
 }
 
+/* The intake sheet's MONTH encoding is not known until the credential lands —
+   the fixtures carry full names ('August'), the column could equally arrive as
+   1-12 or already abbreviated. ONE canonical helper absorbs all three so no
+   call site has to guess: the cell, the filter's option labels and the filter's
+   comparison all go through it, which is also what makes 'August', 8 and 'Aug'
+   the SAME option instead of three. Anything it cannot recognise is returned
+   untouched — a sheet that invents a value still renders what it says. */
+function monthShort(raw) {
+  if (raw === null || raw === undefined) return '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  const n = Number(s); // Sheets hands numbers back as floats — 8.0 is August
+  if (Number.isInteger(n) && n >= 1 && n <= 12) return MONTHS_SHORT[n - 1];
+  // prefix match at >=3 chars is unambiguous for English months and covers
+  // 'Sep'/'Sept'/'September' alike (en-GB really does emit 'Sept')
+  const lower = s.toLowerCase();
+  if (lower.length >= 3) {
+    const i = MONTHS_LONG.findIndex((m) => m.toLowerCase().startsWith(lower));
+    if (i >= 0) return MONTHS_SHORT[i];
+  }
+  const short = MONTHS_SHORT.findIndex((m) => m.toLowerCase() === lower);
+  return short >= 0 ? MONTHS_SHORT[short] : s;
+}
+/* 0-11 for anything monthShort recognises, -1 otherwise — the one place
+   month order is decided, for both the option list and the row sort. */
+const monthIndex = (raw) => MONTHS_SHORT.indexOf(monthShort(raw));
+
 /* ONE table for the four Requests selects — the Ractive state key IS the def
    key, so nothing has to translate between them. Everything that would
    otherwise enumerate the four (initial data, the filter predicate, the
@@ -65,17 +92,99 @@ function fmtLongIso(iso) {
 const alphaSort = (a, b) => String(a).localeCompare(String(b));
 // months sort by CALENDAR order; a name the sheet invents falls to the end
 const monthRank = (m) => {
-  const i = MONTHS_LONG.indexOf(m);
-  return i < 0 ? MONTHS_LONG.length : i;
+  const i = monthIndex(m);
+  return i < 0 ? MONTHS_SHORT.length : i;
 };
+/* `canon` normalises the raw cell into the value the option list SHOWS and the
+   comparison tests, so an encoding change in the sheet cannot desynchronise
+   the two. Identity everywhere the raw value is already canonical. */
+const identity = (v) => v;
 const REQ_FILTERS = [
-  { key: 'reqYear', label: 'Year', pick: (r) => r.year, sort: (a, b) => a - b },
-  { key: 'reqMonth', label: 'Month', pick: (r) => r.month, sort: (a, b) => monthRank(a) - monthRank(b) || alphaSort(a, b) },
-  { key: 'reqType', label: 'Type', pick: (r) => r.asset_type, sort: alphaSort },
-  { key: 'reqRequestor', label: 'Requestor', pick: (r) => r.requestor, sort: alphaSort },
+  { key: 'reqYear', label: 'Year', pick: (r) => r.year, canon: identity, sort: (a, b) => a - b },
+  { key: 'reqMonth', label: 'Month', pick: (r) => r.month, canon: monthShort, sort: (a, b) => monthRank(a) - monthRank(b) || alphaSort(a, b) },
+  { key: 'reqType', label: 'Type', pick: (r) => r.asset_type, canon: identity, sort: alphaSort },
+  { key: 'reqRequestor', label: 'Requestor', pick: (r) => r.requestor, canon: identity, sort: alphaSort },
 ];
 const reqFilterKeys = REQ_FILTERS.map((f) => f.key);
 const reqFiltersCleared = () => Object.fromEntries(reqFilterKeys.map((k) => [k, '']));
+
+/* ---- Requests column sorting (owl #18) ----------------------------------
+   ONE table drives the header cells AND the comparators: a column is sortable
+   exactly when it names a sort key, so Brief and Frost Notes are unsortable by
+   having none, and the template never enumerates columns twice. Widths live in
+   25-requests.css keyed on the same class. */
+const REQ_COLS = [
+  { cls: 'col-ryear', label: 'Year', sort: 'year' },
+  { cls: 'col-rmonth', label: 'Month', sort: 'month' },
+  { cls: 'col-rmc', label: 'MC #', sort: 'mc' },
+  { cls: 'col-rname', label: 'Deliverable', sort: 'name' },
+  { cls: 'col-rtype', label: 'Type', sort: 'type' },
+  { cls: 'col-rcase', label: 'Use Case', sort: 'case' },
+  { cls: 'col-rwho', label: 'Requestor', sort: 'who' },
+  { cls: 'col-rdue', label: 'Deadline', sort: 'due' },
+  { cls: 'col-rbrief', label: 'Brief', sort: '' },
+  { cls: 'col-rstatus', label: 'Status', sort: 'status' },
+  { cls: 'col-rnote', label: 'Frost Notes', sort: '' },
+];
+
+/* A missing value is not "small" — it is UNRANKED, so it lands last whichever
+   direction the arrow points. Every comparator below routes its nulls here
+   rather than inventing a sentinel that would flip with the direction. */
+const unranked = (v) => v === null || v === undefined || v === '';
+function cmpNullsLast(av, bv, cmp) {
+  const an = unranked(av);
+  const bn = unranked(bv);
+  if (an || bn) return an && bn ? 0 : an ? 1 : -1;
+  return cmp(av, bv);
+}
+const numCmp = (a, b) => a - b;
+const ciCmp = (a, b) => String(a).toLowerCase().localeCompare(String(b).toLowerCase());
+/* MC # sorts NATURALLY — on the number inside the label, so MC-9 precedes
+   MC-10 where a string compare would not. mc_number is 'MC-825'; a human
+   display_id ('MC-655.3') keeps its fractional part rather than truncating. */
+const mcRank = (r) => {
+  const m = String(r.mc_number || '').match(/\d+(?:\.\d+)?/);
+  return m ? Number(m[0]) : null;
+};
+const REQ_SORT_COLS = {
+  year: { val: (r) => r.year, cmp: numCmp },
+  month: { val: (r) => (monthIndex(r.month) < 0 ? null : monthIndex(r.month)), cmp: numCmp },
+  mc: { val: mcRank, cmp: numCmp },
+  name: { val: (r) => r.name, cmp: ciCmp },
+  type: { val: (r) => r.asset_type, cmp: ciCmp },
+  case: { val: (r) => r.use_case, cmp: ciCmp },
+  who: { val: (r) => r.requestor, cmp: ciCmp },
+  // ISO 'YYYY-MM-DD' compares chronologically as a plain string
+  due: { val: (r) => r.deadline, cmp: (a, b) => String(a).localeCompare(String(b)) },
+  status: { val: (r) => r.status, cmp: ciCmp },
+};
+/* Final tiebreak for EVERY sort, so equal keys never reshuffle between renders
+   — sheet_row is the intake sheet's own order and is unique per project. */
+const sheetRowAsc = (a, b) => (a.sheet_row || 0) - (b.sheet_row || 0);
+/* Default (and the 'clear' third click): newest-filed first — year desc, then
+   calendar month desc, then the later sheet row. Rows the sheet left undated
+   sit at the bottom instead of leading the list. */
+const reqDefaultOrder = (a, b) =>
+  cmpNullsLast(a.year, b.year, (x, y) => y - x) ||
+  cmpNullsLast(REQ_SORT_COLS.month.val(a), REQ_SORT_COLS.month.val(b), (x, y) => y - x) ||
+  (b.sheet_row || 0) - (a.sheet_row || 0);
+/* asc/desc flips the VALUE comparison only. The nulls-last verdict and the
+   sheet_row tiebreak are computed outside the sign, which is the whole reason
+   an empty cell cannot rise to the top when the arrow turns over. An unknown
+   key (nothing sorted) is the default order. */
+function reqComparator(key, dir) {
+  const def = REQ_SORT_COLS[key];
+  if (!def) return reqDefaultOrder;
+  const sign = dir === 'desc' ? -1 : 1;
+  return (a, b) => {
+    const av = def.val(a);
+    const bv = def.val(b);
+    const an = unranked(av);
+    const bn = unranked(bv);
+    if (an || bn) return an && bn ? sheetRowAsc(a, b) : an ? 1 : -1;
+    return sign * def.cmp(av, bv) || sheetRowAsc(a, b);
+  };
+}
 
 /* Invariant 11: the today-marker, the shortcuts and the Started/Done tooltips
    are MANILA days whatever the browser's timezone (en-CA gives YYYY-MM-DD). */
@@ -194,6 +303,12 @@ const app = new Ractive({
     ...reqFiltersCleared(), // reqYear / reqMonth / reqType / reqRequestor, '' = All
     reqMenu: null, // which select's overlay is open — shares the Pipeline recipe
     reqMenuPos: { left: 0, top: 0 },
+    reqCols: REQ_COLS,
+    /* owl #18: '' = the default newest-filed order, which is also where the
+       third click on a header lands. Two flat keys, not an object, so the
+       header expressions depend on exactly what they read. */
+    reqSortKey: '',
+    reqSortDir: '',
     reqPage: 1,
     reqThumb: { needed: false, left: 0, width: 100 },
     monthOffset: 0,
@@ -210,6 +325,7 @@ const app = new Ractive({
     fmt: (iso) => fmtDate(iso),
     fmtLong: fmtLongIso,
     fmtInstant,
+    monthShort,
     // §3 brief cell: the STRING truncates at 180, the full text stays in title=
     clip180: (s) => {
       const t = String(s ?? '');
@@ -265,15 +381,28 @@ const app = new Ractive({
       const seg = REQUEST_SEGMENTS[this.get('requestFilter')] || null;
       const q = (this.get('reqQ') || '').trim().toLowerCase();
       // '' = All. Every other value came out of the option list built from
-      // these same rows, so comparing string forms is the same test as
-      // comparing the raw values — and it covers the numeric year too.
-      const picks = REQ_FILTERS.map((f) => ({ pick: f.pick, want: this.get(f.key) })).filter((p) => p.want !== '');
+      // these same rows THROUGH THE SAME canon, so comparing string forms is
+      // the same test as comparing the raw values — it covers the numeric year
+      // and it is what makes a Month picked as 'Aug' match a row storing
+      // 'August' or 8.
+      const picks = REQ_FILTERS.map((f) => ({ pick: f.pick, canon: f.canon, want: this.get(f.key) })).filter(
+        (p) => p.want !== '',
+      );
       return this.get('requests').filter(
         (r) =>
           (!seg || seg(r)) &&
           (!q || (r.blob || '').includes(q)) &&
-          picks.every((p) => String(p.pick(r)) === String(p.want)),
+          picks.every((p) => String(p.canon(p.pick(r))) === String(p.want)),
       );
+    },
+    /* Sorting runs over the FULL filtered set, never the visible page: the
+       client already holds every row of the project from the one unfiltered
+       fetch, so a client-side sort here IS the annotation's "sort the whole
+       dataset" semantic — a server round-trip would return the same order.
+       filter → sort → paginate, in that order. reqFiltered's array is Ractive's
+       cached value, so it is copied before sorting, never sorted in place. */
+    reqSorted() {
+      return this.get('reqFiltered').slice().sort(reqComparator(this.get('reqSortKey'), this.get('reqSortDir')));
     },
     // the four stat segments — one row each, so the a11y attributes and the
     // click wiring live in ONE place in the template
@@ -293,7 +422,7 @@ const app = new Ractive({
     reqRows() {
       const page = Math.max(1, Math.min(this.get('reqPage'), this.get('reqPageCount')));
       const from = (page - 1) * REQ_PAGE_SIZE;
-      return this.get('reqFiltered').slice(from, from + REQ_PAGE_SIZE);
+      return this.get('reqSorted').slice(from, from + REQ_PAGE_SIZE);
     },
     // first and last always, current ±1, an ellipsis marker for each gap
     reqPages() {
@@ -316,7 +445,9 @@ const app = new Ractive({
         key: f.key,
         label: f.label,
         value: this.get(f.key),
-        options: [...new Set(rows.map(f.pick).filter((v) => v !== null && v !== undefined && v !== ''))].sort(f.sort),
+        // canonicalised BEFORE the dedupe, so 'August', 'Aug' and 8 collapse
+        // into the one option the comparison will match
+        options: [...new Set(rows.map((r) => f.canon(f.pick(r))))].filter((v) => !unranked(v)).sort(f.sort),
       }));
     },
     weekCols() {
@@ -729,9 +860,13 @@ function blobRequests(rows) {
   return rows;
 }
 
-/* Any filter change starts the pager over; a reload only clamps it, so
-   saving a note does not yank the reader back to page 1. */
-app.observe(`reqQ requestFilter ${reqFilterKeys.join(' ')}`, () => app.set('reqPage', 1), { init: false });
+/* Any filter OR sort change starts the pager over — page 4 of the old order is
+   not page 4 of the new one. One observer owns that rule, so the sort handler
+   does not repeat it. A reload only clamps the pager, so saving a note does not
+   yank the reader back to page 1. */
+app.observe(`reqQ requestFilter reqSortKey reqSortDir ${reqFilterKeys.join(' ')}`, () => app.set('reqPage', 1), {
+  init: false,
+});
 app.observe('requests', () => {
   const last = app.get('reqPageCount');
   if (app.get('reqPage') > last) app.set('reqPage', last);
@@ -849,7 +984,10 @@ app.on({
   async switchProject() {
     // Requests view state is per-project. A Type/Requestor value from the old
     // project may not exist in the new one, leaving an unclearable empty
-    // table — and an open note editor is keyed on mc_number ALONE, which is
+    // table. The sort resets with them so the new project opens on its own
+    // newest-filed default rather than inheriting a column the reader chose
+    // while looking at other data — and an open note editor is keyed on
+    // mc_number ALONE, which is
     // unique per project and NOT globally (invariant 3), so leaving it open
     // re-attaches project A's draft to project B's same-numbered row and
     // Submit would write it there.
@@ -857,6 +995,8 @@ app.on({
       ...reqFiltersCleared(),
       requestFilter: 'all',
       reqQ: '',
+      reqSortKey: '',
+      reqSortDir: '',
       reqPage: 1,
       reqMenu: null,
       noteEditing: null,
@@ -875,6 +1015,13 @@ app.on({
   },
   pickReqFilter(_ctx, key, value) {
     app.set({ reqMenu: null, [key]: value }); // '' = All, which clears that filter
+  },
+  /* owl #18: asc → desc → clear on the same column; a different column starts
+     that cycle over at asc. Clearing is not "no sort" — it is the newest-filed
+     default the table opens on. The pager reset is the observer's job. */
+  reqSortBy(_ctx, key) {
+    const dir = app.get('reqSortKey') !== key ? 'asc' : app.get('reqSortDir') === 'asc' ? 'desc' : '';
+    app.set({ reqSortKey: dir ? key : '', reqSortDir: dir });
   },
   reqGoPage(_ctx, n) { app.set('reqPage', n); },
   reqPageStep(_ctx, dir) {
