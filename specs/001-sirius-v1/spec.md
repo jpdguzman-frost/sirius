@@ -568,6 +568,22 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
   For Filing). Frost notes stay the existing FR-11 feature (Sirius-owned, audit-logged) —
   the frame's editor states restyle it, no semantics change.
 
+### Session 2026-08-14 (JP) — corrected status model + single-box notes (owls #13–#15)
+
+- **Status derives from Trello presence** (supersedes owl #11 wording; amends FR-11.3's labels,
+  not its precedence): `In Pipeline` = MC filed (still wins over the flag) · `To File` = unfiled
+  (renames "For Filing") · `For Clarification` = unfiled + clarify flag (Sirius-internal, renames
+  the status string "With Clarification"; the notes-cell badge TEXT keeps "With Clarification").
+- **Counts cross-cut**: REQUESTS = IN PIPELINE + TO FILE; FOR CLARIFICATION is a subset of
+  TO FILE — the To File card filters ALL unfiled rows, flagged included. A filed row with a
+  stale flag is In Pipeline and excluded from the clarification count/filter.
+- **One freeform note box** (owl #15): no separate clarification field. Clarify now requires the
+  remark (`REMARK_REQUIRED` replaces `REASON_REQUIRED`); `clarify_reason` stays accepted for
+  API compat, nulled on new writes; legacy rows resolve through `noteText()` (remark ‖ reason)
+  everywhere. FR-11.4 (a remark alone never changes status) unchanged.
+- Clarification display block + editor rebuilt to frame nodes `452:24801`/`452:24791`
+  (red-50/red-500 badge + red-bordered wrapping note; editor text turns red-500 while flagged).
+
 ## Open Decisions
 
 From BRD §13. Marked, not resolved — each is answered by its owner and recorded in Clarifications before dependent work proceeds. (The BRD's numbering has no OD-3.)

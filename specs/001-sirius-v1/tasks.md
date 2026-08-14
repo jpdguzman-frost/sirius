@@ -254,6 +254,13 @@ Scope: Requests tab restyled 1:1 to the frame + client-side search/filters/pagin
 
 ---
 
+## Phase 13d — Corrected status model + Frost Remarks restyle (~0.5–1d) — added 2026-08-14 (JP go "run workflow"; product owls #13–#15, Rex-verified on nodes 452:24801 / 452:24791 / 470:21130)
+
+- [x] T119 Backend: Trello-presence status derivation (In Pipeline / To File / For Clarification; filed wins over flag per FR-11.3), cross-cutting counts (REQUESTS = IN PIPELINE + TO FILE, FOR CLARIFICATION ⊂ TO FILE), single-box note rule (REMARK_REQUIRED, clarify_reason nulled on new writes, legacy round-trip preserved); tests updated + 4 new (256/256 dual-TZ)
+- [x] T120 Frontend: clarification display block to frame pixels (red-50/red-500 badge 25px + red-bordered 288px wrapping note, no truncation), single-box editor (reason field removed, text red-500 while flagged, 10px checkbox row), REQUEST_SEGMENTS predicate filters (To File card includes flagged-unfiled), `noteText()` legacy fallback in display/search/editor; verified live incl. filed+flagged fallthrough
+
+---
+
 ## Dependencies
 
 ```
