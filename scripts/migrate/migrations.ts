@@ -79,6 +79,48 @@ export const MIGRATIONS: Migration[] = [
       await MilestoneDayPlan.syncIndexes();
     },
   },
+  {
+    // Amendment 2026-08-15: buildWeeks() keys used to shift to the SUNDAY
+    // before on hosts east of UTC, and /suggest Accept persisted them.
+    // slotted_week is documented as a Monday (models/index.ts) — normalize
+    // every non-Monday value to the Monday of its week (string math, no TZ).
+    // Every change writes to audit_log (invariant 10), before/after included.
+    id: '005-monday-slotted-week',
+    up: async (conn) => {
+      const db = conn.db;
+      if (!db) throw new Error('no database on connection');
+      const { audit } = await import('../../src/services/audit.ts');
+      const mondayOf = (s: string): string => {
+        const [y, m, d] = s.split('-').map(Number);
+        const t = Date.UTC(y!, (m ?? 1) - 1, d ?? 1);
+        const dow = new Date(t).getUTCDay();
+        const back = dow === 0 ? 6 : dow - 1;
+        return new Date(t - back * 86_400_000).toISOString().slice(0, 10);
+      };
+      const rows = await db
+        .collection('deliverables')
+        .find({ slotted_week: { $ne: null } })
+        .project({ slotted_week: 1, project_id: 1, mc_number: 1 })
+        .toArray();
+      for (const r of rows) {
+        const cur = String(r.slotted_week).slice(0, 10);
+        const mon = mondayOf(cur);
+        if (mon === cur) continue;
+        await db
+          .collection('deliverables')
+          .updateOne({ _id: r._id }, { $set: { slotted_week: mon } });
+        await audit({
+          project_id: r.project_id ? String(r.project_id) : null,
+          actor: 'migration:005-monday-slotted-week',
+          action: 'schedule.normalize',
+          entity: 'deliverable',
+          entity_id: String(r._id),
+          before: { slotted_week: cur },
+          after: { slotted_week: mon },
+        });
+      }
+    },
+  },
 ];
 
 /** Applies pending migrations in order; records each in `migrations`. */

@@ -76,6 +76,20 @@ says otherwise:
 
 ## Live defect found at integrate — blocks R8, corrupts slotted weeks
 
+> **RESOLVED 2026-08-15 — JP chose option (a), plus ARES-canonical calendar.**
+> Constitution amended to v4.2.0 (invariant 5): `lib/calendar.ts` week keys
+> are now the local Monday in every timezone and `isHoliday` matches the
+> local calendar date; the holiday set is injectable via `setHolidays()` and
+> the **ARES working-day calendar is canonical** (worker `calendarTick`
+> derives non-working weekdays from `/api/workload?mode=daily`, cross-checks
+> `/api/portfolio/capacity` `workingDays[]`, persists to `calendar_days`;
+> both processes load it at boot + interval). Migration
+> `005-monday-slotted-week` normalized existing non-Monday `slotted_week`
+> values with audit rows. The Accept guard below stays in place as an inert
+> tripwire. Golden tests amended: TZ-true reference everywhere, oracle
+> parity kept where the oracle is correct (UTC), suites also green
+> west-of-UTC. The section below is preserved as the historical record.
+
 `buildWeeks().key` in `lib/calendar.ts:93` yields **Sundays** on an Asia/Manila
 host (recon §E.1, contract flag 1). `POST /suggest` is the only planner path
 that returns those keys. Reproduced end to end on the seeded isolated database,
