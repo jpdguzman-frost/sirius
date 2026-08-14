@@ -129,7 +129,7 @@
 .rtable .sbadge.clar { background: var(--status-destructive-light); border: 1px solid var(--status-destructive-strong); color: var(--status-destructive-strong); }
 
 /* ---- FROST NOTES (FR-11) — three display states + the inline editor ---- */
-.rtable .col-rnote .notewrap { width: 288px; max-width: 100%; }
+.rtable .col-rnote .notewrap { width: 100%; }
 .notewrap .addremark {
   width: 100%; height: 36px; box-sizing: border-box; padding: 0 var(--space-8); text-align: left;
   background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
