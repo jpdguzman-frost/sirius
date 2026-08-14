@@ -7,6 +7,10 @@
  *  - a multi-deliverable MC group (invariant 3) with work cards attached to
  *    the group (invariant 4)
  *  - sprints with a gap between them (BR-5)
+ *  - one row slotted INTO that gap, so the planner's "Outside any sprint"
+ *    block (R5, invariant 12) is reachable without hand-editing a database
+ *  - a late Hard row (renderOverdue) and rows with / without requestor+type,
+ *    so every planner badge and phase colour has a live example
  *  - a CSV intake fixture consumed by the phase-5 sheet-sync tests
  */
 

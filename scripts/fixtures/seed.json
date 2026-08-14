@@ -41,6 +41,8 @@
       "lane": "design",
       "labels": ["Main Card"],
       "sheet_deadline": "2026-08-28",
+      "requestor": "@jamie",
+      "asset_type": "Static",
       "slotted_week": "2026-08-10"
     },
     {
@@ -54,7 +56,9 @@
       "lane": "design",
       "labels": ["Main Card"],
       "trello_due": "2026-08-21",
-      "sheet_deadline": "2026-08-28"
+      "sheet_deadline": "2026-08-28",
+      "requestor": "@jamie",
+      "asset_type": "Static"
     },
     {
       "project": "rt-837",
@@ -65,7 +69,24 @@
       "current_list": "Backlog",
       "difficulty": "Hard",
       "lane": "design",
-      "labels": ["Main Card"]
+      "labels": ["Main Card"],
+      "requestor": "@jamie",
+      "asset_type": "Static"
+    },
+    {
+      "project": "rt-837",
+      "mc_number": "MC-712",
+      "display_id": "MC-712",
+      "trello_card_id": "fxCard712",
+      "name": "MC-712 Campaign banner set",
+      "current_list": "Working on Design",
+      "difficulty": "Hard",
+      "lane": "design",
+      "labels": ["Main Card"],
+      "requestor": "@andyandy",
+      "asset_type": "UI",
+      "sheet_deadline": "2026-08-14",
+      "slotted_week": "2026-08-03"
     },
     {
       "project": "rt-837",
