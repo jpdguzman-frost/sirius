@@ -31,7 +31,7 @@ build per the standing Rex-first rule.
 | 12 | MC-cell "row 2" sub-label | Decoded as the §3.6 sheet-row link. Renders as an external link only when a sheet URL is derivable, else plain dim text. |
 | 13 | Rejects banner (§3.3 incomplete panel) | **Removed by JP (2026-08-14, "remove this banner already")** — the rejects payload stays in the API; the rejects-only empty state carries the message instead. |
 | 14 | Status model (owl #14 supersedes #11) | Trello presence drives it: In Pipeline (filed, wins over flag) · To File (unfiled) · For Clarification (unfiled + flag, Sirius-internal). Counts cross-cut: REQUESTS = IN PIPELINE + TO FILE; FOR CLARIFICATION ⊂ TO FILE. Card filters are predicates, not string matches. |
-| 15 | Filed row with a stale clarify flag | Not in the "For Clarification state" (owl #13's render condition) — shows In Pipeline + the plain remark box, excluded from the clarification count/filter. Flagged to product for confirm. |
+| 15 | Filed row with a stale clarify flag | Not in the "For Clarification state" (owl #13's render condition) — shows In Pipeline + the plain remark box, excluded from the clarification count/filter. **CONFIRMED by JP 2026-08-14** ("Correct. A" — filed wins, red block clears). |
 | 16 | Single-box notes (owl #15) | The reason field is gone; clarify requires the remark (`REMARK_REQUIRED`). Legacy rows keep their text via `noteText()` = remark ‖ clarify_reason. Keying stays `(project_id, mc_number)` — owl #15 said `(project_id, trello_card_id)`, but a For-Clarification request has no Trello card by definition. |
 | 17 | Breakdown annotation drift | The moved node `470:21130` still describes **bordered** cards; JP's borderless revision (ruling #1) stands — annotation refresh requested from product. |
 
