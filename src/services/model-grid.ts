@@ -1,9 +1,10 @@
 /**
  * Per-project empirical model loader (T043) — assembles an EmpiricalModel
  * (the shape lib/forecast consumes, FR-7.3) from the project's model_grid /
- * throughput_grid. Falls back to the shipped snapshot when a cell or the
- * whole grid is absent, so a young project still forecasts — with the
- * fallback visible in provenance (FR-7.7, AC-11).
+ * throughput_grid. Falls back to the shipped snapshot per difficulty tier and
+ * per lane (design), per percentile (review), per difficulty (throughput), or
+ * for the whole grid when none of it exists, so a young project still
+ * forecasts — with the fallback visible in provenance (FR-7.7, AC-11).
  */
 
 import type { Types } from 'mongoose';
@@ -64,21 +65,38 @@ export async function loadProjectModel(
     throughput[t.difficulty as Difficulty] = { p25: t.p25 ?? 0, p50: t.p50 ?? 0, p70: t.p70 ?? 0 };
   }
 
-  // Per-difficulty snapshot fill: lib/model's verbatim designCell walks
-  // difficulty → Medium → lane → 'design' and dereferences without guards,
-  // so a sparse young grid (e.g. only Easy cells) must still carry every
-  // difficulty key — review and throughput above already fill per-key
-  // (live 500 on rt-test, 2026-08-13).
-  let filled = 0;
+  // Snapshot fill for a sparse young grid, per difficulty tier AND per lane
+  // inside a present tier. lib/model's verbatim designCell walks difficulty →
+  // Medium → lane → 'design' → first-cell, with no guards: a missing tier
+  // dereferences undefined (live 500 on rt-test, 2026-08-13), and a tier whose
+  // only measured lane is 'assets' silently forecasts a design-lane card off
+  // the assets cell. Filling the snapshot's own lanes restores the exact
+  // fallback chain the shipped grid gives. Measured cells always win — only
+  // absent ones are filled, and lanes the snapshot itself lacks are left to
+  // designCell's t.design step.
+  let tiersFilled = 0;
+  let lanesFilled = 0;
   for (const d of Object.keys(EMPIRICAL.design) as Difficulty[]) {
     if (!design[d]) {
-      design[d] = EMPIRICAL.design[d];
-      filled++;
+      design[d] = { ...EMPIRICAL.design[d] };
+      tiersFilled++;
+      continue;
+    }
+    for (const l of Object.keys(EMPIRICAL.design[d]!) as Lane[]) {
+      if (!design[d]![l]) {
+        design[d]![l] = EMPIRICAL.design[d]![l];
+        lanesFilled++;
+      }
     }
   }
+  const gaps = [
+    tiersFilled ? `${tiersFilled} difficulty tier${tiersFilled === 1 ? '' : 's'}` : '',
+    lanesFilled ? `${lanesFilled} lane${lanesFilled === 1 ? '' : 's'}` : '',
+  ].filter(Boolean);
+  const sparseNote = gaps.length ? ` · ${gaps.join(' + ')} from snapshot (sparse grid)` : '';
 
   const model: EmpiricalModel = {
-    source: `ARES · refreshed grid · computed ${computedAt?.toISOString().slice(0, 10) ?? 'n/a'}${filled ? ` · ${filled} difficulty tier${filled === 1 ? '' : 's'} from snapshot (sparse grid)` : ''}`,
+    source: `ARES · refreshed grid · computed ${computedAt?.toISOString().slice(0, 10) ?? 'n/a'}${sparseNote}`,
     design,
     review: {
       Average: review.Average ?? EMPIRICAL.review.Average,

@@ -16,20 +16,27 @@ import { AresClient } from '../src/services/ares.ts';
 import { assignDisplayIds, mapTrello } from '../src/services/mapper.ts';
 import { Deliverable, Project, PushEvent, SyncRun, WorkCard } from '../src/models/index.ts';
 import type { Env } from '../src/config/env.ts';
-import { deriveWorkSpans, makeClient, syncProject, upsertDeliverable, upsertWorkCard } from './syncAres.ts';
+import { deriveWorkSpans, insertCardEvents, makeClient, syncProject, upsertDeliverable, upsertWorkCard } from './syncAres.ts';
 
 const PUSH_HEALTHY_MS = 30 * 60 * 1000;
 const RECONCILE_WHILE_HEALTHY_MS = 60 * 60 * 1000;
 
 type ProjectDoc = { _id: Types.ObjectId; code: string; trello_board_id: string; trello_label?: string | null };
 
-/** Re-read one card from ARES and reconcile it (notification-then-read). */
+/**
+ * Re-read one card from ARES and reconcile it (notification-then-read). The
+ * read returns the card's movement history alongside it, and those movements
+ * are ingested here on the same dedupe key the full sync uses — without them
+ * the move that TRIGGERED this push is not in card_events, and the caller's
+ * deriveWorkSpans could neither advance a span nor stop re-applying a stale
+ * work_done_at to a reopened-then-recompleted card.
+ */
 export async function reconcileCard(
   client: AresClient,
   project: ProjectDoc,
   cardId: string,
 ): Promise<'deliverable' | 'work_card' | 'descoped' | 'missing'> {
-  const card = await client.card(cardId);
+  const { card, movements } = await client.cardWithMovements(cardId);
   if (!card) return 'missing'; // the full board sync catches true deletions
   const mapped = mapTrello([card], project.trello_label ?? null);
 
@@ -38,12 +45,12 @@ export async function reconcileCard(
     const existing = await Deliverable.find({ project_id: project._id }).select('trello_card_id display_id');
     const ids = assignDisplayIds(new Map(existing.map((x) => [x.trello_card_id, x.display_id])), [d]);
     await upsertDeliverable(project._id, d, ids.get(d.trello_card_id));
-    await deriveWorkSpans(project._id, [cardId]); // Started/Done follow the list move
+    await insertCardEvents(project._id, movements);
     return 'deliverable';
   }
   if (mapped.workCards.length > 0) {
     await upsertWorkCard(project._id, mapped.workCards[0]!);
-    await deriveWorkSpans(project._id, [cardId]);
+    await insertCardEvents(project._id, movements);
     return 'work_card';
   }
   // Scoped out (lost the project label) or an unlinked task: locally known
@@ -84,6 +91,10 @@ export async function drainPushEvents(env: Env, clientOverride?: AresClient): Pr
           const outcome = await reconcileCard(client, project, cardId);
           outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
         }
+        // ONE derivation for the whole batch: Started/Done follow the list
+        // moves just ingested. Idempotent and order-independent, and it reads
+        // only stored state, which the reconcile loop has finished writing.
+        if (cardIds.length > 0) await deriveWorkSpans(project._id, cardIds);
       }
       await PushEvent.updateMany(
         { _id: { $in: pending.map((e) => e._id) }, project_id: project._id },

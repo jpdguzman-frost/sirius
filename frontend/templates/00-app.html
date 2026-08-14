@@ -201,7 +201,7 @@
                       <button on-click="['dueShortcut', 'monday']">Next Monday</button>
                     </div>
                     <div class="dueact">
-                      <button class="dueclear" on-click="['dueClear', row.cardId]" title="Clear the Trello due date — the sheet deadline (if any) takes over">Clear Due Date</button>
+                      <button class="dueclear" disabled="{{!row.trelloDue}}" on-click="['dueClear', row.cardId]" title="{{row.trelloDue ? 'Clear the Trello due date — the sheet deadline (if any) takes over' : (row.deadline ? 'This date comes from the intake sheet — Sirius cannot clear it' : 'No due date to clear')}}">Clear Due Date</button>
                       <button class="dueapply" on-click="['dueApply', row.cardId]">Apply</button>
                     </div>
                   </div>
@@ -210,8 +210,8 @@
                 <span class="datefield readonly {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{row.deadline ? fmtLong(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
               {{/if}}
             </div></td>
-            <td class="col-started">{{#if row.workStarted}}<span class="plaincell nowrap" title="{{fmtInstant(row.workStartedTs)}}">{{fmtLong(row.workStarted)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-            <td class="col-done">{{#if row.workDone}}<span class="plaincell nowrap" title="{{fmtInstant(row.workDoneTs)}}">{{fmtLong(row.workDone)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-started">{{#if row.workStarted}}<span class="plaincell nowrap" title="{{fmtInstant(row.workStarted, row.workStartedTs)}}">{{fmtLong(row.workStarted)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-done">{{#if row.workDone}}<span class="plaincell nowrap" title="{{fmtInstant(row.workDone, row.workDoneTs)}}">{{fmtLong(row.workDone)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-links">
               {{#if row.trelloUrl}}<a class="srclink" href="{{row.trelloUrl}}" target="_blank" aria-label="Open {{row.displayId}} in Trello"><svg class="i18"><use href="#i-trello" /></svg></a>
               {{else}}<span class="srclink off" aria-disabled="true"><svg class="i18"><use href="#i-trello" /></svg></span>{{/if}}

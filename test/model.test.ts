@@ -192,6 +192,37 @@ describe('refresh + loader (integration)', () => {
     ).not.toThrow();
   });
 
+  it('a tier present but missing the design lane fills per LANE — a design-lane card must not forecast off the assets cell', async () => {
+    // the only history is an Easy card dwelling in an ASSETS-named list, so the
+    // refreshed grid carries design.Easy.assets and nothing else. designCell's
+    // verbatim chain is lane → 'design' → FIRST cell, so without the per-lane
+    // fill a 'Working on Design' card would be forecast off the 12-day assets
+    // dwell instead of the snapshot's 0.94.
+    const p = await Project.create({ code: 'rt-test', name: 'Fx', trello_board_id: 'fxB', weekly_capacity: 3 });
+    await Deliverable.create({
+      project_id: p._id, mc_number: 'MC-10', display_id: 'MC-10', trello_card_id: 'c10',
+      name: 'D10', difficulty: 'Easy', lane: 'assets', labels: ['Assets'],
+    });
+    await CardEvent.insertMany([
+      { project_id: p._id, trello_card_id: 'c10', source_event_id: 'f1', to_list: 'Asset Production', occurred_at: at(0) },
+      { project_id: p._id, trello_card_id: 'c10', source_event_id: 'f2', to_list: 'Sent for Client Review', occurred_at: at(12 * 24) },
+      { project_id: p._id, trello_card_id: 'c10', source_event_id: 'f3', to_list: 'Done', occurred_at: at(12 * 24 + 24) },
+    ]);
+    await refreshProjectModel(p._id);
+
+    const { model, provenance } = await loadProjectModel(p._id);
+    expect(model.design.Easy?.assets?.['0.7']).toBe(12); // the MEASURED lane still wins
+    expect(model.design.Easy?.design).toEqual(EMPIRICAL.design.Easy!.design); // the absent one is snapshot-filled
+    expect(provenance.source).toContain('lanes from snapshot'); // FR-7.7 visibility
+
+    const f = forecast(
+      { difficulty: 'Easy', currentList: 'Working on Design', labels: [], startDate: '2026-08-03', confidence: '0.7', slaSketch: null, slaRender: null },
+      model,
+    );
+    expect(f.lane).toBe('design');
+    expect(f.sketchDesign).toBe(EMPIRICAL.design.Easy!.design!['0.7']); // 0.94, not the 12-day assets dwell
+  });
+
   it('serves the model with provenance over HTTP (T043; AC-11 data side)', async () => {
     const p = await seedProjectWithHistory();
     await refreshProjectModel(p._id);

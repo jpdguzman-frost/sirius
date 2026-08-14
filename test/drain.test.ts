@@ -9,9 +9,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Types } from 'mongoose';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { drainPushEvents, reconcileCard, shouldRunFullSync } from '../worker/drainPush.ts';
-import type { AresClient, AresCard } from '../src/services/ares.ts';
+import type { AresClient, AresCard, AresMovement } from '../src/services/ares.ts';
 import { validateEnv } from '../src/config/env.ts';
-import { Deliverable, Project, PushEvent, SyncRun } from '../src/models/index.ts';
+import { CardEvent, Deliverable, Project, PushEvent, SyncRun } from '../src/models/index.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -40,14 +40,27 @@ function aresCard(over: Partial<AresCard> = {}): AresCard {
   } as AresCard;
 }
 
-const stubClient = (over: Partial<Record<'card' | 'boardCards', unknown>> = {}): AresClient =>
+const stubClient = (over: Partial<Record<'cardWithMovements' | 'boardCards', unknown>> = {}): AresClient =>
   ({
-    card: async () => aresCard(),
+    cardWithMovements: async () => ({ card: aresCard(), movements: [] as AresMovement[] }),
     boardCards: async () => [aresCard()],
     boardMovements: async () => [],
     referenceWeeks: async () => ({ least: null, typical: null, most: null, effectiveWeeklyRate: null }),
     ...over,
   }) as unknown as AresClient;
+
+/** The push read hands back {card, movements} — the drain needs both halves. */
+const pushRead = (card: AresCard | null, movements: AresMovement[] = []) => ({
+  cardWithMovements: async () => ({ card, movements }),
+});
+
+const movement = (over: Partial<AresMovement> = {}): AresMovement => ({
+  cardId: 'c9',
+  fromList: 'Production Backlog',
+  toList: 'Working on Design',
+  detectedAt: '2026-08-04T01:00:00.000Z',
+  ...over,
+});
 
 async function makeProject(over: Record<string, unknown> = {}) {
   return Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'b1', weekly_capacity: 3, ...over });
@@ -83,7 +96,9 @@ describe('drainPushEvents — notification, then read (FR-9.4)', () => {
     await PushEvent.create(pushEvent(project._id, { event_id: 'evt-1' }));
     await PushEvent.create(pushEvent(project._id, { event_id: 'evt-2' }));
     await PushEvent.create(pushEvent(project._id, { event_id: 'evt-3' }));
-    await drainPushEvents(env, stubClient({ card: async () => (reads++, aresCard()) }));
+    await drainPushEvents(env, stubClient({
+      cardWithMovements: async () => (reads++, { card: aresCard(), movements: [] }),
+    }));
     expect(reads).toBe(1);
     expect(await PushEvent.countDocuments({ status: 'done' })).toBe(3);
   });
@@ -100,7 +115,7 @@ describe('drainPushEvents — notification, then read (FR-9.4)', () => {
   it('a failing ARES read marks events failed and logs the failure — last good data stays', async () => {
     const project = await makeProject();
     await PushEvent.create(pushEvent(project._id, { event_id: 'evt-f' }));
-    await drainPushEvents(env, stubClient({ card: async () => { throw new Error('Ares HTTP 500'); } }));
+    await drainPushEvents(env, stubClient({ cardWithMovements: async () => { throw new Error('Ares HTTP 500'); } }));
     expect((await PushEvent.findOne({ event_id: 'evt-f' }))?.status).toBe('failed');
     expect(await SyncRun.countDocuments({ project_id: project._id, source: 'ares_push', ok: false })).toBe(1);
   });
@@ -113,7 +128,7 @@ describe('reconcileCard edges (FR-9.5)', () => {
       project_id: project._id, mc_number: 'MC-9', display_id: 'MC-9', trello_card_id: 'c9', name: 'Poster',
     });
     const outcome = await reconcileCard(
-      stubClient({ card: async () => aresCard({ labels: [label('Main Card')] }) }), // no ProjectX label
+      stubClient(pushRead(aresCard({ labels: [label('Main Card')] }))), // no ProjectX label
       project,
       'c9',
     );
@@ -123,8 +138,61 @@ describe('reconcileCard edges (FR-9.5)', () => {
 
   it('a card ARES no longer knows is left to the full board sync', async () => {
     const project = await makeProject();
-    const outcome = await reconcileCard(stubClient({ card: async () => null }), project, 'gone');
+    const outcome = await reconcileCard(stubClient(pushRead(null)), project, 'gone');
     expect(outcome).toBe('missing');
+  });
+});
+
+/**
+ * The push path must be able to MOVE a span, not only clear one: the movement
+ * that triggered the push is ingested from the same read, so Started/Done
+ * follow the list change immediately instead of waiting up to an hour for the
+ * relaxed full sync (FR-9.6).
+ */
+describe('push-path Started/Done spans (FR-9.4 + the 2026-08-13 span spec)', () => {
+  const drainOne = async (card: AresCard, movements: AresMovement[], projectId: Types.ObjectId) => {
+    await PushEvent.create(pushEvent(projectId, { event_id: `evt-${Math.random()}` }));
+    await drainPushEvents(env, stubClient(pushRead(card, movements)));
+  };
+
+  it('a move INTO an ongoing list sets Started from the pushed movement', async () => {
+    const project = await makeProject();
+    await drainOne(aresCard({ currentList: 'Working on Design' }), [movement()], project._id);
+
+    const doc = await Deliverable.findOne({ trello_card_id: 'c9' }).orFail();
+    expect(doc.work_started_at?.toISOString()).toBe('2026-08-04T01:00:00.000Z');
+    expect(doc.work_done_at).toBeNull();
+    expect(await CardEvent.countDocuments({ project_id: project._id, trello_card_id: 'c9' })).toBe(1);
+  });
+
+  it('a reopened card re-completed by push gets the NEW done date, never the stale one', async () => {
+    const project = await makeProject();
+    const start = movement();
+    const done1 = movement({ fromList: 'Working on Design', toList: 'Done', detectedAt: '2026-08-07T01:00:00.000Z' });
+    await drainOne(aresCard({ currentList: 'Done' }), [start, done1], project._id);
+    expect((await Deliverable.findOne({ trello_card_id: 'c9' }).orFail()).work_done_at?.toISOString())
+      .toBe('2026-08-07T01:00:00.000Z');
+
+    // reopened — done clears, start survives
+    const reopen = movement({ fromList: 'Done', toList: 'Working on Design', detectedAt: '2026-08-10T01:00:00.000Z' });
+    await drainOne(aresCard({ currentList: 'Working on Design' }), [start, done1, reopen], project._id);
+    expect((await Deliverable.findOne({ trello_card_id: 'c9' }).orFail()).work_done_at).toBeNull();
+
+    // re-completed — the Aug 14 move, not the Aug 7 one
+    const done2 = movement({ fromList: 'Working on Design', toList: 'Done', detectedAt: '2026-08-14T01:00:00.000Z' });
+    await drainOne(aresCard({ currentList: 'Done' }), [start, done1, reopen, done2], project._id);
+    const doc = await Deliverable.findOne({ trello_card_id: 'c9' }).orFail();
+    expect(doc.work_started_at?.toISOString()).toBe('2026-08-04T01:00:00.000Z');
+    expect(doc.work_done_at?.toISOString()).toBe('2026-08-14T01:00:00.000Z');
+    // the repeated movements dedupe on the synthesized key, same as the full sync
+    expect(await CardEvent.countDocuments({ project_id: project._id, trello_card_id: 'c9' })).toBe(4);
+  });
+
+  it('a read without a movements half is tolerated — no throw, no span', async () => {
+    const project = await makeProject();
+    await drainOne(aresCard({ currentList: 'Working on Design' }), [], project._id);
+    expect((await Deliverable.findOne({ trello_card_id: 'c9' }).orFail()).work_started_at).toBeFalsy();
+    expect(await SyncRun.countDocuments({ project_id: project._id, source: 'ares_push', ok: true })).toBe(1);
   });
 });
 

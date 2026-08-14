@@ -164,17 +164,25 @@ export class AresClient {
   }
 
   /**
-   * Single card (gap repair + push-drain reconcile, contracts/ares-push.md).
-   * Drift-tolerant on shape ({card, movements} or the card bare); 404 comes
-   * back null — the full board sync catches true deletions.
+   * Single card WITH its movement history (gap repair + push-drain reconcile,
+   * contracts/ares-read.md, contracts/ares-push.md). The push drain needs both
+   * halves: the card gives the current list, the movements give the move that
+   * triggered the push — without them Started/Done cannot follow a list change
+   * until the next full sync. Drift-tolerant on shape ({card, movements} or
+   * the card bare, absent movements → []); 404 comes back null — the full
+   * board sync catches true deletions.
    */
-  async card(cardId: string): Promise<AresCard | null> {
+  async cardWithMovements(cardId: string): Promise<{ card: AresCard | null; movements: AresMovement[] }> {
     try {
       const data = await this.get<Record<string, unknown>>(`/api/v1/trello/cards/${cardId}`);
       const card = ((data as { card?: unknown })?.card ?? data) as AresCard | null;
-      return card && (card as AresCard).cardId ? (card as AresCard) : null;
+      const raw = (data as { movements?: unknown })?.movements;
+      const movements = Array.isArray(raw)
+        ? (raw as AresMovement[]).map((m) => ({ ...m, cardId: m.cardId ?? cardId }))
+        : [];
+      return { card: card && (card as AresCard).cardId ? (card as AresCard) : null, movements };
     } catch (err) {
-      if ((err as AresError).status === 404) return null;
+      if ((err as AresError).status === 404) return { card: null, movements: [] };
       throw err;
     }
   }

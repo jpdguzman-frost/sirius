@@ -175,7 +175,6 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
   }
 
   const manualStatus = (d.status_note as string) ?? null;
-  // The row's own span (2026-08-13 spec) — never the MC group's aggregate.
   const startedAt = (d.work_started_at as Date | null) ?? null;
   const doneAt = (d.work_done_at as Date | null) ?? null;
   return {

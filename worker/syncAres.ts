@@ -95,6 +95,41 @@ export async function upsertWorkCard(projectId: Types.ObjectId, w: MappedWorkCar
   );
 }
 
+/**
+ * Append movements to card_events, idempotent on the synthesized
+ * source_event_id (the API exposes no event id) — duplicate keys ARE the
+ * dedupe mechanism, not a failure, so the full board sync and the push drain
+ * can both insert the same movement. Returns how many rows were new.
+ */
+export async function insertCardEvents(projectId: Types.ObjectId, movements: AresMovement[]): Promise<number> {
+  if (movements.length === 0) return 0;
+  try {
+    const res = await CardEvent.insertMany(
+      movements.map((m) => ({
+        project_id: projectId,
+        trello_card_id: m.cardId,
+        source_event_id: sourceEventId(m),
+        from_list: m.fromList,
+        to_list: m.toList,
+        occurred_at: new Date(m.detectedAt),
+      })),
+      { ordered: false },
+    );
+    return res.length;
+  } catch (err) {
+    const e = err as {
+      code?: number;
+      writeErrors?: Array<{ code?: number; err?: { code?: number } }>;
+      result?: { insertedCount?: number };
+      insertedDocs?: unknown[];
+    };
+    const codes = (e.writeErrors ?? []).map((w) => w.code ?? w.err?.code);
+    const allDup = codes.length > 0 ? codes.every((c) => c === 11000) : e.code === 11000;
+    if (!allDup) throw err;
+    return e.insertedDocs?.length ?? e.result?.insertedCount ?? 0;
+  }
+}
+
 const SPAN_FIELDS = 'trello_card_id current_list work_started_at work_done_at';
 
 interface SpanCard {
@@ -104,14 +139,24 @@ interface SpanCard {
   work_done_at?: Date | null;
 }
 
+interface SpanEvent {
+  trello_card_id: string;
+  to_list?: string | null;
+  occurred_at: Date;
+}
+
 interface Span {
   started: Date | null;
   done: Date | null;
 }
 
+interface PendingSpan extends Span {
+  trello_card_id: string;
+}
+
 /** Cards whose stored span differs from the derived one — the only writes. */
-function pendingSpans(cards: SpanCard[], byCard: Map<string, Span>): Array<SpanCard & Span> {
-  const out: Array<SpanCard & Span> = [];
+function pendingSpans(cards: SpanCard[], byCard: Map<string, Span>): PendingSpan[] {
+  const out: PendingSpan[] = [];
   for (const c of cards) {
     const s = byCard.get(c.trello_card_id) ?? { started: null, done: null };
     // done is HELD only while the card sits in a done list today
@@ -122,18 +167,35 @@ function pendingSpans(cards: SpanCard[], byCard: Map<string, Span>): Array<SpanC
     ) {
       continue;
     }
-    out.push({ ...c, started: s.started, done });
+    out.push({ trello_card_id: c.trello_card_id, started: s.started, done });
   }
   return out;
 }
 
+/** Structural, because Model<TWorkCard> | Model<TDeliverable> is not callable. */
+interface SpanWriter {
+  bulkWrite(ops: object[]): PromiseLike<unknown>;
+}
+
+/** One round trip per collection — the full sync has up to ~5,000 pending. */
+async function writeSpans(model: SpanWriter, projectId: Types.ObjectId, pending: PendingSpan[]): Promise<number> {
+  if (pending.length === 0) return 0;
+  await model.bulkWrite(
+    pending.map((c) => ({
+      updateOne: {
+        filter: { project_id: projectId, trello_card_id: c.trello_card_id },
+        update: { $set: { work_started_at: c.started, work_done_at: c.done } },
+      },
+    })),
+  );
+  return pending.length;
+}
+
 /**
- * Derive work_started_at / work_done_at from a card's OWN movements (JP go
- * 2026-08-12; extended to deliverable cards 2026-08-13 — the row's Started /
- * Done columns are the deliverable's own span, never its MC group's).
- * Started = the card's FIRST move into an ongoing-or-done list, so a card
- * that skipped straight to done still counts as started, and a card that
- * bounced back to backlog and returned keeps its original start; done = the
+ * Derive work_started_at / work_done_at for deliverable AND work cards, each
+ * from its OWN movements — a row's Started/Done is that card's span, never
+ * its MC group's (JP 2026-08-12, extended per the 2026-08-13 spec).
+ * Started = the card's FIRST move into an ongoing-or-done list; done = the
  * LATEST move into a done list, kept only while the card currently sits in a
  * done list (moving it back out clears it). Idempotent: same-value spans
  * write nothing. Shared by the full board sync and the push drain.
@@ -148,11 +210,14 @@ export async function deriveWorkSpans(projectId: Types.ObjectId, cardIds?: strin
   const events = await CardEvent.find({
     project_id: projectId,
     trello_card_id: { $in: [...workCards, ...mainCards].map((c) => c.trello_card_id) },
-  }).select('trello_card_id to_list occurred_at');
+  })
+    .select('trello_card_id to_list occurred_at')
+    .lean<SpanEvent[]>();
 
   const byCard = new Map<string, Span>();
   for (const e of events) {
-    const cls = classifyList(e.to_list ?? '');
+    if (!e.to_list) continue; // a list-less movement is not a move INTO any list
+    const cls = classifyList(e.to_list);
     if (cls !== 'ongoing' && cls !== 'done') continue;
     const s = byCard.get(e.trello_card_id) ?? { started: null, done: null };
     if (!s.started || e.occurred_at < s.started) s.started = e.occurred_at;
@@ -160,22 +225,10 @@ export async function deriveWorkSpans(projectId: Types.ObjectId, cardIds?: strin
     byCard.set(e.trello_card_id, s);
   }
 
-  let updated = 0;
-  for (const c of pendingSpans(workCards, byCard)) {
-    await WorkCard.updateOne(
-      { project_id: projectId, trello_card_id: c.trello_card_id },
-      { $set: { work_started_at: c.started, work_done_at: c.done } },
-    );
-    updated++;
-  }
-  for (const c of pendingSpans(mainCards, byCard)) {
-    await Deliverable.updateOne(
-      { project_id: projectId, trello_card_id: c.trello_card_id },
-      { $set: { work_started_at: c.started, work_done_at: c.done } },
-    );
-    updated++;
-  }
-  return updated;
+  return (
+    (await writeSpans(WorkCard, projectId, pendingSpans(workCards, byCard))) +
+    (await writeSpans(Deliverable, projectId, pendingSpans(mainCards, byCard)))
+  );
 }
 
 export async function syncProject(
@@ -219,35 +272,7 @@ export async function syncProject(
 
   // Movements → card_events, idempotent on the synthesized key (T032).
   const movements = await client.boardMovements(project.trello_board_id, movementsFrom);
-  let inserted = 0;
-  if (movements.length > 0) {
-    try {
-      const res = await CardEvent.insertMany(
-        movements.map((m) => ({
-          project_id: projectId,
-          trello_card_id: m.cardId,
-          source_event_id: sourceEventId(m),
-          from_list: m.fromList,
-          to_list: m.toList,
-          occurred_at: new Date(m.detectedAt),
-        })),
-        { ordered: false },
-      );
-      inserted = res.length;
-    } catch (err) {
-      // duplicate keys are the idempotency mechanism, not a failure
-      const e = err as {
-        code?: number;
-        writeErrors?: Array<{ code?: number; err?: { code?: number } }>;
-        result?: { insertedCount?: number };
-        insertedDocs?: unknown[];
-      };
-      const codes = (e.writeErrors ?? []).map((w) => w.code ?? w.err?.code);
-      const allDup = codes.length > 0 ? codes.every((c) => c === 11000) : e.code === 11000;
-      if (!allDup) throw err;
-      inserted = e.insertedDocs?.length ?? e.result?.insertedCount ?? 0;
-    }
-  }
+  const inserted = await insertCardEvents(projectId, movements);
 
   // Started/Done spans from the freshly appended movements.
   const workSpans = await deriveWorkSpans(projectId);

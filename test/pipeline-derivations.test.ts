@@ -168,6 +168,24 @@ describe('phase-13 row derivations', () => {
     expect(card.work_done_at?.toISOString()).toBe('2026-08-04T01:00:00.000Z');
   });
 
+  it('a movement with no to_list is not a move INTO any list', async () => {
+    const p = await newProject();
+    // AresMovement.toList is `string | null`, so these rows exist; classifyList('')
+    // falls through to 'ongoing', which would otherwise read as a Work Started.
+    await Deliverable.create({ project_id: p._id, mc_number: 'MC-8', display_id: 'MC-8.1', trello_card_id: 'c8', name: 'D8', current_list: 'Production Backlog' });
+    await Deliverable.create({ project_id: p._id, mc_number: 'MC-8', display_id: 'MC-8.2', trello_card_id: 'c8b', name: 'D8b', current_list: 'Working on Design' });
+    await CardEvent.insertMany([
+      { project_id: p._id, trello_card_id: 'c8', source_event_id: 'n1', to_list: null, occurred_at: new Date('2026-02-05T01:00:00Z') },
+      { project_id: p._id, trello_card_id: 'c8b', source_event_id: 'n2', to_list: null, occurred_at: new Date('2026-01-05T01:00:00Z') },
+      { project_id: p._id, trello_card_id: 'c8b', source_event_id: 'n3', to_list: 'Working on Design', occurred_at: new Date('2026-08-04T01:00:00Z') },
+    ]);
+
+    expect(await deriveWorkSpans(p._id)).toBe(1); // only c8b has a real move
+    expect((await Deliverable.findOne({ trello_card_id: 'c8' }).orFail()).work_started_at).toBeFalsy();
+    expect((await Deliverable.findOne({ trello_card_id: 'c8b' }).orFail()).work_started_at?.toISOString())
+      .toBe('2026-08-04T01:00:00.000Z'); // the real move, not the list-less one
+  });
+
   it('a card with no movements derives nothing', async () => {
     const p = await newProject();
     await Deliverable.create({ project_id: p._id, mc_number: 'MC-7', display_id: 'MC-7', trello_card_id: 'c9', name: 'Solo' });

@@ -183,11 +183,15 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .ubadge.urgent { background: var(--status-destructive-light); border-color: var(--red-300); color: var(--status-destructive-strong); }
 .ubadge.nonurgent, .ubadge.unset { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
 .ubadge.saving { opacity: 0.5; pointer-events: none; }
-/* fixed so it escapes the .pscroll clip (review finding 3); coords set inline */
+/* both are fixed boxes that escape the .pscroll clip (review finding 3), with
+   their flipped/clamped coords set inline — one recipe, two sizes */
+.selectmenu, .duepop {
+  position: fixed;
+  background: var(--white); border: 1px solid var(--slate-200);
+  box-shadow: var(--shadow-xs); display: flex; flex-direction: column;
+}
 .selectmenu {
-  position: fixed; width: 116px; z-index: 30;
-  background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-xs); padding: var(--space-4); display: flex; flex-direction: column;
+  width: 116px; z-index: 30; border-radius: var(--radius-sm); padding: var(--space-4);
 }
 .selectmenu .selecthead { font-size: var(--text-caption); font-weight: 600; line-height: 1; color: var(--surface-foreground); padding: var(--space-4); }
 .selectmenu .selectitem {
@@ -215,22 +219,27 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .datefield svg { display: block; flex: none; color: var(--slate-500); }
 .datefield .dpdate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .datefield:hover:not(.readonly) { border-color: var(--surface-foreground); color: var(--surface-foreground); }
-.datefield:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+/* one focus ring for the table's interactive chrome */
+.datefield:focus-visible, .duepop button:focus-visible, a.srclink:focus-visible {
+  outline: 2px solid var(--blue-500); outline-offset: 1px;
+}
 .datefield.missing { border-color: var(--amber-400); color: var(--amber-600); }
 .datefield.missing svg { color: var(--amber-600); }
 .datefield.overdue { border-color: var(--amber-500); background: var(--status-warning-light); color: var(--amber-700); }
 .datefield.readonly { cursor: default; }
 .datefield.saving { opacity: 0.5; pointer-events: none; }
 
-/* fixed so it escapes the .pscroll clip and outranks the sticky header;
-   coords (flipped + clamped) set inline */
+/* outranks the sticky header. max-height keeps Apply / Clear reachable on a
+   viewport shorter than the 420px box — it shrinks and scrolls itself rather
+   than pushing its own action row off-screen; overscroll-behavior keeps that
+   scroll from chaining to the page (which would trip the dismisser). */
 .duepop {
-  position: fixed; width: 354px; z-index: 40; box-sizing: border-box;
-  background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs); padding: var(--space-16); font-family: var(--font-sans);
-  display: flex; flex-direction: column; gap: 12px;
+  width: 354px; z-index: 40; box-sizing: border-box; border-radius: var(--radius-md);
+  padding: var(--space-16); font-family: var(--font-sans); gap: 12px;
+  max-height: calc(100vh - 8px);
+  max-height: calc(100dvh - 8px);
+  overflow-y: auto; overscroll-behavior: contain;
 }
-.duepop button:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
 .duepop .duehead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }
 .duepop .duemonth { font-size: var(--text-subtitle); font-weight: 600; line-height: 1.2; color: var(--surface-foreground); }
 .duepop .duenav {
@@ -254,23 +263,28 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .duepop .dueday.on { background: var(--surface-foreground); color: var(--white); font-weight: 600; } /* staged, not yet written */
 .duepop .dueday.on:hover { background: var(--slate-700); }
 .duepop .dueshort { display: flex; flex-wrap: wrap; gap: var(--space-8); padding-top: 12px; border-top: 1px solid var(--slate-100); }
+/* shortcut / clear / apply share the popover's button chrome */
+.duepop .dueshort button, .duepop .dueclear, .duepop .dueapply {
+  cursor: pointer; border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: var(--text-label); line-height: 1;
+}
 .duepop .dueshort button {
-  border: 1px solid var(--slate-200); background: var(--white); border-radius: var(--radius-sm); cursor: pointer;
-  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; line-height: 1;
-  color: var(--slate-700); padding: 7px 10px 6px;
+  border: 1px solid var(--slate-200); background: var(--white);
+  font-weight: 400; color: var(--slate-700); padding: 7px 10px 6px;
 }
 .duepop .dueshort button:hover { background: var(--slate-50); border-color: var(--slate-300); }
 .duepop .dueact { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }
 .duepop .dueclear {
-  border: none; background: none; cursor: pointer; border-radius: var(--radius-sm);
-  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; line-height: 1;
+  border: none; background: none; font-weight: 400;
   color: var(--status-destructive-strong); padding: 8px var(--space-4) 7px;
 }
-.duepop .dueclear:hover { background: var(--status-destructive-light); }
+.duepop .dueclear:hover:not(:disabled) { background: var(--status-destructive-light); }
+/* W2 owns only the TRELLO due date: a sheet-sourced (or absent) deadline is
+   not Sirius's to clear, so the control says so instead of doing nothing */
+.duepop .dueclear:disabled { opacity: 0.4; cursor: not-allowed; }
 .duepop .dueapply {
   border: 1px solid var(--surface-foreground); background: var(--surface-foreground); color: var(--white);
-  border-radius: var(--radius-sm); cursor: pointer;
-  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 600; line-height: 1; padding: 8px 16px 7px;
+  font-weight: 600; padding: 8px 16px 7px;
 }
 .duepop .dueapply:hover { background: var(--slate-700); border-color: var(--slate-700); }
 
@@ -282,7 +296,6 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 }
 .srclink svg { display: block; }
 a.srclink:hover { background: var(--slate-100); }
-a.srclink:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
 .srclink.off { opacity: 0.3; cursor: default; }
 
 /* horizontal slider (annotation 251:6758) */

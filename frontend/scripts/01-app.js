@@ -18,8 +18,9 @@ function todayIso() {
 }
 
 /* frame date format: '4 Aug 2026' (annotation 251:23859). A fixed month table,
-   NOT Intl: every English locale renders September as 'Sept', which the frame
-   forbids. Pure string math, so no Date and no timezone can shift the day. */
+   NOT Intl: en-GB — the one English locale with the frame's day-first order —
+   renders September as 'Sept', which the frame forbids. Pure string math, so
+   no Date and no timezone can shift the day. */
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 function fmtLongIso(iso) {
@@ -34,11 +35,13 @@ const MANILA_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', y
 const MANILA_TIME = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
 const manilaToday = () => MANILA_DAY.format(new Date());
 /* tooltip for the read-only Started/Done cells: the exact source instant, in
-   the timezone the whole app computes in */
-function fmtInstant(ts) {
-  if (!ts) return '';
+   the timezone the whole app computes in. The Manila DAY arrives from the
+   payload (the cell beside it already renders that string) — only the
+   clock time is derived here. */
+function fmtInstant(day, ts) {
+  if (!day || !ts) return '';
   const d = new Date(ts);
-  return Number.isNaN(d.getTime()) ? '' : `${fmtLongIso(MANILA_DAY.format(d))}, ${MANILA_TIME.format(d)} PHT`;
+  return Number.isNaN(d.getTime()) ? '' : `${fmtLongIso(day)}, ${MANILA_TIME.format(d)} PHT`;
 }
 
 /* calendar arithmetic on 'YYYY-MM-DD' — local midnight, so only the calendar
@@ -50,14 +53,13 @@ function isoAddDays(iso, n) {
 }
 function isoNextMonday(iso) {
   const d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); // strictly after today
+  d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); // strictly after `iso`
   return isoOf(d);
 }
 const monthOf = (iso) => iso.slice(0, 7);
 function monthShiftYm(ym, delta) {
   const [y, m] = ym.split('-').map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return monthOf(isoOf(new Date(y, m - 1 + delta, 1)));
 }
 
 function mondayIso(base) {
@@ -299,9 +301,10 @@ app.set('hl', (text) => {
 
 /* Anything that invalidates a fixed-position overlay's anchor closes it;
    outside click and Escape dismiss it (review findings 3 + 8). The due-date
-   popover rides the same dismissers, which is also what makes it and the
-   select menus mutually exclusive — opening either closes the other.
-   Dismissing DISCARDS the staged date: only Apply writes (W2). */
+   popover rides the same dismissers. Mutual exclusion is separate — a click
+   on any trigger is inside the ignore list below, so each opener nulls the
+   other two itself. Dismissing DISCARDS the staged date: only Apply writes
+   (W2), so the popover defends its own scrolling below. */
 function anyMenuOpen() {
   return app.get('urgencyMenu') || app.get('diffMenu') || app.get('duePopover');
 }
@@ -314,9 +317,68 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && anyMenuOpen()) closeMenus();
 });
-document.addEventListener('scroll', () => {
+document.addEventListener('scroll', (e) => {
+  // the popover scrolls INSIDE itself on a viewport shorter than it is —
+  // that must not dismiss the multi-step edit it exists to hold
+  if (e.target.closest && e.target.closest('.duepop')) return;
   if (anyMenuOpen()) closeMenus();
 }, true);
+/* A trackpad nudge with the pointer inside the popover would otherwise chain
+   to the page and trip the dismisser above, discarding the staged date and
+   the navigated month. Swallow it — unless the popover has its own overflow
+   to scroll, in which case let it scroll itself. */
+document.addEventListener('wheel', (e) => {
+  if (!app.get('duePopover') || !e.target.closest) return;
+  const pop = e.target.closest('.duepop');
+  if (pop && pop.scrollHeight <= pop.clientHeight) e.preventDefault();
+}, { passive: false });
+
+/* One opener for all three row overlays. They differ only in state keys, box
+   height and gap, and whether the box is big enough to need clamping: the two
+   select menus are one-click lists, the due popover is a 354×420 dialog that
+   must stay fully on screen. Mutual exclusion lives here — opening any one
+   nulls the other two. */
+function openOverlay(ctx, cardId, opts) {
+  if (app.get(`${opts.saving}.${cardId}`)) return; // one write in flight per card (invariant 8)
+  if (app.get(opts.key) === cardId) {
+    app.set(opts.key, null);
+    return;
+  }
+  // fixed positioning escapes the .pscroll clip; flip up near the viewport
+  // bottom (review finding 3)
+  const rect = ctx.node.getBoundingClientRect();
+  const up = rect.bottom + opts.h + opts.gap > window.innerHeight;
+  let left = rect.left;
+  let top = up ? rect.top - opts.h - opts.gap : rect.bottom + opts.gap;
+  if (opts.clampW) {
+    left = Math.max(4, Math.min(left, window.innerWidth - opts.clampW - 4));
+    top = Math.max(4, Math.min(top, window.innerHeight - opts.h - 4));
+  }
+  app.set({
+    urgencyMenu: null,
+    diffMenu: null,
+    duePopover: null,
+    ...opts.extra,
+    [opts.key]: cardId,
+    [opts.posKey]: { left: Math.round(left), top: Math.round(top) },
+  });
+}
+
+/* loadAll may have replaced the rows array while a PATCH was in flight, so a
+   row is re-found by cardId at every step and never held as an index. */
+function patchRow(cardId, fields) {
+  const i = app.get('rows').findIndex((r) => r.cardId === cardId);
+  if (i < 0) return;
+  const patch = {};
+  for (const k of Object.keys(fields)) patch[`rows.${i}.${k}`] = fields[k];
+  app.set(patch);
+}
+
+const errText = (err) => (err.detail && err.detail.message) || err.message;
+function flashBanner(msg) {
+  app.set('banner', msg);
+  setTimeout(() => app.set('banner', ''), 6000);
+}
 
 /* Custom horizontal scroll for the pipeline table (annotation 251:6758) —
    rAF-throttled; handlers resolve their scroller from the event node, so a
@@ -385,7 +447,7 @@ async function loadAdmin() {
     const res = await api.get('/api/admin/users');
     app.set({ adminUsers: res.users, adminProjects: res.projects, adminEditing: null });
   } catch (err) {
-    app.set('adminError', (err.detail && err.detail.message) || err.message);
+    app.set('adminError', errText(err));
   }
 }
 
@@ -410,9 +472,10 @@ app.set('dueGrid', (month, staged) => {
   const [y, m] = month.split('-').map(Number);
   const today = manilaToday();
   const lead = new Date(y, m - 1, 1).getDay(); // 0 = Sunday, matching dowNames
-  const start = new Date(y, m - 1, 1 - lead);
   return Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    // the constructor normalises out-of-range day fields, so no leading or
+    // trailing cell needs its own Date to walk from
+    const d = new Date(y, m - 1, 1 - lead + i);
     const iso = isoOf(d);
     return { iso, day: d.getDate(), out: d.getMonth() !== m - 1, today: iso === today, on: iso === staged };
   });
@@ -425,33 +488,23 @@ app.set('dueMonthLabel', (month) => {
 
 /* W2 deadline write (FR-9.1): optimistic with revert, same pattern as urgency
    and difficulty; Trello is written first server-side, so a failure reverts
-   here. The row is re-found by cardId at every step — loadAll may have
-   replaced the rows array while the PATCH was in flight (review finding 2).
-   The cell shows 'saving…' meanwhile, so no unconfirmed date is ever on
-   screen (invariant 8). */
+   here. The no-op guard compares against trelloDue because W2 owns only the
+   TRELLO due date — a sheet-sourced deadline is not Sirius's to clear, which
+   is why the popover disables Clear on those rows. The cell shows 'saving…'
+   meanwhile, so no unconfirmed date is ever on screen (invariant 8). */
 async function writeDeadline(cardId, value) {
-  const rowAt = () => app.get('rows').findIndex((r) => r.cardId === cardId);
-  const idx = rowAt();
-  if (idx < 0) return;
-  const row = app.get(`rows.${idx}`);
+  const row = app.get('rows').find((r) => r.cardId === cardId);
+  if (!row) return;
   if ((value || null) === (row.trelloDue || null)) return; // no-op guard — no call, no audit
   const prev = { deadline: row.deadline, deadlineSource: row.deadlineSource, trelloDue: row.trelloDue };
-  const apply = (state) => {
-    const i = rowAt();
-    if (i < 0) return;
-    app.set(`rows.${i}.deadline`, state.deadline);
-    app.set(`rows.${i}.deadlineSource`, state.deadlineSource);
-    app.set(`rows.${i}.trelloDue`, state.trelloDue);
-  };
-  apply({ deadline: value, deadlineSource: value ? 'trello' : null, trelloDue: value });
+  patchRow(cardId, { deadline: value, deadlineSource: value ? 'trello' : null, trelloDue: value });
   app.set(`savingDeadline.${cardId}`, true);
   try {
     await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/deadline`, { date: value });
     await loadAll(); // precedence may fall back to the sheet deadline (BR-9)
   } catch (err) {
-    apply(prev);
-    app.set('banner', `Deadline write failed — reverted. ${err.detail && err.detail.message ? err.detail.message : err.message}`);
-    setTimeout(() => app.set('banner', ''), 6000);
+    patchRow(cardId, prev);
+    flashBanner(`Deadline write failed — reverted. ${errText(err)}`);
   } finally {
     app.set(`savingDeadline.${cardId}`, false);
   }
@@ -468,11 +521,11 @@ async function loadAll() {
       api.get(`/api/projects/${pid}/model`),
     ]);
     // searchable text per row, computed once per load (annotation 17:2057).
-    // displayId stays in the blob even though the MC# cell now shows the bare
-    // mcLabel (JP ruling 2026-08-13) — typing 'MC-655.3' must still find its
-    // row; mcLabel is here too so the VISIBLE text is always searchable.
+    // The MC# cell shows the bare mcLabel (JP ruling 2026-08-13), but typing
+    // 'MC-655.3' must still find its row — displayId and mcNumber both stay
+    // searchable, and mcLabel is by construction one of the two.
     pipeline.rows.forEach((r) => {
-      r.blob = `${r.displayId} ${r.mcLabel || ''} ${r.mcNumber} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
+      r.blob = `${r.displayId} ${r.mcNumber || ''} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
     });
     app.set({
       rows: pipeline.rows,
@@ -580,8 +633,7 @@ async function writeDayPlan(cardId, phase, day) {
     computeDeadlines();
     const code = err.detail && err.detail.error && err.detail.error.code;
     const why = code === 'HOLIDAY' ? 'that day is a holiday — it takes no work' : code === 'DAY_OUTSIDE_WEEK' ? 'that day is outside the milestone’s week' : err.message;
-    app.set('banner', `Day move failed — reverted. ${why}`);
-    setTimeout(() => app.set('banner', ''), 6000);
+    flashBanner(`Day move failed — reverted. ${why}`);
   }
 }
 
@@ -669,8 +721,7 @@ app.on({
     } catch (err) {
       app.set(`requests.${idx}.note`, prev.note);
       app.set(`requests.${idx}.status`, prev.status);
-      app.set('banner', `Note save failed — reverted. ${(err.detail && err.detail.message) || err.message}`);
-      setTimeout(() => app.set('banner', ''), 6000);
+      flashBanner(`Note save failed — reverted. ${errText(err)}`);
     }
   },
   toggleGroup(_ctx, mc) { app.toggle(`expanded.${mc}`); },
@@ -681,80 +732,40 @@ app.on({
     app.toggle(`expanded.${mcNumber}`);
   },
   openUrgencyMenu(ctx, cardId) {
-    if (app.get(`savingUrgency.${cardId}`)) return; // one write in flight per card (invariant 8)
-    if (app.get('urgencyMenu') === cardId) {
-      app.set('urgencyMenu', null);
-      return;
-    }
-    // fixed positioning escapes the .pscroll clip; flip upward near the
-    // viewport bottom (review finding 3)
-    const rect = ctx.node.getBoundingClientRect();
-    const menuH = 92;
-    const up = rect.bottom + menuH + 3 > window.innerHeight;
-    app.set({
-      urgencyMenu: cardId,
-      diffMenu: null,
-      duePopover: null,
-      urgencyMenuPos: { left: Math.round(rect.left), top: Math.round(up ? rect.top - menuH - 3 : rect.bottom + 3) },
-    });
+    openOverlay(ctx, cardId, { key: 'urgencyMenu', posKey: 'urgencyMenuPos', saving: 'savingUrgency', h: 92, gap: 3 });
   },
   // annotations 169:26364/26074: optimistic write with 'saving…' chrome and
   // rollback — Sirius never shows a state Trello does not hold (FR-4.7).
-  // The row is re-found by cardId at every step: loadAll may have replaced
-  // the rows array while the PATCH was in flight (review finding 2).
   async chooseUrgency(_ctx, cardId, next, current) {
     app.set('urgencyMenu', null);
     if (next === current || app.get(`savingUrgency.${cardId}`)) return;
-    const setUrgency = (value) => {
-      const idx = app.get('rows').findIndex((r) => r.cardId === cardId);
-      if (idx >= 0) app.set(`rows.${idx}.urgency`, value);
-    };
-    setUrgency(next);
+    patchRow(cardId, { urgency: next });
     app.set(`savingUrgency.${cardId}`, true);
     try {
       await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/urgency`, { urgent: next === 'Urgent' });
     } catch (err) {
-      setUrgency(current);
-      app.set('banner', `Urgency write failed — reverted. ${err.detail && err.detail.message ? err.detail.message : err.message}`);
-      setTimeout(() => app.set('banner', ''), 6000);
+      patchRow(cardId, { urgency: current });
+      flashBanner(`Urgency write failed — reverted. ${errText(err)}`);
     } finally {
       app.set(`savingUrgency.${cardId}`, false);
     }
   },
-  // W3 (BRD-§9-A1): same optimistic-with-rollback shape as urgency; menuH
-  // differs — head + THREE options
+  // W3 (BRD-§9-A1): same optimistic-with-rollback shape as urgency; the box
+  // is taller — head + THREE options
   openDiffMenu(ctx, cardId) {
-    if (app.get(`savingDifficulty.${cardId}`)) return; // one write in flight per card (invariant 8)
-    if (app.get('diffMenu') === cardId) {
-      app.set('diffMenu', null);
-      return;
-    }
-    const rect = ctx.node.getBoundingClientRect();
-    const menuH = 116;
-    const up = rect.bottom + menuH + 3 > window.innerHeight;
-    app.set({
-      diffMenu: cardId,
-      urgencyMenu: null,
-      duePopover: null,
-      diffMenuPos: { left: Math.round(rect.left), top: Math.round(up ? rect.top - menuH - 3 : rect.bottom + 3) },
-    });
+    openOverlay(ctx, cardId, { key: 'diffMenu', posKey: 'diffMenuPos', saving: 'savingDifficulty', h: 116, gap: 3 });
   },
   async chooseDifficulty(_ctx, cardId, next, current) {
     app.set('diffMenu', null);
     if (next === current || app.get(`savingDifficulty.${cardId}`)) return;
-    const setDifficulty = (value) => {
-      const idx = app.get('rows').findIndex((r) => r.cardId === cardId);
-      if (idx >= 0) app.set(`rows.${idx}.difficulty`, value);
-    };
-    setDifficulty(next);
+    patchRow(cardId, { difficulty: next });
     app.set(`savingDifficulty.${cardId}`, true);
     try {
       await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/difficulty`, { difficulty: next });
       await loadAll(); // difficulty re-keys the forecast (difficulty × lane) and the hard-mix numbers
     } catch (err) {
-      setDifficulty(current);
-      app.set('banner', `Difficulty write failed — reverted. ${err.detail && err.detail.message ? err.detail.message : err.message}`);
-      setTimeout(() => app.set('banner', ''), 6000);
+      patchRow(cardId, { difficulty: current });
+      flashBanner(`Difficulty write failed — reverted. ${errText(err)}`);
     } finally {
       app.set(`savingDifficulty.${cardId}`, false);
     }
@@ -786,7 +797,7 @@ app.on({
       app.set({ adminForm: { email: '', name: '', projectIds: {} }, adminError: '' });
       await loadAdmin();
     } catch (err) {
-      app.set('adminError', (err.detail && err.detail.message) || err.message);
+      app.set('adminError', errText(err));
     }
   },
   async adminToggleActive(_ctx, id, current) {
@@ -794,7 +805,7 @@ app.on({
       await api.send('PATCH', `/api/admin/users/${id}`, { active: !current });
       await loadAdmin();
     } catch (err) {
-      app.set('adminError', (err.detail && err.detail.message) || err.message);
+      app.set('adminError', errText(err));
     }
   },
   adminEdit(_ctx, id) {
@@ -811,7 +822,7 @@ app.on({
       app.set('adminEditing', null);
       await loadAdmin();
     } catch (err) {
-      app.set('adminError', (err.detail && err.detail.message) || err.message);
+      app.set('adminError', errText(err));
     }
   },
 
@@ -821,28 +832,12 @@ app.on({
      and remembers it as dueBaseline, so Apply on an untouched popover writes
      nothing — including the case where the shown date came from the sheet. */
   openDuePopover(ctx, cardId) {
-    if (app.get(`savingDeadline.${cardId}`)) return; // one write in flight per card (invariant 8)
-    if (app.get('duePopover') === cardId) {
-      app.set('duePopover', null);
-      return;
-    }
     const row = app.get('rows').find((r) => r.cardId === cardId);
     const current = (row && row.deadline) || null;
-    // fixed positioning escapes the .pscroll clip; flip up near the viewport
-    // bottom and clamp horizontally — 354px stays fully on screen
-    const rect = ctx.node.getBoundingClientRect();
-    const up = rect.bottom + DUE_POP_H + 4 > window.innerHeight;
-    app.set({
-      duePopover: cardId,
-      urgencyMenu: null,
-      diffMenu: null,
-      dueStaged: current,
-      dueBaseline: current,
-      dueMonth: monthOf(current || manilaToday()),
-      duePopPos: {
-        left: Math.round(Math.max(4, Math.min(rect.left, window.innerWidth - DUE_POP_W - 4))),
-        top: Math.round(up ? Math.max(4, rect.top - DUE_POP_H - 4) : rect.bottom + 4),
-      },
+    openOverlay(ctx, cardId, {
+      key: 'duePopover', posKey: 'duePopPos', saving: 'savingDeadline',
+      h: DUE_POP_H, gap: 4, clampW: DUE_POP_W, // clamped both ways — the box stays fully on screen
+      extra: { dueStaged: current, dueBaseline: current, dueMonth: monthOf(current || manilaToday()) },
     });
   },
   duePick(_ctx, iso) { app.set('dueStaged', iso); }, // stages only — Apply writes
