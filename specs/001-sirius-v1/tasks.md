@@ -268,6 +268,13 @@ Scope: Requests tab restyled 1:1 to the frame + client-side search/filters/pagin
 
 ---
 
+## Phase 13f — Planner toolbar + capacity write + sync strip (~1d) — added 2026-08-14 (owls #20–#21, Rex-verified on 94:4828; §3.2 build ruled by product)
+
+- [x] T123 Backend: `PATCH /api/projects/:projectId/capacity` — first write surface for `weekly_capacity` (Zod strict int 1..2000, audited `capacity.set`, project-scoped, NOT a registry entry — Sirius-internal planning data, same class as slotted_week/pins); 7 tests (263/263 dual-TZ)
+- [x] T124 Frontend: schedules toolbar tokenized to frame 94:4828 (32px nav + exact-format range label — 2,922-case/3-TZ sweep; Cards/week slider bounded least..most w/ §5.4 five-band descriptor — 16,276-case sweep, degrades on null refs, serialized optimistic writes; black Suggest + slate Sprints + helper note; Accept/Discard preserved); Requests §3.2 sync strip (Trello mark + read-only rule + Manila sync status, honest degrade states); range-picker-on-click + slider snapping NOT built (product confirms pending); tab stays legacybg (only the toolbar tokenized this pass)
+
+---
+
 ## Dependencies
 
 ```

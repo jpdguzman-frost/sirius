@@ -5,6 +5,25 @@ Table), read via Rex. This file records where the build had to interpret,
 mirror-corrected, or deviated — the requests-tab counterpart of
 `pipeline-frame-notes.md`.
 
+## Canonical node map (product, owl #19 — read annotations ONLY from these)
+
+Root cause of the recurring node-id drift was duplicate component instances on
+the Workspace page; product is consolidating. Canonical instances:
+
+| Component | Node |
+|---|---|
+| Breakdown | `470:21130` (metric-wrapper) — the duplicate `452:23559` is stale, disregard |
+| Request Tab Table | `452:23561` |
+| Frost Remarks — display block | `452:24801` |
+| Frost Remarks — edit state | `452:24791` |
+| YEAR column | header `470:21145` · value `452:24773` |
+| MONTH column | header `470:21178` · value `470:21206` |
+| Planner toolbar | `94:4828` |
+
+Closures via #19/#20: filed-wins confirmed by product too; frost-note keying
+corrected to `(project_id, mc_number)` in their records; client-side sort
+accepted (annotation updated to match); rulings #15–#17 all closed both sides.
+
 ## Annotation source
 
 The owls cite nodes `160:10320` / `279:21667` — the source components, which
