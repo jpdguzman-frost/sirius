@@ -40,6 +40,8 @@ export async function syncIntakeRows(
           requestor: r.requestor,
           asset_type: r.asset_type,
           use_case: r.use_case,
+          year: r.year,
+          month: r.month,
           brief: r.brief,
           deadline: r.deadline,
           in_frost_prod: r.in_frost_prod,

@@ -14,6 +14,7 @@ import {
   parseCsv,
   parseDeadline,
   parseIntake,
+  parseYear,
   serialToDate,
 } from '../src/services/intake-parser.ts';
 
@@ -85,6 +86,44 @@ describe('row classification (FR-3.4, FR-3.5)', () => {
     expect(result.ok.length).toBe(495);
     expect(result.reserved).toBe(495);
     expect(result.rejects.length).toBe(8);
+  });
+});
+
+describe('year / month columns (optional — sheet still deferred)', () => {
+  const YM_HEADER = [...HEADER, 'Year', 'Month'];
+  const ymRow = (mc: string, year: string, month: string) => [
+    mc, `Deliverable ${mc}`, 'Static', 'Campaign', 'Web', 'r@c.example', '2026-08-28', 'brief', 'TRUE', year, month,
+  ];
+
+  it('parses the year cell, spreadsheet float or plain, and rejects the rest', () => {
+    expect(parseYear('2026.0')).toBe(2026);
+    expect(parseYear('2026')).toBe(2026);
+    expect(parseYear(' 2026 ')).toBe(2026);
+    expect(parseYear('')).toBeNull();
+    expect(parseYear('   ')).toBeNull();
+    expect(parseYear('soon™')).toBeNull();
+  });
+
+  it('carries year and month off the sheet, month verbatim', () => {
+    const result = parseIntake([
+      YM_HEADER,
+      ymRow('MC-1', '2026.0', 'January'),
+      ymRow('MC-2', '2026', ' February '),
+      ymRow('MC-3', '', ''),
+      ymRow('MC-4', 'whenever', 'Q3'),
+    ]);
+    expect(result.ok.length).toBe(4);
+    expect(result.ok.map((r) => r.year)).toEqual([2026, 2026, null, null]);
+    expect(result.ok.map((r) => r.month)).toEqual(['January', 'February', null, 'Q3']);
+  });
+
+  it('rows without the columns still parse — year/month are optional, never a reject', () => {
+    const result = parseIntake([
+      HEADER,
+      ['MC-9', 'No year column', 'Static', 'Campaign', 'Web', 'r@c.example', '2026-08-28', 'brief', 'TRUE'],
+    ]);
+    expect(result.rejects.length).toBe(0);
+    expect(result.ok[0]).toMatchObject({ mc_number: 'MC-9', year: null, month: null });
   });
 });
 

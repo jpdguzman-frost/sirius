@@ -24,6 +24,8 @@ export interface ParsedRequest {
   use_case: string;
   brief: string;
   deadline: string | null; // YYYY-MM-DD
+  year: number | null; // optional timing columns — absent on older tabs
+  month: string | null; // raw sheet name, e.g. 'January'
   in_frost_prod: boolean | null;
 }
 
@@ -54,6 +56,8 @@ const HEADER_ALIASES: Record<string, string> = {
   brief: 'brief',
   description: 'brief',
   deadline: 'deadline',
+  year: 'year',
+  month: 'month',
   'in frost prod': 'in_frost_prod',
   'in frost prod?': 'in_frost_prod',
 };
@@ -80,6 +84,12 @@ export function parseDeadline(cell: string): string | null {
   return null;
 }
 
+/** Sheets hands numbers back as floats — `2026.0` is the same year as `2026`. */
+export function parseYear(cell: string): number | null {
+  const n = parseFloat(String(cell || '').trim());
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
 interface HeaderMap {
   mc?: number;
   name?: number;
@@ -88,6 +98,8 @@ interface HeaderMap {
   use_case?: number;
   brief?: number;
   deadline?: number;
+  year?: number;
+  month?: number;
   in_frost_prod?: number;
 }
 
@@ -173,6 +185,9 @@ export function parseIntake(allRows: string[][]): ParseResult {
       use_case: get('use_case'),
       brief: get('brief'),
       deadline: parseDeadline(get('deadline')),
+      // optional: a tab without these columns parses exactly as before
+      year: parseYear(get('year')),
+      month: get('month') || null,
       in_frost_prod: prod ? ['yes', 'true', '1'].includes(prod) : null,
     });
   });

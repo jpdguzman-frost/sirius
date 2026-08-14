@@ -76,6 +76,21 @@ describe('mirror + join', () => {
     expect(viaView?.deadline_source).toBe('sheet');
   });
 
+  it('carries the new year/month columns onto the mirror, like use_case', async () => {
+    const p = await makeProject();
+    await syncIntakeRows(p._id, [
+      [...HEADER, 'Year', 'Month'],
+      [...ROW('MC-655', 'Landing hero'), '2026.0', 'January'],
+      [...ROW('MC-702', 'No timing'), '', ''],
+    ]);
+    const filled = await IntakeRequest.findOne({ mc_number: 'MC-655' }).orFail();
+    expect(filled.year).toBe(2026);
+    expect(filled.month).toBe('January');
+    const empty = await IntakeRequest.findOne({ mc_number: 'MC-702' }).orFail();
+    expect(empty.year ?? null).toBeNull();
+    expect(empty.month ?? null).toBeNull();
+  });
+
   it('AC-19: a failing fetch records ok:false and last good data survives', async () => {
     const p = await makeProject();
     await runIntakeSync(p._id, async () => [HEADER, ROW('MC-655', 'Landing hero')]);

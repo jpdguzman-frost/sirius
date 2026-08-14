@@ -207,6 +207,8 @@ const intakeRequestSchema = new Schema(
     requestor: String,
     asset_type: String,
     use_case: String,
+    year: Number, // optional sheet timing columns — absent on older tabs
+    month: String, // raw sheet name, e.g. 'January'
     brief: String,
     deadline: DATE_ONLY,
     in_frost_prod: Boolean,

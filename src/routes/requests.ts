@@ -9,9 +9,15 @@
  *   else                      → 'For Filing'
  * A remark alone never changes status (FR-11.4, AC-21).
  *
+ * The deadline is RESOLVED, not the sheet cell (invariant 14 / BR-9, same
+ * precedence as deliverables_v): the MC group's earliest Trello due wins,
+ * else the sheet date, else none — mc_number is not unique (invariant 3),
+ * so the whole group is scanned.
+ *
  * Notes never touch the sheet (FR-11.2) — no Sheets write path exists
  * anywhere; the service account stays spreadsheets.readonly (FR-8.2/8.3).
- * Filters: filed / unfiled / clarification / missing-deadline (FR-3.6).
+ * Filters: filed / unfiled / clarification / missing-deadline (FR-3.6);
+ * missing-deadline tests the resolved value.
  * Sync status + last-success surfaces here (FR-8.6, AC-19).
  */
 
@@ -50,11 +56,18 @@ export function requestsRouter(): Router {
       const requests = await IntakeRequest.find({ project_id: projectId, active: true }).sort({
         sheet_row: 1,
       });
-      const filedMcs = new Set(
-        (await Deliverable.find({ project_id: projectId, active: true }).select('mc_number')).map(
-          (d) => d.mc_number,
-        ),
+      const deliverables = await Deliverable.find({ project_id: projectId, active: true }).select(
+        'mc_number trello_due',
       );
+      const filedMcs = new Set(deliverables.map((d) => d.mc_number));
+      // invariant 14: earliest Trello due per MC group — date-only strings
+      // compare lexicographically (mapper stores them YYYY-MM-DD)
+      const trelloDue = new Map<string, string>();
+      for (const d of deliverables) {
+        if (!d.mc_number || !d.trello_due) continue;
+        const seen = trelloDue.get(d.mc_number);
+        if (seen === undefined || d.trello_due < seen) trelloDue.set(d.mc_number, d.trello_due);
+      }
       const notes = new Map(
         (await FrostNote.find({ project_id: projectId }).lean()).map((n) => [n.mc_number, n]),
       );
@@ -67,6 +80,8 @@ export function requestsRouter(): Router {
           : note?.clarify
             ? 'With Clarification'
             : 'For Filing';
+        const due = trelloDue.get(r.mc_number) ?? null;
+        const sheetDeadline = r.deadline ?? null;
         return {
           mc_number: r.mc_number,
           sheet_row: r.sheet_row,
@@ -75,7 +90,10 @@ export function requestsRouter(): Router {
           asset_type: r.asset_type,
           use_case: r.use_case,
           brief: r.brief,
-          deadline: r.deadline ?? null,
+          deadline: due ?? sheetDeadline,
+          deadline_source: due ? 'trello' : sheetDeadline ? 'sheet' : null,
+          year: r.year ?? null,
+          month: r.month ?? null,
           status,
           note: noteOf(note),
         };
