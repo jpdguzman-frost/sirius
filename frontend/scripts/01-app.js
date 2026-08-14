@@ -5,6 +5,13 @@
 const HARD_IDEAL = 0.083;
 const HARD_CEILING = 0.129;
 const WEEK_COUNT = 8;
+/* Requests tab (build-spec v1.2 §3): the stat cards are a single-select
+   filter on the DERIVED status (FR-11.3), the table pages ten rows at a
+   time, and every filter runs client-side over one fetch. */
+const REQUEST_STATUS = { filed: 'In Pipeline', filing: 'For Filing', clarification: 'With Clarification' };
+const REQ_FILTER_KEYS = { year: 'reqYear', month: 'reqMonth', type: 'reqType', requestor: 'reqRequestor' };
+const REQ_PAGE_SIZE = 10;
+const REQ_MENU_H = 240; // estimated select box, for the flip-up decision
 /* due-date popover box (node 415:54979) — used to decide flip-up and the
    horizontal clamp before the element exists to measure */
 const DUE_POP_W = 354;
@@ -139,8 +146,16 @@ const app = new Ractive({
     adminEditing: null,
     adminEditSel: {},
     adminError: '',
-    requestFilters: ['all', 'filed', 'unfiled', 'missing-deadline'],
-    requestFilter: 'all',
+    requestFilter: 'all', // 'all' | key of REQUEST_STATUS — the stat cards
+    reqQ: '',
+    reqYear: '', // '' = All, for all four selects
+    reqMonth: '',
+    reqType: '',
+    reqRequestor: '',
+    reqMenu: null, // which select's overlay is open — shares the Pipeline recipe
+    reqMenuPos: { left: 0, top: 0 },
+    reqPage: 1,
+    reqThumb: { needed: false, left: 0, width: 100 },
     monthOffset: 0,
     monthLabel: '',
     deadlinePayload: { milestones: [], conflicts: [], replot: [] },
@@ -155,6 +170,11 @@ const app = new Ractive({
     fmt: (iso) => fmtDate(iso),
     fmtLong: fmtLongIso,
     fmtInstant,
+    // §3 brief cell: the STRING truncates at 180, the full text stays in title=
+    clip180: (s) => {
+      const t = String(s ?? '');
+      return t.length > 180 ? `${t.slice(0, 180)}…` : t;
+    },
     pct: (x) => `${Math.round((x || 0) * 1000) / 10}%`,
     // BR-6c/§5.4 display rule: fractions to one decimal, whole numbers plain
     fmtLoad: (n) => {
@@ -197,6 +217,67 @@ const app = new Ractive({
     visibleCorrections() {
       const c = this.get('corrections');
       return this.get('showAllCorrections') ? c : c.slice(0, 5);
+    },
+    /* ---- Requests §3: card + search + four selects, AND-combined, all
+       client-side over the single unfiltered payload. The counts stay on
+       requestCounts, which the server derives from the same unfiltered set. */
+    reqFiltered() {
+      const status = REQUEST_STATUS[this.get('requestFilter')] || null;
+      const q = (this.get('reqQ') || '').trim().toLowerCase();
+      const year = this.get('reqYear');
+      const month = this.get('reqMonth');
+      const type = this.get('reqType');
+      const who = this.get('reqRequestor');
+      return this.get('requests').filter(
+        (r) =>
+          (!status || r.status === status) &&
+          (!q || (r.blob || '').includes(q)) &&
+          (year === '' || String(r.year) === String(year)) &&
+          (month === '' || r.month === month) &&
+          (type === '' || r.asset_type === type) &&
+          (who === '' || r.requestor === who),
+      );
+    },
+    reqPageCount() {
+      return Math.max(1, Math.ceil(this.get('reqFiltered').length / REQ_PAGE_SIZE));
+    },
+    reqRows() {
+      const page = Math.max(1, Math.min(this.get('reqPage'), this.get('reqPageCount')));
+      const from = (page - 1) * REQ_PAGE_SIZE;
+      return this.get('reqFiltered').slice(from, from + REQ_PAGE_SIZE);
+    },
+    // first and last always, current ±1, an ellipsis marker for each gap
+    reqPages() {
+      const total = this.get('reqPageCount');
+      const cur = Math.max(1, Math.min(this.get('reqPage'), total));
+      if (total <= 7) return Array.from({ length: total }, (_, i) => ({ n: i + 1 }));
+      const want = [...new Set([1, cur - 1, cur, cur + 1, total])]
+        .filter((n) => n >= 1 && n <= total)
+        .sort((a, b) => a - b);
+      const out = [];
+      want.forEach((n, i) => {
+        if (i && n - want[i - 1] > 1) out.push({ gap: true });
+        out.push({ n });
+      });
+      return out;
+    },
+    // options come from the LOADED rows only — never a hardcoded list, so a
+    // sheet that gains a type or a requestor needs no code change
+    reqFilterDefs() {
+      const rows = this.get('requests');
+      const uniq = (pick) => [...new Set(rows.map(pick).filter((v) => v !== null && v !== undefined && v !== ''))];
+      const alpha = (a, b) => String(a).localeCompare(String(b));
+      // months sort by CALENDAR order; a name the sheet invents falls to the end
+      const monthRank = (m) => {
+        const i = MONTHS_LONG.indexOf(m);
+        return i < 0 ? MONTHS_LONG.length : i;
+      };
+      return [
+        { key: 'year', label: 'Year', value: this.get('reqYear'), options: uniq((r) => r.year).sort((a, b) => a - b) },
+        { key: 'month', label: 'Month', value: this.get('reqMonth'), options: uniq((r) => r.month).sort((a, b) => monthRank(a) - monthRank(b) || alpha(a, b)) },
+        { key: 'type', label: 'Type', value: this.get('reqType'), options: uniq((r) => r.asset_type).sort(alpha) },
+        { key: 'requestor', label: 'Requestor', value: this.get('reqRequestor'), options: uniq((r) => r.requestor).sort(alpha) },
+      ];
     },
     weekCols() {
       const from = this.get('weekStart');
@@ -279,25 +360,30 @@ const rowLoad = (rows) => rows.reduce((a, r) => a + (r.weight || 1), 0);
 
 /* Search-match highlight (annotation 17:2057): escape first, then wrap the
    matches in <mark> — rendered via triple-mustache, so escaping is mandatory.
-   The app.get('searchQ') read registers the Ractive dependency; the regex
-   compiles once per distinct query, not once per cell. */
+   The app.get(queryKey) read registers the Ractive dependency; the regex
+   compiles once per distinct query, not once per cell. One factory, one
+   cache per search box — Pipeline (hl) and Requests (hlr) never share a
+   query, so they must not share the compiled regex either. */
 const escHtml = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-let hlCache = { q: '', rx: null };
-app.set('hl', (text) => {
-  const q = (app.get('searchQ') || '').trim();
-  const raw = String(text ?? '');
-  if (!q) return escHtml(raw);
-  if (hlCache.q !== q) {
-    hlCache = { q, rx: new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'ig') };
-  }
-  // match on the RAW text, escape each segment — a regex over escaped HTML
-  // splits '&amp;'-style entities (review finding 6)
-  return raw
-    .split(hlCache.rx)
-    .map((part, i) => (i % 2 ? `<mark>${escHtml(part)}</mark>` : escHtml(part)))
-    .join('');
-});
+function makeHighlighter(queryKey) {
+  let cache = { q: '', rx: null };
+  return (text) => {
+    const q = (app.get(queryKey) || '').trim();
+    const raw = String(text ?? '');
+    if (!q) return escHtml(raw);
+    if (cache.q !== q) {
+      cache = { q, rx: new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'ig') };
+    }
+    // match on the RAW text, escape each segment — a regex over escaped HTML
+    // splits '&amp;'-style entities (review finding 6)
+    return raw
+      .split(cache.rx)
+      .map((part, i) => (i % 2 ? `<mark>${escHtml(part)}</mark>` : escHtml(part)))
+      .join('');
+  };
+}
+app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ') });
 
 /* Anything that invalidates a fixed-position overlay's anchor closes it;
    outside click and Escape dismiss it (review findings 3 + 8). The due-date
@@ -306,21 +392,22 @@ app.set('hl', (text) => {
    other two itself. Dismissing DISCARDS the staged date: only Apply writes
    (W2), so the popover defends its own scrolling below. */
 function anyMenuOpen() {
-  return app.get('urgencyMenu') || app.get('diffMenu') || app.get('duePopover');
+  return app.get('urgencyMenu') || app.get('diffMenu') || app.get('duePopover') || app.get('reqMenu');
 }
 function closeMenus() {
-  app.set({ urgencyMenu: null, diffMenu: null, duePopover: null });
+  app.set({ urgencyMenu: null, diffMenu: null, duePopover: null, reqMenu: null });
 }
 document.addEventListener('click', (e) => {
-  if (anyMenuOpen() && !e.target.closest('.ubadge-wrap, .selectmenu, .duewrap, .duepop')) closeMenus();
+  if (anyMenuOpen() && !e.target.closest('.ubadge-wrap, .selectmenu, .duewrap, .duepop, .selwrap')) closeMenus();
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && anyMenuOpen()) closeMenus();
 });
 document.addEventListener('scroll', (e) => {
   // the popover scrolls INSIDE itself on a viewport shorter than it is —
-  // that must not dismiss the multi-step edit it exists to hold
-  if (e.target.closest && e.target.closest('.duepop')) return;
+  // that must not dismiss the multi-step edit it exists to hold; a long
+  // Requests select scrolls itself for the same reason
+  if (e.target.closest && e.target.closest('.duepop, .selectmenu')) return;
   if (anyMenuOpen()) closeMenus();
 }, true);
 /* A trackpad nudge with the pointer inside the popover would otherwise chain
@@ -339,7 +426,9 @@ document.addEventListener('wheel', (e) => {
    must stay fully on screen. Mutual exclusion lives here — opening any one
    nulls the other two. */
 function openOverlay(ctx, cardId, opts) {
-  if (app.get(`${opts.saving}.${cardId}`)) return; // one write in flight per card (invariant 8)
+  // one write in flight per card (invariant 8); the read-only Requests
+  // selects have no write to guard, so they pass no `saving` key
+  if (opts.saving && app.get(`${opts.saving}.${cardId}`)) return;
   if (app.get(opts.key) === cardId) {
     app.set(opts.key, null);
     return;
@@ -358,6 +447,7 @@ function openOverlay(ctx, cardId, opts) {
     urgencyMenu: null,
     diffMenu: null,
     duePopover: null,
+    reqMenu: null,
     ...opts.extra,
     [opts.key]: cardId,
     [opts.posKey]: { left: Math.round(left), top: Math.round(top) },
@@ -380,29 +470,32 @@ function flashBanner(msg) {
   setTimeout(() => app.set('banner', ''), 6000);
 }
 
-/* Custom horizontal scroll for the pipeline table (annotation 251:6758) —
-   rAF-throttled; handlers resolve their scroller from the event node, so a
-   second table can reuse the pattern without fighting over one thumb. */
-let thumbRaf = 0;
-function updateThumb(el) {
-  if (thumbRaf) return;
-  thumbRaf = requestAnimationFrame(() => {
-    thumbRaf = 0;
+/* Custom horizontal scroll for the wide tables (annotation 251:6758) —
+   rAF-throttled; handlers resolve their scroller from the event node, and the
+   thumb state key comes with it, so Pipeline and Requests drive two
+   independent sliders without fighting over one thumb. */
+const thumbRaf = {};
+function updateThumb(el, key) {
+  if (thumbRaf[key]) return;
+  thumbRaf[key] = requestAnimationFrame(() => {
+    thumbRaf[key] = 0;
     const needed = el.scrollWidth > el.clientWidth + 1; // slider only when the table actually overflows
     const width = Math.max(8, (el.clientWidth / el.scrollWidth) * 100);
     const denom = el.scrollWidth - el.clientWidth;
     const left = denom > 0 ? (el.scrollLeft / denom) * (100 - width) : 0;
-    app.set('pipeThumb', { needed, left: Math.round(left * 100) / 100, width: Math.round(width * 100) / 100 });
+    app.set(key, { needed, left: Math.round(left * 100) / 100, width: Math.round(width * 100) / 100 });
   });
 }
+const thumbKeyOf = (node) => (node.closest('.reqwrap') ? 'reqThumb' : 'pipeThumb');
 const scrollerOf = (node) => {
   const wrap = node.closest('.pscrollwrap');
   return wrap ? wrap.querySelector('.pscroll') : document.querySelector('.pscroll');
 };
-window.addEventListener('resize', () => {
-  const el = document.querySelector('.pscroll');
-  if (el) updateThumb(el);
-});
+// only one tab is mounted at a time, but the sweep is key-driven either way
+function refreshThumbs() {
+  document.querySelectorAll('.pscroll').forEach((el) => updateThumb(el, thumbKeyOf(el)));
+}
+window.addEventListener('resize', refreshThumbs);
 
 app.set('footClass', (weekKey) => {
   const rows = app.get('schedRows').filter((r) => r.slottedWeek === weekKey);
@@ -451,10 +544,22 @@ async function loadAdmin() {
   }
 }
 
-/* §3.1 tiles: unselected tiles drop to 45% opacity, never an underline */
-app.set('tileOff', (f) => {
+/* §3 stat bar: with a status filter on, every card but the active one drops
+   to 45% opacity (REQUESTS included — it is the show-all, not a status) */
+app.set('statOff', (f) => {
   const cur = app.get('requestFilter');
   return cur !== 'all' && cur !== f;
+});
+
+/* The MC# provenance line links into the intake sheet only when the project
+   payload carries the sheet id. /api/projects does not select it today, so
+   this returns '' and the template renders plain dim text — never a dead
+   link. It starts working the moment the field is exposed. */
+app.set('sheetRowUrl', (row) => {
+  const p = (app.get('projects') || []).find((x) => x._id === app.get('activeProjectId'));
+  const id = p && p.intake_sheet_id;
+  if (!id || !row) return '';
+  return `https://docs.google.com/spreadsheets/d/${id}/edit#gid=${p.intake_sheet_gid || 0}&range=A${row}`;
 });
 
 app.set('projCode', (pid) => {
@@ -516,7 +621,7 @@ async function loadAll() {
   try {
     const [pipeline, requests, deadlines, model] = await Promise.all([
       api.get(`/api/projects/${pid}/deliverables`),
-      api.get(`/api/projects/${pid}/requests${filterQuery()}`),
+      api.get(`/api/projects/${pid}/requests`), // §3: one unfiltered fetch — every filter is client-side
       api.get(`/api/projects/${pid}/deadlines`),
       api.get(`/api/projects/${pid}/model`),
     ]);
@@ -541,7 +646,7 @@ async function loadAll() {
           : 'sync failing — showing last good data'
         : 'no sync yet',
       banner: pipeline.sync && !pipeline.sync.ok ? `Sync error: ${pipeline.sync.error || 'unknown'} — data below is the last good state.` : '',
-      requests: requests.requests,
+      requests: blobRequests(requests.requests),
       rejects: requests.rejects,
       requestCounts: requests.counts || app.get('requestCounts'),
       deadlinePayload: deadlines,
@@ -549,19 +654,30 @@ async function loadAll() {
       modelReview: model.model.review,
     });
     computeDeadlines();
-    requestAnimationFrame(() => {
-      const el = document.querySelector('.pscroll');
-      if (el) updateThumb(el);
-    });
+    requestAnimationFrame(refreshThumbs);
   } catch (err) {
     app.set('banner', `Load failed: ${err.message} — the app stays usable with what it has.`);
   }
 }
 
-function filterQuery() {
-  const f = app.get('requestFilter');
-  return f && f !== 'all' ? `?filter=${f}` : '';
+/* §3 search: one blob per request row, computed once per load — MC#, name,
+   use case, requestor, type, brief and both frost-note fields, so the filter
+   and the highlighter agree on what counts as a match. */
+function blobRequests(rows) {
+  rows.forEach((r) => {
+    const n = r.note || {};
+    r.blob = `${r.mc_number || ''} ${r.name || ''} ${r.use_case || ''} ${r.requestor || ''} ${r.asset_type || ''} ${r.brief || ''} ${n.remark || ''} ${n.clarify_reason || ''}`.toLowerCase();
+  });
+  return rows;
 }
+
+/* Any filter change starts the pager over; a reload only clamps it, so
+   saving a note does not yank the reader back to page 1. */
+app.observe('reqQ reqYear reqMonth reqType reqRequestor requestFilter', () => app.set('reqPage', 1), { init: false });
+app.observe('requests', () => {
+  const last = app.get('reqPageCount');
+  if (app.get('reqPage') > last) app.set('reqPage', last);
+}, { init: false });
 
 function computeDeadlines() {
   const payload = app.get('deadlinePayload');
@@ -644,14 +760,16 @@ function selectTab(id) {
   closeMenus();
   app.set('activeTab', id);
   if (id === 'admin' && app.get('isAdmin')) loadAdmin();
-  if (id === 'pipeline') {
+  if (id === 'pipeline' || id === 'requests') {
     // returning to the tab remounts .pscroll at scrollLeft 0 — recompute the
     // slider so the affordance is never stale (review finding 5)
-    requestAnimationFrame(() => {
-      const el = document.querySelector('.pscroll');
-      if (el) updateThumb(el);
-    });
+    requestAnimationFrame(refreshThumbs);
   }
+}
+
+/* clicking the active card clears it; REQUESTS is always the show-all */
+function applyRequestFilter(f) {
+  app.set('requestFilter', f === app.get('requestFilter') && f !== 'all' ? 'all' : f);
 }
 
 app.on({
@@ -670,14 +788,32 @@ app.on({
       if (btn) btn.focus();
     });
   },
-  async switchProject() { await loadAll(); },
+  async switchProject() {
+    // Requests view state is per-project — a Type/Requestor value from the old
+    // project may not exist in the new one, leaving an unclearable empty table.
+    app.set({ requestFilter: 'all', reqQ: '', reqYear: '', reqMonth: '', reqType: '', reqRequestor: '', reqPage: 1, reqMenu: null });
+    await loadAll();
+  },
   signOut() { api.send('POST', '/auth/logout').then(() => window.location.reload()); },
   toggleCorrections() { app.toggle('showAllCorrections'); },
-  async setRequestFilter(_ctx, f) {
-    app.set('requestFilter', f === app.get('requestFilter') && f !== 'all' ? 'all' : f); // clicking the active tile clears it
-    const res = await api.get(`/api/projects/${app.get('activeProjectId')}/requests${filterQuery()}`);
-    app.set({ requests: res.requests, rejects: res.rejects, requestCounts: res.counts || app.get('requestCounts') });
+  /* ---- Requests §3: stat cards, selects, pager — no round-trip ---- */
+  setRequestFilter(_ctx, f) { applyRequestFilter(f); },
+  statKey(ctx, f) {
+    if (ctx.event.key !== 'Enter' && ctx.event.key !== ' ') return;
+    ctx.event.preventDefault(); // Space would scroll the page
+    applyRequestFilter(f);
   },
+  openReqMenu(ctx, key) {
+    openOverlay(ctx, key, { key: 'reqMenu', posKey: 'reqMenuPos', h: REQ_MENU_H, gap: 4 });
+  },
+  pickReqFilter(_ctx, key, value) {
+    app.set({ reqMenu: null, [REQ_FILTER_KEYS[key]]: value }); // '' = All, which clears that filter
+  },
+  reqGoPage(_ctx, n) { app.set('reqPage', n); },
+  reqPageStep(_ctx, dir) {
+    app.set('reqPage', Math.max(1, Math.min(app.get('reqPage') + dir, app.get('reqPageCount'))));
+  },
+  reqScrolled(ctx) { updateThumb(ctx.node, 'reqThumb'); },
 
   /* ---- frost notes (FR-11): inline editor, only Submit persists ---- */
   openNote(_ctx, mc) {
@@ -716,8 +852,8 @@ app.on({
       await api.send('PUT', `/api/projects/${app.get('activeProjectId')}/requests/${mc}/note`, {
         remark, clarify: d.clarify, ...(d.clarify ? { clarify_reason: reason } : {}),
       });
-      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/requests${filterQuery()}`);
-      app.set({ requests: res.requests, requestCounts: res.counts || app.get('requestCounts') });
+      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/requests`);
+      app.set({ requests: blobRequests(res.requests), requestCounts: res.counts || app.get('requestCounts') });
     } catch (err) {
       app.set(`requests.${idx}.note`, prev.note);
       app.set(`requests.${idx}.status`, prev.status);
@@ -770,12 +906,12 @@ app.on({
       app.set(`savingDifficulty.${cardId}`, false);
     }
   },
-  pipeScrolled(ctx) { updateThumb(ctx.node); },
+  pipeScrolled(ctx) { updateThumb(ctx.node, 'pipeThumb'); },
   nudgeScroll(ctx, dir) {
     const el = scrollerOf(ctx.node);
     if (!el) return;
     el.scrollLeft += dir * 240;
-    updateThumb(el);
+    updateThumb(el, thumbKeyOf(ctx.node));
   },
   trackJump(ctx) {
     const el = scrollerOf(ctx.node);
@@ -783,7 +919,7 @@ app.on({
     const rect = ctx.node.getBoundingClientRect();
     const frac = (ctx.event.clientX - rect.left) / rect.width;
     el.scrollLeft = Math.max(0, frac * el.scrollWidth - el.clientWidth / 2);
-    updateThumb(el);
+    updateThumb(el, thumbKeyOf(ctx.node));
   },
   /* ---- Admin tab (FR-10): allow-listing from a screen ---- */
   adminDismiss() { app.set('adminError', ''); },

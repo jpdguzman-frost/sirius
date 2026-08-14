@@ -1,0 +1,204 @@
+/* Requests tab v2 — restyle to the Figma frame + build-spec v1.2 §3. Every
+   value binds to a token (05-tokens.css); the legacy .tiles/.grid/.notecell
+   recipes in 10-ui.css stay untouched because the unmigrated tabs still use
+   them. Shared chrome (.searchbar, .pscrollwrap, .hslider, .selectmenu) is
+   reused from 20-pipeline.css — only the deltas live here. */
+
+.reqstack { display: flex; flex-direction: column; gap: var(--space-16); }
+
+/* ---- A. breakdown stat bar — 4-up, no gap, single-select status filter ---- */
+.rstats { display: flex; width: 100%; }
+.rstat {
+  flex: 1 0 0; min-width: 1px; height: 82px; box-sizing: border-box;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: var(--space-8);
+  padding: 0 var(--space-16) var(--space-24);
+  background: transparent; border: 1px solid var(--border-border); border-radius: 0;
+  font-family: var(--font-sans); text-align: left; cursor: pointer;
+}
+.rstat:hover { background: var(--slate-50); }
+.rstat:focus-visible { outline: 2px solid var(--blue-500); outline-offset: -2px; }
+.rstat .rlabel { font-size: var(--text-label); font-weight: 600; line-height: 1; text-transform: uppercase; letter-spacing: 0.02em; }
+.rstat .rvalue { font-size: var(--text-display); font-weight: 600; line-height: 1; }
+/* label AND value share the card's colour */
+.rstat.all { color: var(--surface-foreground); }
+.rstat.green { color: var(--green-600); }
+.rstat.amber { color: var(--amber-500); }
+.rstat.red { color: var(--status-destructive-strong); }
+/* a status filter is on: the picked card thickens, the rest recede */
+.rstat.on { border-width: 2px; border-color: var(--surface-foreground); }
+.rstat.off { opacity: 0.45; }
+
+/* ---- C/D. search + filter bar ---- */
+.reqsearch { padding-top: 0; }
+
+.filterbar {
+  display: flex; align-items: center; gap: var(--space-24); flex-wrap: wrap;
+  height: 72px; box-sizing: border-box;
+}
+.rfilter { display: flex; align-items: center; gap: var(--space-8); }
+.rfilter .flabel {
+  font-size: var(--text-label); font-weight: 600; line-height: 1;
+  text-transform: uppercase; letter-spacing: 0.02em; color: var(--surface-muted-foreground);
+}
+.selwrap { position: relative; display: inline-block; }
+.seltrigger {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+  width: 120px; height: 32px; box-sizing: border-box; padding: 0 var(--space-8);
+  background: var(--slate-50); border: 1px solid var(--slate-100); border-radius: var(--radius-sm);
+  cursor: pointer; font-family: var(--font-sans);
+  font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--surface-foreground);
+}
+.seltrigger:hover { border-color: var(--slate-300); }
+.seltrigger:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.seltrigger .selval { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seltrigger .bchev { display: inline-flex; flex: none; color: var(--slate-400); }
+.seltrigger .bchev svg { display: block; }
+/* a non-All selection tints the trigger so the active filter is obvious */
+.seltrigger.on {
+  background: var(--blue-50); border-color: var(--blue-200); color: var(--blue-700); font-weight: 600;
+}
+.seltrigger.on .bchev { color: var(--blue-700); }
+/* the shared overlay recipe, widened for names and capped so a long list scrolls */
+.selectmenu.reqmenu { width: 180px; max-height: 264px; overflow-y: auto; overscroll-behavior: contain; }
+.selectmenu.reqmenu .selectitem { width: 100%; }
+
+/* ---- E. pagination ---- */
+.pager { display: flex; align-items: center; gap: var(--space-4); margin-left: auto; }
+.pager .pbtn, .pager .pnav {
+  min-width: 28px; height: 32px; box-sizing: border-box; padding: 0 var(--space-8);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--white); border: 1px solid transparent; border-radius: var(--radius-sm);
+  cursor: pointer; font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400;
+  line-height: 1; color: var(--surface-muted-foreground);
+}
+.pager .pbtn { min-width: 34px; }
+.pager .pbtn:hover:not(.on), .pager .pnav:hover:not(:disabled) { background: var(--slate-50); color: var(--surface-foreground); }
+.pager .pbtn.on { background: var(--slate-100); border-color: var(--border-border); color: var(--surface-foreground); font-weight: 600; }
+.pager .pnav { color: var(--slate-400); }
+.pager .pnav svg { display: block; }
+.pager .pnav.prev svg { transform: rotate(180deg); } /* one chevron, both directions */
+.pager .pnav:disabled { opacity: 0.35; cursor: not-allowed; }
+.pager .pgap { padding: 0 var(--space-4); color: var(--slate-400); font-size: var(--text-label); }
+.pager .pbtn:focus-visible, .pager .pnav:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+
+/* ---- F. table ---- */
+.rtable { min-width: 1420px; table-layout: fixed; }
+.rtable th { height: 44px; background: var(--slate-50); }
+.rtable td { padding: 20px var(--space-16); border-bottom: 1px solid var(--slate-200); background: var(--white); vertical-align: top; }
+.rtable .col-rmc { width: 120px; }
+.rtable .col-rname { width: 200px; }
+.rtable .col-rtype { width: 120px; }
+.rtable .col-rcase { width: 200px; }
+.rtable .col-rwho { width: 120px; }
+.rtable .col-rdue { width: 128px; }
+.rtable .col-rbrief { width: 320px; }
+.rtable .col-rstatus { width: 136px; }
+.rtable .col-rnote { width: 320px; }
+
+.rtable .rtext { font-size: var(--text-body); line-height: 1.5; color: var(--surface-foreground); overflow-wrap: anywhere; }
+.rtable .emdash { font-size: var(--text-body); line-height: 1.5; color: var(--slate-400); }
+
+/* MC # — value over the sheet-row provenance line */
+.rtable .mcstack { display: flex; flex-direction: column; gap: var(--space-4); align-items: flex-start; }
+.rtable .mcval { font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
+.rtable .sheetrow {
+  display: inline-flex; align-items: center; gap: var(--space-4);
+  font-size: var(--text-label); line-height: 1.2; color: var(--slate-400); text-decoration: none;
+}
+.rtable a.sheetrow:hover { color: var(--blue-700); text-decoration: underline; }
+.rtable .sheetrow svg { display: block; flex: none; }
+
+/* TYPE / REQUESTOR chips — the Badge recipe, no interaction chrome */
+.rtable .rbadge {
+  display: inline-flex; align-items: center; border-radius: var(--radius-sm);
+  background: var(--slate-100); border: 1px solid var(--border-border); color: var(--surface-muted-foreground);
+  font-size: var(--text-label); font-weight: 600; line-height: 1.2; padding: var(--space-4) var(--space-8);
+  max-width: 100%; overflow-wrap: anywhere;
+}
+
+/* DEADLINE — read-only here; the Pipeline tab owns the W2 write */
+.rtable .nopill {
+  display: inline-flex; align-items: center; border-radius: var(--radius-sm);
+  background: transparent; border: 1px solid var(--status-destructive-strong); color: var(--status-destructive-strong);
+  font-size: var(--text-label); font-weight: 600; line-height: 1.2; padding: var(--space-4) var(--space-8);
+}
+
+/* STATUS (FR-11.3 derivation, one recipe per derived value) */
+.rtable .sbadge {
+  display: inline-flex; align-items: center; border-radius: var(--radius-sm);
+  font-size: var(--text-label); font-weight: 600; line-height: 1.2; padding: var(--space-4) 10px;
+  white-space: nowrap;
+}
+.rtable .sbadge.file { background: var(--amber-100); border: 1px solid var(--amber-500); color: var(--amber-600); }
+.rtable .sbadge.pipe { background: var(--green-50); border: 1px solid var(--green-600); color: var(--green-600); }
+.rtable .sbadge.clar { background: var(--status-destructive-light); border: 1px solid var(--status-destructive-strong); color: var(--status-destructive-strong); }
+
+/* ---- FROST NOTES (FR-11) — three display states + the inline editor ---- */
+.rtable .col-rnote .notewrap { width: 288px; max-width: 100%; }
+.notewrap .addremark2 {
+  width: 100%; height: 36px; box-sizing: border-box; padding: 0 var(--space-8); text-align: left;
+  background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
+  cursor: pointer; font-family: var(--font-sans); font-size: var(--text-label); line-height: 1; color: var(--slate-400);
+}
+.notewrap .notebox {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  font-family: var(--font-sans); font-size: var(--text-label); line-height: 1.4;
+  background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
+  padding: var(--space-8); color: var(--surface-foreground);
+}
+.notewrap .notebox.flagged { background: transparent; border: none; padding: 0; }
+.notewrap .addremark2:hover, .notewrap .notebox:not(.flagged):hover { border-color: var(--slate-300); }
+.notewrap .addremark2:focus-visible, .notewrap .notebox:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.notewrap .clarpill {
+  display: inline-flex; align-items: center; border-radius: var(--radius-sm);
+  border: 1px solid var(--red-500); color: var(--red-500);
+  font-size: var(--text-label); font-weight: 600; line-height: 1.2; padding: var(--space-4) var(--space-8);
+}
+.notewrap .clarwhy {
+  margin-top: 6px; padding-left: var(--space-8); border-left: 2px solid var(--status-destructive-strong);
+  font-size: var(--text-label); line-height: 1.4; color: var(--status-destructive-strong); overflow-wrap: anywhere;
+}
+.notewrap .clarremark { margin-top: 6px; font-size: var(--text-label); line-height: 1.4; color: var(--surface-muted-foreground); overflow-wrap: anywhere; }
+
+.noteedit { display: flex; flex-direction: column; gap: 6px; }
+.noteedit textarea {
+  font-family: var(--font-sans); font-size: var(--text-label); line-height: 1.4; color: var(--surface-foreground);
+  background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
+  padding: var(--space-8); resize: vertical; width: 100%; box-sizing: border-box;
+}
+.noteedit textarea.reason { border-color: var(--status-destructive-strong); }
+.noteedit textarea:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 0; }
+.noteedit .nchk {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--surface-foreground);
+}
+.noteedit .nsub { font-size: var(--text-caption); line-height: 1.3; color: var(--surface-muted-foreground); }
+.noteedit .nerr { font-size: var(--text-label); font-weight: 600; color: var(--status-destructive-strong); }
+.noteedit .nbtns { display: flex; justify-content: flex-end; gap: var(--space-8); }
+.noteedit .nghost, .noteedit .nsubmit {
+  cursor: pointer; font-family: var(--font-sans); font-size: var(--text-label); line-height: 1;
+  border-radius: var(--radius-sm); padding: 8px 12px 7px;
+}
+.noteedit .nghost { border: none; background: none; color: var(--surface-muted-foreground); }
+.noteedit .nghost:hover { background: var(--slate-100); color: var(--surface-foreground); }
+.noteedit .nsubmit { border: 1px solid var(--neutral-950); background: var(--neutral-950); color: var(--white); font-weight: 600; }
+.noteedit .nsubmit:hover { background: var(--slate-700); border-color: var(--slate-700); }
+
+/* ---- G. rejects callout + empty states, tokenised ---- */
+.rcallout {
+  background: var(--amber-50); border: 1px solid var(--amber-300); border-radius: 6px;
+  display: flex; flex-direction: column; gap: 6px; padding: 17px 17px 13px;
+}
+.rcallout .ctitle { display: flex; align-items: center; gap: var(--space-8); color: var(--amber-800); font-size: var(--text-body); font-weight: 600; line-height: 1.4; }
+.rcallout .ctitle svg { display: block; color: var(--amber-700); flex: none; }
+.rcallout .crow { display: flex; gap: var(--space-8); align-items: baseline; flex-wrap: wrap; font-size: var(--text-label); line-height: 1.4; color: var(--slate-700); }
+.rcallout .crow .rowtag { font-weight: 600; color: var(--amber-700); white-space: nowrap; }
+.rcallout .crow .creason { color: var(--surface-muted-foreground); }
+
+.rempty {
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-8);
+  padding: 48px var(--space-24); text-align: center;
+  border: 1px dashed var(--slate-200); border-radius: var(--radius-md); background: var(--slate-50);
+}
+.rempty strong { font-size: var(--text-subtitle); font-weight: 600; color: var(--surface-foreground); }
+.rempty span { font-size: var(--text-body); line-height: 1.5; color: var(--surface-muted-foreground); max-width: 620px; }

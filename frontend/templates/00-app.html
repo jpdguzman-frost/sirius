@@ -34,61 +34,144 @@
 
 {{#if banner}}<div class="banner">{{banner}}</div>{{/if}}
 
-<main class="view {{activeTab === 'pipeline' ? '' : 'legacybg'}}" id="view-panel" role="tabpanel" aria-labelledby="tab-{{activeTab}}">
+<main class="view {{activeTab === 'pipeline' || activeTab === 'requests' ? '' : 'legacybg'}}" id="view-panel" role="tabpanel" aria-labelledby="tab-{{activeTab}}">
 
 {{#if activeTab === 'requests'}}
   {{#if requests.length || rejects.length || requestCounts.requests}}
-    <div class="tiles">
-      <button class="tile {{#if tileOff('all')}}off{{/if}}" on-click="['setRequestFilter', 'all']"><span class="tlabel">Requests</span><span class="tvalue">{{requestCounts.requests}}</span></button>
-      <button class="tile green {{#if tileOff('filed')}}off{{/if}}" on-click="['setRequestFilter', 'filed']"><span class="tlabel">In Pipeline</span><span class="tvalue">{{requestCounts.inPipeline}}</span></button>
-      <button class="tile amber {{#if tileOff('filing')}}off{{/if}}" on-click="['setRequestFilter', 'filing']"><span class="tlabel">To File</span><span class="tvalue">{{requestCounts.forFiling}}</span></button>
-      <button class="tile red {{#if tileOff('clarification')}}off{{/if}}" on-click="['setRequestFilter', 'clarification']"><span class="tlabel">For Clarification</span><span class="tvalue">{{requestCounts.forClarification}}</span></button>
-      <button class="chip {{#if requestFilter === 'missing-deadline'}}on{{/if}}" style="align-self:center;" on-click="['setRequestFilter', 'missing-deadline']">missing deadline</button>
+  <div class="reqstack">
+    <!-- §3 breakdown stat bar — counts always from the UNFILTERED set; the
+         cards are the single-select status filter (click again clears) -->
+    <div class="rstats" role="group" aria-label="Request breakdown">
+      <div class="rstat all {{#if statOff('all')}}off{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'all' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'all']" on-keydown="['statKey', 'all']"><span class="rlabel">Requests</span><span class="rvalue">{{requestCounts.requests}}</span></div>
+      <div class="rstat green {{#if statOff('filed')}}off{{/if}} {{#if requestFilter === 'filed'}}on{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'filed' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'filed']" on-keydown="['statKey', 'filed']"><span class="rlabel">In Pipeline</span><span class="rvalue">{{requestCounts.inPipeline}}</span></div>
+      <div class="rstat amber {{#if statOff('filing')}}off{{/if}} {{#if requestFilter === 'filing'}}on{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'filing' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'filing']" on-keydown="['statKey', 'filing']"><span class="rlabel">To File</span><span class="rvalue">{{requestCounts.forFiling}}</span></div>
+      <div class="rstat red {{#if statOff('clarification')}}off{{/if}} {{#if requestFilter === 'clarification'}}on{{/if}}" role="button" tabindex="0" aria-pressed="{{requestFilter === 'clarification' ? 'true' : 'false'}}" on-click="['setRequestFilter', 'clarification']" on-keydown="['statKey', 'clarification']"><span class="rlabel">For Clarification</span><span class="rvalue">{{requestCounts.forClarification}}</span></div>
     </div>
-    <div class="scroll"><table class="grid">
-      <thead><tr><th>MC #</th><th>Deliverable</th><th>Type</th><th>Use case</th><th>Requestor</th><th>Deadline</th><th>Brief</th><th>Status</th><th>Frost notes</th></tr></thead>
-      <tbody>
-      {{#each requests as r}}
-        <tr>
-          <td class="mono">{{r.mc_number}}</td><td>{{r.name}}</td><td>{{r.asset_type}}</td><td>{{r.use_case}}</td>
-          <td class="dim">{{r.requestor}}</td><td>{{fmt(r.deadline)}}</td>
-          <td class="dim clip">{{r.brief}}</td>
-          <td><span class="badge {{r.status === 'In Pipeline' ? 'ok' : r.status === 'With Clarification' ? 'bad' : 'warn'}}">{{r.status}}</span></td>
-          <td class="notecell">
-            {{#if noteEditing === r.mc_number}}
-              <div class="note-editor" on-keydown="['noteKeydown']">
-                <textarea rows="3" placeholder="Remark" value="{{noteDraft.remark}}" autofocus></textarea>
-                <label class="chk"><input type="checkbox" checked="{{noteDraft.clarify}}" /> With Clarification</label>
-                <div class="dim subline">Marks the request as not fileable yet</div>
-                {{#if noteDraft.clarify}}<textarea rows="2" class="reason" placeholder="Reason (required)" value="{{noteDraft.reason}}"></textarea>{{/if}}
-                {{#if noteError}}<span class="badge bad">{{noteError}}</span>{{/if}}
-                <div class="editbtns"><button class="chip" on-click="['cancelNote']">Cancel</button><button class="chip primary" on-click="['submitNote', r.mc_number]">Submit</button></div>
+
+    <div class="searchbar reqsearch">{{{icon.search}}}<input name="requests-search" placeholder="Search cards or MC#" value="{{reqQ}}" lazy="250" aria-label="Search requests by card or MC number" /></div>
+
+    <!-- filter bar: four selects (options derived from the loaded rows) plus
+         the pager; every control here filters CLIENT-SIDE, one fetch per load -->
+    <div class="filterbar">
+      {{#each reqFilterDefs as f}}
+        <div class="rfilter">
+          <span class="flabel">{{f.label}}</span>
+          <div class="selwrap">
+            <button class="seltrigger {{#if f.value !== ''}}on{{/if}}" on-click="['openReqMenu', f.key]" aria-haspopup="listbox" aria-expanded="{{reqMenu === f.key ? 'true' : 'false'}}" aria-label="{{f.label}} filter">
+              <span class="selval">{{f.value === '' ? 'All' : f.value}}</span><span class="bchev"><svg class="i16"><use href="#i-badgeChevron" /></svg></span>
+            </button>
+            {{#if reqMenu === f.key}}
+              <div class="selectmenu reqmenu" role="listbox" aria-label="{{f.label}}" style="left:{{reqMenuPos.left}}px;top:{{reqMenuPos.top}}px;">
+                <div class="selecthead">{{f.label}}</div>
+                <button class="selectitem {{#if f.value === ''}}on{{/if}}" role="option" aria-selected="{{f.value === '' ? 'true' : 'false'}}" on-click="['pickReqFilter', f.key, '']">All</button>
+                {{#each f.options as o}}
+                  <button class="selectitem {{#if f.value === o}}on{{/if}}" role="option" aria-selected="{{f.value === o ? 'true' : 'false'}}" on-click="['pickReqFilter', f.key, o]">{{o}}</button>
+                {{/each}}
               </div>
-            {{else}}
-              {{#if r.note && r.note.clarify}}
-                <span class="badge bad">With Clarification</span>
-                <button class="chev" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}">✎</button>
-                <div class="clarify-reason">{{r.note.clarify_reason}}</div>
-                {{#if r.note.remark}}<div class="remarkbox">{{r.note.remark}}</div>{{/if}}
-              {{elseif r.note && r.note.remark}}
-                <div class="remarkbox">{{r.note.remark}} <button class="chev" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}">✎</button></div>
-              {{else}}
-                <button class="addremark" on-click="['openNote', r.mc_number]">Add Remarks</button>
-              {{/if}}
             {{/if}}
-          </td>
-        </tr>
+          </div>
+        </div>
       {{/each}}
-      </tbody>
-    </table></div>
+
+      {{#if reqPageCount > 1}}
+        <nav class="pager" aria-label="Requests pages">
+          <button class="pnav prev" disabled="{{reqPage <= 1}}" on-click="['reqPageStep', -1]" aria-label="Previous page"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+          {{#each reqPages as p}}
+            {{#if p.gap}}<span class="pgap" aria-hidden="true">…</span>
+            {{else}}<button class="pbtn {{#if p.n === reqPage}}on{{/if}}" aria-current="{{p.n === reqPage ? 'page' : 'false'}}" on-click="['reqGoPage', p.n]">{{p.n}}</button>{{/if}}
+          {{/each}}
+          <button class="pnav" disabled="{{reqPage >= reqPageCount}}" on-click="['reqPageStep', 1]" aria-label="Next page"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+        </nav>
+      {{/if}}
+    </div>
+
+    <div class="pscrollwrap reqwrap">
+      <div class="pscroll" on-scroll="['reqScrolled']">
+        <table class="ptable rtable">
+          <thead><tr>
+            <th class="col-rmc">MC #</th><th class="col-rname">Deliverable</th><th class="col-rtype">Type</th>
+            <th class="col-rcase">Use Case</th><th class="col-rwho">Requestor</th><th class="col-rdue">Deadline</th>
+            <th class="col-rbrief">Brief</th><th class="col-rstatus">Status</th><th class="col-rnote">Frost Notes</th>
+          </tr></thead>
+          <tbody>
+          {{#each reqRows as r}}
+            <tr>
+              <td class="col-rmc"><div class="mcstack">
+                <span class="mcval">{{{hlr(r.mc_number)}}}</span>
+                {{#if r.sheet_row}}
+                  {{#if sheetRowUrl(r.sheet_row)}}
+                    <a class="sheetrow" href="{{sheetRowUrl(r.sheet_row)}}" target="_blank" rel="noopener" title="Open row {{r.sheet_row}} in the intake sheet">row {{r.sheet_row}} {{{icon.extLink}}}</a>
+                  {{else}}
+                    <span class="sheetrow">row {{r.sheet_row}}</span>
+                  {{/if}}
+                {{/if}}
+              </div></td>
+              <td class="col-rname"><span class="rtext">{{{hlr(r.name)}}}</span></td>
+              <td class="col-rtype">{{#if r.asset_type}}<span class="rbadge">{{{hlr(r.asset_type)}}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
+              <td class="col-rcase"><span class="rtext">{{{hlr(r.use_case)}}}</span></td>
+              <td class="col-rwho">{{#if r.requestor}}<span class="rbadge">{{{hlr(r.requestor)}}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
+              <!-- invariant 14: the server resolves Trello due over sheet deadline; the tooltip names which -->
+              <td class="col-rdue">{{#if r.deadline}}<span class="rtext nowrap" title="{{r.deadline_source === 'trello' ? 'From Trello due date' : 'From intake sheet'}}">{{fmtLong(r.deadline)}}</span>{{else}}<span class="nopill">none</span>{{/if}}</td>
+              <td class="col-rbrief">{{#if r.brief}}<span class="rtext" title="{{r.brief}}">{{{hlr(clip180(r.brief))}}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
+              <td class="col-rstatus"><span class="sbadge {{r.status === 'In Pipeline' ? 'pipe' : r.status === 'With Clarification' ? 'clar' : 'file'}}">{{r.status}}</span></td>
+              <td class="col-rnote"><div class="notewrap">
+                {{#if noteEditing === r.mc_number}}
+                  <div class="noteedit" on-keydown="['noteKeydown']">
+                    <textarea rows="3" placeholder="Remark" value="{{noteDraft.remark}}" autofocus></textarea>
+                    <label class="nchk"><input type="checkbox" checked="{{noteDraft.clarify}}" /> With Clarification</label>
+                    <div class="nsub">Marks the request as not fileable yet</div>
+                    {{#if noteDraft.clarify}}<textarea rows="2" class="reason" placeholder="Reason (required)" value="{{noteDraft.reason}}"></textarea>{{/if}}
+                    {{#if noteError}}<span class="nerr">{{noteError}}</span>{{/if}}
+                    <div class="nbtns"><button class="nghost" on-click="['cancelNote']">Cancel</button><button class="nsubmit" on-click="['submitNote', r.mc_number]">Submit</button></div>
+                  </div>
+                {{elseif r.note && r.note.clarify}}
+                  <button class="notebox flagged" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}">
+                    <span class="clarpill">With Clarification</span>
+                    <span class="clarwhy">{{{hlr(r.note.clarify_reason)}}}</span>
+                    {{#if r.note.remark}}<span class="clarremark">{{{hlr(r.note.remark)}}}</span>{{/if}}
+                  </button>
+                {{elseif r.note && r.note.remark}}
+                  <button class="notebox" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}">{{{hlr(r.note.remark)}}}</button>
+                {{else}}
+                  <button class="addremark2" on-click="['openNote', r.mc_number]">Add Remarks</button>
+                {{/if}}
+              </div></td>
+            </tr>
+          {{/each}}
+          </tbody>
+        </table>
+      </div>
+      {{#if reqThumb.needed}}
+      <div class="hslider">
+        <button class="hnudge" on-click="['nudgeScroll', -1]" aria-label="Scroll table left">{{{icon.sliderLeft}}}</button>
+        <div class="htrack" on-click="['trackJump']"><div class="hthumb" style="left:{{reqThumb.left}}%;width:{{reqThumb.width}}%;"></div></div>
+        <button class="hnudge" on-click="['nudgeScroll', 1]" aria-label="Scroll table right">{{{icon.sliderRight}}}</button>
+      </div>
+      {{/if}}
+    </div>
+
+    <!-- the empty state names the real cause: filters only when rows exist to
+         hide, otherwise the sheet itself (every parsed row landed in rejects) -->
+    {{#if !reqFiltered.length}}
+      {{#if requests.length}}
+        <div class="rempty"><strong>No requests match</strong><span>Clear the search, the status card or a filter to see the other rows.</span></div>
+      {{elseif rejects.length}}
+        <div class="rempty"><strong>No usable requests</strong><span>Every row the sync read needs correction in the sheet — see the list below.</span></div>
+      {{else}}
+        <div class="rempty"><strong>No requests loaded</strong><span>Nothing came back for this project on the last intake sync.</span></div>
+      {{/if}}
+    {{/if}}
+
     {{#if rejects.length}}
-      <div class="callout"><div class="ctitle">⚠ {{rejects.length}} rows need correction in the sheet</div>
-        {{#each rejects as x}}<div class="crow"><span class="mono">row {{x.sheet_row}}</span><span>{{x.raw}}</span><span class="dim">{{x.reason}}</span></div>{{/each}}
+      <div class="rcallout">
+        <div class="ctitle">{{{icon.warning}}} {{rejects.length}} rows need correction in the sheet</div>
+        {{#each rejects as x}}<div class="crow"><span class="rowtag">row {{x.sheet_row}}</span><span>{{x.raw}}</span><span class="creason">{{x.reason}}</span></div>{{/each}}
       </div>
     {{/if}}
+  </div>
   {{else}}
-    <div class="note soft" style="flex-direction:column; align-items:center; padding:3rem;">
-      <strong style="color:var(--ink); font-size:1.05rem;">No requests loaded</strong>
+    <div class="rempty">
+      <strong>No requests loaded</strong>
       <span>The intake sheet mirror is deferred until the sheet stabilises. The sync service reads it server-side — nothing is edited here, ever.</span>
     </div>
   {{/if}}
