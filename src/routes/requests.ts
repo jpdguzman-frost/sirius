@@ -17,8 +17,10 @@
  * The note is a SINGLE freeform box (owl #15): the remark carries notes and
  * clarifications alike, so the flag requires the remark (REMARK_REQUIRED) and
  * new writes store clarify_reason null. The field stays in the accepted body
- * for API compatibility, and legacy rows keep their text — readers display
- * (remark || clarify_reason).
+ * for API compatibility (a browser still running the pre-owl-#15 bundle posts
+ * it on every flagged save), and legacy rows keep their text: the GET returns
+ * both fields verbatim and the reader joins them, so a legacy row carrying a
+ * remark AND a reason shows — and re-saves — both.
  *
  * The deadline is RESOLVED, not the sheet cell (invariant 14 / BR-9, same
  * precedence as deliverables_v): the MC group's earliest Trello due wins,
@@ -53,6 +55,23 @@ type NoteShape = { remark: string | null; clarify: boolean; clarify_reason: stri
 const noteOf = (n: { remark?: string | null; clarify?: boolean; clarify_reason?: string | null } | null): NoteShape | null =>
   n ? { remark: n.remark ?? null, clarify: Boolean(n.clarify), clarify_reason: n.clarify_reason ?? null } : null;
 
+/* The derived-status vocabulary, named ONCE on the side that owns it. The
+ * client mirrors these three strings; a rename here is one table, not nine
+ * literals scattered through the derivation, the counts and the filters. */
+const STATUS = { filed: 'In Pipeline', clarify: 'For Clarification', toFile: 'To File' } as const;
+
+type SegmentRow = { status: string; deadline: string | null };
+type Segment = (r: SegmentRow) => boolean;
+/* ONE predicate table for the ?filter= branches AND the tile counts, so the
+ * cross-cutting rule (owl #14: unfiled is NOT In Pipeline, flagged included)
+ * cannot be spelled two ways that silently drift apart. FR-3.6. */
+const SEGMENTS = {
+  filed: (r) => r.status === STATUS.filed,
+  unfiled: (r) => r.status !== STATUS.filed,
+  clarification: (r) => r.status === STATUS.clarify,
+  'missing-deadline': (r) => !r.deadline,
+} satisfies Record<string, Segment>;
+
 export function requestsRouter(): Router {
   const router = Router();
 
@@ -65,13 +84,18 @@ export function requestsRouter(): Router {
       const filter = String(req.query.filter ?? '');
 
       // every read here is flattened into plain literals below — no document
-      // methods, no virtuals, no save — so all of them are .lean()
-      const requests = await IntakeRequest.find({ project_id: projectId, active: true })
-        .sort({ sheet_row: 1 })
-        .lean();
-      const deliverables = await Deliverable.find({ project_id: projectId, active: true })
-        .select('mc_number trello_due')
-        .lean();
+      // methods, no virtuals, no save — so all of them are .lean().
+      // The five are mutually independent (each keyed on project_id alone,
+      // none consumes another's result), so they fan out in ONE round trip
+      // instead of five serial ones — only `lastGood` genuinely waits on
+      // `lastRun`. Invariant 1: project_id still filters every query.
+      const [requests, deliverables, noteRows, rejects, lastRun] = await Promise.all([
+        IntakeRequest.find({ project_id: projectId, active: true }).sort({ sheet_row: 1 }).lean(),
+        Deliverable.find({ project_id: projectId, active: true }).select('mc_number trello_due').lean(),
+        FrostNote.find({ project_id: projectId }).lean(),
+        IntakeReject.find({ project_id: projectId }).sort({ sheet_row: 1 }).lean(),
+        SyncRun.findOne({ project_id: projectId, source: 'sheet' }).sort({ at: -1 }).lean(),
+      ]);
       const filedMcs = new Set(deliverables.map((d) => d.mc_number));
       // invariant 14: earliest Trello due per MC group — date-only strings
       // compare lexicographically (mapper stores them YYYY-MM-DD)
@@ -81,18 +105,16 @@ export function requestsRouter(): Router {
         const seen = trelloDue.get(d.mc_number);
         if (seen === undefined || d.trello_due < seen) trelloDue.set(d.mc_number, d.trello_due);
       }
-      const notes = new Map(
-        (await FrostNote.find({ project_id: projectId }).lean()).map((n) => [n.mc_number, n]),
-      );
+      const notes = new Map(noteRows.map((n) => [n.mc_number, n]));
 
       let rows = requests.map((r) => {
         const note = notes.get(r.mc_number) ?? null;
         // FR-11.3: derived, never stored — pipeline wins over the flag
         const status = filedMcs.has(r.mc_number)
-          ? 'In Pipeline'
+          ? STATUS.filed
           : note?.clarify
-            ? 'For Clarification'
-            : 'To File';
+            ? STATUS.clarify
+            : STATUS.toFile;
         const due = trelloDue.get(r.mc_number) ?? null;
         const sheetDeadline = r.deadline ?? null;
         return {
@@ -113,22 +135,21 @@ export function requestsRouter(): Router {
       });
       // FR-11.5 tile counts, from the unfiltered set — cross-cutting (owl #14):
       // toFile is every unfiled row, so requests = inPipeline + toFile, and
-      // forClarification is a subset of toFile rather than a fourth bucket
+      // forClarification is a subset of toFile rather than a fourth bucket.
+      // toFile is the ARITHMETIC complement, which states that invariant in
+      // code instead of leaving two independent scans to agree by luck.
+      const inPipeline = rows.filter(SEGMENTS.filed).length;
       const counts = {
         requests: rows.length,
-        inPipeline: rows.filter((r) => r.status === 'In Pipeline').length,
-        toFile: rows.filter((r) => r.status !== 'In Pipeline').length,
-        forClarification: rows.filter((r) => r.status === 'For Clarification').length,
+        inPipeline,
+        toFile: rows.length - inPipeline,
+        forClarification: rows.filter(SEGMENTS.clarification).length,
       };
-      if (filter === 'filed') rows = rows.filter((r) => r.status === 'In Pipeline');
-      if (filter === 'unfiled') rows = rows.filter((r) => r.status !== 'In Pipeline');
-      if (filter === 'clarification') rows = rows.filter((r) => r.status === 'For Clarification');
-      if (filter === 'missing-deadline') rows = rows.filter((r) => !r.deadline);
+      // hasOwn, not a bare lookup: `?filter=__proto__` must miss the table,
+      // not reach Object.prototype
+      const seg = Object.hasOwn(SEGMENTS, filter) ? (SEGMENTS[filter as keyof typeof SEGMENTS] as Segment) : null;
+      if (seg) rows = rows.filter(seg);
 
-      const rejects = await IntakeReject.find({ project_id: projectId }).sort({ sheet_row: 1 }).lean();
-      const lastRun = await SyncRun.findOne({ project_id: projectId, source: 'sheet' })
-        .sort({ at: -1 })
-        .lean();
       const lastGood = lastRun?.ok
         ? lastRun
         : await SyncRun.findOne({ project_id: projectId, source: 'sheet', ok: true })

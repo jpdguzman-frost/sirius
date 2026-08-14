@@ -8,7 +8,8 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
-import { loggedInProjectFixture, type TestAgent } from './helpers/fixtures.ts';
+import { loggedInProjectFixture } from './helpers/fixtures.ts';
+import { byMc, rowsOf } from './helpers/requests.ts';
 import type { Types } from 'mongoose';
 import { Deliverable, IntakeRequest, Project } from '../src/models/index.ts';
 
@@ -21,14 +22,6 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearCollections();
 });
-
-interface Row {
-  mc_number: string;
-  deadline: string | null;
-  deadline_source: string | null;
-  year: number | null;
-  month: string | null;
-}
 
 const fixture = loggedInProjectFixture;
 
@@ -44,12 +37,6 @@ const card = (projectId: Types.ObjectId, mc: string, id: string, over: Record<st
     name: `Card ${id}`,
     ...over,
   });
-
-const rowsOf = async (agent: TestAgent, projectId: Types.ObjectId, query = ''): Promise<Row[]> => {
-  const res = await agent.get(`/api/projects/${projectId}/requests${query}`).expect(200);
-  return res.body.requests as Row[];
-};
-const byMc = (rows: Row[], mc: string) => rows.find((r) => r.mc_number === mc)!;
 
 describe('resolved deadline (invariant 14)', () => {
   it('a filed deliverable carrying trello_due beats the sheet date', async () => {

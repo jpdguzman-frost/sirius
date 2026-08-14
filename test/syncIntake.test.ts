@@ -7,6 +7,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
+import { getRequests, mcsOf } from './helpers/requests.ts';
 import { runIntakeSync, syncIntakeRows } from '../worker/syncIntake.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
@@ -123,16 +124,16 @@ describe('requests route (FR-3.2, FR-3.3, FR-3.6, FR-8.6)', () => {
     const agent = request.agent(app);
     await agent.post('/__test/login').send({ userId: String(user._id), email: user.email }).expect(200);
 
-    const all = await agent.get(`/api/projects/${p._id}/requests`).expect(200);
+    const all = await getRequests(agent, p._id);
     // FR-11.3 (owls #13–#15, 2026-08-14): three-state — no note on these, so unfiled = To File
-    expect(all.body.requests.map((r: { status: string }) => r.status)).toEqual(['In Pipeline', 'To File']);
-    expect(all.body.counts).toEqual({ requests: 2, inPipeline: 1, toFile: 1, forClarification: 0 });
-    expect(all.body.sync.lastAttemptOk).toBe(true);
-    expect(all.body.sync.lastSuccessAt).toBeTruthy();
+    expect(all.requests.map((r) => r.status)).toEqual(['In Pipeline', 'To File']);
+    expect(all.counts).toEqual({ requests: 2, inPipeline: 1, toFile: 1, forClarification: 0 });
+    expect(all.sync.lastAttemptOk).toBe(true);
+    expect(all.sync.lastSuccessAt).toBeTruthy();
 
-    const unfiled = await agent.get(`/api/projects/${p._id}/requests?filter=unfiled`).expect(200);
-    expect(unfiled.body.requests.length).toBe(1);
-    const missing = await agent.get(`/api/projects/${p._id}/requests?filter=missing-deadline`).expect(200);
-    expect(missing.body.requests.map((r: { mc_number: string }) => r.mc_number)).toEqual(['MC-702']);
+    const unfiled = await getRequests(agent, p._id, '?filter=unfiled');
+    expect(unfiled.requests.length).toBe(1);
+    const missing = await getRequests(agent, p._id, '?filter=missing-deadline');
+    expect(mcsOf(missing.requests)).toEqual(['MC-702']);
   });
 });

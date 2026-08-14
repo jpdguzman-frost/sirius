@@ -21,10 +21,17 @@ const REQUEST_SEGMENTS = {
   clarification: (r) => r.status === STATUS_CLARIFY,
 };
 /* A frost note is ONE freeform text (owl #15). Rows written before that ruling
-   can still hold their text in clarify_reason with an empty remark, so every
+   can still hold their text in clarify_reason — with an empty remark OR
+   alongside one, because the two-box editor let a writer fill both — so every
    place that shows, searches or edits a note resolves it through this ONE
-   helper — no call site has to remember the legacy fallback. */
-const noteText = (n) => (n && (n.remark || n.clarify_reason)) || '';
+   helper, which JOINS what it finds rather than picking a winner. Dropping to
+   (remark || clarify_reason) would hide the legacy reason, keep it out of the
+   search blob, and let the next Submit overwrite it with the remark alone. */
+const noteText = (n) => {
+  if (!n) return '';
+  const parts = [n.remark, n.clarify_reason].map((t) => String(t || '').trim()).filter(Boolean);
+  return [...new Set(parts)].join(' — ');
+};
 const REQ_PAGE_SIZE = 10;
 /* the filter select box (25-requests.css .selectmenu.reqmenu) — its WIDTH is
    fixed but its height is content-derived, so 264 is the max-height cap, not
@@ -78,9 +85,25 @@ function monthShort(raw) {
   const short = MONTHS_SHORT.findIndex((m) => m.toLowerCase() === lower);
   return short >= 0 ? MONTHS_SHORT[short] : s;
 }
-/* 0-11 for anything monthShort recognises, -1 otherwise — the one place
-   month order is decided, for both the option list and the row sort. */
-const monthIndex = (raw) => MONTHS_SHORT.indexOf(monthShort(raw));
+/* 0-11 for anything monthShort recognises, null otherwise — THE one place
+   month order is decided, for the option list, the row sort and the default
+   order alike. null rather than a sentinel, because an unreadable month is
+   UNRANKED, which every comparator below already knows how to place. */
+const monthOrder = (raw) => {
+  const i = MONTHS_SHORT.indexOf(monthShort(raw));
+  return i < 0 ? null : i;
+};
+
+/* ---- the comparators every Requests list shares ------------------------- */
+const alphaSort = (a, b) => String(a).localeCompare(String(b));
+const numCmp = (a, b) => a - b;
+const ciCmp = (a, b) => String(a).toLowerCase().localeCompare(String(b).toLowerCase());
+/* A missing value is not "small" — it is UNRANKED, so it lands last whichever
+   direction the arrow points. Every comparator below routes its nulls here
+   rather than inventing a sentinel that would flip with the direction. */
+const unranked = (v) => v === null || v === undefined || v === '';
+// months sort by CALENDAR order; a name the sheet invents falls to the end
+const monthRank = (m) => monthOrder(m) ?? MONTHS_SHORT.length;
 
 /* ONE table for the four Requests selects — the Ractive state key IS the def
    key, so nothing has to translate between them. Everything that would
@@ -88,86 +111,68 @@ const monthIndex = (raw) => MONTHS_SHORT.indexOf(monthShort(raw));
    option lists, the observer that resets the pager, the project-switch
    reset) is driven from here: a fifth filter is one row, not five edits that
    silently drift out of step. Options are always derived from the LOADED
-   rows, never hardcoded, so a sheet that gains a type needs no code change. */
-const alphaSort = (a, b) => String(a).localeCompare(String(b));
-// months sort by CALENDAR order; a name the sheet invents falls to the end
-const monthRank = (m) => {
-  const i = monthIndex(m);
-  return i < 0 ? MONTHS_SHORT.length : i;
-};
-/* `canon` normalises the raw cell into the value the option list SHOWS and the
-   comparison tests, so an encoding change in the sheet cannot desynchronise
-   the two. Identity everywhere the raw value is already canonical. */
-const identity = (v) => v;
+   rows, never hardcoded, so a sheet that gains a type needs no code change.
+   `pick` returns the CANONICAL value — the one the option list shows AND the
+   one the comparison tests — so an encoding change in the sheet cannot
+   desynchronise the two, and 'August', 'Aug' and 8 are one option. */
 const REQ_FILTERS = [
-  { key: 'reqYear', label: 'Year', pick: (r) => r.year, canon: identity, sort: (a, b) => a - b },
-  { key: 'reqMonth', label: 'Month', pick: (r) => r.month, canon: monthShort, sort: (a, b) => monthRank(a) - monthRank(b) || alphaSort(a, b) },
-  { key: 'reqType', label: 'Type', pick: (r) => r.asset_type, canon: identity, sort: alphaSort },
-  { key: 'reqRequestor', label: 'Requestor', pick: (r) => r.requestor, canon: identity, sort: alphaSort },
+  { key: 'reqYear', label: 'Year', pick: (r) => r.year, sort: numCmp },
+  { key: 'reqMonth', label: 'Month', pick: (r) => monthShort(r.month), sort: (a, b) => monthRank(a) - monthRank(b) || alphaSort(a, b) },
+  { key: 'reqType', label: 'Type', pick: (r) => r.asset_type, sort: alphaSort },
+  { key: 'reqRequestor', label: 'Requestor', pick: (r) => r.requestor, sort: alphaSort },
 ];
 const reqFilterKeys = REQ_FILTERS.map((f) => f.key);
 const reqFiltersCleared = () => Object.fromEntries(reqFilterKeys.map((k) => [k, '']));
 
-/* ---- Requests column sorting (owl #18) ----------------------------------
-   ONE table drives the header cells AND the comparators: a column is sortable
-   exactly when it names a sort key, so Brief and Frost Notes are unsortable by
-   having none, and the template never enumerates columns twice. Widths live in
-   25-requests.css keyed on the same class. */
-const REQ_COLS = [
-  { cls: 'col-ryear', label: 'Year', sort: 'year' },
-  { cls: 'col-rmonth', label: 'Month', sort: 'month' },
-  { cls: 'col-rmc', label: 'MC #', sort: 'mc' },
-  { cls: 'col-rname', label: 'Deliverable', sort: 'name' },
-  { cls: 'col-rtype', label: 'Type', sort: 'type' },
-  { cls: 'col-rcase', label: 'Use Case', sort: 'case' },
-  { cls: 'col-rwho', label: 'Requestor', sort: 'who' },
-  { cls: 'col-rdue', label: 'Deadline', sort: 'due' },
-  { cls: 'col-rbrief', label: 'Brief', sort: '' },
-  { cls: 'col-rstatus', label: 'Status', sort: 'status' },
-  { cls: 'col-rnote', label: 'Frost Notes', sort: '' },
-];
-
-/* A missing value is not "small" — it is UNRANKED, so it lands last whichever
-   direction the arrow points. Every comparator below routes its nulls here
-   rather than inventing a sentinel that would flip with the direction. */
-const unranked = (v) => v === null || v === undefined || v === '';
-function cmpNullsLast(av, bv, cmp) {
-  const an = unranked(av);
-  const bn = unranked(bv);
-  if (an || bn) return an && bn ? 0 : an ? 1 : -1;
-  return cmp(av, bv);
-}
-const numCmp = (a, b) => a - b;
-const ciCmp = (a, b) => String(a).toLowerCase().localeCompare(String(b).toLowerCase());
 /* MC # sorts NATURALLY — on the number inside the label, so MC-9 precedes
    MC-10 where a string compare would not. mc_number is 'MC-825'; a human
-   display_id ('MC-655.3') keeps its fractional part rather than truncating. */
+   display_id ('MC-655.3') keeps its fractional part rather than truncating.
+   Computed once per load (blobRequests), never inside the comparator. */
 const mcRank = (r) => {
   const m = String(r.mc_number || '').match(/\d+(?:\.\d+)?/);
   return m ? Number(m[0]) : null;
 };
-const REQ_SORT_COLS = {
-  year: { val: (r) => r.year, cmp: numCmp },
-  month: { val: (r) => (monthIndex(r.month) < 0 ? null : monthIndex(r.month)), cmp: numCmp },
-  mc: { val: mcRank, cmp: numCmp },
-  name: { val: (r) => r.name, cmp: ciCmp },
-  type: { val: (r) => r.asset_type, cmp: ciCmp },
-  case: { val: (r) => r.use_case, cmp: ciCmp },
-  who: { val: (r) => r.requestor, cmp: ciCmp },
+
+/* ---- Requests columns + sorting (owl #18) -------------------------------
+   ONE table drives the header cells AND the comparators — the sort-key lookup
+   is DERIVED from this list, so a key can never exist in one and not the
+   other. A column is sortable exactly when it names a sort key, so Brief and
+   Frost Notes are unsortable by having none, and the template never
+   enumerates columns twice. Widths live in 25-requests.css keyed on the same
+   class. `val` reads the row's precomputed sort keys where deriving one costs
+   string work (see blobRequests) — the comparator itself allocates nothing. */
+const REQ_COLS = [
+  { cls: 'col-ryear', label: 'Year', sort: 'year', val: (r) => r.year, cmp: numCmp },
+  { cls: 'col-rmonth', label: 'Month', sort: 'month', val: (r) => r._monthIdx, cmp: numCmp },
+  { cls: 'col-rmc', label: 'MC #', sort: 'mc', val: (r) => r._mcRank, cmp: numCmp },
+  { cls: 'col-rname', label: 'Deliverable', sort: 'name', val: (r) => r.name, cmp: ciCmp },
+  { cls: 'col-rtype', label: 'Type', sort: 'type', val: (r) => r.asset_type, cmp: ciCmp },
+  { cls: 'col-rcase', label: 'Use Case', sort: 'case', val: (r) => r.use_case, cmp: ciCmp },
+  { cls: 'col-rwho', label: 'Requestor', sort: 'who', val: (r) => r.requestor, cmp: ciCmp },
   // ISO 'YYYY-MM-DD' compares chronologically as a plain string
-  due: { val: (r) => r.deadline, cmp: (a, b) => String(a).localeCompare(String(b)) },
-  status: { val: (r) => r.status, cmp: ciCmp },
-};
+  { cls: 'col-rdue', label: 'Deadline', sort: 'due', val: (r) => r.deadline, cmp: alphaSort },
+  { cls: 'col-rbrief', label: 'Brief', sort: '' },
+  { cls: 'col-rstatus', label: 'Status', sort: 'status', val: (r) => r.status, cmp: ciCmp },
+  { cls: 'col-rnote', label: 'Frost Notes', sort: '' },
+];
+const REQ_SORT_COLS = Object.fromEntries(REQ_COLS.filter((c) => c.sort).map((c) => [c.sort, c]));
+
 /* Final tiebreak for EVERY sort, so equal keys never reshuffle between renders
    — sheet_row is the intake sheet's own order and is unique per project. */
 const sheetRowAsc = (a, b) => (a.sheet_row || 0) - (b.sheet_row || 0);
+/* Descending, with the unranked sinking either way — the shape the default
+   order needs on both of its legs. */
+function descNullsLast(av, bv) {
+  const an = unranked(av);
+  const bn = unranked(bv);
+  if (an || bn) return an && bn ? 0 : an ? 1 : -1;
+  return bv - av;
+}
 /* Default (and the 'clear' third click): newest-filed first — year desc, then
    calendar month desc, then the later sheet row. Rows the sheet left undated
    sit at the bottom instead of leading the list. */
 const reqDefaultOrder = (a, b) =>
-  cmpNullsLast(a.year, b.year, (x, y) => y - x) ||
-  cmpNullsLast(REQ_SORT_COLS.month.val(a), REQ_SORT_COLS.month.val(b), (x, y) => y - x) ||
-  (b.sheet_row || 0) - (a.sheet_row || 0);
+  descNullsLast(a.year, b.year) || descNullsLast(a._monthIdx, b._monthIdx) || -sheetRowAsc(a, b);
 /* asc/desc flips the VALUE comparison only. The nulls-last verdict and the
    sheet_row tiebreak are computed outside the sign, which is the whole reason
    an empty cell cannot rise to the top when the arrow turns over. An unknown
@@ -326,6 +331,10 @@ const app = new Ractive({
     fmtLong: fmtLongIso,
     fmtInstant,
     monthShort,
+    /* the derived-status names the template compares against — the constants
+       above, never re-typed as literals in the markup (owls #13–#15) */
+    statusFiled: STATUS_FILED,
+    statusClarify: STATUS_CLARIFY,
     // §3 brief cell: the STRING truncates at 180, the full text stays in title=
     clip180: (s) => {
       const t = String(s ?? '');
@@ -381,18 +390,16 @@ const app = new Ractive({
       const seg = REQUEST_SEGMENTS[this.get('requestFilter')] || null;
       const q = (this.get('reqQ') || '').trim().toLowerCase();
       // '' = All. Every other value came out of the option list built from
-      // these same rows THROUGH THE SAME canon, so comparing string forms is
+      // these same rows THROUGH THE SAME pick, so comparing string forms is
       // the same test as comparing the raw values — it covers the numeric year
       // and it is what makes a Month picked as 'Aug' match a row storing
       // 'August' or 8.
-      const picks = REQ_FILTERS.map((f) => ({ pick: f.pick, canon: f.canon, want: this.get(f.key) })).filter(
-        (p) => p.want !== '',
-      );
+      const picks = REQ_FILTERS.map((f) => ({ pick: f.pick, want: this.get(f.key) })).filter((p) => p.want !== '');
       return this.get('requests').filter(
         (r) =>
           (!seg || seg(r)) &&
           (!q || (r.blob || '').includes(q)) &&
-          picks.every((p) => String(p.canon(p.pick(r))) === String(p.want)),
+          picks.every((p) => String(p.pick(r)) === String(p.want)),
       );
     },
     /* Sorting runs over the FULL filtered set, never the visible page: the
@@ -408,9 +415,11 @@ const app = new Ractive({
     // click wiring live in ONE place in the template
     reqStats() {
       const c = this.get('requestCounts');
-      // labels literal-uppercase like the Pipeline metrics — one shared recipe
+      // labels literal-uppercase like the Pipeline metrics — one shared recipe.
+      // REQUESTS takes .metric's default colour, so it names no colourway:
+      // green/amber/red are the complete set.
       return [
-        { key: 'all', cls: 'all', label: 'REQUESTS', value: c.requests },
+        { key: 'all', cls: '', label: 'REQUESTS', value: c.requests },
         { key: 'filed', cls: 'green', label: 'IN PIPELINE', value: c.inPipeline },
         { key: 'filing', cls: 'amber', label: 'TO FILE', value: c.toFile },
         { key: 'clarification', cls: 'red', label: 'FOR CLARIFICATION', value: c.forClarification },
@@ -445,9 +454,9 @@ const app = new Ractive({
         key: f.key,
         label: f.label,
         value: this.get(f.key),
-        // canonicalised BEFORE the dedupe, so 'August', 'Aug' and 8 collapse
-        // into the one option the comparison will match
-        options: [...new Set(rows.map((r) => f.canon(f.pick(r))))].filter((v) => !unranked(v)).sort(f.sort),
+        // pick canonicalises BEFORE the dedupe, so 'August', 'Aug' and 8
+        // collapse into the one option the comparison will match
+        options: [...new Set(rows.map((r) => f.pick(r)))].filter((v) => !unranked(v)).sort(f.sort),
       }));
     },
     weekCols() {
@@ -850,23 +859,59 @@ async function loadAll() {
   }
 }
 
-/* §3 search: one blob per request row, computed once per load — MC#, name,
-   use case, requestor, type, brief and the frost note's ONE resolved text, so
-   the filter and the highlighter agree on what counts as a match. */
+/* §3 search text for one request row — MC#, name, use case, requestor, type,
+   brief and the frost note's ONE resolved text, so the filter and the
+   highlighter agree on what counts as a match. Anything that changes a row's
+   note rebuilds this, or the two stop agreeing. */
+const requestBlob = (r) =>
+  `${r.mc_number || ''} ${r.name || ''} ${r.use_case || ''} ${r.requestor || ''} ${r.asset_type || ''} ${r.brief || ''} ${noteText(r.note)}`.toLowerCase();
+/* One pass per load: the search blob plus the two sort keys whose derivation
+   costs string work (month canonicalisation, the MC# regex). Both are pure
+   functions of payload fields the client never edits, so computing them here
+   is O(n) instead of O(n log n) inside the comparator — and EVERY assignment
+   to `requests` goes through this function, so no row reaches a comparator
+   without them. */
 function blobRequests(rows) {
   rows.forEach((r) => {
-    r.blob = `${r.mc_number || ''} ${r.name || ''} ${r.use_case || ''} ${r.requestor || ''} ${r.asset_type || ''} ${r.brief || ''} ${noteText(r.note)}`.toLowerCase();
+    r.blob = requestBlob(r);
+    r._monthIdx = monthOrder(r.month);
+    r._mcRank = mcRank(r);
   });
   return rows;
 }
 
+/* An open note editor is keyed on mc_number ALONE and renders only where its
+   row is on the VISIBLE page, so a sort, a filter or the search can carry that
+   row off-screen while noteEditing stays set: the editor silently disappears
+   and the NEXT openNote overwrites the draft with another row's text.
+   Dismissing it here keeps "open" and "visible" the same thing, and an unsaved
+   draft says so rather than vanishing. switchProject clears the same three
+   keys, for the neighbouring reason (a draft must not follow the reader into
+   another project's same-numbered row). */
+function closeNoteEditor() {
+  const mc = app.get('noteEditing');
+  if (!mc) return;
+  const d = app.get('noteDraft') || {};
+  const row = app.get('requests').find((x) => x.mc_number === mc);
+  const saved = (row && row.note) || null;
+  const dirty = (d.remark || '').trim() !== noteText(saved) || !!d.clarify !== !!(saved && saved.clarify);
+  app.set({ noteEditing: null, noteDraft: { remark: '', clarify: false }, noteError: '' });
+  if (dirty) flashBanner(`The note on ${mc} was not saved — the table re-ordered before Submit.`);
+}
+
 /* Any filter OR sort change starts the pager over — page 4 of the old order is
-   not page 4 of the new one. One observer owns that rule, so the sort handler
-   does not repeat it. A reload only clamps the pager, so saving a note does not
-   yank the reader back to page 1. */
-app.observe(`reqQ requestFilter reqSortKey reqSortDir ${reqFilterKeys.join(' ')}`, () => app.set('reqPage', 1), {
-  init: false,
-});
+   not page 4 of the new one — and closes the note editor, which the new order
+   may have moved out of sight. One observer owns both rules, so the sort
+   handler repeats neither. A reload only clamps the pager, so saving a note
+   does not yank the reader back to page 1. */
+app.observe(
+  `reqQ requestFilter reqSortKey reqSortDir ${reqFilterKeys.join(' ')}`,
+  () => {
+    app.set('reqPage', 1);
+    closeNoteEditor();
+  },
+  { init: false },
+);
 app.observe('requests', () => {
   const last = app.get('reqPageCount');
   if (app.get('reqPage') > last) app.set('reqPage', last);
@@ -1033,8 +1078,8 @@ app.on({
   openNote(_ctx, mc) {
     const r = app.get('requests').find((x) => x.mc_number === mc);
     const n = (r && r.note) || null;
-    // a legacy clarify_reason opens IN the single box, so Submit rewrites it
-    // as the remark instead of dropping it
+    // legacy text opens IN the single box — reason, remark, or the two joined
+    // — so Submit rewrites all of it as the remark instead of dropping half
     app.set({
       noteEditing: mc,
       noteDraft: { remark: noteText(n), clarify: !!(n && n.clarify) },
@@ -1057,15 +1102,25 @@ app.on({
     }
     const idx = app.get('requests').findIndex((x) => x.mc_number === mc);
     const row = app.get(`requests.${idx}`);
-    const prev = { note: row.note, status: row.status };
+    const prev = { note: row.note, status: row.status, blob: row.blob };
     // clarify_reason is legacy-only — a new write always nulls it
     const note = remark === null && !d.clarify ? null : { remark, clarify: d.clarify, clarify_reason: null };
-    // optimistic: status is derived — mirror the server's derivation (FR-11.3)
-    app.set(`requests.${idx}.note`, note);
-    if (row.status !== STATUS_FILED) {
-      app.set(`requests.${idx}.status`, d.clarify ? STATUS_CLARIFY : STATUS_TO_FILE);
-    }
-    app.set({ noteEditing: null, noteError: '' });
+    /* Optimistic, in ONE set — three keypaths, one runloop flush, so the
+       filter, the sort and the option lists recompute once instead of thrice
+       and no frame renders the new note against the old badge. status is
+       derived, so it mirrors the server's derivation (FR-11.3); the search
+       blob is REBUILT, or the filter (which reads blob) and the cell (which
+       reads the note) disagree until the next successful load — and the
+       refetch below is explicitly allowed to fail. */
+    app.set({
+      [`requests.${idx}.note`]: note,
+      [`requests.${idx}.blob`]: requestBlob({ ...row, note }),
+      ...(row.status !== STATUS_FILED
+        ? { [`requests.${idx}.status`]: d.clarify ? STATUS_CLARIFY : STATUS_TO_FILE }
+        : {}),
+      noteEditing: null,
+      noteError: '',
+    });
     // ONLY the write is inside the rollback: once the PUT resolves the server
     // holds the note and has audited it (invariant 10), so a failed refresh is
     // staleness, never a reason to revert a row the database already has.
@@ -1074,8 +1129,11 @@ app.on({
         remark, clarify: d.clarify,
       });
     } catch (err) {
-      app.set(`requests.${idx}.note`, prev.note);
-      app.set(`requests.${idx}.status`, prev.status);
+      app.set({
+        [`requests.${idx}.note`]: prev.note,
+        [`requests.${idx}.status`]: prev.status,
+        [`requests.${idx}.blob`]: prev.blob,
+      });
       flashBanner(`Note save failed — reverted. ${errText(err)}`);
       return;
     }

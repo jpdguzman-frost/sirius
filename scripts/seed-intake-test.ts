@@ -50,20 +50,36 @@ const filedMcs = (await Deliverable.distinct('mc_number', { project_id: project.
   .slice(0, 4);
 console.log(`[seed-intake] ${CODE}: joining ${filedMcs.length} existing MC group(s): ${filedMcs.join(', ') || '(none)'}`);
 
-const HEADER = ['MC #', 'Deliverable', 'Type', 'Use Case', 'Type', 'Requestor', 'Deadline', 'Brief', 'In Frost Prod'];
-const row = (mc: string, name: string, deadline: string, brief = 'Synthetic fixture brief — no client content') => [
-  mc, name, 'Static', 'Team testing', 'Web', 'fixtures@frostdesigngroup.com', deadline, brief, 'TRUE',
-];
+/* Year and Month are the sheet's own filing-period columns. They are seeded
+   deliberately MIXED — a full name, a 1-12 number, an abbreviation — because
+   the live sheet's encoding is not known until the credential lands and the
+   Requests tab canonicalises all three onto one value (monthShort). Two years
+   and several months are what give the YEAR/MONTH filters more than an 'All'
+   option, the column sorts something to move, and the default newest-filed
+   order a visible effect. One row leaves both blank, for the em-dash cell and
+   the unranked-last rule. Invariant 16: this fixture is the only way any of
+   that is exercisable. */
+const HEADER = ['MC #', 'Deliverable', 'Type', 'Use Case', 'Type', 'Requestor', 'Year', 'Month', 'Deadline', 'Brief', 'In Frost Prod'];
+const row = (
+  mc: string, name: string, deadline: string, year: string, month: string,
+  brief = 'Synthetic fixture brief — no client content',
+) => [mc, name, 'Static', 'Team testing', 'Web', 'fixtures@frostdesigngroup.com', year, month, deadline, brief, 'TRUE'];
+
+// period per filed row, cycling the three encodings the parser passes through raw
+const PERIODS = [['2026', 'August'], ['2026', '9'], ['2025', 'Jul'], ['2026', 'October']];
 
 const rows: string[][] = [HEADER];
 // filed rows → 'In Pipeline'; their deadlines join onto the MC group (AC-8 shape)
-filedMcs.forEach((mc, i) => rows.push(row(mc, `Filed fixture ${i + 1}`, `2026-09-${String(10 + i).padStart(2, '0')}`)));
+filedMcs.forEach((mc, i) => {
+  const [year, month] = PERIODS[i % PERIODS.length]!;
+  rows.push(row(mc, `Filed fixture ${i + 1}`, `2026-09-${String(10 + i).padStart(2, '0')}`, year!, month!));
+});
 // unfiled rows → 'To File'; targets for frost-note testing (flag → 'For Clarification')
-rows.push(row('MC-9101', 'Unfiled fixture — flag me for clarification', '2026-09-18'));
-rows.push(row('MC-9102', 'Unfiled fixture — add a remark to me', '2026-09-21'));
-rows.push(row('MC-9103', 'Unfiled fixture — plain', '2026-09-25'));
-rows.push(row('MC-9104', 'Unfiled fixture — no deadline (missing-deadline filter)', ''));
-rows.push(['', 'Broken fixture row — lands in the corrections panel', 'Static', 'Team testing', 'Web', 'fixtures@frostdesigngroup.com', '2026-09-30', 'no MC number', 'TRUE']);
+rows.push(row('MC-9101', 'Unfiled fixture — flag me for clarification', '2026-09-18', '2026', 'September'));
+rows.push(row('MC-9102', 'Unfiled fixture — add a remark to me', '2026-09-21', '2026', '8'));
+rows.push(row('MC-9103', 'Unfiled fixture — plain', '2026-09-25', '2025', 'December'));
+rows.push(row('MC-9104', 'Unfiled fixture — no deadline (missing-deadline filter)', '', '', ''));
+rows.push(['', 'Broken fixture row — lands in the corrections panel', 'Static', 'Team testing', 'Web', 'fixtures@frostdesigngroup.com', '2026', 'September', '2026-09-30', 'no MC number', 'TRUE']);
 
 const stats = await syncIntakeRows(project._id, rows);
 console.log('[seed-intake] done:', JSON.stringify(stats));

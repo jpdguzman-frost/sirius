@@ -15,9 +15,11 @@
 .rstats { margin-bottom: var(--space-8); } /* + the reqstack 16px gap = the pipeline's 24px below the hairline */
 .rstat {
   /* button reset that PRESERVES .metric's bottom hairline; UA buttons also
-     default align-items to flex-start where a div would stretch */
+     default align-items to flex-start where a div would stretch. The 24px
+     below the value is .metrics .metric's, at higher specificity — restating
+     it here would be a second copy of a number this rule does not own. */
   background: transparent; border-top: 0; border-left: 0; border-right: 0;
-  padding: 0 0 var(--space-24); align-items: stretch;
+  padding: 0; align-items: stretch;
   font-family: var(--font-sans); text-align: left; cursor: pointer;
 }
 .rstat:hover { background: var(--slate-50); }
@@ -149,7 +151,9 @@
 .rtable .sbadge { padding: var(--space-4) 10px; white-space: nowrap; }
 .rtable .sbadge.file { background: var(--amber-100); border: 1px solid var(--amber-500); color: var(--amber-600); }
 .rtable .sbadge.pipe { background: var(--green-50); border: 1px solid var(--green-500); color: var(--green-500); }
-.rtable .sbadge.clar { background: var(--red-50); border: 1px solid var(--red-500); color: var(--red-500); }
+/* ONE clarification colourway for the status badge and the note-cell pill —
+   owl #17's retune had to be applied twice because they were two rules */
+.rtable .sbadge.clar, .notewrap .clarpill { background: var(--red-50); border: 1px solid var(--red-500); color: var(--red-500); }
 
 /* ---- FROST NOTES (FR-11) — three display states + the inline editor ---- */
 .rtable .col-rnote .notewrap { width: 100%; }
@@ -172,6 +176,7 @@
    SPANs (they live inside a <button>), so each is told to be a block — inline
    boxes drop margin-top. NOTHING here truncates or fixes a height: the note
    wraps to whatever the text needs. ---- */
+/* the pill's GEOMETRY only — its colourway is grouped with the status badge */
 .notewrap .clarpill {
   height: 25px; padding: 0 var(--space-8); box-sizing: border-box;
   /* it inherits inline-flex from the badge geometry above, so it rides the
@@ -179,13 +184,12 @@
      alignment makes the line box exactly the badge's 25px, so .clarnote's
      margin is the frame's 20px gap and not 25 */
   vertical-align: top;
-  background: var(--red-50); border: 1px solid var(--red-500); color: var(--red-500);
 }
 .notewrap .clarnote {
   display: block; width: 100%; box-sizing: border-box; margin-top: 20px;
   padding: var(--space-8) var(--space-8) var(--space-8) 11px;
-  border: 1px solid var(--red-500); border-radius: 0; /* square in the frame */
-  font-size: var(--text-label); font-weight: 400; line-height: 1.4; white-space: normal;
+  border: 1px solid var(--red-500);
+  font-size: var(--text-label); line-height: 1.4;
   color: var(--red-600); overflow-wrap: anywhere;
 }
 
