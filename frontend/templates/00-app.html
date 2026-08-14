@@ -365,8 +365,8 @@
   {{! Planner toolbar — owl #21 / node 94:4828. Three sections in one row:
       the time range picker, cards-per-week, and the functionality container.
       Every handler here is the one that was already wired; only the chrome is
-      new. The phase legend and the unavoidable-mix banner below stay on the
-      legacy recipe — this pass tokenises the toolbar and nothing else. }}
+      new. The unavoidable-mix banner below stays on the legacy recipe; the
+      phase legend now lives with the planner body (35-gantt.css, .glegend). }}
   <div class="ptoolbar">
     <div class="trpicker">
       <button class="rangenav" on-click="['weekShiftView', -1]" aria-label="Previous week"><svg class="i16 flipx" aria-hidden="true"><use href="#i-rowChevron" /></svg></button>
@@ -394,71 +394,141 @@
       <button class="fnbtn primary" on-click="['runSuggest']"><svg class="i16" aria-hidden="true"><use href="#i-sparkle" /></svg>Suggest plan</button>
       <button class="fnbtn ghost" on-click="['openSprints']"><svg class="i16" aria-hidden="true"><use href="#i-calendar" /></svg>Sprints</button>
       {{#if suggest}}
-        <button class="fnbtn accept" on-click="['acceptSuggest']">Accept {{suggestCount}} moves</button>
+        {{#if suggestOffWeeks.length}}
+          <button class="fnbtn accept" disabled title="The proposed weeks are not Mondays — accepting would corrupt the slotted weeks.">Accept blocked</button>
+        {{else}}
+          <button class="fnbtn accept" on-click="['acceptSuggest']">Accept {{suggestCount}} moves</button>
+        {{/if}}
         <button class="fnbtn discard" on-click="['clearSuggest']">Discard</button>
       {{/if}}
       <span class="fnnote">Grab a row to reslot it. Pinned rows are never moved by a suggestion.</span>
     </div>
   </div>
 
-  <div class="toolbar">
-    <span class="legend">
-      <span><span class="sw sketch"></span>Sketch</span>
-      <span><span class="sw review"></span>Review</span>
-      <span><span class="sw render"></span>Render</span>
-      <span><span class="sw latebar"></span>Render past deadline</span>
-      <span><span class="sw dl"></span>Client deadline</span>
-    </span>
-  </div>
-  {{#if suggest && suggest.unavoidable}}
-    <div class="conflict over-capacity"><span class="ctag">Unachievable mix</span> — {{pct(suggest.backlogHardShare)}} of unpinned deliverables are Hard, against a historical ceiling of {{pct(hardCeiling)}}. No arrangement of these weeks can stay under it, so the plan spreads hard work as evenly as possible instead.</div>
+  {{! The guard, not the repair: buildWeeks() keys off a local-midnight Monday
+      through toISOString(), so on a Manila host /suggest proposes the Sunday
+      before every week. Those weeks draw no ghost bar and, if accepted, drop
+      the rows out of their sprint and blank the capacity footer. lib/** is
+      frozen — this says so out loud and blocks Accept until JP rules. }}
+  {{#if suggestOffWeeks.length}}
+    <div class="conflict over-capacity"><span class="ctag">Suggestion blocked</span> — {{suggestOffWeeksText}}. Nothing can be applied without corrupting the slotted weeks, so Accept is disabled; discard the plan. The week-key defect in lib/calendar.ts is logged in the frame notes and needs a decision.</div>
   {{/if}}
 
-  <div class="scroll"><table class="grid sched">
-    <thead>
-      <tr class="gheadrow"><th></th><th>MC no.</th><th>Scope</th><th>Requestor</th><th>Status</th>
-        <th class="ganttcell" style="padding:0.5rem 0.8rem !important;">
-          <div class="footcells">{{#each weekCols as wk}}<div class="footcell"><span class="gwk">{{fmt(wk.key)}}</span></div>{{/each}}</div>
-        </th></tr>
-    </thead>
-    <tbody>
-    {{#each schedGroups as g}}
-      <tr class="grouphead"><td colspan="6">{{g.name}} <span class="gmeta">{{g.meta}} · {{g.rows.length}} items</span></td></tr>
-      {{#each g.rows as row}}
-        <tr tabindex="0" draggable="true" class="{{#if selected[row.cardId]}}sel{{/if}}"
-            on-dragstart="['dragRow', row.cardId]" on-keydown="['rowKey', row.cardId]">
-          <td class="nowrap"><input type="checkbox" checked="{{selected[row.cardId]}}" /><button class="chev" on-click="['togglePin', row.cardId, row.pinned]" title="{{row.pinned ? 'Unpin — suggestions may move this' : 'Pin — suggestions leave this alone'}}">{{row.pinned ? '📌' : '·'}}</button></td>
-          <td class="mono">{{row.displayId}}{{#if row.forecast && row.forecast.late}}<br /><span class="latenote">⏰ late</span>{{/if}}</td>
-          <td class="clip">{{row.name}}
-            <br /><span class="badge {{#if row.urgency === 'Urgent'}}urgentchip{{/if}}">{{#if row.urgency === 'Urgent'}}⚡ {{/if}}{{row.urgency}}</span>
-            <span class="badge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span>
-            <button class="chev" on-click="['duplicateRow', row.cardId]" title="Duplicate without links">⧉</button>
-            <button class="chev" on-click="['editNote', row.cardId, row.statusNote]" title="Status override with note">✎</button>
-            {{#if row.statusNote}}<span class="badge warn" title="{{row.statusNote}}">manual</span>{{/if}}
-          </td>
-          <td><span class="badge">{{row.requestor || '—'}}</span></td>
-          <td><span class="badge s-{{row.status}}">{{row.currentList || '—'}}</span></td>
-          <td class="ganttcell">
-            <div class="gtrack">
-              <div class="gweeks">{{#each weekCols as wk}}<div class="gweek" on-dragover="['dragOver']" on-drop="['dropOnWeek', wk.key]"></div>{{/each}}</div>
-              {{#if row.slottedWeek && row.forecast}}
-                {{#each ganttBars(row) as b}}<div class="gbar {{b.cls}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}"></div>{{/each}}
-                {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
-              {{elseif suggest && suggest.plan[row.cardId]}}
-                <div class="gbar ghosted" style="left:{{ghostLeft(row)}}%;width:12%;" title="suggested — apply with Accept"></div>
-              {{elseif !row.slottedWeek}}
-                <div class="gunsched">⏱ Not yet scheduled — drag the row onto a week</div>
-              {{/if}}
+  {{#if suggest && suggest.unavoidable}}
+    <div class="conflict over-capacity"><span class="ctag">Unachievable mix</span> — {{pct(suggest.backlogHardShare)}} of unpinned deliverables are Hard, against a historical ceiling of {{pct(capHardCeiling)}}. No arrangement of these weeks can stay under it, so the plan spreads hard work as evenly as possible instead.</div>
+  {{/if}}
+
+  {{! ==== deliverables table + Gantt planner (owl #22, node 95:5795) ====
+      LEFT = the pinned deliverable columns, RIGHT = the weekly timeline, rows
+      grouped into sprint blocks + Outside any sprint + Unscheduled (R5), a
+      capacity footer (R9) and the timeline's own horizontal slider (§3.7).
+      Ractive renders dynamic member access in a TRIPLE mustache as empty, so
+      every per-row lookup here goes through a helper function. }}
+  <div class="gantt">
+    <div class="glegend" aria-hidden="true">
+      <span class="gleg"><span class="gseg sketch"></span>Sketch</span>
+      <span class="gleg"><span class="gseg review"></span>Review</span>
+      <span class="gleg"><span class="gseg render"></span>Render</span>
+      <span class="gleg"><span class="gseg renderOverdue"></span>Render past deadline</span>
+      <span class="gleg"><span class="gdl"></span>Client deadline</span>
+    </div>
+
+    {{#if plannerGroups.length}}
+    <div class="pscrollwrap gwrap">
+      <div class="pscroll gscroll" on-scroll="['ganttScrolled']">
+        <div class="gsheet">
+          {{! month + week labels are derived from the real week dates (R2) —
+              a week belongs to its Monday's month and wkN counts Mondays
+              within that month, so the frame's OCTOBER mislabel cannot recur }}
+          <div class="gmonths">
+            <div class="gpin"></div>
+            {{#each plannerMonths as m}}<div class="gmonth" style="width:calc(var(--gw) * {{m.span}});">{{m.month}}</div>{{/each}}
+          </div>
+          <div class="gcolhead">
+            <div class="gpin gdetails">
+              <span class="gcell c-mc">MC no.</span>
+              <span class="gcell c-scope">Scope</span>
+              <span class="gcell c-req">Requestor</span>
+              <span class="gcell c-type">Type</span>
+              <span class="gcell c-status">Status</span>
             </div>
-          </td>
-        </tr>
-      {{/each}}
-    {{/each}}
-    </tbody>
-    <tfoot><tr><td colspan="5" class="dim">cards vs capacity {{capacity.weekly}} — a row carries its work cards (1 + tasks÷deliverables) · hard share amber >{{pct(hardIdeal)}} red >{{pct(hardCeiling)}}</td>
-      <td class="ganttcell"><div class="footcells">{{#each weekCols as wk}}<div class="footcell {{footClass(wk.key)}}">{{footLabel(wk.key)}}</div>{{/each}}</div></td>
-    </tr></tfoot>
-  </table></div>
+            {{#each plannerWeeks as wk}}
+              <div class="gwkcell"><span class="gwkn">{{wk.wk}}</span><span class="gwksub">{{wk.sub}}</span></div>
+            {{/each}}
+          </div>
+
+          {{#each plannerGroups as g}}
+            <div class="gblock">
+              {{! the Unscheduled bar is the ONE unslot drop zone (§3.8); the
+                  handlers take the kind so sprint bars reject the drop }}
+              <div class="gblockhead {{#if g.kind === 'unscheduled'}}dropzone{{/if}}"
+                   on-dragover="['dragOverBlock', g.kind]" on-drop="['dropBlock', g.kind]">
+                <div class="gbhinner"><span class="gbname">{{g.name}}</span><span class="gbmeta">{{g.meta}}</span><span class="gbcount">{{g.count}}</span></div>
+              </div>
+              {{#each g.rows as row}}
+                <div class="growr {{#if selected[row.cardId]}}sel{{/if}} {{#if row.pinned}}pinned{{/if}}"
+                     tabindex="0" draggable="{{row.pinned ? 'false' : 'true'}}"
+                     title="{{row.pinned ? 'Pinned — unpin to move' : ''}}"
+                     on-dragstart="['dragRow', row.cardId]" on-keydown="['rowKey', row.cardId]">
+                  <div class="gpin gdetails">
+                    <div class="gcell c-mc">
+                      <input class="gsel" type="checkbox" checked="{{selected[row.cardId]}}" aria-label="Select {{row.mcLabel}} for a multi-row move" />
+                      <span class="ghandle" aria-hidden="true"><svg class="i16"><use href="#i-rowChevron" /></svg></span>
+                      <span class="gmc" title="{{row.displayId}}">{{row.mcLabel}}</span>
+                      {{#if row.forecast && row.forecast.late}}<span class="glate">Late</span>{{/if}}
+                    </div>
+                    <div class="gcell c-scope">
+                      <div class="gchips">
+                        <span class="pbadge gsm {{row.urgency === 'Urgent' ? 'u-on' : 'u-off'}}">{{row.urgency === 'Urgent' ? '⚡ Urgent' : 'Non-Urgent'}}</span>
+                        {{#if row.difficulty}}<span class="pbadge gsm d-{{row.difficulty}}">{{row.difficulty}}</span>{{else}}<span class="gdim">—</span>{{/if}}
+                        {{#if row.statusNote}}<span class="pbadge gsm gnote" title="{{row.statusNote}}">manual</span>{{/if}}
+                      </div>
+                      <span class="gname">{{row.name}}</span>
+                    </div>
+                    <div class="gcell c-req">{{#if row.requestor}}<span class="pbadge">{{row.requestor}}</span>{{else}}<span class="gdim">—</span>{{/if}}</div>
+                    <div class="gcell c-type">{{#if row.assetType}}<span class="pbadge">{{row.assetType}}</span>{{else}}<span class="gdim">—</span>{{/if}}</div>
+                    <div class="gcell c-status">
+                      {{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{row.currentList}}</span>{{else}}<span class="gdim">—</span>{{/if}}
+                      <span class="gactions">
+                        <button class="gact {{#if row.pinned}}on{{/if}}" on-click="['togglePin', row.cardId, row.pinned]" title="{{row.pinned ? 'Unpin — suggestions may move this' : 'Pin — suggestions leave this alone'}}">{{row.pinned ? '📌' : '📍'}}</button>
+                        <button class="gact" on-click="['duplicateRow', row.cardId]" title="Duplicate without links">⧉</button>
+                        <button class="gact" on-click="['editNote', row.cardId, row.statusNote]" title="Status override with note">✎</button>
+                      </span>
+                    </div>
+                  </div>
+                  <div class="gtrack">
+                    <div class="gweeks">{{#each plannerWeeks as wk}}<div class="gweek" on-dragover="['dragOver']" on-drop="['dropOnWeek', wk.key]"></div>{{/each}}</div>
+                    {{#if row.slottedWeek}}
+                      {{#each phaseBars(row) as b}}<div class="gseg {{b.cls}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}"></div>{{/each}}
+                      {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
+                    {{else}}
+                      <div class="gunsched">Not yet scheduled — drag the row onto a week</div>
+                    {{/if}}
+                    {{#each ghostBar(row) as gh}}<div class="gghost" style="left:{{gh.left}}%;width:{{gh.width}}%;" title="suggested — apply with Accept"></div>{{/each}}
+                  </div>
+                </div>
+              {{/each}}
+            </div>
+          {{/each}}
+
+          <div class="gfoot">
+            <div class="gpin gfootcap"><span class="gfl">Cards / week</span><span class="gfs">{{footCaption}}</span></div>
+            {{#each plannerWeeks as wk}}<div class="gfootcell {{footCls(wk.key)}}">{{footText(wk.key)}}</div>{{/each}}
+          </div>
+        </div>
+      </div>
+      {{#if ganttThumb.needed}}
+      <div class="hslider">
+        <button class="hnudge" on-click="['nudgeScroll', -1]" aria-label="Scroll the timeline back one week">{{{icon.sliderLeft}}}</button>
+        <div class="htrack" on-click="['trackJump']"><div class="hthumb" style="left:{{ganttThumb.left}}%;width:{{ganttThumb.width}}%;"></div></div>
+        <button class="hnudge" on-click="['nudgeScroll', 1]" aria-label="Scroll the timeline on one week">{{{icon.sliderRight}}}</button>
+      </div>
+      {{/if}}
+    </div>
+    {{else}}
+    <div class="rempty"><strong>Nothing to plan</strong><span>Every deliverable on this board is done, or the sync has not read one yet. Rows appear here as soon as an active card lands.</span></div>
+    {{/if}}
+  </div>
 
   {{#if sprintModal}}
     <div class="modal-back" on-click="['closeSprints']"><div class="modal" on-click="['noop']">

@@ -120,6 +120,10 @@
 /* Discard drops it, and neither is the resting look of the toolbar */
 .ptoolbar .fnbtn.accept { background: var(--green-600); color: var(--white); }
 .ptoolbar .fnbtn.accept:hover { background: var(--green-500); }
+/* a proposal the client refuses to apply keeps its slot in the row so the
+   toolbar does not reflow, but reads as unavailable — the strip above it
+   carries the reason */
+.ptoolbar .fnbtn[disabled] { background: var(--slate-100); color: var(--slate-400); cursor: not-allowed; }
 .ptoolbar .fnbtn.discard { background: transparent; color: var(--slate-700); border-color: var(--border-border); }
 .ptoolbar .fnbtn.discard:hover { background: var(--slate-100); }
 .fnbox .fnnote {

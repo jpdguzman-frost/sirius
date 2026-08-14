@@ -1,0 +1,264 @@
+/* Sprint Schedules — deliverables table + Gantt planner (owl #22, node
+   95:5795). This file owns the whole planner BODY; the toolbar above it is
+   30-planner.css and is untouched (R1). Every value binds to a token
+   (05-tokens.css) — a raw hex here is a defect.
+
+   Layout contract (frozen contract §3.7): the left column block is pinned at
+   999px and the timeline scrolls inside its OWN container, so the page body
+   never scrolls horizontally. One scroller holds the month header, the week
+   header, every row's track and the capacity footer, and the left block is
+   `position: sticky; left: 0` inside it — that is what keeps the five columns
+   and their bars on the same baseline without a second scroll listener.
+
+   Widths are INTRINSIC: a week column is --gw wide, every row lays 12 of them
+   end to end, so the sheet sizes itself and no rule repeats the week count.
+   --gw is the CSS half of WEEK_PX (01-app.js §3.1); the month cells multiply
+   it with calc() rather than shipping a second pixel number. */
+
+.gantt {
+  --gw: 92px; /* one week column — mirrors WEEK_PX in 01-app.js */
+  --gleft: 999px; /* 58 gutter + 97 + 262 + 136 + 146 + 300 — mirrors LEFT_PANE_PX */
+  --gbar-h: 26px;
+  font-family: var(--font-sans);
+}
+
+/* ---- 1. phase legend (R4) ----
+   The frame carries no legend, but four bar colours with no key is a worse
+   defect than one extra row: the swatches reuse the phase classes below, so
+   there is exactly ONE phase→colour map in the codebase. */
+.glegend {
+  display: flex; align-items: center; gap: var(--space-16); flex-wrap: wrap;
+  margin: 0 0 var(--space-8);
+  font-size: var(--text-label); line-height: 1; color: var(--surface-muted-foreground);
+}
+.glegend .gleg { display: inline-flex; align-items: center; gap: var(--space-4); }
+.glegend .gseg { display: inline-block; width: 22px; height: 10px; border-radius: var(--radius-xs); }
+/* the deadline swatch borrows `.gantt .gdl`'s colour but not its geometry, and
+   that rule is declared LATER at equal specificity — so this one carries the
+   `.gantt` prefix too, or the swatch keeps `position: absolute` and escapes
+   the legend to the top-left of the page (found at integrate). */
+.gantt .glegend .gdl { position: static; width: 3px; height: 12px; }
+
+/* ---- 2. the card + its scroller ---- */
+.gantt .gwrap {
+  background: var(--surface-background);
+  border: 1px solid var(--slate-200); border-radius: var(--radius-md);
+  overflow: hidden; /* the rounded corner clips the sheet, not the sticky column */
+}
+/* .pscroll (20-pipeline.css) already hides the native bar and scrolls x only */
+.gantt .gsheet { width: max-content; min-width: 100%; }
+
+/* the pinned left block — one recipe, four surfaces (month header, column
+   header, row, footer) differing only in background */
+.gantt .gpin {
+  position: sticky; left: 0; z-index: 2; flex: none;
+  width: var(--gleft);
+  border-right: 1px solid var(--slate-200);
+  background: var(--surface-background);
+}
+/* The pin's right border IS the 999px pane boundary (it doubles as the cover
+   the sticky column scrolls under), so the FIRST timeline cell of every strip
+   drops its own left border — otherwise the two 1px rules sit adjacent and the
+   frame's single hairline renders 2px wide, two-tone in the row and footer. */
+.gantt .gpin + .gmonth,
+.gantt .gpin + .gwkcell,
+.gantt .gfootcap + .gfootcell,
+.gantt .gweeks .gweek:first-child { border-left: none; }
+
+/* ---- 3. month header (29px) + week header (45px) ---- */
+.gantt .gmonths {
+  display: flex; height: 29px;
+  background: var(--slate-50); border-bottom: 1px solid var(--slate-200);
+}
+.gantt .gmonths .gpin { background: var(--slate-50); }
+.gantt .gmonth {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  border-left: 1px solid var(--slate-200);
+  font-size: var(--text-label); font-weight: 600; line-height: 1;
+  color: var(--surface-muted-foreground); letter-spacing: 0.02em; white-space: nowrap;
+}
+
+.gantt .gcolhead {
+  display: flex; min-height: 45px;
+  background: var(--slate-50); border-bottom: 1px solid var(--slate-200);
+}
+.gantt .gcolhead .gpin { background: var(--slate-50); display: flex; align-items: center; }
+.gantt .gcolhead .gcell {
+  font-size: var(--text-label); font-weight: 600; line-height: 1; letter-spacing: 0.02em;
+  text-transform: uppercase; color: var(--surface-muted-foreground); white-space: nowrap;
+}
+.gantt .gwkcell {
+  flex: none; width: var(--gw);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: var(--space-8) var(--space-16);
+  border-left: 1px solid var(--slate-200);
+}
+.gantt .gwkn { font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--surface-foreground); }
+.gantt .gwksub { font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--slate-400); white-space: nowrap; }
+
+/* ---- 4. sprint / outside / unscheduled block headers (36px) ----
+   R6: the frame's header checkbox and collapse/expand are NOT built. */
+.gantt .gblockhead {
+  display: flex; align-items: center; min-height: 36px;
+  background: var(--slate-100); border-bottom: 1px solid var(--slate-200);
+}
+.gantt .gbhinner {
+  position: sticky; left: 0;
+  display: flex; align-items: center; gap: var(--space-8);
+  padding: var(--space-8) var(--space-16); white-space: nowrap;
+}
+.gantt .gbname { font-size: var(--text-body); font-weight: 600; line-height: 1; color: var(--surface-foreground); }
+/* the frame gives the header's meta line two tones: the duration reads
+   #64748b and the item count #94a3b8 (dump sprintHeader '#duration' vs
+   '#items'), so they are two spans, not one string */
+.gantt .gbmeta { font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--surface-muted-foreground); }
+.gantt .gbcount { font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--slate-400); }
+/* the one unslot drop zone (contract §3.8) — the Unscheduled block's own bar */
+.gantt .gblockhead.dropzone { cursor: copy; }
+.gantt .gblockhead.dropzone .gbcount::after { content: ' · drop a row here to unslot it'; }
+
+/* ---- 5. deliverable row (84px base, grows when the badges wrap) ---- */
+.gantt .growr {
+  display: flex; min-height: 84px;
+  background: var(--surface-background); border-bottom: 1px solid var(--slate-200);
+  cursor: grab;
+}
+.gantt .growr:focus { outline: 2px solid var(--blue-500); outline-offset: -2px; }
+.gantt .growr.sel { background: var(--blue-50); }
+.gantt .growr.sel .gpin { background: var(--blue-50); }
+/* /replot skips pinned rows server-side (FR-5.9), so a pinned row does not
+   drag at all rather than fail silently (contract §3.8) */
+.gantt .growr.pinned { cursor: not-allowed; }
+
+.gantt .gdetails { display: flex; align-items: stretch; }
+/* a cell is a fixed box: it clips rather than pushing its neighbours, so no
+   freak-long Trello list name can widen the pinned block past --gleft */
+.gantt .gdetails .gcell { flex: none; padding: var(--space-16) var(--space-8) var(--space-16) 0; overflow: hidden; }
+/* frame column widths (58 + 97 + 262 + 136 + 146 + 300 = --gleft) — the 58px
+   gutter lives INSIDE the first cell so the header label and the MC number
+   share one left edge and the drag handle sits in the space beside them */
+.gantt .gdetails .c-mc { width: 155px; position: relative; padding-left: 58px; }
+.gantt .gdetails .c-scope { width: 262px; }
+.gantt .gdetails .c-req { width: 136px; }
+.gantt .gdetails .c-type { width: 146px; }
+.gantt .gdetails .c-status { width: 300px; display: flex; align-items: flex-start; gap: var(--space-8); }
+
+.gantt .gsel { position: absolute; left: var(--space-16); top: 20px; width: 14px; height: 14px; margin: 0; cursor: pointer; }
+/* R11: the frame's 16px chevron is the drag-handle affordance and nothing else */
+.gantt .ghandle {
+  position: absolute; left: 36px; top: 18px;
+  display: inline-flex; color: var(--slate-400); cursor: grab;
+}
+.gantt .growr.pinned .ghandle { cursor: not-allowed; }
+.gantt .ghandle svg { display: block; }
+.gantt .gmc { display: block; font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
+.gantt .glate { display: block; font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--red-600); }
+.gantt .gchips { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-8); }
+/* contract §2: a null difficulty prints the same dimmed dash as every other
+   empty column, sized onto the badges' 19px baseline instead of pushing the
+   chips row taller — those rows carry no bar either, so the dash is the only
+   cue that the missing difficulty label is why */
+.gantt .gchips .gdim { font-size: var(--text-label); line-height: 19px; }
+.gantt .gname { font-size: var(--text-body); font-weight: 400; line-height: 1.4; color: var(--surface-foreground); }
+.gantt .gdim { font-size: var(--text-body); line-height: 1.5; color: var(--surface-muted-foreground); }
+
+/* badges: the SHARED .pbadge recipes (20-pipeline.css) at the frame's row
+   sizes. No second status map, no second difficulty map (contract §3.10) —
+   only the two heights the frame measures are local. */
+.gantt .pbadge { height: 25px; }
+.gantt .pbadge.gsm {
+  height: 19px; padding: 4px 6px 3px;
+  font-size: var(--text-caption); border-radius: var(--radius-xs);
+}
+.gantt .pbadge.u-on { background: var(--red-500); border-color: var(--red-500); color: var(--red-50); }
+.gantt .pbadge.u-off { background: var(--slate-100); border-color: var(--slate-200); color: var(--slate-500); }
+.gantt .pbadge.gnote { background: var(--amber-100); border-color: var(--amber-300); color: var(--amber-700); }
+
+/* row actions — pin (FR-5.9), duplicate, status note. The frame draws no such
+   cluster, so it stays out of the resting look: hover or keyboard focus
+   reveals it, and a PINNED row keeps it visible because state must never hide
+   behind a hover. (A manual note announces itself with its own chip, and
+   opacity 0 leaves every button in the tab order regardless.) */
+.gantt .gactions { display: inline-flex; gap: var(--space-4); margin-left: auto; opacity: 0; transition: opacity 0.12s ease; }
+.gantt .growr:hover .gactions,
+.gantt .growr:focus-within .gactions,
+.gantt .growr.pinned .gactions { opacity: 1; }
+.gantt .gact {
+  border: none; background: none; cursor: pointer; padding: 2px 4px; line-height: 1;
+  font-family: var(--font-sans); font-size: var(--text-label); color: var(--slate-400); border-radius: var(--radius-xs);
+}
+.gantt .gact:hover { background: var(--slate-100); color: var(--slate-700); }
+.gantt .gact.on { color: var(--surface-foreground); }
+
+/* ---- 6. the timeline track + the bars ---- */
+.gantt .gtrack { position: relative; flex: none; display: flex; }
+.gantt .gweeks { display: flex; flex: 1; }
+/* the body gridline is the SAME hairline as the headers' (#e2e8f0 in the frame
+   dump's row-weeks and footer Cells), so it runs continuously past the header
+   boundary instead of visibly lightening below it */
+.gantt .gweek { width: var(--gw); flex: none; border-left: 1px solid var(--slate-200); }
+
+/* ONE phase→colour map (R4). The Board-scope amber Review variant in the
+   component set contradicts the Row-scope palette and is judged a stale copy;
+   the legend swatches above reuse these same four classes. */
+.gseg.sketch { background: var(--amber-500); }
+.gseg.review { background: var(--blue-200); }
+.gseg.render { background: var(--blue-600); }
+.gseg.renderOverdue { background: var(--red-600); }
+.gantt .gtrack .gseg {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  height: var(--gbar-h); border-radius: var(--radius-xs);
+}
+/* the frame draws the client deadline as a LIGHT 2px tick (dump row84
+   'Deadline Marker' → mark: stroke #94a3b8, stroke-width 2), not the legacy
+   week-board's near-black 2.5px bar */
+.gantt .gdl { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--slate-400); }
+/* R8: a pending suggestion is a proposal, not a state — outline only, drawn
+   over the proposed week ALONGSIDE the row's current bar. */
+.gantt .gghost {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  height: var(--gbar-h); border: 1px dashed var(--violet-500); border-radius: var(--radius-xs);
+  background: none; pointer-events: none;
+}
+.gantt .gunsched {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  padding-left: var(--space-16); pointer-events: none; /* the week columns below stay droppable */
+  font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--surface-muted-foreground);
+}
+
+/* ---- 7. capacity footer (63px) ----
+   The footer is CHROME, not a row: the frame paints its caption area and every
+   week cell #f8fafc, the same tint the two headers carry. The sticky .gpin
+   needs the tint restated because its own rule seats it on the row surface. */
+.gantt .gfoot { display: flex; min-height: 63px; border-top: 1px solid var(--slate-200); background: var(--slate-50); }
+.gantt .gfoot .gpin { background: var(--slate-50); }
+.gantt .gfootcap {
+  display: flex; flex-direction: column; justify-content: center; gap: var(--space-4);
+  padding: 0 var(--space-16);
+}
+.gantt .gfl {
+  font-size: var(--text-label); font-weight: 600; line-height: 1; letter-spacing: 0.02em;
+  text-transform: uppercase; color: var(--surface-muted-foreground);
+}
+.gantt .gfs { font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--slate-400); }
+.gantt .gfootcell {
+  width: var(--gw); flex: none;
+  display: flex; align-items: center; justify-content: center;
+  border-left: 1px solid var(--slate-200);
+  font-size: var(--text-label); font-weight: 600; line-height: 1;
+  color: var(--surface-foreground); font-variant-numeric: tabular-nums;
+}
+/* R9 — over capacity (or over the hard ceiling) is red, the ideal-to-ceiling
+   band is amber, and a week with no rows prints a dash, not a zero */
+.gantt .gfootcell.empty { color: var(--slate-300); }
+.gantt .gfootcell.warn { color: var(--amber-600); }
+.gantt .gfootcell.over { color: var(--red-600); }
+
+/* ---- 8. the horizontal slider (24px) ----
+   Same .hslider recipe as Pipeline and Requests (20-pipeline.css); only the
+   frame's padding (p4,0,4,0), its #f8fafc chrome tint and its seat inside the
+   card are local. */
+.gantt .gwrap .hslider {
+  padding: var(--space-4) 0; border-top: 1px solid var(--slate-200);
+  background: var(--slate-50);
+}

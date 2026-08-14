@@ -2,9 +2,26 @@
    Hard-mix constants mirror lib/planner.constants (HARD_MIX); load is BR-6c
    card-equivalents (row.weight from the server). */
 
+/* Pre-payload fallbacks only. Every READ prefers capacity.hardIdeal /
+   capacity.hardCeiling from the server, which carry lib/planner.constants
+   HARD_MIX — these two exist so the first paint before /deliverables lands
+   does not divide by undefined. */
 const HARD_IDEAL = 0.083;
 const HARD_CEILING = 0.129;
-const WEEK_COUNT = 8;
+/* Planner geometry (node 95:5795). WEEK_COUNT drives the drawn columns, the
+   range label AND the /suggest horizon — widening it to the frame's 12 widens
+   all three, which is flagged to product.
+
+   The LAYOUT numbers live in CSS, not here: 35-gantt.css sizes a week column
+   from `--gw` (92px) and the pinned left block from `--gleft` (999px = 58
+   gutter + 97 + 262 + 136 + 146 + 300), and every row lays its columns out
+   end to end so the sheet measures itself. WEEK_PX is the one pixel value
+   this file needs a copy of — a chevron scrolls exactly one column — and the
+   left pane needs none, because nothing in JS positions it. */
+const WEEK_COUNT = 12;
+const WEEK_PX = 92; // mirrors --gw in 35-gantt.css
+const WORKDAYS_PER_WEEK = 5; // the gantt x-axis unit — a week column is 5 workdays wide
+const NUDGE_PX = 240; // one chevron step on the Pipeline / Requests tables
 /* how recent a push receipt has to be for the app to claim the push channel is
    live (FR-8.6). The header chip and the Requests sync strip read the same
    window from here — two numbers would let the two disagree on screen. */
@@ -276,6 +293,25 @@ function mondayIso(base) {
   return isoOf(d);
 }
 
+/* the dimmer half of a block header's meta line — one pluralisation rule for
+   all three block kinds, so a sprint can never read '1 items' */
+const itemCount = (n) => `· ${n} item${n === 1 ? '' : 's'}`;
+
+/* how many Mondays a sprint covers — the '2 wk' in a sprint header. Counted,
+   not divided: Aug 3–Aug 14 is 2 weeks even though it spans 12 days, and a
+   sprint that starts mid-week owns only the Mondays inside it. */
+function mondaysBetween(startIso, endIso) {
+  if (!startIso || !endIso || endIso < startIso) return 0;
+  let m = mondayIso(startIso);
+  if (m < startIso) m = mondayShift(m, 1);
+  let n = 0;
+  while (m <= endIso) {
+    n += 1;
+    m = mondayShift(m, 1);
+  }
+  return n;
+}
+
 const app = new Ractive({
   target: '#app',
   template: '#tpl-app',
@@ -335,8 +371,14 @@ const app = new Ractive({
     sprintModal: false,
     sprintDraft: [],
     sprintError: '',
-    hardIdeal: HARD_IDEAL,
-    hardCeiling: HARD_CEILING,
+    ganttThumb: { needed: false, left: 0, width: 100 },
+    /* per-week capacity totals, keyed by slotted-week Monday. `perWeek` is the
+       server's (window-independent, every slotted row); `perWeekLocal` is the
+       optimistic override a drop writes and loadAll clears. A key present with
+       a null value means "this week emptied" and must beat the server's stale
+       entry, which is why the lookup tests hasOwnProperty rather than ??. */
+    perWeek: {},
+    perWeekLocal: {},
     requests: [],
     rejects: [],
     requestCounts: { requests: 0, inPipeline: 0, toFile: 0, forClarification: 0 },
@@ -509,13 +551,42 @@ const app = new Ractive({
         options: [...new Set(rows.map((r) => f.pick(r)))].filter((v) => !unranked(v)).sort(f.sort),
       }));
     },
-    weekCols() {
+    /* R2 — the drawn window: WEEK_COUNT weeks from weekStart, labelled from the
+       real dates. A week belongs to its MONDAY's month and wkN is that Monday's
+       ordinal among the Mondays of that month (Aug 3 → wk1 … Aug 31 → wk5,
+       Sep 7 → wk1), which reproduces the frame and fixes its OCTOBER mislabel
+       by construction. Pure string/local-midnight math through the existing
+       13f helpers — never buildWeeks(), whose key is a Sunday on a Manila host
+       (recon §E.1), and never toLocaleDateString, which can emit 'Sept'. */
+    plannerWeeks() {
       const from = this.get('weekStart');
-      return Array.from({ length: WEEK_COUNT }, (_, i) => ({ key: mondayShift(from, i) }));
+      return Array.from({ length: WEEK_COUNT }, (_, i) => {
+        const key = mondayShift(from, i);
+        const fridayIso = isoAddDays(key, 4);
+        const month = Number(key.slice(5, 7));
+        return {
+          key,
+          fridayIso,
+          wk: `wk${Math.floor((Number(key.slice(8, 10)) - 1) / 7) + 1}`,
+          sub: `${fmtMonthDay(key)}–${Number(fridayIso.slice(8, 10))}`,
+          monthKey: key.slice(0, 7),
+          month: MONTHS_LONG[month - 1].toUpperCase(),
+        };
+      });
+    },
+    /* contiguous runs over plannerWeeks — the header cell spans span×--gw */
+    plannerMonths() {
+      const out = [];
+      for (const w of this.get('plannerWeeks')) {
+        const last = out[out.length - 1];
+        if (last && last.monthKey === w.monthKey) last.span += 1;
+        else out.push({ month: w.month, monthKey: w.monthKey, span: 1 });
+      }
+      return out;
     },
     /* the window the gantt actually draws: WEEK_COUNT weeks starting at
-       weekStart, so the label's right end is the LAST day shown (day 55), not
-       the Monday after it — the old label named a week the board never drew. */
+       weekStart, so the label's right end is the LAST day shown, not the
+       Monday after it — the old label named a week the board never drew. */
     rangeLabel() {
       const from = this.get('weekStart');
       return fmtRange(from, isoAddDays(from, WEEK_COUNT * 7 - 1));
@@ -561,28 +632,90 @@ const app = new Ractive({
       const live = s.push_at && Date.now() - new Date(s.push_at).getTime() < PUSH_LIVE_MS;
       return `synced ${MANILA_TIME.format(at)}${live ? ' · push live' : ''}`;
     },
+    /* Each row is stamped with the KEY of the block it belongs to — the
+       sprint's id, or the two derived tails. Never the sprint NAME: names are
+       free text (the modal edits them, and addSprint can auto-name a duplicate
+       'Sprint 2'), so a name join makes two same-named sprints each collect the
+       union of both ranges and every affected row render twice. */
     schedRows() {
       const sprints = this.get('sprints');
       return this.get('rows')
         .filter((r) => r.status !== 'done')
         .map((r) => {
           const s = r.slottedWeek ? sprints.find((sp) => r.slottedWeek >= sp.start && r.slottedWeek <= sp.end) : null;
-          return { ...r, sprintName: r.slottedWeek ? (s ? s.name : 'Outside any sprint') : 'Unscheduled' };
+          return { ...r, sprintKey: r.slottedWeek ? (s ? s.id : 'outside') : 'unscheduled' };
         });
     },
-    schedGroups() {
+    /* R5 — sprint membership is DERIVED from the slotted week, so dragging a
+       row into another sprint's date range IS the sprint move; there is no
+       sprint-assignment write. Invariant 12 wants the gaps surfaced, hence the
+       'Outside any sprint' block between the sprints and the unscheduled tail.
+       Empty groups are dropped.
+
+       `meta` and `count` are two strings because the frame gives them two
+       tones (dump sprintHeader: '#duration' #64748b, '#items' #94a3b8); their
+       concatenation is the contract §3.5 string, character for character. */
+    plannerGroups() {
       const rows = this.get('schedRows');
-      const sprints = this.get('sprints');
       const groups = [];
-      for (const s of sprints) {
-        const inSprint = rows.filter((r) => r.sprintName === s.name);
-        if (inSprint.length) groups.push({ name: s.name, meta: `${fmtDate(s.start)} – ${fmtDate(s.end)}`, rows: inSprint });
+      for (const s of this.get('sprints')) {
+        const inSprint = rows.filter((r) => r.sprintKey === s.id);
+        if (!inSprint.length) continue;
+        groups.push({
+          kind: 'sprint',
+          id: s.id,
+          name: s.name,
+          meta: `${fmtDate(s.start)} - ${fmtDate(s.end)} · ${mondaysBetween(s.start, s.end)} wk`,
+          count: itemCount(inSprint.length),
+          rows: inSprint,
+        });
       }
-      const outside = rows.filter((r) => r.sprintName === 'Outside any sprint');
-      if (outside.length) groups.push({ name: 'Outside any sprint', meta: 'weeks no sprint covers', rows: outside });
-      const unsched = rows.filter((r) => r.sprintName === 'Unscheduled');
-      if (unsched.length) groups.push({ name: 'Unscheduled', meta: 'not yet plotted', rows: unsched });
+      const outside = rows.filter((r) => r.sprintKey === 'outside');
+      if (outside.length) {
+        groups.push({ kind: 'outside', id: 'outside', name: 'Outside any sprint', meta: 'weeks no sprint covers', count: itemCount(outside.length), rows: outside });
+      }
+      const unsched = rows.filter((r) => r.sprintKey === 'unscheduled');
+      if (unsched.length) {
+        groups.push({ kind: 'unscheduled', id: 'unscheduled', name: 'Unscheduled', meta: 'Not yet plotted', count: itemCount(unsched.length), rows: unsched });
+      }
       return groups;
+    },
+    /* GUARD, not a fix — the live defect recorded in gantt-frame-notes.md.
+       `POST /suggest` keys its plan off lib/calendar's buildWeeks(), whose
+       `key` is derived with toISOString() from a LOCAL-midnight Monday: on an
+       Asia/Manila host (invariant 11, i.e. production) every key comes back as
+       the SUNDAY before. Those keys match no drawn column, so R8's ghost bars
+       render nothing, and Accept would persist them as slotted_week — the rows
+       then fall outside their sprint and the capacity footer, keyed on
+       Mondays, silently blanks. `lib/**` is frozen and the repair is JP's
+       call, so until it lands a proposal whose weeks are not Mondays is
+       refused loudly instead of applied silently. Empty on a correct host. */
+    suggestOffWeeks() {
+      const s = this.get('suggest');
+      if (!s || !s.plan) return [];
+      return [...new Set(Object.values(s.plan).filter((w) => w && mondayIso(w) !== w))].sort();
+    },
+    suggestOffWeeksText() {
+      const off = this.get('suggestOffWeeks');
+      return off.length === 1
+        ? `the plan proposes ${off[0]}, which is not a Monday`
+        : `the plan proposes ${off.length} weeks that are not Mondays (${off.join(', ')})`;
+    },
+    /* the hard-mix thresholds the server measured (lib/planner.constants
+       HARD_MIX), with the module constants as the pre-payload fallback */
+    capHardIdeal() {
+      const c = this.get('capacity');
+      return Number.isFinite(c.hardIdeal) ? c.hardIdeal : HARD_IDEAL;
+    },
+    capHardCeiling() {
+      const c = this.get('capacity');
+      return Number.isFinite(c.hardCeiling) ? c.hardCeiling : HARD_CEILING;
+    },
+    /* '13%' is ROUNDED from the measured 12.9% ceiling, never a second literal */
+    footCaption() {
+      const c = this.get('capacity');
+      const typical = Number.isFinite(c.typical) ? c.typical : '—';
+      return `capacity ${c.weekly} · typical ${typical} · hard ceiling ${Math.round(this.get('capHardCeiling') * 100)}%`;
     },
     forecastRows() {
       return this.get('rows').filter((r) => r.status !== 'done');
@@ -590,42 +723,60 @@ const app = new Ractive({
   },
 });
 
-/* ---- gantt helpers: percentage positions across the visible week range ---- */
+/* ---- gantt geometry: a WORKDAY-indexed x-axis across the visible window ----
 
-function rangeDays() {
-  return WEEK_COUNT * 7;
-}
-function pctOf(dateIso) {
-  const start = Date.parse(app.get('weekStart') + 'T00:00:00');
-  const days = (Date.parse(dateIso + 'T00:00:00') - start) / 864e5;
-  return (days / rangeDays()) * 100;
-}
-const clamp = (x) => Math.max(0, Math.min(100, x));
+   A week column is five workdays wide, so the axis counts workdays, not
+   calendar days: one unit = --gw ÷ 5 = 18.4px. Every phase endpoint the
+   forecast produces is a Mon–Fri day (lib/calendar workday() skips weekends),
+   so the weekend clamp below is defensive only. Percentages are of the track,
+   whose width is exactly WEEK_COUNT columns, so % and px agree. */
 
-app.set('ganttBars', (row) => {
-  if (!row.slottedWeek || !row.forecast) return [];
-  const f = row.forecast;
+const TOTAL_UNITS = WEEK_COUNT * WORKDAYS_PER_WEEK;
+/* workday ordinal of `iso` relative to the first drawn Monday; a Sat/Sun date
+   clamps forward to the next Monday so it can never land mid-weekend */
+function dayIndex(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  const dow = d.getDay(); // 0=Sun..6=Sat
+  const base = new Date(app.get('weekStart') + 'T00:00:00');
+  let days = Math.round((d - base) / 864e5);
+  if (dow === 6) days += 2;
+  else if (dow === 0) days += 1;
+  const w = Math.floor(days / 7);
+  const wd = Math.min(WORKDAYS_PER_WEEK - 1, Math.max(0, ((days % 7) + 7) % 7));
+  return w * WORKDAYS_PER_WEEK + wd;
+}
+const clampUnits = (u) => Math.max(0, Math.min(TOTAL_UNITS, u));
+const unitPct = (u) => ((u / TOTAL_UNITS) * 100).toFixed(2);
+
+/* R3 — the bar IS the server's phase segments (absolute, half-open ISO dates
+   built from lib/forecast output). No forecast math runs here: a segment that
+   the window clips to nothing is dropped, and that is the whole of it. */
+app.set('phaseBars', (row) => {
+  const phases = Array.isArray(row.phases) ? row.phases : [];
   const bars = [];
-  const seg = (fromIso, toIso, cls, title) => {
-    const left = clamp(pctOf(fromIso));
-    const right = clamp(pctOf(toIso) + 100 / rangeDays());
-    if (right <= 0 || left >= 100 || right <= left) return;
-    bars.push({ cls, left: left.toFixed(2), width: (right - left).toFixed(2), title });
-  };
-  seg(row.slottedWeek, f.sketchDelivery, 'sketch', `sketch → ${fmtDate(f.sketchDelivery)}`);
-  seg(f.sketchDelivery, f.sketchApproved, 'review', `review → ${fmtDate(f.sketchApproved)}`);
-  seg(f.sketchApproved, f.renderDelivery, f.late ? 'render red' : 'render', `render → ${fmtDate(f.renderDelivery)}`);
+  for (const p of phases) {
+    const left = clampUnits(dayIndex(p.startIso));
+    const right = clampUnits(dayIndex(p.endIso));
+    if (right <= left) continue; // zero-width, or clipped fully outside the window
+    bars.push({ cls: p.phase, left: unitPct(left), width: unitPct(right - left), title: `${p.phase} → ${fmtDate(p.endIso)}` });
+  }
   return bars;
 });
 app.set('deadlineTick', (row) => {
   if (!row.deadline) return null;
-  const p = pctOf(row.deadline);
-  return p >= 0 && p <= 100 ? p.toFixed(2) : null;
+  const u = dayIndex(row.deadline);
+  return u >= 0 && u <= TOTAL_UNITS ? unitPct(u) : null;
 });
-app.set('ghostLeft', (row) => {
+/* R8 — a pending suggestion draws an outline over the PROPOSED week alongside
+   the row's current bar. Returns 0 or 1 entries so the template resolves it in
+   one call; a proposal outside the drawn window draws nothing. */
+app.set('ghostBar', (row) => {
   const s = app.get('suggest');
-  if (!s || !s.plan[row.cardId]) return 0;
-  return clamp(pctOf(s.plan[row.cardId])).toFixed(2);
+  const week = s && s.plan ? s.plan[row.cardId] : null;
+  if (!week) return [];
+  const at = app.get('plannerWeeks').findIndex((w) => w.key === week);
+  if (at < 0) return [];
+  return [{ left: unitPct(at * WORKDAYS_PER_WEEK), width: unitPct(WORKDAYS_PER_WEEK) }];
 });
 /* BR-6c: a row carries its MC group's work-card share, so the footer speaks
    the same unit as capacity (cards). Hard mix stays BR-6b's own test. */
@@ -778,7 +929,7 @@ function updateThumb(el, key) {
     app.set(key, { needed, left: Math.round(left * 100) / 100, width: Math.round(width * 100) / 100 });
   });
 }
-const thumbKeyOf = (node) => (node.closest('.reqwrap') ? 'reqThumb' : 'pipeThumb');
+const thumbKeyOf = (node) => (node.closest('.gwrap') ? 'ganttThumb' : node.closest('.reqwrap') ? 'reqThumb' : 'pipeThumb');
 const scrollerOf = (node) => {
   const wrap = node.closest('.pscrollwrap');
   return wrap ? wrap.querySelector('.pscroll') : document.querySelector('.pscroll');
@@ -789,22 +940,29 @@ function refreshThumbs() {
 }
 window.addEventListener('resize', refreshThumbs);
 
-app.set('footClass', (weekKey) => {
-  const rows = app.get('schedRows').filter((r) => r.slottedWeek === weekKey);
-  const cap = app.get('capacity').weekly || 1;
-  const hard = rows.filter((r) => r.difficulty === 'Hard').length;
-  const share = rows.length ? hard / rows.length : 0;
-  if (rowLoad(rows) > cap || share > HARD_CEILING) return 'red';
-  if (share > HARD_IDEAL) return 'amber';
-  return '';
+/* ---- capacity footer ----
+
+   The totals are the SERVER's, computed over every slotted row rather than the
+   twelve visible columns, so week nav never refetches and never re-sums. The
+   only client-side arithmetic is the optimistic drop delta below, which writes
+   into perWeekLocal; that override wins even when it is null, which is how a
+   week that just emptied prints a dash instead of its stale server total. */
+function weekTotal(weekKey) {
+  const local = app.get('perWeekLocal');
+  if (Object.prototype.hasOwnProperty.call(local, weekKey)) return local[weekKey];
+  return app.get('perWeek')[weekKey] || null;
+}
+app.set('footText', (weekKey) => {
+  const t = weekTotal(weekKey);
+  return t ? app.get('fmtLoad')(t.cards) : '—';
 });
-app.set('footLabel', (weekKey) => {
-  const rows = app.get('schedRows').filter((r) => r.slottedWeek === weekKey);
-  const cap = app.get('capacity').weekly || 0;
-  const hard = rows.filter((r) => r.difficulty === 'Hard').length;
-  const share = rows.length ? hard / rows.length : 0;
-  const fmtLoad = app.get('fmtLoad');
-  return rows.length ? `${fmtLoad(rowLoad(rows))}/${cap} · ${hard}H · ${Math.round(share * 1000) / 10}%` : '';
+/* R9: over capacity — or over the measured hard-mix ceiling — is red, the
+   ideal-to-ceiling band is amber, and an empty week is a dimmed dash. */
+app.set('footCls', (weekKey) => {
+  const t = weekTotal(weekKey);
+  if (!t) return 'empty';
+  if (t.over || t.hardOver) return 'over';
+  return t.hardWarn ? 'warn' : '';
 });
 
 /* ---------- data loading ---------- */
@@ -992,6 +1150,8 @@ async function loadAll() {
       sprints: pipeline.sprints,
       capacity: pipeline.capacity,
       capDraft: pipeline.capacity.weekly, // server truth re-seats the thumb
+      perWeek: pipeline.perWeek || {},
+      perWeekLocal: {}, // server truth supersedes every optimistic drop delta
       sync: pipeline.sync,
       syncLabel: pipeline.sync
         ? pipeline.sync.ok
@@ -1152,7 +1312,7 @@ function selectTab(id) {
   closeMenus();
   app.set('activeTab', id);
   if (id === 'admin' && app.get('isAdmin')) loadAdmin();
-  if (id === 'pipeline' || id === 'requests') {
+  if (id === 'pipeline' || id === 'requests' || id === 'schedules') {
     // returning to the tab remounts .pscroll at scrollLeft 0 — recompute the
     // slider so the affordance is never stale (review finding 5)
     requestAnimationFrame(refreshThumbs);
@@ -1345,10 +1505,14 @@ app.on({
     }
   },
   pipeScrolled(ctx) { updateThumb(ctx.node, 'pipeThumb'); },
+  ganttScrolled(ctx) { updateThumb(ctx.node, 'ganttThumb'); },
+  /* on the planner a chevron is worth exactly one week column — the timeline
+     has a unit and the affordance should speak it; the two data tables have
+     none, so they keep the fixed step */
   nudgeScroll(ctx, dir) {
     const el = scrollerOf(ctx.node);
     if (!el) return;
-    el.scrollLeft += dir * 240;
+    el.scrollLeft += dir * (ctx.node.closest('.gwrap') ? WEEK_PX : NUDGE_PX);
     updateThumb(el, thumbKeyOf(ctx.node));
   },
   trackJump(ctx) {
@@ -1451,11 +1615,34 @@ app.on({
     ctx.event.preventDefault();
     await moveRows(ctx.event.dataTransfer.getData('text/plain'), weekKey);
   },
+  /* the Unscheduled block's bar is the one unslot target — the sprint bars
+     take the same handlers and refuse the drop, so the markup has one path
+     (the pattern dayDragOver already uses for holidays) */
+  dragOverBlock(ctx, kind) {
+    if (kind === 'unscheduled') ctx.event.preventDefault();
+  },
+  async dropBlock(ctx, kind) {
+    if (kind !== 'unscheduled') return;
+    ctx.event.preventDefault();
+    await moveRows(ctx.event.dataTransfer.getData('text/plain'), null);
+  },
   async rowKey(ctx, cardId) {
     const key = ctx.event.key;
     if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
     ctx.event.preventDefault();
     const row = app.get('schedRows').find((r) => r.cardId === cardId);
+    if (!row) return;
+    /* the keyboard path says what the drag path says. /replot skips pinned
+       rows server-side (FR-5.9), so without this an arrow key on a pinned row
+       is a round trip that changes nothing and reports nothing — the same
+       silent no-op that made pinned rows non-draggable (contract §3.8). A
+       multi-select still goes through: /replot applies the unpinned members. */
+    const sel = app.get('selected');
+    const inMulti = Object.keys(sel).filter((id) => sel[id]).length > 1 && sel[cardId];
+    if (row.pinned && !inMulti) {
+      flashBanner('Pinned — unpin to move.');
+      return;
+    }
     const from = row.slottedWeek || app.get('weekStart');
     await moveRows(cardId, mondayShift(from, key === 'ArrowRight' ? 1 : -1));
   },
@@ -1484,6 +1671,13 @@ app.on({
   async acceptSuggest() {
     const s = app.get('suggest');
     if (!s) return;
+    /* see the suggestOffWeeks note — the button is already hidden in this
+       state; this is the second lock, because a persisted non-Monday week
+       corrupts the slot silently and is not recoverable from the UI */
+    if (app.get('suggestOffWeeks').length) {
+      flashBanner(`Suggestion not applied — ${app.get('suggestOffWeeksText')}. Accepting would corrupt the slotted weeks.`);
+      return;
+    }
     const moves = Object.entries(s.plan).map(([cardId, week]) => ({ cardId, week }));
     await api.send('POST', `/api/projects/${app.get('activeProjectId')}/replot`, { moves });
     app.set({ suggest: null, suggestCount: 0 });
@@ -1579,7 +1773,39 @@ function patchUrl(cardId) {
   return `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/planning`;
 }
 
-/* BR-8: a multi-select drag applies the grabbed row's interval to every selected row. */
+/* One week's total, moved by one row (§3.6). The base is the CURRENT view of
+   the week — the optimistic override if this drop already touched it, else the
+   server's — because a delta applied to zero would erase every row the server
+   counted. `null` means the week has no rows left and renders a dash. */
+function bumpWeek(map, weekKey, row, sign) {
+  if (!weekKey) return;
+  const seen = Object.prototype.hasOwnProperty.call(map, weekKey);
+  const cur = (seen ? map[weekKey] : app.get('perWeek')[weekKey]) || { cards: 0, rows: 0, hard: 0 };
+  const rows = cur.rows + sign;
+  if (rows <= 0) {
+    map[weekKey] = null;
+    return;
+  }
+  const hard = cur.hard + (row.difficulty === 'Hard' ? sign : 0);
+  const cards = Math.max(0, Math.round((cur.cards + sign * (row.weight || 1)) * 1000) / 1000);
+  const hardShare = hard / rows;
+  const cap = app.get('capacity');
+  const ideal = app.get('capHardIdeal');
+  const ceiling = app.get('capHardCeiling');
+  map[weekKey] = {
+    cards,
+    rows,
+    hard,
+    hardShare,
+    over: cards > cap.weekly,
+    hardOver: hardShare > ceiling,
+    hardWarn: hardShare > ideal && hardShare <= ceiling,
+  };
+}
+
+/* BR-8: a multi-select drag applies the grabbed row's interval to every
+   selected row. A null target unslots instead — /replot takes `week: null`,
+   and an interval has no meaning when there is no week to land on. */
 async function moveRows(grabbedId, targetWeek) {
   const selected = app.get('selected');
   const rows = app.get('schedRows');
@@ -1588,12 +1814,30 @@ async function moveRows(grabbedId, targetWeek) {
   const ids = Object.keys(selected).filter((id) => selected[id]);
   const group = ids.length > 1 && ids.includes(grabbedId) ? ids : [grabbedId];
   const from = grabbed.slottedWeek || targetWeek;
-  const deltaWeeks = Math.round((Date.parse(targetWeek) - Date.parse(from)) / (7 * 864e5));
+  const deltaWeeks = targetWeek === null ? 0 : Math.round((Date.parse(targetWeek) - Date.parse(from)) / (7 * 864e5));
   const moves = group.map((cardId) => {
     const row = rows.find((r) => r.cardId === cardId);
+    if (targetWeek === null) return { cardId, week: null };
     return { cardId, week: row.slottedWeek ? mondayShift(row.slottedWeek, deltaWeeks) : targetWeek };
   });
-  await api.send('POST', `/api/projects/${app.get('activeProjectId')}/replot`, { moves });
+  /* the footer moves with the rows, before the round trip. Pinned rows are
+     skipped server-side (FR-5.9), so counting them here would show a total the
+     server will never agree with. */
+  const local = { ...app.get('perWeekLocal') };
+  for (const mv of moves) {
+    const row = rows.find((r) => r.cardId === mv.cardId);
+    if (!row || row.pinned) continue;
+    bumpWeek(local, row.slottedWeek, row, -1);
+    bumpWeek(local, mv.week, row, 1);
+  }
+  app.set('perWeekLocal', local);
+  try {
+    await api.send('POST', `/api/projects/${app.get('activeProjectId')}/replot`, { moves });
+  } catch (err) {
+    app.set('perWeekLocal', {}); // the optimistic totals are void — fall back to the server's
+    flashBanner(`Replot failed — the plan is unchanged. ${errText(err)}`);
+    return;
+  }
   await loadAll();
 }
 

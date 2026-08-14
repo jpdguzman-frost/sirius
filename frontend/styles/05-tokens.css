@@ -36,6 +36,7 @@
   --blue-500: #3b82f6;
   --blue-600: #2563eb; /* planner cards-per-week slider fill + thumb (node 94:4828) */
   --blue-700: #1d4ed8;
+  --violet-500: #8b5cf6; /* planner suggestion ghost bar outline (R8, node 95:5795) */
   --neutral-950: #0a0a0a; /* Requests note-editor Submit fill */
   --green-50: #f0fdf4;
   --green-100: #dcfce7;
