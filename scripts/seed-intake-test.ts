@@ -58,7 +58,7 @@ const row = (mc: string, name: string, deadline: string, brief = 'Synthetic fixt
 const rows: string[][] = [HEADER];
 // filed rows → 'In Pipeline'; their deadlines join onto the MC group (AC-8 shape)
 filedMcs.forEach((mc, i) => rows.push(row(mc, `Filed fixture ${i + 1}`, `2026-09-${String(10 + i).padStart(2, '0')}`)));
-// unfiled rows → 'For Filing'; targets for frost-note testing (flag → 'With Clarification')
+// unfiled rows → 'To File'; targets for frost-note testing (flag → 'For Clarification')
 rows.push(row('MC-9101', 'Unfiled fixture — flag me for clarification', '2026-09-18'));
 rows.push(row('MC-9102', 'Unfiled fixture — add a remark to me', '2026-09-21'));
 rows.push(row('MC-9103', 'Unfiled fixture — plain', '2026-09-25'));

@@ -3,11 +3,22 @@
  * intake sheet, plus the one Sirius-owned annotation: the frost note.
  *
  * Status derives from the Trello join and the note, never stored (FR-11.3,
- * amends FR-3.3):
- *   MC group has deliverables → 'In Pipeline'
- *   else clarification flag   → 'With Clarification'
- *   else                      → 'For Filing'
+ * amends FR-3.3; names corrected by owls #13–#15, 2026-08-14):
+ *   MC group has deliverables → 'In Pipeline'   (wins over the flag)
+ *   else clarification flag   → 'For Clarification'
+ *   else                      → 'To File'
  * A remark alone never changes status (FR-11.4, AC-21).
+ *
+ * The tile counts are CROSS-CUTTING, not a partition of the three statuses
+ * (owl #14): `toFile` is EVERY unfiled row, flagged ones included, so
+ * requests = inPipeline + toFile and `forClarification` is a subset of
+ * `toFile`. A filed+flagged row is In Pipeline only — never clarification.
+ *
+ * The note is a SINGLE freeform box (owl #15): the remark carries notes and
+ * clarifications alike, so the flag requires the remark (REMARK_REQUIRED) and
+ * new writes store clarify_reason null. The field stays in the accepted body
+ * for API compatibility, and legacy rows keep their text — readers display
+ * (remark || clarify_reason).
  *
  * The deadline is RESOLVED, not the sheet cell (invariant 14 / BR-9, same
  * precedence as deliverables_v): the MC group's earliest Trello due wins,
@@ -80,8 +91,8 @@ export function requestsRouter(): Router {
         const status = filedMcs.has(r.mc_number)
           ? 'In Pipeline'
           : note?.clarify
-            ? 'With Clarification'
-            : 'For Filing';
+            ? 'For Clarification'
+            : 'To File';
         const due = trelloDue.get(r.mc_number) ?? null;
         const sheetDeadline = r.deadline ?? null;
         return {
@@ -100,16 +111,18 @@ export function requestsRouter(): Router {
           note: noteOf(note),
         };
       });
-      // FR-11.5 tile counts, from the unfiltered set
+      // FR-11.5 tile counts, from the unfiltered set — cross-cutting (owl #14):
+      // toFile is every unfiled row, so requests = inPipeline + toFile, and
+      // forClarification is a subset of toFile rather than a fourth bucket
       const counts = {
         requests: rows.length,
         inPipeline: rows.filter((r) => r.status === 'In Pipeline').length,
-        forFiling: rows.filter((r) => r.status === 'For Filing').length,
-        forClarification: rows.filter((r) => r.status === 'With Clarification').length,
+        toFile: rows.filter((r) => r.status !== 'In Pipeline').length,
+        forClarification: rows.filter((r) => r.status === 'For Clarification').length,
       };
       if (filter === 'filed') rows = rows.filter((r) => r.status === 'In Pipeline');
       if (filter === 'unfiled') rows = rows.filter((r) => r.status !== 'In Pipeline');
-      if (filter === 'clarification') rows = rows.filter((r) => r.status === 'With Clarification');
+      if (filter === 'clarification') rows = rows.filter((r) => r.status === 'For Clarification');
       if (filter === 'missing-deadline') rows = rows.filter((r) => !r.deadline);
 
       const rejects = await IntakeReject.find({ project_id: projectId }).sort({ sheet_row: 1 }).lean();
@@ -161,17 +174,20 @@ export function requestsRouter(): Router {
 
       const remark = parsed.data.remark?.trim() || null;
       const clarify = parsed.data.clarify;
-      const reason = clarify ? parsed.data.clarify_reason?.trim() || null : null;
-      if (clarify && !reason) {
-        // the flag marks the request as not fileable — that always needs a why
-        res.status(400).json({ ok: false, error: { code: 'REASON_REQUIRED' } });
+      if (clarify && !remark) {
+        // owl #15: one box holds notes and clarifications alike, so the flag —
+        // which marks the request not fileable — needs THAT box filled in
+        res.status(400).json({ ok: false, error: { code: 'REMARK_REQUIRED' } });
         return;
       }
 
       const existing = await FrostNote.findOne({ project_id: projectId, mc_number: mc });
       const before = noteOf(existing);
+      // clarify_reason is retired by the single-box model (owl #15) — still
+      // accepted in the body for API compat, never stored again; legacy rows
+      // keep their text until the next write nulls it
       const after: NoteShape | null =
-        remark === null && !clarify ? null : { remark, clarify, clarify_reason: reason };
+        remark === null && !clarify ? null : { remark, clarify, clarify_reason: null };
 
       if (JSON.stringify(before) === JSON.stringify(after)) {
         res.json({ ok: true, note: after, noop: true }); // idempotent — no audit echo

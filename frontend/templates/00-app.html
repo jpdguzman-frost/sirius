@@ -114,25 +114,29 @@
               <!-- invariant 14: the server resolves Trello due over sheet deadline; the tooltip names which -->
               <td class="col-rdue">{{#if r.deadline}}<span class="rtext nowrap" title="{{r.deadline_source === 'trello' ? 'From Trello due date' : 'From intake sheet'}}">{{fmtLong(r.deadline)}}</span>{{else}}<span class="nopill">none</span>{{/if}}</td>
               <td class="col-rbrief">{{#if r.brief}}<span class="rtext" title="{{r.brief}}">{{{hlr(clip180(r.brief))}}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
-              <td class="col-rstatus"><span class="sbadge {{r.status === 'In Pipeline' ? 'pipe' : r.status === 'With Clarification' ? 'clar' : 'file'}}">{{r.status}}</span></td>
+              <td class="col-rstatus"><span class="sbadge {{r.status === 'In Pipeline' ? 'pipe' : r.status === 'For Clarification' ? 'clar' : 'file'}}">{{r.status}}</span></td>
+              <!-- FR-11 note cell. ONE freeform box in the editor (owl #15) and
+                   one resolved text everywhere else — noteText() carries the
+                   legacy clarify_reason fallback so no branch repeats it. The
+                   clarification block keys on the derived STATUS, so a FILED
+                   row that still carries the flag renders the plain remark box
+                   (In Pipeline wins, FR-11.3). -->
               <td class="col-rnote"><div class="notewrap">
                 {{#if noteEditing === r.mc_number}}
                   <div class="noteedit" on-keydown="['noteKeydown']">
-                    <textarea rows="3" placeholder="Remark" value="{{noteDraft.remark}}" autofocus></textarea>
+                    <textarea rows="3" class="{{#if noteDraft.clarify}}flagged{{/if}}" placeholder="Add a remark or a clarification" value="{{noteDraft.remark}}" autofocus></textarea>
                     <label class="nchk"><input type="checkbox" checked="{{noteDraft.clarify}}" /> With Clarification</label>
                     <div class="nsub">Marks the request as not fileable yet</div>
-                    {{#if noteDraft.clarify}}<textarea rows="2" class="reason" placeholder="Reason (required)" value="{{noteDraft.reason}}"></textarea>{{/if}}
                     {{#if noteError}}<span class="nerr">{{noteError}}</span>{{/if}}
                     <div class="nbtns"><button class="nghost" on-click="['cancelNote']">Cancel</button><button class="nsubmit" on-click="['submitNote', r.mc_number]">Submit</button></div>
                   </div>
-                {{elseif r.note && r.note.clarify}}
+                {{elseif r.status === 'For Clarification'}}
                   <button class="notebox flagged" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}">
                     <span class="clarpill">With Clarification</span>
-                    <span class="clarwhy">{{{hlr(r.note.clarify_reason)}}}</span>
-                    {{#if r.note.remark}}<span class="clarremark">{{{hlr(r.note.remark)}}}</span>{{/if}}
+                    <span class="clarnote">{{{hlr(noteText(r.note))}}}</span>
                   </button>
-                {{elseif r.note && r.note.remark}}
-                  <button class="notebox" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}">{{{hlr(r.note.remark)}}}</button>
+                {{elseif noteText(r.note)}}
+                  <button class="notebox" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}">{{{hlr(noteText(r.note))}}}</button>
                 {{else}}
                   <button class="addremark" on-click="['openNote', r.mc_number]">Add Remarks</button>
                 {{/if}}

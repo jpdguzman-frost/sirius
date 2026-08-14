@@ -8,7 +8,23 @@ const WEEK_COUNT = 8;
 /* Requests tab (build-spec v1.2 §3): the stat segments are a single-select
    filter on the DERIVED status (FR-11.3), the table pages ten rows at a
    time, and every filter runs client-side over one fetch. */
-const REQUEST_STATUS = { filed: 'In Pipeline', filing: 'For Filing', clarification: 'With Clarification' };
+const STATUS_FILED = 'In Pipeline';
+const STATUS_TO_FILE = 'To File';
+const STATUS_CLARIFY = 'For Clarification';
+/* Segment key → row predicate (owl #14, 2026-08-14). TO FILE is CROSS-CUTTING:
+   it is every unfiled row, flagged ones included, so REQUESTS = IN PIPELINE +
+   TO FILE and FOR CLARIFICATION is a SUBSET of TO FILE. That is why a segment
+   is a predicate and not string equality against one status value. */
+const REQUEST_SEGMENTS = {
+  filed: (r) => r.status === STATUS_FILED,
+  filing: (r) => r.status !== STATUS_FILED,
+  clarification: (r) => r.status === STATUS_CLARIFY,
+};
+/* A frost note is ONE freeform text (owl #15). Rows written before that ruling
+   can still hold their text in clarify_reason with an empty remark, so every
+   place that shows, searches or edits a note resolves it through this ONE
+   helper — no call site has to remember the legacy fallback. */
+const noteText = (n) => (n && (n.remark || n.clarify_reason)) || '';
 const REQ_PAGE_SIZE = 10;
 /* the filter select box (25-requests.css .selectmenu.reqmenu) — its WIDTH is
    fixed but its height is content-derived, so 264 is the max-height cap, not
@@ -159,9 +175,11 @@ const app = new Ractive({
     hardCeiling: HARD_CEILING,
     requests: [],
     rejects: [],
-    requestCounts: { requests: 0, inPipeline: 0, forFiling: 0, forClarification: 0 },
+    requestCounts: { requests: 0, inPipeline: 0, toFile: 0, forClarification: 0 },
     noteEditing: null,
-    noteDraft: { remark: '', clarify: false, reason: '' },
+    /* one freeform box for notes AND clarifications (owl #15) — the flag is a
+       tick, never a second field */
+    noteDraft: { remark: '', clarify: false },
     noteError: '',
     expandedWeek: null,
     isAdmin: false,
@@ -171,7 +189,7 @@ const app = new Ractive({
     adminEditing: null,
     adminEditSel: {},
     adminError: '',
-    requestFilter: 'all', // 'all' | key of REQUEST_STATUS — the stat segments
+    requestFilter: 'all', // 'all' | key of REQUEST_SEGMENTS — the stat segments
     reqQ: '',
     ...reqFiltersCleared(), // reqYear / reqMonth / reqType / reqRequestor, '' = All
     reqMenu: null, // which select's overlay is open — shares the Pipeline recipe
@@ -244,7 +262,7 @@ const app = new Ractive({
        client-side over the single unfiltered payload. The counts stay on
        requestCounts, which the server derives from the same unfiltered set. */
     reqFiltered() {
-      const status = REQUEST_STATUS[this.get('requestFilter')] || null;
+      const seg = REQUEST_SEGMENTS[this.get('requestFilter')] || null;
       const q = (this.get('reqQ') || '').trim().toLowerCase();
       // '' = All. Every other value came out of the option list built from
       // these same rows, so comparing string forms is the same test as
@@ -252,7 +270,7 @@ const app = new Ractive({
       const picks = REQ_FILTERS.map((f) => ({ pick: f.pick, want: this.get(f.key) })).filter((p) => p.want !== '');
       return this.get('requests').filter(
         (r) =>
-          (!status || r.status === status) &&
+          (!seg || seg(r)) &&
           (!q || (r.blob || '').includes(q)) &&
           picks.every((p) => String(p.pick(r)) === String(p.want)),
       );
@@ -265,7 +283,7 @@ const app = new Ractive({
       return [
         { key: 'all', cls: 'all', label: 'REQUESTS', value: c.requests },
         { key: 'filed', cls: 'green', label: 'IN PIPELINE', value: c.inPipeline },
-        { key: 'filing', cls: 'amber', label: 'TO FILE', value: c.forFiling },
+        { key: 'filing', cls: 'amber', label: 'TO FILE', value: c.toFile },
         { key: 'clarification', cls: 'red', label: 'FOR CLARIFICATION', value: c.forClarification },
       ];
     },
@@ -405,7 +423,7 @@ function makeHighlighter(queryKey) {
       .join('');
   };
 }
-app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ') });
+app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ'), noteText });
 
 /* Anything that invalidates a fixed-position overlay's anchor closes it;
    outside click and Escape dismiss it (review findings 3 + 8). The due-date
@@ -702,12 +720,11 @@ async function loadAll() {
 }
 
 /* §3 search: one blob per request row, computed once per load — MC#, name,
-   use case, requestor, type, brief and both frost-note fields, so the filter
-   and the highlighter agree on what counts as a match. */
+   use case, requestor, type, brief and the frost note's ONE resolved text, so
+   the filter and the highlighter agree on what counts as a match. */
 function blobRequests(rows) {
   rows.forEach((r) => {
-    const n = r.note || {};
-    r.blob = `${r.mc_number || ''} ${r.name || ''} ${r.use_case || ''} ${r.requestor || ''} ${r.asset_type || ''} ${r.brief || ''} ${n.remark || ''} ${n.clarify_reason || ''}`.toLowerCase();
+    r.blob = `${r.mc_number || ''} ${r.name || ''} ${r.use_case || ''} ${r.requestor || ''} ${r.asset_type || ''} ${r.brief || ''} ${noteText(r.note)}`.toLowerCase();
   });
   return rows;
 }
@@ -843,7 +860,7 @@ app.on({
       reqPage: 1,
       reqMenu: null,
       noteEditing: null,
-      noteDraft: { remark: '', clarify: false, reason: '' },
+      noteDraft: { remark: '', clarify: false },
       noteError: '',
     });
     await loadAll();
@@ -868,10 +885,12 @@ app.on({
   /* ---- frost notes (FR-11): inline editor, only Submit persists ---- */
   openNote(_ctx, mc) {
     const r = app.get('requests').find((x) => x.mc_number === mc);
-    const n = (r && r.note) || {};
+    const n = (r && r.note) || null;
+    // a legacy clarify_reason opens IN the single box, so Submit rewrites it
+    // as the remark instead of dropping it
     app.set({
       noteEditing: mc,
-      noteDraft: { remark: n.remark || '', clarify: !!n.clarify, reason: n.clarify_reason || '' },
+      noteDraft: { remark: noteText(n), clarify: !!(n && n.clarify) },
       noteError: '',
     });
   },
@@ -883,19 +902,21 @@ app.on({
   async submitNote(_ctx, mc) {
     const d = app.get('noteDraft');
     const remark = (d.remark || '').trim() || null;
-    const reason = (d.reason || '').trim() || null;
-    if (d.clarify && !reason) {
-      app.set('noteError', 'The flag needs a reason');
+    // the flag has no field of its own any more (owl #15): the box IS the
+    // clarification, so an empty box cannot carry one (server: REMARK_REQUIRED)
+    if (d.clarify && !remark) {
+      app.set('noteError', 'The flag needs a note');
       return;
     }
     const idx = app.get('requests').findIndex((x) => x.mc_number === mc);
     const row = app.get(`requests.${idx}`);
     const prev = { note: row.note, status: row.status };
-    const note = remark === null && !d.clarify ? null : { remark, clarify: d.clarify, clarify_reason: reason };
+    // clarify_reason is legacy-only — a new write always nulls it
+    const note = remark === null && !d.clarify ? null : { remark, clarify: d.clarify, clarify_reason: null };
     // optimistic: status is derived — mirror the server's derivation (FR-11.3)
     app.set(`requests.${idx}.note`, note);
-    if (row.status !== 'In Pipeline') {
-      app.set(`requests.${idx}.status`, d.clarify ? 'With Clarification' : 'For Filing');
+    if (row.status !== STATUS_FILED) {
+      app.set(`requests.${idx}.status`, d.clarify ? STATUS_CLARIFY : STATUS_TO_FILE);
     }
     app.set({ noteEditing: null, noteError: '' });
     // ONLY the write is inside the rollback: once the PUT resolves the server
@@ -903,7 +924,7 @@ app.on({
     // staleness, never a reason to revert a row the database already has.
     try {
       await api.send('PUT', `/api/projects/${app.get('activeProjectId')}/requests/${mc}/note`, {
-        remark, clarify: d.clarify, ...(d.clarify ? { clarify_reason: reason } : {}),
+        remark, clarify: d.clarify,
       });
     } catch (err) {
       app.set(`requests.${idx}.note`, prev.note);
