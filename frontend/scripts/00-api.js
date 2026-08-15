@@ -1,16 +1,25 @@
 /* Sirius frontend API helper — same-origin only; no credential ever lives here. */
 
 /* Base-path awareness: the same built bundle serves at the domain root in dev
-   and under /sirius on the platforms host — derive the prefix from our own
-   URL (the app always lives at the BASE_PATH root, there is no client routing). */
-const BASE = window.location.pathname.replace(/\/(index\.html)?$/, '');
+   and under /sirius on the platforms host. The server stamps the prefix into
+   the shell at serve time (src/app.ts serveShell → injectBase), which is
+   deterministic at ANY url depth — deriving it from our own pathname stopped
+   working the moment the app gained client routing (/sirius/rt-test/schedules
+   would have yielded the whole path as the base). */
+const BASE = window.SIRIUS_BASE ?? '';
 
 const api = {
   async get(path) {
     const res = await fetch(BASE + path, { headers: { Accept: 'application/json' } });
     if (res.status === 401) {
-      // localhost bootstraps via the dev auto-login; everywhere else is Google SSO
-      window.location.href = BASE + (window.location.hostname === 'localhost' ? '/auth/dev' : '/auth/google');
+      // localhost bootstraps via the dev auto-login; everywhere else is Google
+      // SSO. The deep link rides along so sign-in returns to the page that was
+      // asked for; the server whitelists it before honouring it.
+      const here = window.location.pathname.slice(BASE.length) || '/';
+      window.location.href =
+        BASE +
+        (window.location.hostname === 'localhost' ? '/auth/dev' : '/auth/google') +
+        '?returnTo=' + encodeURIComponent(here);
       throw new Error('unauthenticated');
     }
     const body = await res.json();

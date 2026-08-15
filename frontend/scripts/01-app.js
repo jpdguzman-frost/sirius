@@ -312,6 +312,11 @@ function mondaysBetween(startIso, endIso) {
   return n;
 }
 
+/* Where the URL says to start. Captured BEFORE anything can touch history, and
+   read once the project list has loaded (loadShell) — a later location change
+   cannot race it. */
+const initialRoute = parseRoute(window.location.pathname, BASE);
+
 const app = new Ractive({
   target: '#app',
   template: '#tpl-app',
@@ -979,10 +984,27 @@ async function loadShell() {
     isAdmin: !!me.user.admin,
     tabs,
   });
-  if (!app.get('activeProjectId') && projects.projects.length) {
-    app.set('activeProjectId', projects.projects[0]._id);
-  }
+  // URL-first selection (phase 13h, JP 2026-08-15). An unknown project code, a
+  // project the caller is not a member of, and `admin` for a non-admin ALL fall
+  // through to the defaults silently — no error page. `tabs` above already
+  // excludes admin for a non-admin, so no new access check is introduced here
+  // and none is implied: the data still 403s server-side (invariant 9).
+  const byCode = initialRoute.project
+    ? projects.projects.find((p) => p.code === initialRoute.project)
+    : null;
+  const chosen = byCode || projects.projects[0] || null;
+  // Suppressed: boot pushes no history entry — it normalizes once, below.
+  withRouterSuppressed(() => {
+    if (chosen && !app.get('activeProjectId')) app.set('activeProjectId', chosen._id);
+  });
+  const wantTab = tabs.some((t) => t.id === initialRoute.tab) ? initialRoute.tab : ROUTE_DEFAULT_TAB;
+
   await loadAll();
+
+  // After the load, so a deep link into a tab has its data — and through the
+  // real selectTab, so the per-tab resets fire exactly as they do on a click.
+  withRouterSuppressed(() => selectTab(wantTab));
+  normalizeUrl();
 }
 
 async function loadAdmin() {
@@ -1319,6 +1341,34 @@ function selectTab(id) {
   }
 }
 
+/* The project-switch reset. Extracted from the `switchProject` handler verbatim
+   so back/forward across a project boundary (popstate) behaves identically to
+   using the switcher — same clears, same reload. */
+async function resetForProjectSwitch() {
+  // Requests view state is per-project. A Type/Requestor value from the old
+  // project may not exist in the new one, leaving an unclearable empty
+  // table. The sort resets with them so the new project opens on its own
+  // newest-filed default rather than inheriting a column the reader chose
+  // while looking at other data — and an open note editor is keyed on
+  // mc_number ALONE, which is
+  // unique per project and NOT globally (invariant 3), so leaving it open
+  // re-attaches project A's draft to project B's same-numbered row and
+  // Submit would write it there.
+  app.set({
+    ...reqFiltersCleared(),
+    requestFilter: 'all',
+    reqQ: '',
+    reqSortKey: '',
+    reqSortDir: '',
+    reqPage: 1,
+    reqMenu: null,
+    noteEditing: null,
+    noteDraft: { remark: '', clarify: false },
+    noteError: '',
+  });
+  await loadAll();
+}
+
 /* clicking the active segment clears it; REQUESTS is always the show-all */
 function applyRequestFilter(f) {
   app.set('requestFilter', f === app.get('requestFilter') && f !== 'all' ? 'all' : f);
@@ -1341,28 +1391,7 @@ app.on({
     });
   },
   async switchProject() {
-    // Requests view state is per-project. A Type/Requestor value from the old
-    // project may not exist in the new one, leaving an unclearable empty
-    // table. The sort resets with them so the new project opens on its own
-    // newest-filed default rather than inheriting a column the reader chose
-    // while looking at other data — and an open note editor is keyed on
-    // mc_number ALONE, which is
-    // unique per project and NOT globally (invariant 3), so leaving it open
-    // re-attaches project A's draft to project B's same-numbered row and
-    // Submit would write it there.
-    app.set({
-      ...reqFiltersCleared(),
-      requestFilter: 'all',
-      reqQ: '',
-      reqSortKey: '',
-      reqSortDir: '',
-      reqPage: 1,
-      reqMenu: null,
-      noteEditing: null,
-      noteDraft: { remark: '', clarify: false },
-      noteError: '',
-    });
-    await loadAll();
+    await resetForProjectSwitch();
   },
   signOut() { api.send('POST', '/auth/logout').then(() => window.location.reload()); },
   toggleCorrections() { app.toggle('showAllCorrections'); },
@@ -1840,5 +1869,70 @@ async function moveRows(grabbedId, targetWeek) {
   }
   await loadAll();
 }
+
+/* ---------- URL routing — the impure half (phase 13h, JP 2026-08-15) ---------- */
+
+/* A COUNTER, not a boolean, so nesting is safe. While it is above zero the
+   observer below writes no history entry — which is how boot, popstate and
+   normalization avoid pushing states the user never navigated to. Only
+   SYNCHRONOUS app.set calls belong inside: Ractive fires observers inside set,
+   so an await in `fn` would leak the suppression. */
+let routerDepth = 0;
+function withRouterSuppressed(fn) {
+  routerDepth++;
+  try {
+    fn();
+  } finally {
+    routerDepth--;
+  }
+}
+
+function currentUrl() {
+  return window.location.pathname + window.location.search + window.location.hash;
+}
+
+/* The canonical URL for the state on screen, or null when no project has
+   resolved yet (nothing to name — leave the URL untouched). search/hash ride
+   along so a future query parameter survives normalization. */
+function currentHref() {
+  const project = (app.get('projects') || []).find((p) => p._id === app.get('activeProjectId'));
+  if (!project) return null;
+  return buildPath(project.code, app.get('activeTab'), BASE) + window.location.search + window.location.hash;
+}
+
+/* Rewrite the address bar IN PLACE. Used on boot (so `/rt-test`, `/schedules`
+   and `/` grow into their canonical form without a history entry) and after a
+   popstate (so a junk entry is corrected where it sits, and pressing back again
+   does not walk into it a second time). */
+function normalizeUrl() {
+  const href = currentHref();
+  if (href && href !== currentUrl()) window.history.replaceState(null, '', href);
+}
+
+/* One observer over both keypaths: the action is identical for each, and the
+   href guard collapses the double fire if a single set changes both. */
+app.observe('activeTab activeProjectId', () => {
+  if (routerDepth > 0) return;
+  const href = currentHref();
+  if (!href || href === currentUrl()) return;
+  window.history.pushState(null, '', href);
+}, { init: false });
+
+/* Back / forward: restore the entry WITHOUT pushing a new one. */
+window.addEventListener('popstate', () => {
+  const route = parseRoute(window.location.pathname, BASE);
+  const projects = app.get('projects') || [];
+  const target = (route.project && projects.find((p) => p.code === route.project)) || projects[0] || null;
+  const tabs = app.get('tabs') || [];
+  const tab = tabs.some((t) => t.id === route.tab) ? route.tab : ROUTE_DEFAULT_TAB;
+
+  const projectChanged = !!target && target._id !== app.get('activeProjectId');
+  withRouterSuppressed(() => {
+    if (projectChanged) app.set('activeProjectId', target._id);
+    if (tab !== app.get('activeTab')) selectTab(tab);
+  });
+  normalizeUrl();
+  if (projectChanged) resetForProjectSwitch(); // async on purpose — same as the switcher
+});
 
 loadShell().catch((err) => app.set('banner', `Boot failed: ${err.message}`));
