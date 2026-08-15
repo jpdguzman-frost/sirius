@@ -275,6 +275,21 @@ Scope: Requests tab restyled 1:1 to the frame + client-side search/filters/pagin
 
 ---
 
+## Phase 13h — URL routing for the main tabs (~0.5d) — added 2026-08-15 (JP go; QoL/navigation, scheme approved by JP and not re-litigated)
+
+## Phase 13g — Deliverables table + Gantt planner + calendar amendment (~2d) — backfilled 2026-08-15 (owl #22; JP calendar rulings same day)
+
+- [x] T125 Deliverables table + Gantt planner (owl #22, node `95:5795`, 8 Rex-verified annotations; rulings R1–R11 in `gantt-frame-notes.md`): planner payload gains `phases[]` (sketch/review/render/renderOverdue from the verbatim forecast dates, day resolution) + `perWeek` (BR-6c weights, hardShare vs HARD_MIX 12.9%); view replaces the legacy week-board — pinned 999px columns + scrolling weekly timeline (`35-gantt.css`), Monday-owned month/wk labels, derived sprint blocks + outside-any-sprint + unscheduled (R5), capacity footer w/ warnings (R9), whole-row DnD via audited `/replot` (R7), violet ghost proposals + Sunday-key Accept guard (R8). 8-agent workflow, 13 findings fixed; 293/293 dual-TZ; deployed + live-verified (commits `9977f07`…`455a230`)
+- [x] T126 Calendar amendment, constitution v4.2.0 (JP 2026-08-15): `lib/calendar.ts` TZ-safe — local-Monday week keys (un-breaks `/suggest` on Manila hosts), local-date `isHoliday`, injectable `setHolidays()`; **ARES working-day calendar canonical** (worker `calendarTick` derives from `/api/workload?mode=daily`, cross-checks `/api/portfolio/capacity`, persists `calendar_days`; server loads at boot + 15-min); migration `005-monday-slotted-week` (8 live rows, audited); golden tests rebuilt on a TZ-true reference, oracle parity kept where the oracle is correct; 305/305 under Manila + UTC + New York; deployed + live-verified (commits `ba94db4`…`fa0041a`)
+
+
+
+- [x] T127 Routing core: `src/routing/paths.ts` — `isShellPath` whitelist (`/` · `/<code>` · `/<tab>` · `/<code>/<tab>`; segment `[a-z0-9-]+`, reserved first segments `api|auth|healthz|__test`, known tabs only), `safeReturnTo` (path-only, same-origin by construction — absolute/protocol-relative/backslash/CRLF/over-128 all refused), `injectBase`; `frontend/scripts/00-router.js` pure `parseRoute`/`buildPath`; drift guard pins the duplicated tab list to the server's (no module system on the frontend). 28 tests (15 whitelist/validator + 13 executing the shipped client source in a no-globals vm, which is itself the purity assertion)
+- [x] T128 Server + client wiring: shell catch-all registered LAST as a plain middleware (Express 5 / path-to-regexp 8 — an inline param regex throws at registration) + serve-time `window.SIRIUS_BASE` stamp, mtime-keyed per-base cache, `express.static { index: false }` and an `/index.html` redirect closing both unstamped-shell doors; **`00-api.js` BASE fix** (was `location.pathname`-derived, wrong at any depth > 0 — every API call would have 404'd under a deep link); client initial-parse → apply-after-projects-load, one observer over `activeTab activeProjectId` → pushState, popstate restore under a depth-counter guard, `replaceState` normalization; `resetForProjectSwitch` extracted verbatim so back/forward across a project matches the switcher. Silent fallbacks throughout — unknown code, non-member, `/admin` for a non-admin (invariant 9 untouched; the data still 403s). 20 tests
+- [x] T129 Deep-link return through sign-in: `returnTo` captured on `/auth/google` into the SESSION (the strategy has no state store), read **before** `req.logIn` — passport regenerates the session on login to guard against fixation, so a value read inside the callback is already gone — consumed once, whitelist-validated on both write and read; dev auto-login reads the query directly. 13 tests, refusal matrix run at both mounts (366/366 dual-TZ, from 305)
+
+---
+
 ## Dependencies
 
 ```

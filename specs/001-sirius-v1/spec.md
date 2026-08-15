@@ -584,6 +584,17 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 - Clarification display block + editor rebuilt to frame nodes `452:24801`/`452:24791`
   (red-50/red-500 badge + red-bordered wrapping note; editor text turns red-500 while flagged).
 
+### Session 2026-08-15 (JP) — URL routing for the main tabs
+
+- **Tabs and projects are addressable**: the path below `BASE_PATH` is `/<project-code>/<tab>`
+  (`/rt-test/schedules`), with `/<code>`, `/<tab>` and `/` accepted as shorthand and normalized
+  in place. Default tab `pipeline`; default project stays the first the membership returns.
+  Back/forward and refresh restore both; sign-in returns to the full deep link.
+- **Routing is navigation, never access control** (invariant 9 untouched): an unknown code, a
+  non-member project and `/admin` for a non-admin all fall back silently to the defaults — no
+  error page. Every API route still re-checks session and project membership, and admin data
+  still 403s regardless of the URL.
+
 ## Open Decisions
 
 From BRD §13. Marked, not resolved — each is answered by its owner and recorded in Clarifications before dependent work proceeds. (The BRD's numbering has no OD-3.)
