@@ -7,6 +7,7 @@
  * control (invariant 9). Sessions live in Redis, httpOnly cookie (FR-2.3).
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -25,9 +26,30 @@ import { deliverablesRouter } from './routes/deliverables.ts';
 import { scheduleRouter } from './routes/schedule.ts';
 import { writesRouter } from './routes/writes.ts';
 import { aresWebhookRouter } from './routes/webhooks.ts';
+import { injectBase, isShellPath, resolvesToShellFile, safeReturnTo } from './routing/paths.ts';
 import { makeTrelloWriter, type TrelloWriter } from '../lib/trello.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const SHELL = path.join(__dirname, '..', 'public', 'index.html');
+
+/**
+ * The base-stamped shell, cached per base and keyed on the file's mtime: one
+ * 224 KB read per `node frontend/build.js`, not per request, and a rebuild
+ * during `npm run dev` is picked up without a restart. Keyed by base because a
+ * single process serves more than one mount in the test suite.
+ */
+const shellCache = new Map<string, { mtimeMs: number; html: string }>();
+
+async function serveShell(res: express.Response, base: string): Promise<void> {
+  const stat = await fs.promises.stat(SHELL);
+  let hit = shellCache.get(base);
+  if (!hit || hit.mtimeMs !== stat.mtimeMs) {
+    hit = { mtimeMs: stat.mtimeMs, html: injectBase(await fs.promises.readFile(SHELL, 'utf8'), base) };
+    shellCache.set(base, hit);
+  }
+  res.set('Cache-Control', 'no-cache').type('html').send(hit.html);
+}
 
 export interface AppDeps {
   env: Env;
@@ -94,7 +116,9 @@ export function createApp({ env, redis, trello }: AppDeps): express.Express {
         }
         req.logIn({ userId: user._id.toString(), email: user.email, name: user.name }, (err) => {
           if (err) return next(err);
-          res.redirect(`${base}/`);
+          // No round trip here, so the deep link rides the query string
+          // directly — whitelist-validated, path-only (phase 13h).
+          res.redirect(`${base}${safeReturnTo(req.query.returnTo) ?? '/'}`);
         });
       }, next);
     });
@@ -116,12 +140,39 @@ export function createApp({ env, redis, trello }: AppDeps): express.Express {
   root.use(scheduleRouter());
   root.use(writesRouter(env, trello !== undefined ? trello : makeTrelloWriter(env)));
 
+  // The shell is only ever served with its base stamped in (serveShell). This
+  // guard and `index: false` below close the doors through which express.static
+  // would otherwise hand out an UNSTAMPED copy — which would silently set
+  // BASE='' in production and 404 every API call.
+  //
+  // It matches on what serve-static will RESOLVE, not on the one literal
+  // spelling: serve-static percent-decodes and normalizes first, so a
+  // `root.get('/index.html')` route still let `/index%2Ehtml`, `/%69ndex.html`
+  // and `//index.html` through to the raw file (resolvesToShellFile).
+  root.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (!resolvesToShellFile(req.path)) return next();
+    res.redirect(`${base}/`);
+  });
+
   // Built frontend (frontend/build.js → public/). No credential ever ships here.
-  root.use(express.static(path.join(__dirname, '..', 'public')));
+  root.use(express.static(path.join(__dirname, '..', 'public'), { index: false }));
 
   // Unknown API paths answer JSON, not HTML.
   root.use('/api', (_req, res) => {
     res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+  });
+
+  // Client routing (phase 13h, JP 2026-08-15). Registered LAST so every real
+  // route wins first, and whitelisted by isShellPath so it cannot shadow one
+  // even if a later edit registers a route after it — two independent layers.
+  // A plain middleware, not a path pattern: Express 5 ships path-to-regexp 8,
+  // where an inline param regex throws at registration and a bare `/:a/:b`
+  // would swallow `/api/*`.
+  root.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (!isShellPath(req.path)) return next();
+    serveShell(res, base).catch(next);
   });
 
   app.use(base || '/', root);

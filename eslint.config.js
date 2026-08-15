@@ -9,7 +9,10 @@ import globals from 'globals';
 // Names defined in one frontend script and used in another (build.js
 // concatenates them into one <script>). Drives both the eslint globals map
 // and the unused-vars ignore pattern below — one list, two derivations.
-const FRONTEND_SHARED = ['api', 'fmtDate', 'mondayShift', 'ICONS', 'ICON_SPRITE'];
+const FRONTEND_SHARED = [
+  'api', 'fmtDate', 'mondayShift', 'ICONS', 'ICON_SPRITE',
+  'BASE', 'parseRoute', 'buildPath', 'ROUTE_TABS', 'ROUTE_DEFAULT_TAB',
+];
 
 export default [
   {
