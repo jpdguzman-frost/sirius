@@ -29,6 +29,7 @@ import {
   UI_CSS,
   leakedMustacheText,
   renderSprintModal,
+  type SprintBanner,
 } from './helpers/gantt-render.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -72,35 +73,49 @@ function computedMethod(name: string, src: string = APP_JS): string {
 }
 
 interface Draft { name: string; start: string; end: string }
-interface Banner { variant: string; title: string; text: string; after?: number }
+interface Baseline { name: string; start: string; end: string }
+/* the shape the computeds emit, and the shape `renderSprintModal` takes — one
+   type, so a banner can go straight from the shipped validator into the
+   shipped template with nothing retyped in between */
+type Banner = SprintBanner;
 interface Validators {
   set(draft: Draft[], holidays?: string[]): void;
+  baseline(rows: Baseline[]): void;
   dups(): Banner[];
+  blanks(): Banner[];
   overlaps(): Banner[];
   gaps(): Banner[];
+  dirty(): boolean;
   workingDays(a: string, b: string, h?: string[]): number;
   monday(iso: string): string;
   friday(iso: string): string;
 }
 
-const COMPUTEDS = ['sprintOrder', 'sprintDupNames', 'sprintOverlaps', 'sprintGaps'];
+const COMPUTEDS = [
+  'sprintOrder', 'sprintDupNames', 'sprintBlankNames', 'sprintOverlaps', 'sprintGaps', 'sprintDirty',
+];
 
 // `this.get(key)` resolves a computed transparently in Ractive, so the harness
 // `get` does too — that is what lets sprintOverlaps/sprintGaps consume
 // sprintOrder unmodified.
 const v = new Function(`
   ${constDecl('isoOf')}
+  ${constDecl('MONTHS_SHORT')}
+  ${fn('fmtLongIso')}
   ${fn('mondayIso')}
   ${fn('fridayIso')}
   ${fn('workingDaysBetween')}
   const computed = { ${COMPUTEDS.map((n) => computedMethod(n)).join(', ')} };
-  const DATA = { sprintDraft: [], holidays: [] };
+  const DATA = { sprintDraft: [], sprintBaseline: [], holidays: [] };
   const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k) ? computed[k].call(ctx) : DATA[k]) };
   return {
     set: (draft, holidays) => { DATA.sprintDraft = draft; DATA.holidays = holidays || []; },
+    baseline: (rows) => { DATA.sprintBaseline = rows; },
     dups: () => computed.sprintDupNames.call(ctx),
+    blanks: () => computed.sprintBlankNames.call(ctx),
     overlaps: () => computed.sprintOverlaps.call(ctx),
     gaps: () => computed.sprintGaps.call(ctx),
+    dirty: () => computed.sprintDirty.call(ctx),
     workingDays: (a, b, h) => workingDaysBetween(a, b, h || []),
     monday: (iso) => mondayIso(iso),
     friday: (iso) => fridayIso(iso),
@@ -157,6 +172,165 @@ describe('duplicate names — blocking, per project, one banner per NAME', () =>
     const tail = '. Give each sprint a unique name to save.';
     expect(route).toContain(`Multiple sprints are named "\${first}"${tail}`);
     expect(APP_JS).toContain(`Multiple sprints are named "\${String(s.name).trim()}"${tail}`);
+  });
+});
+
+/**
+ * Blank names — the second blocking class (owl #37 item 2, Miles). The
+ * duplicate-name parity test above is the precedent: whichever side a user
+ * trips, the words must be the same, so the copy is pinned on BOTH files at
+ * once rather than trusted to stay in step.
+ *
+ * The executed-validator half of this class (`sprintBlankNames` out of the
+ * shipped 01-app.js) sits with the other computeds; this describe owns only
+ * the two-sided copy contract.
+ */
+describe('blank names — the modal banner and the route’s 422 say the same words', () => {
+  const ROUTE = fs.readFileSync(path.join(ROOT, 'src', 'routes', 'schedule.ts'), 'utf8');
+  const SENTENCE = 'has no name. Name every sprint to save.';
+
+  it('interpolates the SAME sentence on each side, differing only in the date helper', () => {
+    // the date is the only identity a nameless row still has; each side renders
+    // it with its own pure-string-math helper, never `Date` and never a locale
+    expect(ROUTE).toContain(`A sprint starting \${longDate(s.start)} ${SENTENCE}`);
+    expect(APP_JS).toContain(`A sprint starting \${when} ${SENTENCE}`);
+  });
+
+  it('states the imperative fix once per interpolated form — no drifting second copy', () => {
+    const count = (src: string, needle: string) => src.split(needle).length - 1;
+    // server: exactly one blank-name sentence — `start` is DATE_ONLY-required
+    // there, so the route has no dateless branch to word differently
+    expect(count(ROUTE, SENTENCE)).toBe(1);
+    // client: two — the interpolated one plus the cleared-date fallback below,
+    // and this pins that there is no third
+    expect(count(APP_JS, SENTENCE)).toBe(2);
+  });
+
+  it('keeps the client’s cleared-date fallback on the same second sentence', () => {
+    // clearing the row's date input sets `start` to '' (snapSprintStart), so
+    // `fmtLongIso('')` is empty and the row cannot be named by its date. Only
+    // the first clause changes; the fix the user must perform reads identically.
+    expect(APP_JS).toContain(`This sprint ${SENTENCE}`);
+    expect(ROUTE).not.toContain('This sprint');
+  });
+
+  it('shares the two-clause house shape with the duplicate-name copy', () => {
+    // [state the problem in the user's own data]. [imperative fix] to save.
+    expect(ROUTE).toContain('. Give each sprint a unique name to save.');
+    expect(ROUTE).toContain('. Name every sprint to save.');
+  });
+});
+
+describe('blank names — blocking, one banner per unnamed ROW (owl #37 item 2)', () => {
+  const AGREED = 'A sprint starting 17 Aug 2026 has no name. Name every sprint to save.';
+
+  it('says nothing while every row carries a name', () => {
+    v.set([{ name: 'Sprint 46', start: '2026-08-17', end: '2026-08-28' }]);
+    expect(v.blanks()).toEqual([]);
+  });
+
+  it('fires on an empty string, and names the row by its start date', () => {
+    v.set([{ name: '', start: '2026-08-17', end: '2026-08-28' }]);
+    const [b] = v.blanks();
+    expect(v.blanks()).toHaveLength(1);
+    expect(b!.variant).toBe('err');
+    expect(b!.title).toBe('Sprint name required');
+    expect(b!.after).toBe(0); // the DRAFT index, so placement stays data (R-f-4)
+    expect(b!.text).toBe(AGREED);
+  });
+
+  it('treats whitespace-only as the same class — trim, then reject', () => {
+    for (const name of ['   ', '\t', '\n', ' \t ']) {
+      v.set([{ name, start: '2026-08-17', end: '2026-08-28' }]);
+      expect(v.blanks()).toHaveLength(1);
+      expect(v.blanks()[0]!.text).toBe(AGREED);
+    }
+  });
+
+  it('emits one banner PER blank row, each after its own row', () => {
+    v.set([
+      { name: '', start: '2026-08-03', end: '2026-08-14' },
+      { name: '  ', start: '2026-08-17', end: '2026-08-28' },
+      { name: 'Sprint 48', start: '2026-08-31', end: '2026-09-11' },
+    ]);
+    const out = v.blanks();
+    expect(out).toHaveLength(2);
+    expect(out.map((b) => b.after)).toEqual([0, 1]);
+    expect(out[0]!.text).toBe('A sprint starting 3 Aug 2026 has no name. Name every sprint to save.');
+    expect(out[1]!.text).toBe(AGREED);
+  });
+
+  // clearing the date input sets `start` to '' (snapSprintStart), so the row has
+  // no date to be named by either. Only the first clause changes.
+  it('falls back to a dateless sentence when the row’s start has been cleared', () => {
+    v.set([{ name: '', start: '', end: '' }]);
+    const [b] = v.blanks();
+    expect(b!.text).toBe('This sprint has no name. Name every sprint to save.');
+    for (const banner of v.blanks()) expect(banner.text).not.toMatch(/ {2}/); // no collapsed gap
+  });
+
+  // the two sides used to disagree exactly here: the client stayed silent while
+  // the route called two blanks a duplicate of each other. Both now say blank.
+  it('owns the whole blank class — two blanks are never ALSO a duplicate', () => {
+    v.set([
+      { name: '', start: '2026-08-03', end: '2026-08-14' },
+      { name: '   ', start: '2026-08-17', end: '2026-08-28' },
+    ]);
+    expect(v.blanks()).toHaveLength(2);
+    expect(v.dups()).toEqual([]);
+  });
+});
+
+describe('sprintDirty — the draft against the baseline captured at open', () => {
+  it('is false while the draft still matches the baseline', () => {
+    v.baseline(FOUR.map((s) => ({ ...s })));
+    v.set(FOUR.map((s) => ({ ...s })));
+    expect(v.dirty()).toBe(false);
+  });
+
+  it('turns true on any of the three persisted fields, and back to false on revert', () => {
+    for (const field of ['name', 'start', 'end'] as const) {
+      v.baseline(FOUR.map((s) => ({ ...s })));
+      const draft = FOUR.map((s) => ({ ...s }));
+      const was = draft[1]![field];
+      draft[1]![field] = 'CHANGED';
+      v.set(draft);
+      expect(v.dirty()).toBe(true);
+      draft[1]![field] = was; // put it back — the case the reframe buys
+      expect(v.dirty()).toBe(false);
+    }
+  });
+
+  it('does not trim — a trailing space is a change the user made', () => {
+    v.baseline([{ name: 'Sprint 1', start: '2026-08-03', end: '2026-08-14' }]);
+    v.set([{ name: 'Sprint 1 ', start: '2026-08-03', end: '2026-08-14' }]);
+    expect(v.dirty()).toBe(true);
+  });
+
+  it('is false for an empty modal opened on an empty list — nothing to persist', () => {
+    v.baseline([]);
+    v.set([]);
+    expect(v.dirty()).toBe(false);
+  });
+
+  it('is true when the user removes every row — a deletion is a real change', () => {
+    v.baseline(FOUR.map((s) => ({ ...s })));
+    v.set([]);
+    expect(v.dirty()).toBe(true);
+  });
+
+  it('is true when the user adds the first row to an empty list', () => {
+    v.baseline([]);
+    v.set([{ name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' }]);
+    expect(v.dirty()).toBe(true);
+  });
+
+  it('compares in DRAFT order — the same rows reordered are a change', () => {
+    v.baseline(FOUR.map((s) => ({ ...s })));
+    const swapped = FOUR.map((s) => ({ ...s }));
+    [swapped[0], swapped[1]] = [swapped[1]!, swapped[0]!];
+    v.set(swapped);
+    expect(v.dirty()).toBe(true);
   });
 });
 
@@ -333,7 +507,7 @@ describe('empty state (node 528:113433)', () => {
 });
 
 describe('filled state (node 322:30031)', () => {
-  const html = renderSprintModal({ sprintDraft: FOUR, sprintOpenedEmpty: false });
+  const html = renderSprintModal({ sprintDraft: FOUR, sprintDirty: true });
 
   it('emits one row per draft with a name input and two date inputs', () => {
     expect([...html.matchAll(/class="strow"/g)]).toHaveLength(4);
@@ -362,7 +536,7 @@ describe('filled state (node 322:30031)', () => {
     expect(html).toMatch(/<span class="stc sc-rm"><button class="strm"/);
   });
 
-  it('enables Save when the list is clean', () => {
+  it('enables Save when the list is clean and the user has changed something', () => {
     expect(saveBtn(html)).not.toContain('disabled');
   });
 
@@ -392,7 +566,7 @@ describe('R-f-1 / R-f-7 — the two copy-and-chrome rulings', () => {
 describe('banners — one recipe, three modifiers, zero CTAs (R-f-5)', () => {
   const gap = renderSprintModal({
     sprintDraft: FOUR,
-    sprintOpenedEmpty: false,
+    sprintDirty: true,
     sprintGaps: [{
       variant: 'warn',
       title: 'Unscheduled Gap Detected',
@@ -402,7 +576,7 @@ describe('banners — one recipe, three modifiers, zero CTAs (R-f-5)', () => {
   });
   const dup = renderSprintModal({
     sprintDraft: FOUR,
-    sprintOpenedEmpty: false,
+    sprintDirty: true,
     sprintDupNames: [{
       variant: 'err',
       title: 'Duplicate sprint names found',
@@ -411,7 +585,7 @@ describe('banners — one recipe, three modifiers, zero CTAs (R-f-5)', () => {
   });
   const lap = renderSprintModal({
     sprintDraft: FOUR,
-    sprintOpenedEmpty: false,
+    sprintDirty: true,
     sprintOverlaps: [{ variant: 'err', title: 'Overlapping sprints', text: 'Sprint 46 and Sprint 47 cover the same weeks.', after: 0 }],
   });
 
@@ -452,6 +626,53 @@ describe('banners — one recipe, three modifiers, zero CTAs (R-f-5)', () => {
     expect(dup.indexOf('class="sbanner err"')).toBeLessThan(dup.indexOf('class="strow"'));
   });
 
+  /* the blank-name class reuses the SAME red recipe rather than forking one:
+     one banner, sitting after the row it is about, no CTA, Save dead. */
+  it('draws a blank name in the same red variant, after its own row, and blocks Save', () => {
+    const blank = renderSprintModal({
+      sprintDraft: FOUR,
+      sprintDirty: true,
+      sprintBlankNames: [{
+        variant: 'err',
+        title: 'Sprint name required',
+        text: 'A sprint starting 17 Aug 2026 has no name. Name every sprint to save.',
+        after: 1,
+      }],
+    });
+    expect(blank).toContain('class="sbanner err"');
+    expect(blank).toContain('role="alert"');
+    expect(blank).toContain('Sprint name required');
+    expect(saveBtn(blank)).toContain('disabled');
+
+    const rowAt = [...blank.matchAll(/class="strow"/g)].map((m) => m.index!);
+    const bannerAt = blank.indexOf('class="sbanner err"');
+    expect(bannerAt).toBeGreaterThan(rowAt[1]!);
+    expect(bannerAt).toBeLessThan(rowAt[2]!);
+
+    const banners = [...blank.matchAll(/<div class="sbanner err"[\s\S]*?<\/p><\/div>/g)].map((m) => m[0]);
+    expect(banners).toHaveLength(1);
+    expect(banners[0]).not.toContain('<button'); // R-f-5
+    expect(blank).not.toContain('sbctas');
+    // a blank is reported as a blank and NOTHING else (the class the server and
+    // the client used to disagree about)
+    expect(blank).not.toContain('Duplicate sprint names found');
+  });
+
+  it('draws two blank rows as two banners, still with zero CTAs', () => {
+    const two = renderSprintModal({
+      sprintDraft: FOUR,
+      sprintDirty: true,
+      sprintBlankNames: [
+        { variant: 'err', title: 'Sprint name required', text: 'A sprint starting 3 Aug 2026 has no name. Name every sprint to save.', after: 0 },
+        { variant: 'err', title: 'Sprint name required', text: 'A sprint starting 17 Aug 2026 has no name. Name every sprint to save.', after: 1 },
+      ],
+    });
+    expect([...two.matchAll(/class="sbanner err"/g)]).toHaveLength(2);
+    expect(two).not.toContain('sbctas');
+    expect(two).not.toContain('Duplicate sprint names found');
+    expect(saveBtn(two)).toContain('disabled');
+  });
+
   it('shares one CSS recipe across the modifiers', () => {
     expect(UI_CSS).toMatch(/\n\.sbanner \{/);
     expect(UI_CSS).toMatch(/\n\.sbanner\.warn \{[^}]*--amber-50/);
@@ -485,7 +706,7 @@ describe('the 1450px slot trap (R4)', () => {
 describe('deletion warning (Miles, #30)', () => {
   const html = renderSprintModal({
     sprintDraft: FOUR,
-    sprintOpenedEmpty: false,
+    sprintDirty: true,
     sprintDeleteConfirm: { idx: 1, name: 'Sprint 47', count: 4 },
   });
 
@@ -520,17 +741,143 @@ describe('deletion warning (Miles, #30)', () => {
   });
 });
 
-describe('R7 — an emptied table is not the same state as an empty one', () => {
+/**
+ * R7 SUPERSEDED (owl #37 item 1, Miles): "Don't decide empty vs not, decide
+ * UNSAVED CHANGES vs not." Save is live iff the draft differs from the
+ * baseline captured at open AND no blocking issue stands. Both batch-4
+ * behaviours fall out of that, and so does the case the old flag could never
+ * express — edit a field and put it back.
+ *
+ * The three render states below are each paired with the executed `dirty()`
+ * arithmetic in the describe under it, so the markup and the maths are proven
+ * together rather than one standing in for the other.
+ */
+describe('R7 superseded — Save gates on UNSAVED CHANGES', () => {
+  it('renders Save dead when the modal was opened with none — nothing to persist', () => {
+    expect(saveBtn(renderSprintModal({ sprintDraft: [], sprintDirty: false }))).toContain('disabled');
+  });
+
   it('keeps Save live when the user has removed every row, so the deletion can land', () => {
-    expect(saveBtn(renderSprintModal({ sprintDraft: [], sprintOpenedEmpty: false }))).not.toContain('disabled');
+    expect(saveBtn(renderSprintModal({ sprintDraft: [], sprintDirty: true }))).not.toContain('disabled');
   });
 
-  it('still renders Save dead when the modal was opened with none', () => {
-    expect(saveBtn(renderSprintModal({ sprintDraft: [], sprintOpenedEmpty: true }))).toContain('disabled');
+  it('renders Save dead on a full table the user has edited and put back', () => {
+    // the case the reframe buys: four good rows, no issue of any kind, and
+    // still nothing to save
+    expect(saveBtn(renderSprintModal({ sprintDraft: FOUR, sprintDirty: false }))).toContain('disabled');
   });
 
-  it('sets the flag once, at open, from the STORED list', () => {
-    expect(APP_JS).toContain('sprintOpenedEmpty: stored.length === 0');
+  it('captures the baseline at open as a COPY, never a reference to the stored list', () => {
+    // a shared reference would be dragged along by every edit, and the draft
+    // could then never look different from its own baseline
+    const sites = [...APP_JS.matchAll(/sprintBaseline/g)].map((m) => APP_JS.slice(m.index!, m.index! + 160));
+    expect(sites.length).toBeGreaterThan(1); // the state init AND the capture at open
+    expect(sites.some((s) => s.includes('.map('))).toBe(true);
+    for (const site of sites) {
+      expect(site).not.toMatch(/sprintBaseline['"]?\s*,\s*(app\.get\('sprints'\)|stored|draft)\s*\)/);
+    }
+  });
+
+  it('leaves no trace of the retired flag in either shipped file', () => {
+    // an unused key that still names the old split is exactly the drift the
+    // ruling forbids — the deletion is part of the change, not a follow-up
+    expect(APP_JS).not.toContain('sprintOpenedEmpty');
+    expect(TEMPLATE).not.toContain('sprintOpenedEmpty');
+  });
+});
+
+/**
+ * The two halves joined (owl #37, integrate). Every describe above proves one
+ * side: the computeds sliced out of `01-app.js` are EXECUTED, the template is
+ * RENDERED off hand-written banner stubs. Neither on its own catches a
+ * validator that emits `index` where the template reads `after`, or a Save
+ * expression that forgets one of the three blocking classes.
+ *
+ * So here nothing is stubbed and nothing is hand-written: the draft goes into
+ * the shipped computeds, and whatever they return goes straight into the
+ * shipped template. What the user would actually see, for the six states the
+ * rulings name.
+ */
+describe('end to end — the shipped validators drive the shipped markup', () => {
+  /** baseline as captured at open + the draft as it now stands → the markup. */
+  const render = (baseline: Draft[], draft: Draft[]): string => {
+    v.baseline(baseline.map((s) => ({ ...s })));
+    v.set(draft.map((s) => ({ ...s })));
+    return renderSprintModal({
+      sprintDraft: draft,
+      sprintDupNames: v.dups(),
+      sprintBlankNames: v.blanks(),
+      sprintOverlaps: v.overlaps(),
+      sprintGaps: v.gaps(),
+      sprintDirty: v.dirty(),
+    });
+  };
+
+  it('opened on an empty list → Save dead, nothing to persist', () => {
+    expect(saveBtn(render([], []))).toContain('disabled');
+  });
+
+  it('emptied BY the user → Save live, so the last sprint can be removed', () => {
+    expect(saveBtn(render(FOUR, []))).not.toContain('disabled');
+  });
+
+  it('edited and put back → Save dead again, the case the reframe buys', () => {
+    const edited = FOUR.map((s) => ({ ...s }));
+    edited[1]!.name = 'Sprint 47 renamed';
+    expect(saveBtn(render(FOUR, edited))).not.toContain('disabled');
+    expect(saveBtn(render(FOUR, FOUR.map((s) => ({ ...s }))))).toContain('disabled');
+  });
+
+  it('a blank name renders its own red banner, blocks Save, and raises NO duplicate', () => {
+    const draft = FOUR.map((s) => ({ ...s }));
+    draft[1]!.name = '   ';
+    const html = render(FOUR, draft);
+
+    expect(html).toContain('Sprint name required');
+    // the words the route's 422 carries for this same row, verbatim
+    expect(html).toContain('A sprint starting 17 Aug 2026 has no name. Name every sprint to save.');
+    expect([...html.matchAll(/class="sbanner err"/g)]).toHaveLength(1);
+    expect(html).not.toContain('Duplicate sprint names found');
+    expect(html).not.toContain('sbctas'); // R-f-5: banners never grow a CTA
+    expect(saveBtn(html)).toContain('disabled');
+
+    // and it sits after the row it names, because `after` is the draft index
+    const rowAt = [...html.matchAll(/class="strow"/g)].map((m) => m.index!);
+    const bannerAt = html.indexOf('class="sbanner err"');
+    expect(bannerAt).toBeGreaterThan(rowAt[1]!);
+    expect(bannerAt).toBeLessThan(rowAt[2]!);
+  });
+
+  it('two blank names render TWO blank banners and still no duplicate one', () => {
+    const draft = FOUR.map((s) => ({ ...s }));
+    draft[0]!.name = '';
+    draft[1]!.name = '\t';
+    const html = render(FOUR, draft);
+
+    expect([...html.matchAll(/class="sbanner err"/g)]).toHaveLength(2);
+    expect([...html.matchAll(/Sprint name required/g)]).toHaveLength(2);
+    expect(html).toContain('A sprint starting 3 Aug 2026 has no name. Name every sprint to save.');
+    expect(html).toContain('A sprint starting 17 Aug 2026 has no name. Name every sprint to save.');
+    expect(html).not.toContain('Duplicate sprint names found');
+    expect(saveBtn(html)).toContain('disabled');
+  });
+
+  it('a real duplicate still renders as a duplicate — the blank guard took nothing else', () => {
+    const draft = FOUR.map((s) => ({ ...s }));
+    draft[1]!.name = 'Sprint 46';
+    const html = render(FOUR, draft);
+    expect(html).toContain('Duplicate sprint names found');
+    expect(html).not.toContain('Sprint name required');
+    expect(saveBtn(html)).toContain('disabled');
+  });
+
+  it('a gap is advisory — the banner renders and Save stays live', () => {
+    const draft = FOUR.map((s) => ({ ...s }));
+    draft.splice(1, 1); // drop Sprint 47, opening a two-week hole
+    const html = render(FOUR, draft);
+    expect(html).toContain('class="sbanner warn"');
+    expect(html).toContain('role="status"');
+    expect(saveBtn(html)).not.toContain('disabled');
   });
 });
 

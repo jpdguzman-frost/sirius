@@ -196,6 +196,125 @@ describe('sprints (FR-5.14, FR-5.15, BR-5)', () => {
   });
 });
 
+/**
+ * Owl #37 item 2 (Miles): "Trim and reject empty, surfaced like the
+ * duplicate-name error." A nameless sprint is unidentifiable in the Gantt's
+ * sprint headers. Both `''` and whitespace-only are ONE class, and the class
+ * must land on the friendly 422 — never a Zod 400, whose envelope carries no
+ * `issues[]` for the modal's `issues[0].text` fallback to read.
+ */
+describe('sprints — blank names reject (owl #37 item 2)', () => {
+  it('rejects a whitespace-only name with a 422 that writes nothing and audits nothing', async () => {
+    const { project, agent } = await setup();
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [{ name: '   ', start: '2026-08-17', end: '2026-08-28' }],
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('SPRINT_CONFLICT');
+    expect(res.body.error.issues).toHaveLength(1);
+    expect(res.body.error.issues[0].kind).toBe('blank-name');
+    // the copy the modal banner shows, verbatim — the row is named by its start
+    expect(res.body.error.issues[0].text).toBe(
+      'A sprint starting 17 Aug 2026 has no name. Name every sprint to save.',
+    );
+    expect(await Sprint.countDocuments({})).toBe(0);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(0);
+  });
+
+  // regression on relaxing `.min(1)`: '' used to be swallowed as INVALID_BODY
+  it('answers 422 and NOT a Zod 400 for an empty-string name', async () => {
+    const { project, agent } = await setup();
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [{ name: '', start: '2026-08-17', end: '2026-08-28' }],
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('SPRINT_CONFLICT');
+    expect(res.body.error.code).not.toBe('INVALID_BODY');
+    expect(res.body.error.issues[0].kind).toBe('blank-name');
+    expect(res.body.error.issues[0].text).toBe(
+      'A sprint starting 17 Aug 2026 has no name. Name every sprint to save.',
+    );
+    expect(await Sprint.countDocuments({})).toBe(0);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(0);
+  });
+
+  // the two sides used to disagree exactly here: the client's `if (key)` guard
+  // stayed silent while the server called two blanks a duplicate of each other
+  it('reports one blank issue PER ROW and never also calls two blanks a duplicate', async () => {
+    const { project, agent } = await setup();
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { name: '', start: '2026-08-03', end: '2026-08-14' },
+        { name: '  ', start: '2026-08-17', end: '2026-08-28' },
+      ],
+    });
+    expect(res.status).toBe(422);
+    const issues = res.body.error.issues as { kind: string; text: string }[];
+    expect(issues.filter((i) => i.kind === 'blank-name')).toHaveLength(2);
+    expect(issues.filter((i) => i.kind === 'duplicate-name')).toHaveLength(0);
+    expect(issues.map((i) => i.text)).toEqual([
+      'A sprint starting 3 Aug 2026 has no name. Name every sprint to save.',
+      'A sprint starting 17 Aug 2026 has no name. Name every sprint to save.',
+    ]);
+    expect(await Sprint.countDocuments({})).toBe(0);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(0);
+  });
+
+  it('saves the same list once every row has a name', async () => {
+    const { project, agent } = await setup();
+    await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' },
+        { name: 'Sprint 47', start: '2026-08-17', end: '2026-08-28' },
+      ],
+    }).expect(200);
+    expect(await Sprint.countDocuments({ project_id: project._id })).toBe(2);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(1);
+  });
+
+  it('still refuses an over-long name as INVALID_BODY — .max(80) survived the relaxation', async () => {
+    const { project, agent } = await setup();
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [{ name: 'x'.repeat(81), start: '2026-08-17', end: '2026-08-28' }],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_BODY');
+    expect(await Sprint.countDocuments({})).toBe(0);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(0);
+  });
+
+  // a blank row must not destroy a good stored list either (the replace is
+  // destructive; rejection returns before deleteMany)
+  it('leaves an already-stored list intact when a later save carries a blank', async () => {
+    const { project, agent } = await setup();
+    await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [{ name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' }],
+    }).expect(200);
+
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' },
+        { name: '\t', start: '2026-08-17', end: '2026-08-28' },
+      ],
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.error.issues[0].kind).toBe('blank-name');
+    expect(await Sprint.countDocuments({ project_id: project._id })).toBe(1);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(1); // only the good save
+  });
+
+  // the date in the copy is pure string math on the YYYY-MM-DD the wire carries:
+  // no Date, so no TZ shift (invariant 11) and no locale (en-GB emits 'Sept')
+  it('renders the start date as the frame format, in any timezone', async () => {
+    const { project, agent } = await setup();
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [{ name: ' ', start: '2026-09-01', end: '2026-09-11' }],
+    });
+    expect(res.body.error.issues[0].text).toContain('1 Sep 2026');
+    expect(res.body.error.issues[0].text).not.toContain('Sept');
+  });
+});
+
 describe('suggest plan (AC-15, AC-16; BR-7)', () => {
   it('proposes without applying; pinned rows never appear in the plan', async () => {
     const { project, agent, mk } = await setup();

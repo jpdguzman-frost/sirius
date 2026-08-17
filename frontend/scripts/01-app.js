@@ -473,18 +473,17 @@ const app = new Ractive({
     leftCollapsed: false,
     sprintModal: false,
     sprintDraft: [],
+    /* the draft exactly as it stood when the modal OPENED, held in the same
+       three persisted fields a save PUTs ({name, start, end}). `sprintDirty`
+       compares the two, and Save is live only when they differ. A deep copy —
+       never a reference to `sprints`, or an edit would drag the baseline with
+       it and nothing would ever read as changed. */
+    sprintBaseline: [],
     sprintError: '',
     /* Miles's ruling (#30): removing a sprint that covers slotted deliverables
        warns with the count first. `{ idx, name, count }` while the confirm is
        open, null otherwise. Draft-only — nothing persists until Save. */
     sprintDeleteConfirm: null,
-    /* R7 — the empty TABLE and an emptied table are different states. Opened
-       with no sprints, Save has nothing to commit and renders disabled (the
-       frame's own empty-state treatment). Emptied BY the user, Save must stay
-       live or the last sprint could never be removed: the route accepts an
-       empty list and audits the replace like any other. This flag is the only
-       thing that tells the two apart, so it is set once at open. */
-    sprintOpenedEmpty: false,
     /* the ACTIVE working-day calendar, straight off the deliverables payload
        (getHolidays() — ARES-canonical). Only the sprints modal's gap warning
        reads it; an empty array simply means weekends are the only skip. */
@@ -890,9 +889,9 @@ const app = new Ractive({
       return this.get('rows').filter((r) => r.status !== 'done');
     },
 
-    /* ---- sprints modal validation (owls #28–#30) ----
+    /* ---- sprints modal validation (owls #28–#30, #37) ----
 
-       Three live computeds over the DRAFT, so a banner appears — and Save locks
+       Four live computeds over the DRAFT, so a banner appears — and Save locks
        or unlocks — as the user types, without a round trip. They are not the
        truth: `PUT /sprints` rejects duplicate names and overlaps with a 422 and
        writes nothing (invariant 12). They are the same rules said EARLY, and
@@ -931,6 +930,37 @@ const app = new Ractive({
           text: `Multiple sprints are named "${String(s.name).trim()}". Give each sprint a unique name to save.`,
         });
       }
+      return out;
+    },
+    /* BLOCKING (Miles, #37): a nameless sprint is unidentifiable in the Gantt's
+       sprint headers, so trim-and-reject. One banner per blank ROW — unlike
+       duplicates, which are one per NAME — because there is no shared name to
+       collapse them onto, and each row needs its own pointer. The row is named
+       by the one thing a nameless row still has: its start date. The blank test
+       and the copy are byte-shared with the route's `blankNameIssues`, so the
+       422 the server would return says the same words as this banner.
+
+       `sprintDupNames` skips blanks (the guards at `if (key)` / `if (!key`), so
+       a blank reports here ONCE and never also as a duplicate. */
+    sprintBlankNames() {
+      const draft = this.get('sprintDraft');
+      const out = [];
+      draft.forEach((s, i) => {
+        if (String((s && s.name) || '').trim() !== '') return;
+        /* clearing the date input sets `start` to '' (snapSprintStart), and a
+           nameless row with no start has nothing left to point at — so the
+           fallback drops the clause rather than rendering "starting  has". The
+           route never needs it: its `start` is DATE_ONLY-required. */
+        const when = fmtLongIso(s && s.start);
+        out.push({
+          after: i,
+          variant: 'err',
+          title: 'Sprint name required',
+          text: when
+            ? `A sprint starting ${when} has no name. Name every sprint to save.`
+            : 'This sprint has no name. Name every sprint to save.',
+        });
+      });
       return out;
     },
     /* BLOCKING, and symmetric with duplicates by ruling (R-f-3): constitution
@@ -974,6 +1004,24 @@ const app = new Ractive({
         });
       }
       return out;
+    },
+    /* Miles's ruling (#37), superseding R7: Save decides on UNSAVED CHANGES,
+       not on empty-vs-not. The draft is compared against the baseline captured
+       at open, on the three PERSISTED fields in DRAFT ORDER, and a length
+       change is a change. All three cases then fall out of one rule: opened
+       empty = nothing changed = dead; every sprint deleted = a real change =
+       live; a field edited and put back = nothing changed = dead again.
+
+       No trimming — a name the user changed to 'Sprint 1 ' is an edit they
+       made. Whether the route trims on store is a separate question. */
+    sprintDirty() {
+      const draft = this.get('sprintDraft') || [];
+      const base = this.get('sprintBaseline') || [];
+      if (draft.length !== base.length) return true;
+      return draft.some((s, i) => {
+        const b = base[i] || {};
+        return (s && s.name) !== b.name || (s && s.start) !== b.start || (s && s.end) !== b.end;
+      });
     },
   },
 });
@@ -2112,10 +2160,12 @@ app.on({
   openSprints() {
     const stored = app.get('sprints');
     app.set('sprintDraft', stored.map((s) => ({ ...s })));
-    app.set({
-      sprintModal: true, sprintError: '', sprintDeleteConfirm: null,
-      sprintOpenedEmpty: stored.length === 0, // R7: opened-with-none vs emptied-by-the-user
-    });
+    /* the dirty baseline (#37): a fresh copy of the three fields a save PUTs,
+       mapped off `stored` so it can never be a reference the draft edits reach.
+       Same shape saveSprints sends, so `sprintDirty` compares exactly what
+       would be persisted and nothing else. */
+    app.set('sprintBaseline', stored.map((s) => ({ name: s.name, start: s.start, end: s.end })));
+    app.set({ sprintModal: true, sprintError: '', sprintDeleteConfirm: null });
   },
   closeSprints() { app.set({ sprintModal: false, sprintDeleteConfirm: null }); },
   /* a new sprint starts the Monday AFTER the last one ends and runs to that
@@ -2167,8 +2217,12 @@ app.on({
   },
   async saveSprints() {
     // the button is already disabled in these states; this is the second lock,
-    // because the server rejects both and would write nothing either way
-    if (app.get('sprintDupNames').length || app.get('sprintOverlaps').length) return;
+    // because the server rejects all three and would write nothing either way
+    if (app.get('sprintDupNames').length || app.get('sprintOverlaps').length || app.get('sprintBlankNames').length) return;
+    // and nothing to commit is not a save: a no-op PUT would write a
+    // `sprints.replace` audit row for a non-change, which invariant 10 does not
+    // ask for — it logs changes, not attempts (the batch-4 Calendar Remove fix)
+    if (!app.get('sprintDirty')) return;
     try {
       await api.send('PUT', `/api/projects/${app.get('activeProjectId')}/sprints`, {
         sprints: app.get('sprintDraft').map((s) => ({ name: s.name, start: s.start, end: s.end })),

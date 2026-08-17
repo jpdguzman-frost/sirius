@@ -223,10 +223,16 @@ export interface SprintModalState {
   sprintDupNames?: SprintBanner[];
   sprintOverlaps?: SprintBanner[];
   sprintGaps?: SprintBanner[];
+  /** blocking: one banner per UNNAMED row (owl #37 item 2) */
+  sprintBlankNames?: SprintBanner[];
   sprintError?: string;
   sprintDeleteConfirm?: { idx: number; name: string; count: number } | null;
-  /** R7: true only when the modal was OPENED with no sprints stored. */
-  sprintOpenedEmpty?: boolean;
+  /**
+   * R7 (superseded, owl #37 item 1): the draft differs from the baseline
+   * captured at open. Save is live iff dirty AND no blocking issue — so
+   * opened-empty, and edit-and-put-it-back, are the same dead state.
+   */
+  sprintDirty?: boolean;
 }
 
 /**
@@ -239,10 +245,14 @@ export interface SprintModalState {
  * which nodes each state emits, that neither banner carries a CTA, and that
  * the component's unused 1450px variant slots never reach the markup.
  *
- * `sprintOverlaps` and `sprintGaps` must BOTH be arrays: the template iterates
- * `sprintOverlaps.concat(sprintGaps)`, and a missing stub renders no banner at
- * all rather than throwing — a silent pass. Defaulting both here is what stops
- * a test from proving nothing.
+ * `sprintBlankNames`, `sprintOverlaps` and `sprintGaps` must ALL THREE be
+ * arrays: the template iterates
+ * `sprintBlankNames.concat(sprintOverlaps, sprintGaps)`, and a missing stub
+ * renders no banner at all rather than throwing — a silent pass. Defaulting
+ * every one of them here is what stops a test from proving nothing.
+ *
+ * `sprintDirty` defaults FALSE — Save dead unless a state says otherwise,
+ * the same polarity the retired `sprintOpenedEmpty ?? true` had.
  */
 export function renderSprintModal(state: SprintModalState = {}): string {
   const instance = new Ractive({
@@ -253,9 +263,10 @@ export function renderSprintModal(state: SprintModalState = {}): string {
       sprintDupNames: state.sprintDupNames ?? [],
       sprintOverlaps: state.sprintOverlaps ?? [],
       sprintGaps: state.sprintGaps ?? [],
+      sprintBlankNames: state.sprintBlankNames ?? [],
       sprintError: state.sprintError ?? '',
       sprintDeleteConfirm: state.sprintDeleteConfirm ?? null,
-      sprintOpenedEmpty: state.sprintOpenedEmpty ?? true,
+      sprintDirty: state.sprintDirty ?? false,
       // LENGTH is derived and read-only; the real helper is mondaysBetween
       sprintLength: (s: SprintDraftRow) => (s && s.start && s.end ? '2 wk' : '0 wk'),
     },

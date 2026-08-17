@@ -789,9 +789,10 @@
                 {{/if}}
                 {{! R-f-3 / R-f-4 — one banner per situation, rendered BETWEEN
                     the two rows it names; each carries the draft index of the
-                    row it follows, so placement is data. Overlaps (blocking)
-                    are listed before gaps (advisory). }}
-                {{#each sprintOverlaps.concat(sprintGaps) as b}}
+                    row it follows, so placement is data. Read outward from the
+                    row: blank name (blocking, about THIS row), then overlaps
+                    (blocking, about the pair), then gaps (advisory). }}
+                {{#each sprintBlankNames.concat(sprintOverlaps, sprintGaps) as b}}
                   {{#if b.after === i}}
                     <div class="sbanner {{b.variant}}" role="{{ b.variant === 'err' ? 'alert' : 'status' }}">
                       <div class="sbhead">
@@ -829,14 +830,15 @@
               tracks the rendered branch, so it is on exactly when the empty
               block above is. }}
           <button class="smbtn ghost {{#if !sprintDraft.length}}dim{{/if}}" type="button" on-click="['closeSprints']">Cancel</button>
-          {{! R7 — Save is dead only when there is nothing to commit: errors, or
-              a modal OPENED with no sprints. A table the user has emptied is a
-              real edit (remove every sprint, save, everything falls to
-              *Outside any sprint*), so Save stays live for it — the route takes
-              an empty list and audits the replace like any other. }}
+          {{! #37, superseding R7 — Save is live when there is something to
+              persist and nothing blocking it: `sprintDirty` and no error
+              banner. One rule covers the whole class — opened with no sprints
+              is not a change, emptied BY the user is (the route takes an empty
+              list and audits the replace like any other), and an edit put back
+              is not one again. }}
           <button class="smbtn primary" type="button" on-click="['saveSprints']"
-                  disabled="{{ sprintDupNames.length || sprintOverlaps.length || (sprintDraft.length === 0 && sprintOpenedEmpty) }}"
-                  {{#if sprintDupNames.length || sprintOverlaps.length}}title="Fix the errors above to save"{{/if}}>Save sprints</button>
+                  disabled="{{ sprintDupNames.length || sprintOverlaps.length || sprintBlankNames.length || !sprintDirty }}"
+                  {{#if sprintDupNames.length || sprintOverlaps.length || sprintBlankNames.length}}title="Fix the errors above to save"{{/if}}>Save sprints</button>
         </div>
       </div>
     </div>

@@ -65,6 +65,11 @@ function duplicateNameIssues(sprints: { id?: string; name: string }[]): SprintSa
   const reported = new Set<string>();
   const issues: SprintSaveIssue[] = [];
   sprints.forEach((s, i) => {
+    // blankNameIssues owns this class — mirrors the client guard at
+    // 01-app.js:921/926. Without it two unnamed rows collide on the key `''`
+    // and get reported as "Multiple sprints are named """, which is both wrong
+    // and unreadable (owl #37 item 2).
+    if (s.name.trim() === '') return;
     const key = s.name.trim().toLocaleLowerCase();
     const first = firstSeen.get(key);
     if (first === undefined) {
@@ -77,6 +82,44 @@ function duplicateNameIssues(sprints: { id?: string; name: string }[]): SprintSa
       id: s.id ?? `new-${i}`,
       kind: 'duplicate-name',
       text: `Multiple sprints are named "${first}". Give each sprint a unique name to save.`,
+    });
+  });
+  return issues;
+}
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * '2026-08-17' → '17 Aug 2026' — the client's `fmtLongIso` (01-app.js:154),
+ * reproduced as pure string math so the two sides emit byte-identical copy:
+ * no `Date` (no TZ shift, invariant 11) and no locale (en-GB says 'Sept').
+ */
+function longDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  return `${Number(d)} ${MONTHS_SHORT[Number(m) - 1]} ${y}`;
+}
+
+/**
+ * Blank sprint name rejection (owl #37 item 2, Miles) — SERVER TRUTH beside the
+ * modal's live check, same envelope as duplicates. A nameless sprint is
+ * unidentifiable in the Gantt's sprint headers, so `''` and whitespace-only are
+ * one class and both reject.
+ *
+ * ONE issue per blank ROW (unlike duplicates, which are one per NAME): every
+ * unnamed row is its own thing to fix, and there is no shared name to point at.
+ * The row is named by the only identity it still has — its start date, which
+ * `DATE_ONLY` guarantees is present and `YYYY-MM-DD` here.
+ *
+ * Route-layer validation, never lib/** (invariant 5).
+ */
+function blankNameIssues(sprints: { id?: string; name: string; start: string }[]): SprintSaveIssue[] {
+  const issues: SprintSaveIssue[] = [];
+  sprints.forEach((s, i) => {
+    if (s.name.trim() !== '') return;
+    issues.push({
+      id: s.id ?? `new-${i}`,
+      kind: 'blank-name',
+      text: `A sprint starting ${longDate(s.start)} has no name. Name every sprint to save.`,
     });
   });
   return issues;
@@ -217,7 +260,13 @@ export function scheduleRouter(): Router {
       const body = z
         .object({
           sprints: z.array(
-            z.object({ id: z.string().optional(), name: z.string().min(1).max(80), start: DATE_ONLY, end: DATE_ONLY }).strict(),
+            // `.min(1)` deliberately absent: an empty name is a USER mistake with
+            // a friendly fix, not a malformed body. Zod would answer 400
+            // INVALID_BODY — an envelope carrying no `issues[]` at all — and the
+            // modal's `issues[0].text` fallback would print a developer string.
+            // blankNameIssues owns the whole blank class on the 422 path instead.
+            // `.max(80)` still guards the field length (owl #37 item 2).
+            z.object({ id: z.string().optional(), name: z.string().max(80), start: DATE_ONLY, end: DATE_ONLY }).strict(),
           ).max(100),
         })
         .strict()
@@ -226,16 +275,18 @@ export function scheduleRouter(): Router {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
       }
-      // Both validators run BEFORE any write: a rejected save must leave the
+      // Every validator runs BEFORE any write: a rejected save must leave the
       // collection exactly as it was (the replace below is destructive).
       // Overlaps/inversions are invariant 12, already enforced by sprintIssues;
-      // duplicate names are the batch-4 addition. Same envelope, so the client
-      // reads one issues[] whichever class fired.
+      // duplicate names are the batch-4 addition; blank names the batch-5b one.
+      // Same envelope, so the client reads one issues[] whichever class fired.
+      // Blanks append LAST so issues[0] is unchanged for every pre-existing case.
       const issues: SprintSaveIssue[] = [
         ...sprintIssues(
           body.data.sprints.map((s, i) => ({ id: s.id ?? `new-${i}`, name: s.name, start: s.start, end: s.end })),
         ).filter((i) => i.kind !== 'gap'), // gaps are legal and surfaced, not rejected (BR-5)
         ...duplicateNameIssues(body.data.sprints),
+        ...blankNameIssues(body.data.sprints),
       ];
       if (issues.length > 0) {
         res.status(422).json({ ok: false, error: { code: 'SPRINT_CONFLICT', issues } });

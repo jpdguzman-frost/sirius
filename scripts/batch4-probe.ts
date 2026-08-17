@@ -24,7 +24,11 @@
  *      one open weekday counts ONE (banner fires). The R-f-8 proof, computed
  *      from the holidays the API actually served;
  *   7. drag write path unchanged — /replot slots, unslots, audits each move,
- *      and skips a pinned row with no audit row (FR-5.9, pins stay frozen);
+ *      and skips a pinned row with no audit row (FR-5.9, pins stay frozen),
+ *      plus (7c/7d, owl #37) the Save dirty-gate and the blank-name reject:
+ *      `''` and whitespace-only both land on the friendly 422 carrying the
+ *      modal's own words, write nothing, audit nothing, and are never ALSO
+ *      reported as duplicate names;
  *   8. no write-registry growth.
  */
 
@@ -282,7 +286,7 @@ try {
   check('and unslotRow returns before writing when there is no week to remove',
     /async unslotRow\([\s\S]*?if \(!row\.slottedWeek\) return;/.test(rowActionsJs));
 
-  // ---- 7c. R7 — an emptied sprint list must be persistable ------------------
+  // ---- 7c. R7 SUPERSEDED — Save gates on UNSAVED CHANGES (owl #37 item 1) ---
   const auditBeforeEmpty = await AuditLog.countDocuments({ action: 'sprints.replace', project_id: project._id });
   const emptied = await asMember.put(`/api/projects/${project._id}/sprints`).send({ sprints: [] });
   check('saving an EMPTY sprint list → 200 (the route accepts it)', emptied.status === 200, emptied.body);
@@ -291,9 +295,69 @@ try {
     (await AuditLog.countDocuments({ action: 'sprints.replace', project_id: project._id })) === auditBeforeEmpty + 1);
   check('membership fell back to derivation — no deliverable was touched',
     (await Deliverable.findOne({ trello_card_id: 'c1' }).lean())?.slotted_week === '2026-08-24');
-  check('so Save stays live for a table the user emptied (R7)',
-    rowActionsTpl.includes('(sprintDraft.length === 0 && sprintOpenedEmpty)')
-    && rowActionsJs.includes('sprintOpenedEmpty: stored.length === 0'));
+  // the emptied-vs-opened-empty flag is gone: Save is live iff the draft
+  // differs from the baseline captured at open AND nothing blocks
+  check('Save is gated on the dirty check, not on an empty-vs-not flag',
+    rowActionsTpl.includes('!sprintDirty') && rowActionsJs.includes('sprintBaseline'));
+  check('the retired sprintOpenedEmpty flag is gone from both shipped files',
+    !rowActionsTpl.includes('sprintOpenedEmpty') && !rowActionsJs.includes('sprintOpenedEmpty'));
+
+  // ---- 7d. blank sprint names reject (owl #37 item 2) ----------------------
+  // the route now owns the WHOLE blank class on the friendly 422 — `''` and
+  // whitespace alike — instead of letting Zod answer an issue-less 400.
+  await asMember.put(`/api/projects/${project._id}/sprints`).send({
+    sprints: [{ name: 'Sprint A', start: '2026-08-03', end: '2026-08-14' }],
+  }).expect(200);
+  const sprintsBeforeBlank = await Sprint.countDocuments({ project_id: project._id });
+  const auditBeforeBlank = await AuditLog.countDocuments({ action: 'sprints.replace', project_id: project._id });
+
+  const blank = await asMember.put(`/api/projects/${project._id}/sprints`).send({
+    sprints: [
+      { name: 'Sprint A', start: '2026-08-03', end: '2026-08-14' },
+      { name: '   ', start: '2026-08-17', end: '2026-08-28' },
+    ],
+  });
+  check('a whitespace-only name → 422 SPRINT_CONFLICT, never a Zod 400',
+    blank.status === 422 && blank.body?.error?.code === 'SPRINT_CONFLICT',
+    { status: blank.status, code: blank.body?.error?.code });
+  check('issue kind is blank-name',
+    blank.body?.error?.issues?.some((i: { kind: string }) => i.kind === 'blank-name'), blank.body?.error?.issues);
+  check('issue text matches the modal banner copy, dated from the row itself',
+    blank.body?.error?.issues?.some((i: { text: string }) =>
+      i.text === 'A sprint starting 17 Aug 2026 has no name. Name every sprint to save.'),
+    blank.body?.error?.issues?.map((i: { text: string }) => i.text));
+  check('blank reject wrote nothing',
+    (await Sprint.countDocuments({ project_id: project._id })) === sprintsBeforeBlank);
+  check('blank reject wrote no audit row',
+    (await AuditLog.countDocuments({ action: 'sprints.replace', project_id: project._id })) === auditBeforeBlank);
+
+  // two blanks used to collide on the key '' and get called duplicates of each
+  // other — the class each side reports must now be the same one
+  const twoBlanks = await asMember.put(`/api/projects/${project._id}/sprints`).send({
+    sprints: [
+      { name: '', start: '2026-08-03', end: '2026-08-14' },
+      { name: '\t', start: '2026-08-17', end: '2026-08-28' },
+    ],
+  });
+  const blankIssues = (twoBlanks.body?.error?.issues ?? []) as { kind: string }[];
+  check('two blank rows → 422 with TWO blank-name issues',
+    twoBlanks.status === 422 && blankIssues.filter((i) => i.kind === 'blank-name').length === 2, blankIssues);
+  check('and ZERO duplicate-name issues — a blank is never a duplicate',
+    blankIssues.filter((i) => i.kind === 'duplicate-name').length === 0, blankIssues);
+  check('two blanks wrote nothing and audited nothing',
+    (await Sprint.countDocuments({ project_id: project._id })) === sprintsBeforeBlank
+    && (await AuditLog.countDocuments({ action: 'sprints.replace', project_id: project._id })) === auditBeforeBlank);
+
+  const named = await asMember.put(`/api/projects/${project._id}/sprints`).send({
+    sprints: [
+      { name: 'Sprint A', start: '2026-08-03', end: '2026-08-14' },
+      { name: 'Sprint B', start: '2026-08-17', end: '2026-08-28' },
+    ],
+  });
+  check('the SAME list saves once every row has a name → 200', named.status === 200, named.body);
+  check('and the named save landed both rows, audited once more',
+    (await Sprint.countDocuments({ project_id: project._id })) === 2
+    && (await AuditLog.countDocuments({ action: 'sprints.replace', project_id: project._id })) === auditBeforeBlank + 1);
 
   // ---- 8. no write-registry growth ----------------------------------------
   const scheduleSrc = await readFile(new URL('../src/routes/schedule.ts', import.meta.url), 'utf8');
