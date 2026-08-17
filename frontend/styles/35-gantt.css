@@ -183,7 +183,15 @@
    share one left edge and the drag handle sits in the space beside them */
 .gantt .gdetails .c-mc { width: 155px; position: relative; padding-left: 58px; }
 .gantt .gdetails .c-scope { width: 262px; }
-.gantt .gdetails .c-req { width: 136px; }
+/* owl #39/#40 — the ONE cell whose clip moves inward. Its badge clips itself
+   with an ellipsis (the shared `.clipbadge` recipe, 20-pipeline.css), so the
+   cell has nothing left to spill and its own clip is redundant; releasing it is
+   what lets the badge's tooltip escape the cell without a fixed-position
+   overlay or a hard-coded left offset. Same specificity as the `.gcell` rule
+   above (0,3,0) and declared later, so it wins with no new selector. The other
+   four columns keep the clip untouched — `flex: none` + the width below is what
+   holds the pinned block to --gleft, not the overflow. */
+.gantt .gdetails .c-req { width: 136px; overflow: visible; }
 .gantt .gdetails .c-type { width: 146px; }
 .gantt .gdetails .c-status { width: 300px; display: flex; align-items: flex-start; gap: var(--space-8); }
 

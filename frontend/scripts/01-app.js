@@ -1277,6 +1277,54 @@ function refreshThumbs() {
 }
 window.addEventListener('resize', refreshThumbs);
 
+/* Truncation sweep for the shared clip recipe (owl #39, corrected by #40 —
+   the frames' `@handle` samples are longer than any production requestor).
+
+   It MEASURES, it never guesses: a character count would clip "Andy" on one
+   font and miss a long value on another.
+
+   Deliberately NOT updateThumb's `+ 1` epsilon, and the difference is the point.
+   `text-overflow: ellipsis` fires on ANY overflow, including a fraction of a
+   pixel, so `scrollWidth === clientWidth + 1` is a value the user can SEE
+   truncated — the ellipsis is drawn and 2-3 characters are gone. Under the
+   epsilon that badge got no tooltip and no tab stop, i.e. the exact bug this
+   sweep exists to fix, surviving in a ~1px band. The two costs are asymmetric:
+   a false positive puts a harmless tooltip on a value that only just fits, a
+   false negative hides data with no way to reach it. updateThumb's epsilon
+   guards the opposite trade (suppress a useless slider for 1px of scroll), so
+   it keeps its own. Both metrics are integer-rounded already, which absorbs the
+   sub-pixel noise the epsilon was there for.
+
+   It CLEARS as well as sets, and that half is not tidiness: `{{#each g.rows}}`
+   is unkeyed, so Ractive reuses badge nodes by index and only rewrites their
+   text — a node that held a long value and now holds a short one would keep a
+   stale tab stop and a stale tooltip forever if the sweep only added. Neither
+   attribute appears in the template, so Ractive does not own them and will not
+   fight the sweep between renders.
+
+   Collapsed left pane falls out for free: `.c-req` is `display: none` there, so
+   both widths read 0, the test is false, and the hidden cell is stripped of its
+   tab stop — which is what a hidden cell should have. Expanding re-runs it.
+
+   NOT hooked to `resize`: every width in the pinned pane is a literal px with
+   no responsive rule, so the viewport cannot change this verdict. */
+function refreshClips() {
+  document.querySelectorAll('.clipbadge').forEach((el) => {
+    const text = el.querySelector('.cliptext');
+    if (text && text.scrollWidth > text.clientWidth) { // any overflow at all — the ellipsis is already drawn
+      el.setAttribute('data-clipped', '');
+      el.setAttribute('tabindex', '0'); // only a TRUNCATED badge is reachable
+    } else {
+      el.removeAttribute('data-clipped');
+      el.removeAttribute('tabindex');
+    }
+  });
+}
+/* The webfont lands AFTER first paint (index.html loads Google Sans Flex with
+   `display=swap`), so the first sweep can measure fallback metrics and be wrong
+   in either direction. One re-measure when the real font is in. */
+document.fonts.ready.then(refreshClips);
+
 /* ---- capacity footer ----
 
    The totals are the SERVER's, computed over every slotted row rather than the
@@ -1551,7 +1599,10 @@ async function loadAll() {
       modelReview: model.model.review,
     });
     computeDeadlines();
-    requestAnimationFrame(refreshThumbs);
+    // one frame, both post-render measurements. loadAll is also the project
+    // switch (resetForProjectSwitch and popstate both end here), so the clip
+    // sweep needs no separate hook for it.
+    requestAnimationFrame(() => { refreshThumbs(); refreshClips(); });
   } catch (err) {
     app.set('banner', `Load failed: ${err.message} — the app stays usable with what it has.`);
   }
@@ -1698,8 +1749,9 @@ function selectTab(id) {
   if (id === 'admin' && app.get('isAdmin')) loadAdmin();
   if (id === 'pipeline' || id === 'requests' || id === 'schedules') {
     // returning to the tab remounts .pscroll at scrollLeft 0 — recompute the
-    // slider so the affordance is never stale (review finding 5)
-    requestAnimationFrame(refreshThumbs);
+    // slider so the affordance is never stale (review finding 5). The tab
+    // remounts the whole sheet, so the requestor badges are new nodes too.
+    requestAnimationFrame(() => { refreshThumbs(); refreshClips(); });
   }
 }
 
@@ -2142,14 +2194,18 @@ app.on({
      row still counts against capacity (the footer is data, not visibility). */
   toggleBlock(_ctx, id) {
     app.set(`collapsedBlocks.${id}`, !app.get(`collapsedBlocks.${id}`));
-    requestAnimationFrame(refreshThumbs); // the sheet just changed height
+    // the sheet just changed height, and an expanded block's rows did not exist
+    // a frame ago — so their badges have never been measured
+    requestAnimationFrame(() => { refreshThumbs(); refreshClips(); });
   },
   /* owl #24 — collapsing the pane narrows --gleft, so the sheet's scrollWidth
      moves with it; without the refresh the timeline thumb keeps the old ratio
      and lies about how much timeline is off-screen. */
   toggleLeftPane() {
     app.set('leftCollapsed', !app.get('leftCollapsed'));
-    requestAnimationFrame(refreshThumbs);
+    // collapsing hides .c-req entirely, so its badges measure 0 and lose the tab
+    // stop; expanding has to re-measure to give it back
+    requestAnimationFrame(() => { refreshThumbs(); refreshClips(); });
   },
 
   /* ---- sprints modal (owls #28–#30) ----

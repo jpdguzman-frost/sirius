@@ -586,7 +586,26 @@
                       </div>
                       <span class="gname">{{row.name}}</span>
                     </div>
-                    <div class="gcell c-req">{{#if row.requestor}}<span class="pbadge">{{row.requestor}}</span>{{else}}<span class="gdim">—</span>{{/if}}</div>
+                    <!-- owl #39 as corrected by #40 — the requestor badge hugs its text
+                         inside a fixed 136px cell, so a long value used to be cut
+                         mid-character with no sign it was cut. It now clips itself with a
+                         trailing ellipsis and shows the whole value on hover AND on
+                         keyboard focus (20-pipeline.css, the shared clip recipe).
+                         `aria-label` is the accessible name AND the tooltip's text, so the
+                         two can never drift — and it needs `role="note"` to be legal:
+                         ARIA 1.2 PROHIBITS an author-supplied name on `role=generic`, which
+                         is what a bare `<span>` is, so on a stricter AT stack than Chrome the
+                         label could simply be dropped. `note` (ancillary content) is the
+                         weakest role that permits naming and it costs nothing on the
+                         non-focusable case. There is deliberately NO `tabindex` and no
+                         `title` here: the post-render MEASUREMENT in 01-app.js grants the
+                         tab stop only to a badge that is actually truncated, because a
+                         badge whose value fits is not interactive.
+                         `noop` stops the arrow keys reaching the row's `rowKey`, which
+                         would reslot the deliverable a week — an informational cell must
+                         not move data. An HTML comment, not a Ractive one: this is
+                         element-content position, where `{{! }}` leaks. -->
+                    <div class="gcell c-req">{{#if row.requestor}}<span class="pbadge clipbadge" role="note" aria-label="{{row.requestor}}" on-keydown="['noop']"><span class="cliptext">{{row.requestor}}</span></span>{{else}}<span class="gdim">—</span>{{/if}}</div>
                     <div class="gcell c-type">{{#if row.assetType}}<span class="pbadge">{{row.assetType}}</span>{{else}}<span class="gdim">—</span>{{/if}}</div>
                     <div class="gcell c-status">
                       {{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{row.currentList}}</span>{{else}}<span class="gdim">—</span>{{/if}}

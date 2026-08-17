@@ -152,6 +152,59 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 }
 .pbadge .bchev { display: inline-flex; margin-left: 2px; }
 .pbadge .bchev svg { display: block; }
+
+/* ---- the shared clip recipe (owl #39, corrected by #40) ----
+   A hugging badge inside a FIXED-WIDTH cell. Applied to the Gantt's Requestor
+   column in this batch and written to be reused wherever the same pairing
+   appears — it names no column and no pixel width.
+
+   The clip lives INSIDE the badge, not on the cell. `text-overflow` can only
+   act on the box that owns the overflow, so clipping at the cell cut the value
+   mid-character AND painted ~8px of text outside the badge's own stroke. The
+   cell's `overflow: hidden` was never what held the pinned block to --gleft
+   (`flex: none` + the column width does that, unchanged), so moving the clip
+   one level in costs nothing and is what makes an ellipsis possible.
+
+   The badge's cap is `.pbadge`'s own `max-width: 100%` above — 100% of the
+   CELL's content box. No width is repeated here, so nothing can drift from the
+   column's measure.
+
+   `min-width: 0` is load-bearing: the text is a flex item of the inline-flex
+   badge, and at the default `min-width: auto` a flex item refuses to shrink
+   below its content, so the box would still overflow and the ellipsis would
+   silently never render. */
+.clipbadge .cliptext { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* [data-clipped] is written by the post-render MEASUREMENT in 01-app.js
+   (refreshClips, scrollWidth vs clientWidth) and by nothing else — never by the
+   template, never from a character count. Both the tooltip and the tab stop
+   hang off it, so a value that FITS shows nothing on hover and is not
+   focusable: a badge that is not truncated is not interactive. */
+.clipbadge[data-clipped] { position: relative; }
+.clipbadge[data-clipped]:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+/* ONE rule, both reveals — hover and keyboard focus. Hover-only would put the
+   clipped part (which is the identifying part) out of reach without a pointer.
+   `attr(aria-label)` makes the visible tooltip and the accessible name the same
+   string by construction. `position: absolute` keeps it out of the badge's flex
+   flow, so it adds no layout and cannot grow the row (row heights are aligned
+   to the timeline bars — a taller row desyncs the pane from the Gantt).
+   `top: 100%` leaves no dead zone between badge and tooltip, so the pointer can
+   travel onto it and it stays open (WCAG 1.4.13 hoverable + persistent).
+   KNOWN GAP: a pure-CSS tooltip cannot be dismissed with Escape, the third
+   limb of 1.4.13, and touch has no reveal path at all. Not answered here by
+   putting JS state behind an informational cell — both are written up in
+   gantt-frame-notes.md and carried as an explicit question for Miles/JP in
+   T152, so the call gets made rather than left in this comment. */
+.clipbadge[data-clipped]:hover::after,
+.clipbadge[data-clipped]:focus-visible::after {
+  content: attr(aria-label);
+  position: absolute; top: 100%; left: 0; z-index: 1;
+  padding: var(--space-4) var(--space-8);
+  background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
+  font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--slate-700);
+  white-space: nowrap;
+}
+
 .ptable .col-diff .pbadge { width: 111px; justify-content: space-between; }
 /* difficulty recipes = product's W3 tokens (Miles, owl #04 2026-08-12): 50 fill / 500 stroke+text */
 .pbadge.d-Easy { background: var(--green-50); border-color: var(--green-500); color: var(--green-500); }
