@@ -329,3 +329,182 @@ pre-existing). The hazard is element-content position only.
   Chrome against a standalone harness built from the shipped CSS, but live
   drag-and-drop, `ArrowLeft`/`ArrowRight` reslot and the real slider thumb ratio
   in both pane states are still owed.
+
+---
+
+# Batch 4 — sprints modal, drag reversal, row action icons (phase 13j, 2026-08-17)
+
+Owls #27–#31. Figma file `abDRsIVDs1XjJKeR8xYOoF`, six nodes verified via the
+official Figma MCP before any code was written: `528:113433` (empty),
+`322:30031` (filled), `328:38162` (alert/gap), `328:38454` (error/duplicates),
+`I262:33396;251:27040` (icon cluster), `262:33397` (row-weeks). No node
+materially mismatched its owl.
+
+## The precedence override — pins stay FULLY frozen
+
+Owls #27 and #31 both say *"a pin blocks Suggest, not deliberate action (per
+#24)"*, and **two live Figma annotations still carry that line**
+(`I262:33396;251:27040` interaction, `262:33397` interaction). All of it
+predates **JP's ruling B of 2026-08-17: pins stay fully frozen, FR-5.9
+unchanged.** The build follows JP:
+
+- a pinned row is **not draggable** — not by its bar, not by the row;
+- **Calendar Remove is `disabled`** on a pinned row, not merely warned about,
+  because `/replot` skips pinned rows server-side and an enabled control would
+  be a round trip that changes nothing;
+- the keyboard guard (`rowKey` → *Pinned — unpin to move.*) is untouched.
+
+**Flag the supersession in the deploy owl.** Miles was informed in jp→miles #18;
+the two annotations still need correcting at source.
+
+## Rulings R-f-1 … R-f-9, R-drag-a/b — R-f-1…8 and R-drag-a/b issued in the contract, R-f-9 at review; with what shipped
+
+| ID | Ruling | Shipped |
+|---|---|---|
+| **R-f-1** | Copy is **"Add Sprint"** in both states; the empty state's frame label "Add a Sprint" is dropped (the frame flags its own inconsistency). | Yes — a render test asserts `Add a Sprint` appears in neither state |
+| **R-f-2** | START snaps to the Monday of the picked week, END to that week's Friday — **snap on pick, never reject**. | Yes — new `fridayIso()` beside `mondayIso()`, bound to `change` and **not** `input` (some engines fire `input` per keystroke and would rewrite a half-typed year) |
+| **R-f-3** | Overlap: **constitution invariant 12 already answers #28.4.** The server rejects overlaps on save (`sprintIssues` → 422 `SPRINT_CONFLICT`, nothing written) and did before this batch. The modal surfaces them as an **error-variant banner**, red and blocking, symmetric with duplicates. **Error treatment flagged to Miles.** | Yes — no server change; one strengthened test plus two probe legs |
+| **R-f-4** | The gap banner renders **between the two rows it names**, one banner **per gap**. | Yes — each banner carries the draft index of the row it follows, so placement is data, not a second layout rule |
+| **R-f-5** | **No CTAs in either banner** — Miles removed the frame's "Delete sprint" / "Keep it" buttons. | Yes — asserted per banner variant, and both strings are absent from every state |
+| **R-f-6** | Column 1 holds the **remove ✕**; there is **no grip** and **no manual reordering** (`position` is derived from the sorted start dates on save). Resolves recon defect D-1, where the frame draws a six-dot grip in col 1 and the ✕ at the right of LENGTH while every annotation and the owl say col 1 removes the row. **Flagged to Miles.** | Yes — build the annotation, not the pixels. A grip would also be a control that drags nothing, which is exactly what R-drag-b deletes from the Gantt gutter |
+| **R-f-7** | **No SubTone hint strip.** Resolves recon defect D-2: the frame's `offset-subtone` layer is `hidden` in all three table states and the stated 812×416 only adds up without it. **Flagged to Miles.** | Yes — nothing matching `subtone` renders in any state |
+| **R-f-8** | Gap detection counts **working days** against the active ARES calendar (`getHolidays()`), never raw weekdays. | Yes — `holidays` joins the `GET /deliverables` payload (read-only, no new collection) and the client skips weekends + that set. `lib/planner.ts`'s own raw-calendar `> 2 days` gap rule is untouched (frozen, and the route filters gap issues out anyway) |
+| **R-drag-a** | Unscheduled rows have **no bar**, so they keep the current **row-drag** onto week cells. A necessary asymmetry. **Flagged.** | Yes — and the hint line already said so |
+| **R-drag-b** | The gutter **grip is removed for scheduled rows** and kept **only on unscheduled** ones; the BR-8 multi-select checkbox stays on both and the keyboard arrows still reslot. Answers #31's confirm. **Flagged.** | Yes |
+| **R-f-9** | The contract's three `#000` facts — the modal title, "No sprints yet" and the enabled Save fill — ship as **tokens**, not as a raw hex: text takes `--surface-foreground` (`#0f172a`), the Save fill takes `--neutral-950` (`#0a0a0a`). A raw hex in component CSS is a declared defect in this repo and there is no `#000` token. A ~1–2% luminance departure from the frame, deliberate. **Flagged to Miles** — add a true black token if the frame's `#000` is load-bearing. | Yes — no raw hex anywhere in the modal's CSS |
+
+## #27's divergence, answered
+
+The build being replaced had **pin / duplicate / status-note**; the design
+specifies **Copy / Pin / Calendar Remove**. An exhaustive search for
+`status_note` / `statusNote` / `editNote` found that the cluster's pencil is the
+**only status-note edit surface anywhere in the app** — every other site is
+display-only (the "manual" chip's `title`, the two status-badge tooltips, the
+row search blob).
+
+So it was **preserved outside `badge-icons-container`**, not dropped: with a
+note, the `.gchips` chip that already announces one *becomes* the edit button
+(same pixels, zero new chrome); without one, a ghost pencil appears in the same
+chips row on the same hover/focus rule. The cluster is left at exactly the three
+specified icons. **Placement flagged to Miles.**
+
+## Two contract deviations, both deliberate and both flagged
+
+1. **`.gbar` spans the whole track** (`position:absolute; inset:0`) rather than
+   the contract's `min(left)` → `max(left+width)` of `phaseBars(row)`. `.gseg`
+   offsets are percentages **of the track**, so a narrower wrapper re-bases every
+   one of them and moves the shipped bars. `pointer-events: none` on the wrapper
+   and `auto` on the segments (the `.gunsched` pattern) makes the **segments**
+   the only hit area, so the grab target is exactly the bar the user sees and the
+   `.gweek` cells stay droppable. Side effect: the browser's default drag image
+   is the transparent full-track box, so the ghost reads as the bar floating but
+   is not tight. Reversible with a `barGroup(row)` helper that re-bases the
+   segments, at the cost of a new harness stub.
+2. **The banner markup appears at two sites** (leading duplicates; in-loop
+   overlaps + gaps) instead of once through a Ractive partial. Ractive accepts
+   partial *definitions* only at the top level of a template, and the render
+   harness slices the modal out as a subtree — a top-level definition would fall
+   outside the slice and `{{>sbanner}}` would not resolve in tests. Both copies
+   are byte-identical and read `.variant`; the styling is a **single** `.sbanner`
+   recipe with three modifiers, which is what the one-recipe rule asks for.
+
+## Two defects fixed at integrate
+
+- **Calendar Remove was live on a row that had no slotted week.** `/replot`
+  audits every move it *applies*, and a `null → null` move is applied — so a
+  single click wrote a `schedule.replot` row for a non-change. Invariant 10 logs
+  **changes**, not attempts, so the affordance now carries the rule: the button
+  is `disabled` (title *Already off the schedule*) and `unslotRow` returns before
+  writing. The route stays a dumb applier. A probe leg proves the route's
+  behaviour is what makes the guard necessary.
+- **R7 was shipped as a dead end.** Save was disabled while `sprintDraft` was
+  empty, which meant a user who removed every sprint could never persist that
+  removal — with no other route to an empty list in the UI. The contract's own
+  risk row states the intended behaviour ("deleting the last row from a filled
+  table must keep Save enabled"), so the two states are now distinguished by one
+  flag set at open (`sprintOpenedEmpty`): **opened with none** → Save dead (the
+  frame's own empty-state treatment); **emptied by the user** → Save live. The
+  route already accepted an empty list and audits the replace like any other;
+  a probe leg proves it end to end. **Flag to Miles** — this is the one place the
+  build reads the contract's risk row over its §3.2.4 rule.
+
+## Two defects fixed at review (batch 4)
+
+- **The bar drop was refused for every short reslot.** The drag reversal made
+  `.gbar` the source with `pointer-events: none` on the wrapper and `auto` on the
+  `.gseg` children, so a drag can only *start* on a segment. During an HTML5 drag
+  the drop target is hit-tested under the pointer and hit-testing honours
+  pointer-events, so `dragover` kept firing on `.gseg` and bubbling
+  gseg → gbar → gtrack → growr → gbrows — a path with **no** dragover handler
+  (the only two in the planner are `.gweek` and `.gblockhead`). Nothing called
+  `preventDefault`, so the location was not a valid drop target and the drag
+  snapped back with no `moveRows` call. The dragged row's own segments stay
+  painted during the drag, so **any** horizontal move shorter than the distance
+  from the grab point to the bar's edge — the ±1-week reslot the bar's own title
+  advertises — always failed; only wandering vertically off the 26px strip onto
+  bare `.gweek` worked, which contradicts "horizontal only". The `.gdl` deadline
+  tick (`pointer-events` auto, full row height) intercepted the same way. Fix:
+  `dragRow` sets `ganttDragging` and dragend clears it, `.gantt.gdragging` makes
+  `.gbar .gseg` **and** `.gdl` transparent to hit-testing for the duration, so the
+  `.gweek` columns underneath keep receiving the drag. One drop recipe still —
+  the week cell. `moveRows` clears the flag a second time so a re-render that
+  eats the source node cannot leave the bars permanently un-grabbable. It also
+  fixes the unscheduled row-drag, whose pointer crosses other rows' bars on its
+  way to a week. Verification is a **live-browser** case (a 1-week drag on a
+  multi-week bar), folded into the still-open T134.
+- **The empty state's Cancel shipped at full strength.** Contract §1.1 draws
+  Cancel's label `--slate-400` in the empty state and `--slate-900` in the other
+  three; `.smbtn.ghost` was `--slate-900` unconditionally with no state modifier
+  on the button. The earlier reading — that dimming it would make a live control
+  look dead — over-read the frame: it dims the **label only**, leaving the
+  border, fill, hover and click untouched, which is de-emphasis behind
+  "Add Sprint", not a disabled treatment. Now `.smbtn.ghost.dim`, applied on
+  `!sprintDraft.length` so the modifier tracks the rendered branch exactly.
+
+## Known consequences and treatments still owed (batch 4)
+
+| # | Point |
+|---|---|
+| 7 | **R11 widened.** `.gantt.lpc` hides `c-status` **and** `.gchips`, so a collapsed left pane now hides the action cluster *and* the status-note affordance. Pre-existing shape recorded at T133; not widened in scope, but the surface it costs grew |
+| 8 | The `label-offset` 1px paddings inside the table header cells are folded away into the cells' own padding — one declaration instead of a wrapper per label |
+| 9 | **Whitespace-only sprint names are still acceptable.** Zod's `min(1)` lets `" "` through and a single such row saves with a blank-looking name; two of them *do* collide as duplicates (both trim to the same empty key). No rule was specified, so none was invented — flag if a non-blank rule is wanted |
+| 10 | **Gap and overlap pairs are detected in START order** (the order the route persists in) but each banner sits after the **draft** index of its earlier-starting member. If a user reorders rows so draft order diverges from start order, a banner can sit somewhere other than literally between its two rows. Matches R-f-4's intent for every normal case — the server returns sprints sorted by start, and `addSprint` appends after the last end |
+| 11 | **The explainer's double space before "its"** is verbatim in the template source, but Ractive collapses whitespace in text nodes (`preserveWhitespace` defaults to false), so `toHTML()` and the browser both render one space. A render test asserting the double space would fail |
+| 12 | **Overlap copy is new** — the frame supplies no string. It reads *"&lt;A&gt; and &lt;B&gt; cover the same weeks. Sprints cannot overlap, so this list will be rejected on save."* The deletion confirm reads *Remove &lt;name&gt;?* / *N deliverables will move to Outside any sprint.* with **Cancel** / **Remove sprint** — deliberately not "Keep it" / "Delete sprint", which R-f-5 requires to be absent everywhere |
+| 13 | **The DB-backed suite flakes roughly 1 run in 5, and did so before this batch.** Measured at review: a clean `HEAD` worktree failed once in six full runs (`acks.test.ts`, *socket hang up*), and the working tree failed once each on three *different* files (`schedule.test.ts`, `dayplan`, `authz-matrix.test.ts`) over the same number. Always a different test, always one of the `MongoMemoryServer` + supertest files, never a render test, and never reproducible when the file is run alone (6/6 green). It reads as parallel-startup contention in `mongodb-memory-server`, not a logic defect — but the gate is not deterministic today, and a red run should be re-run before it is believed. **Not this batch's to fix; worth a `vitest` pool/isolation setting** |
+
+## What was verified at integrate (batch 4)
+
+- Gates: `npx tsc --noEmit`, `npx eslint .`, `node frontend/build.js`, and
+  `npx vitest run` under **three** timezones (default, `TZ=UTC`,
+  `TZ=Asia/Manila`) — 52 files / **564** tests (557 at integrate, +7 for the two
+  review fixes), from the 463 this batch started at. `scripts/batch4-probe.ts`
+  passes under all three as well.
+- Constitution: `git diff lib/` **empty**; `CLAUDE.md` and `.specify/`
+  untouched; the write registry unchanged at **W1 / W2 / W3** and no route
+  touched by this batch imports `lib/trello.ts` or any sheets client (asserted
+  in the probe, not claimed); every sprint query filters `project_id` and
+  uniqueness is per project by construction (proved by a cross-project save);
+  **membership stays derived** — a probe leg asserts no key matching `/sprint/i`
+  ever lands on a deliverable; both rejection classes write **nothing** and audit
+  **nothing**, because a refusal is not a state change.
+- Template behaviour is **rendered, not grepped**: `renderSprintModal()` joins
+  the harness beside `renderGantt()`/`renderSuggestBar()`, and the two Ractive
+  **directives** in this batch (`on-dragstart`, `on-drop`) are asserted against
+  source with that stated in the test, because they never reach `toHTML()` for
+  any row kind.
+- The three sprint validators are **executed out of the shipped
+  `frontend/scripts/01-app.js`**, the `test/suggest-counts.test.ts` precedent.
+  That matters most for R-f-8: `lib/**` is frozen, so the working-day rule is a
+  second date-math site with no golden test behind it. The probe pins the wire
+  contract (S4) and the rule's behaviour against an injected holiday calendar;
+  the client expression is executed directly.
+- **Not run: a live-browser pass.** The drag reversal replaces the planner's
+  primary interaction and the repo still has no browser test runner. A real bar
+  drag, a drop past the covered weeks, a drop on the Unscheduled header, a
+  multi-select bar drag, the pinned refusal and the arrival pulse + scroll are
+  **owed before deploy** and are folded into the still-open T134. The review fix
+  above widens that pass by one **load-bearing** case: a **±1-week drag on a
+  multi-week bar**, where the pointer never leaves the row's own segment. That is
+  exactly the drop the hit-testing defect refused, and no `toHTML()` assertion
+  can prove the browser now takes it — only a real drag can.
