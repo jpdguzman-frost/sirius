@@ -615,7 +615,7 @@
 
   {{#each deadlineConflicts as c}}
     <div class="conflict {{c.rule}}">
-      <button class="ack" on-click="['ackConflict', c.key]" title="Acknowledge — silences THIS situation only; any change to the cards involved brings it back">✕</button>
+      <button class="ack" on-click="['ackConflict', c.key]" title="Acknowledge — silences THIS situation only; any change to the cards involved, or to the project's weekly capacity, brings it back">✕</button>
       <span class="ctag">{{ruleLabel(c.rule)}} · {{fmt(c.week)}}</span> — {{c.explanation}}
       <div class="chips">{{#each c.items as i}}<span class="badge">{{i.displayId}} · {{i.phase}}</span>{{/each}}</div>
     </div>

@@ -212,7 +212,7 @@ export function scheduleRouter(): Router {
     ensureAuthenticated,
     ensureProjectMember,
     async (req, res) => {
-      const body = z.object({ conflict_key: z.string().min(3).max(2000), reason: z.string().max(500).optional() }).strict().safeParse(req.body);
+      const body = z.object({ conflict_key: z.string().min(3).max(8000), reason: z.string().max(500).optional() }).strict().safeParse(req.body);
       if (!body.success) {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
@@ -234,7 +234,7 @@ export function scheduleRouter(): Router {
     ensureAuthenticated,
     ensureProjectMember,
     async (req, res) => {
-      const body = z.object({ conflict_key: z.string().min(3).max(2000) }).strict().safeParse(req.body);
+      const body = z.object({ conflict_key: z.string().min(3).max(8000) }).strict().safeParse(req.body);
       if (!body.success) {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;

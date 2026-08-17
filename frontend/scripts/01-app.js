@@ -1179,6 +1179,7 @@ async function writeCapacity(next) {
   if (capFlushing) return; // the running flush picks the new value up
   capFlushing = true;
   app.set('savingCapacity', true);
+  let landed = false;
   try {
     while (capQueued !== null) {
       const want = capQueued;
@@ -1188,6 +1189,7 @@ async function writeCapacity(next) {
         const res = await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/capacity`, { weekly: want });
         if (res.capacity) {
           capServer = res.capacity.weekly;
+          landed = true;
           // a newer value is already queued: re-seating here would flash the
           // superseded number, so let the next pass land the server's shape
           if (capQueued === null) app.set({ capacity: res.capacity, capDraft: res.capacity.weekly });
@@ -1202,6 +1204,18 @@ async function writeCapacity(next) {
   } finally {
     capFlushing = false;
     app.set('savingCapacity', false);
+  }
+  /* Invariant 13 v4.3.0: a capacity change invalidates matching acks, so the
+     deadlines banners can RE-SURFACE right now — refetch once after the queue
+     settles or the payload is stale until the next reload. */
+  if (landed) {
+    try {
+      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
+      app.set('deadlinePayload', res);
+      computeDeadlines();
+    } catch {
+      /* stale-until-reload is the pre-amendment behavior — never worse */
+    }
   }
 }
 
@@ -1873,16 +1887,24 @@ app.on({
   async ackConflict(_ctx, key) {
     const reason = window.prompt('Acknowledge this conflict — optional reason (it goes to the audit log):', '');
     if (reason === null) return;
-    await api.send('POST', `/api/projects/${app.get('activeProjectId')}/conflicts/acknowledge`, { conflict_key: key, ...(reason ? { reason } : {}) });
-    const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
-    app.set('deadlinePayload', res);
-    computeDeadlines();
+    try {
+      await api.send('POST', `/api/projects/${app.get('activeProjectId')}/conflicts/acknowledge`, { conflict_key: key, ...(reason ? { reason } : {}) });
+      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
+      app.set('deadlinePayload', res);
+      computeDeadlines();
+    } catch (err) {
+      flashBanner(`Acknowledge failed — the conflict stays visible. ${errText(err)}`);
+    }
   },
   async restoreConflict(_ctx, key) {
-    await api.send('POST', `/api/projects/${app.get('activeProjectId')}/conflicts/restore`, { conflict_key: key });
-    const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
-    app.set('deadlinePayload', res);
-    computeDeadlines();
+    try {
+      await api.send('POST', `/api/projects/${app.get('activeProjectId')}/conflicts/restore`, { conflict_key: key });
+      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
+      app.set('deadlinePayload', res);
+      computeDeadlines();
+    } catch (err) {
+      flashBanner(`Restore failed. ${errText(err)}`);
+    }
   },
 
   async setConfidence(ctx, cardId) {
