@@ -1,6 +1,10 @@
 <!--
 Sync Impact Report
-- Version change: 4.1.0 -> 4.2.0 (MINOR: invariant 5 amended by JP on
+- Version change: 4.2.0 -> 4.3.0 (MINOR: invariant 13 amended by JP on
+  2026-08-17 — weekly capacity joins the acknowledgement key, so a capacity
+  change invalidates affected acks and the week re-surfaces. OD-4's broader
+  expiry question stays open. Raised by product (owl #23), ruled A by JP.)
+- Prior: 4.1.0 -> 4.2.0 (MINOR: invariant 5 amended by JP on
   2026-08-15 — lib/calendar.ts TZ-safe date-string derivation (local-Monday
   week keys; local-date holiday match), injectable holiday set with the
   ARES working-day calendar canonical. Verbatim-port principle unchanged;
@@ -47,7 +51,7 @@ Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning 
 10. **Every state change writes to the immutable `audit_log`** — schedule moves, pins, SLA overrides, urgency, conflict acknowledgements, project settings.
 11. **Store UTC, render and compute Asia/Manila.** Workday math uses `lib/calendar.ts` only.
 12. **Sprints are editable data, not a cadence.** Overlapping sprints rejected on save. Gaps allowed and surfaced as *Outside any sprint*.
-13. **Conflict acknowledgements are keyed on the situation:** `week | rule | sorted card:phase pairs`. Any change to the cards involved invalidates the acknowledgement. Card-level indicators (red bar, late flag) are never suppressed by an acknowledgement.
+13. **Conflict acknowledgements are keyed on the situation:** `week | rule | capacity | sorted card:phase pairs`. Any change to the cards involved — or to the project's weekly capacity — invalidates the acknowledgement, and the week re-surfaces for re-acknowledgement. (Amended 2026-08-17, JP ruling on OD-4's capacity slice, raised by product in owl #23; the broader OD-4 expiry question stays open.) Card-level indicators (red bar, late flag) are never suppressed by an acknowledgement.
 14. **Deadline precedence:** Trello due date wins where present, else sheet deadline, else none (implemented in `deliverables_v`). A Sirius deadline edit writes the Trello due date (registry entry W2), so precedence is preserved by construction.
 15. **Secrets live in server-side environment configuration only** (dotenv on the host, per the ARES pattern). Never in the client bundle, never in the repo, never in logs. The ARES API key is read-only and never leaves the server. The Sheets service-account credential is provisioned as a server-side secret, never committed.
 16. **Seed from fixtures, never from a production dump.** Real briefs never touch a developer laptop.
@@ -109,4 +113,4 @@ A phase is done when: its acceptance criteria (AC-1 to AC-20, as mapped in the p
 - **Open decisions.** OD items (BRD §13) are resolved by JP, recorded in the spec's
   clarifications, and only then do blocked tasks unblock. No defaults picked silently.
 
-**Version**: 4.2.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-15
+**Version**: 4.3.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-17
