@@ -2,17 +2,24 @@
  * Requests routes (T039 + T094; FR-3.x, FR-11) — read-only mirror of the
  * intake sheet, plus the one Sirius-owned annotation: the frost note.
  *
- * Status derives from the Trello join and the note, never stored (FR-11.3,
- * amends FR-3.3; names corrected by owls #13–#15, 2026-08-14):
- *   MC group has deliverables → 'In Pipeline'   (wins over the flag)
- *   else clarification flag   → 'For Clarification'
- *   else                      → 'To File'
- * A remark alone never changes status (FR-11.4, AC-21).
+ * Status derives from the Trello join ALONE and is never stored (FR-11.3,
+ * amends FR-3.3; two-valued per owls #34–#35, 2026-08-17):
+ *   MC group has deliverables → 'In Pipeline'
+ *   else                      → 'For Filing'
+ * Nothing else is reachable. Neither a remark NOR the clarification flag can
+ * change status (FR-11.4, AC-21): the flag is a property of the NOTE, and it
+ * surfaces in the Remarks cell, not in the STATUS column. The earlier third
+ * value 'For Clarification' (owls #13–#15) is retired, and 'To File' is
+ * renamed 'For Filing' — the tile keeps its own TO FILE wording (owl #35
+ * ruled the card/badge asymmetry deliberate).
  *
- * The tile counts are CROSS-CUTTING, not a partition of the three statuses
- * (owl #14): `toFile` is EVERY unfiled row, flagged ones included, so
- * requests = inPipeline + toFile and `forClarification` is a subset of
- * `toFile`. A filed+flagged row is In Pipeline only — never clarification.
+ * The tile counts are unchanged in every input, and still CROSS-CUTTING
+ * rather than a partition (owl #14): `toFile` is EVERY unfiled row, flagged
+ * ones included, so requests = inPipeline + toFile, and `forClarification`
+ * stays a SUBSET of the unfiled set — now derived from (unfiled AND
+ * note.clarify) rather than from a third status value, which is exactly the
+ * set the old derivation produced. A filed+flagged row is In Pipeline only —
+ * never clarification.
  *
  * The note is a SINGLE freeform box (owl #15): the remark carries notes and
  * clarifications alike, so the flag requires the remark (REMARK_REQUIRED) and
@@ -55,20 +62,26 @@ type NoteShape = { remark: string | null; clarify: boolean; clarify_reason: stri
 const noteOf = (n: { remark?: string | null; clarify?: boolean; clarify_reason?: string | null } | null): NoteShape | null =>
   n ? { remark: n.remark ?? null, clarify: Boolean(n.clarify), clarify_reason: n.clarify_reason ?? null } : null;
 
-/* The derived-status vocabulary, named ONCE on the side that owns it. The
- * client mirrors these three strings; a rename here is one table, not nine
- * literals scattered through the derivation, the counts and the filters. */
-const STATUS = { filed: 'In Pipeline', clarify: 'For Clarification', toFile: 'To File' } as const;
+/* The derived-status vocabulary, named ONCE on the side that owns it — and
+ * the ONLY place either literal is spelled in this route. The client mirrors
+ * 'In Pipeline' alone (it prints whatever the server sends for the other), so
+ * a rename here is one table, not literals scattered through the derivation,
+ * the counts and the filters. Exactly two values; no third is reachable. */
+const STATUS = { filed: 'In Pipeline', forFiling: 'For Filing' } as const;
 
-type SegmentRow = { status: string; deadline: string | null };
+/* The note rides along because `clarification` keys on it, not on status. */
+type SegmentRow = { status: string; deadline: string | null; note: NoteShape | null };
 type Segment = (r: SegmentRow) => boolean;
 /* ONE predicate table for the ?filter= branches AND the tile counts, so the
  * cross-cutting rule (owl #14: unfiled is NOT In Pipeline, flagged included)
- * cannot be spelled two ways that silently drift apart. FR-3.6. */
+ * cannot be spelled two ways that silently drift apart. FR-3.6.
+ * `clarification` = unfiled AND flagged, which is precisely the set the old
+ * third status value described — so forClarification ⊂ unfiled still holds by
+ * construction, and a filed+flagged row matches neither it nor `unfiled`. */
 const SEGMENTS = {
   filed: (r) => r.status === STATUS.filed,
   unfiled: (r) => r.status !== STATUS.filed,
-  clarification: (r) => r.status === STATUS.clarify,
+  clarification: (r) => r.status !== STATUS.filed && Boolean(r.note?.clarify),
   'missing-deadline': (r) => !r.deadline,
 } satisfies Record<string, Segment>;
 
@@ -109,12 +122,10 @@ export function requestsRouter(): Router {
 
       let rows = requests.map((r) => {
         const note = notes.get(r.mc_number) ?? null;
-        // FR-11.3: derived, never stored — pipeline wins over the flag
-        const status = filedMcs.has(r.mc_number)
-          ? STATUS.filed
-          : note?.clarify
-            ? STATUS.clarify
-            : STATUS.toFile;
+        // FR-11.3: derived, never stored — Trello presence is the WHOLE rule
+        // (owls #34–#35). The clarification flag is note state and is read
+        // from `note` below; it never reaches this line.
+        const status = filedMcs.has(r.mc_number) ? STATUS.filed : STATUS.forFiling;
         const due = trelloDue.get(r.mc_number) ?? null;
         const sheetDeadline = r.deadline ?? null;
         return {
@@ -138,6 +149,8 @@ export function requestsRouter(): Router {
       // forClarification is a subset of toFile rather than a fourth bucket.
       // toFile is the ARITHMETIC complement, which states that invariant in
       // code instead of leaving two independent scans to agree by luck.
+      // The `toFile` KEY keeps its name — the tile is still labelled TO FILE
+      // (owl #35) even though the row badge now reads 'For Filing'.
       const inPipeline = rows.filter(SEGMENTS.filed).length;
       const counts = {
         requests: rows.length,

@@ -49,9 +49,18 @@ function capacityBand(value, { least, typical, most }) {
 /* Requests tab (build-spec v1.2 §3): the stat segments are a single-select
    filter on the DERIVED status (FR-11.3), the table pages ten rows at a
    time, and every filter runs client-side over one fetch. */
+/* STATUS is TWO-valued and nothing else (owls #34/#35): 'In Pipeline' when the
+   MC# is present in Trello, 'For Filing' when it is not. A clarification flag
+   NEVER changes STATUS — it is a property of the NOTE, surfaced only in the
+   Remarks cell. The client spells exactly ONE of the two, because it is the
+   only one it tests against: the badge branches on `=== statusFiled` and the
+   cell prints the server's own string. */
 const STATUS_FILED = 'In Pipeline';
-const STATUS_TO_FILE = 'To File';
-const STATUS_CLARIFY = 'For Clarification';
+/* THE clarification predicate — one recipe, used by the segment filter AND by
+   the template's Remarks branch, so the two can never drift (drift rule). It
+   keeps owl #14 exactly: FOR CLARIFICATION stays a SUBSET of the unfiled set,
+   so a filed row carrying the flag is 'In Pipeline' and matches neither. */
+const clarified = (r) => r.status !== STATUS_FILED && Boolean(r.note && r.note.clarify);
 /* Segment key → row predicate (owl #14, 2026-08-14). TO FILE is CROSS-CUTTING:
    it is every unfiled row, flagged ones included, so REQUESTS = IN PIPELINE +
    TO FILE and FOR CLARIFICATION is a SUBSET of TO FILE. That is why a segment
@@ -59,7 +68,7 @@ const STATUS_CLARIFY = 'For Clarification';
 const REQUEST_SEGMENTS = {
   filed: (r) => r.status === STATUS_FILED,
   filing: (r) => r.status !== STATUS_FILED,
-  clarification: (r) => r.status === STATUS_CLARIFY,
+  clarification: clarified,
 };
 /* A frost note is ONE freeform text (owl #15). Rows written before that ruling
    can still hold their text in clarify_reason — with an empty remark OR
@@ -83,6 +92,51 @@ const REQ_MENU_H = 264;
    horizontal clamp before the element exists to measure */
 const DUE_POP_W = 354;
 const DUE_POP_H = 420;
+
+/* ---- Pipeline row warning (owl #36, nodes 537:69131 / 537:69135) ----
+   Replaces the old incomplete-card table banner: the three read-only conditions
+   the server already computes per row (`missing`, src/services/pipeline.ts)
+   now speak on the row they belong to. The aggregate signal did not go away —
+   it is the OPEN WORK KPI, which still counts `corrections`.
+
+   WARN_LABEL is a VARIABLE string, not a literal at the render site: 'Needs
+   Info' today, 'Incomplete'/'Action' later. The row message and the popover
+   title both read it, so they cannot drift apart. */
+const WARN_LABEL = 'Needs Info';
+/* WHY each missing field matters — the payload of the popover, and the whole
+   reason it exists. Keyed by the SERVER's own `missing` tokens, so the copy
+   lives in exactly one place; a token this map does not know renders an empty
+   rationale rather than throwing. The first two are the deleted banner's own
+   wording, carried over verbatim; the Figma line is new copy (R-warn-b). */
+const WARN_WHY = {
+  'difficulty label': 'Without a difficulty label the card cannot forecast.',
+  'due date': 'Without a due date the card cannot raise a deadline conflict.',
+  'Figma attachment': 'Without the Figma attachment the deliverable cannot be opened from the plan.',
+};
+/* warning popover box (node 537:69135) — the pre-measure placeBox needs to
+   decide flip-up and the horizontal clamp before the element exists. The
+   HEIGHT hugs its content (one wrapping list-item per missing field: ~202px
+   for one problem, ~346px for all three), so this is the WORST case, the same
+   way REQ_MENU_H is the select's cap — openWarnPop measures the box that
+   actually rendered and places it a second time. Nothing in CSS pins it. */
+const WARN_POP_W = 235;
+const WARN_POP_H = 346;
+/* ONE recipe for the warning, derived from the row the server already sends.
+   Returns null for a complete card — the template's only test — or
+   { label, items:[{ label, why }] }. items[0] is ALWAYS the card's OWN
+   identity (the frame's 'MC-821' is stale filler), then one item per missing
+   field IN THE SERVER'S ORDER. */
+const rowWarning = (row) => {
+  const miss = (row && row.missing) || [];
+  if (!miss.length) return null;
+  return {
+    label: WARN_LABEL,
+    items: [
+      { label: row.mcLabel, why: row.name },
+      ...miss.map((f) => ({ label: f, why: WARN_WHY[f] || '' })),
+    ],
+  };
+};
 
 const isoOf = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -377,8 +431,9 @@ const app = new Ractive({
     rows: [],
     writesEnabled: true, // G7 observation mode: false = read-only project, W1/W2 controls disabled
     workCardsByMc: {},
+    /* still on the wire and still counted — OPEN WORK (kpi.open) is the
+       aggregate signal now that the table banner is gone (owl #36) */
     corrections: [],
-    showAllCorrections: false,
     sprints: [],
     capacity: { weekly: 0 },
     /* the slider's LIVE position (build-spec §5.4). It tracks the thumb on
@@ -401,6 +456,8 @@ const app = new Ractive({
     dueStaged: null, // clicked day — STAGED only; Apply is what writes (W2)
     dueBaseline: null, // value the popover opened on — the Apply no-op guard
     savingDeadline: {},
+    warnPop: null, // cardId whose incomplete-card popover is open (node 537:69135)
+    warnPopPos: { left: 0, top: 0 }, // fixed-position anchor, flipped and clamped on open
     dowNames: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
     pipeThumb: { needed: false, left: 0, width: 100 },
     iconSprite: ICON_SPRITE,
@@ -493,10 +550,15 @@ const app = new Ractive({
     fmtLong: fmtLongIso,
     fmtInstant,
     monthShort,
+    // the Pipeline row's incomplete-card state — one recipe, read three times
+    // per row (the .warn class, the message, the popover)
+    rowWarning,
     /* the derived-status names the template compares against — the constants
-       above, never re-typed as literals in the markup (owls #13–#15) */
+       above, never re-typed as literals in the markup (owls #13–#15). The
+       clarification test is the SHARED predicate, not a second status name:
+       the markup asks the same question the segment filter asks. */
     statusFiled: STATUS_FILED,
-    statusClarify: STATUS_CLARIFY,
+    clarified,
     // §3 brief cell: the STRING truncates at 180, the full text stays in title=
     clip180: (s) => {
       const t = String(s ?? '');
@@ -528,7 +590,9 @@ const app = new Ractive({
       return {
         main: rows.length,
         work,
-        // OPEN WORK mirrors the incomplete panel (annotation 31:2740)
+        // OPEN WORK is the AGGREGATE incomplete-card signal now that the
+        // table banner is gone (owl #36) — the same corrections the per-row
+        // warnings render one at a time
         open: this.get('corrections').length,
         urgent: rows.filter((r) => r.urgency === 'Urgent').length,
       };
@@ -540,10 +604,6 @@ const app = new Ractive({
       const rows = this.get('rows');
       if (!q) return rows;
       return rows.filter((r) => (r.blob || '').includes(q));
-    },
-    visibleCorrections() {
-      const c = this.get('corrections');
-      return this.get('showAllCorrections') ? c : c.slice(0, 5);
     },
     /* ---- Requests §3: segment + search + four selects, AND-combined, all
        client-side over the single unfiltered payload. The counts stay on
@@ -1016,16 +1076,34 @@ app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ'), noteText
    other two itself. Dismissing DISCARDS the staged date: only Apply writes
    (W2), so the popover defends its own scrolling below. */
 function anyMenuOpen() {
-  return app.get('urgencyMenu') || app.get('diffMenu') || app.get('duePopover') || app.get('reqMenu');
+  return app.get('urgencyMenu') || app.get('diffMenu') || app.get('duePopover') || app.get('reqMenu') || app.get('warnPop');
 }
-function closeMenus() {
-  app.set({ urgencyMenu: null, diffMenu: null, duePopover: null, reqMenu: null });
+/* The element that opened whatever overlay is up — captured in openOverlay,
+   which is the ONE door in, so it can never be stale while an overlay is open.
+   Escape hands focus back to it: a keyboard user who dismisses with the key
+   would otherwise be dropped at the top of the document. So does ANY dismissal
+   that unmounts the element currently holding focus — a scroll or a trackpad
+   nudge while the user is tabbed onto `Open Card` would otherwise drop them at
+   <body> and restart the next Tab from the top of the document. An outside
+   click restores nothing: focus has already gone to whatever was clicked, and
+   a re-click on the trigger is standing on it. */
+let overlayTrigger = null;
+function closeMenus({ restoreFocus = false } = {}) {
+  const t = overlayTrigger;
+  const ae = document.activeElement;
+  const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .warnpop'));
+  overlayTrigger = null;
+  app.set({ urgencyMenu: null, diffMenu: null, duePopover: null, reqMenu: null, warnPop: null });
+  if ((restoreFocus || heldFocus) && t && t.isConnected) t.focus();
 }
 document.addEventListener('click', (e) => {
-  if (anyMenuOpen() && !e.target.closest('.ubadge-wrap, .selectmenu, .duewrap, .duepop, .selwrap')) closeMenus();
+  // the ignore list names the TRIGGERS, not their wrappers: `.warnwrap` is a
+  // block spanning the whole fluid name column, so listing it would make the
+  // blank strip beside `Needs Info` a dead zone for dismissing
+  if (anyMenuOpen() && !e.target.closest('.ubadge-wrap, .selectmenu, .duewrap, .duepop, .selwrap, .warnmsg, .warnpop')) closeMenus();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && anyMenuOpen()) closeMenus();
+  if (e.key === 'Escape' && anyMenuOpen()) closeMenus({ restoreFocus: true });
 });
 document.addEventListener('scroll', (e) => {
   // the popover scrolls INSIDE itself on a viewport shorter than it is —
@@ -1059,41 +1137,52 @@ function placeBox(rect, opts) {
   return { left: Math.round(left), top: Math.round(top) };
 }
 
-/* One opener for all four overlays. They differ only in state keys, box
+/* One opener for all five overlays. They differ only in state keys, box
    height and gap, and whether the box is big enough to need clamping: the two
    row select menus are fixed-length lists, the due popover is a 354×420
-   dialog that must stay fully on screen. Mutual exclusion lives here —
-   opening any one nulls the others. */
+   dialog and the warning popover a 235-wide one, both of which must stay fully
+   on screen. Mutual exclusion lives here — opening any one nulls the others —
+   and so does the focus capture the shared close path restores from. */
 function openOverlay(ctx, cardId, opts) {
   // one write in flight per card (invariant 8); the read-only Requests
   // selects have no write to guard, so they pass no `saving` key
   if (opts.saving && app.get(`${opts.saving}.${cardId}`)) return;
   if (app.get(opts.key) === cardId) {
+    // toggling off with a second click: focus is already on the trigger, so
+    // the capture is dropped without being replayed
+    overlayTrigger = null;
     app.set(opts.key, null);
     return;
   }
+  overlayTrigger = ctx.node;
   app.set({
     urgencyMenu: null,
     diffMenu: null,
     duePopover: null,
     reqMenu: null,
+    warnPop: null,
     ...opts.extra,
     [opts.key]: cardId,
     [opts.posKey]: placeBox(ctx.node.getBoundingClientRect(), opts),
   });
 }
 
-/* The Requests select is the one overlay whose height is DATA-derived (1..N
-   options, capped by CSS), so the constant can only ever be its cap: place it
-   a second time against the box that actually rendered. Without this a short
-   menu flips up to a spot 150px above its trigger, and a capped one opens 24px
-   past the viewport edge. Returns false only if the element is not in the DOM
-   yet, which is the caller's cue to retry on the next frame. */
-function placeReqMenu(trigger, key) {
-  if (app.get('reqMenu') !== key) return true; // the click closed it — nothing to place
-  const el = document.querySelector('.selectmenu.reqmenu');
+/* Two overlays have a DATA-derived height that no constant can state: the
+   Requests select (1..N options, capped by CSS) and the warning popover (one
+   list-item per missing field, each wrapping to as many lines as its rationale
+   needs — a three-problem card is ~346px against the 220 a one-problem card
+   measures). Their constants are therefore a pre-measure for the FIRST flip
+   decision only; this places the box a SECOND time against what actually
+   rendered. Without it a short select flips up to a spot 150px above its
+   trigger, and a tall popover runs off the bottom of the viewport with its
+   separator and `Open Card` unreachable. Same placeBox, no second positioner.
+   Returns false only if the element is not in the DOM yet, which is the
+   caller's cue to retry on the next frame. */
+function placeMeasured(trigger, id, opts) {
+  if (app.get(opts.key) !== id) return true; // the click closed it — nothing to place
+  const el = document.querySelector(opts.sel);
   if (!el) return false;
-  app.set('reqMenuPos', placeBox(trigger.getBoundingClientRect(), { h: el.offsetHeight, gap: 4, clampW: el.offsetWidth }));
+  app.set(opts.posKey, placeBox(trigger.getBoundingClientRect(), { h: el.offsetHeight, gap: 4, clampW: el.offsetWidth }));
   return true;
 }
 
@@ -1628,12 +1717,12 @@ app.on({
     await resetForProjectSwitch();
   },
   signOut() { api.send('POST', '/auth/logout').then(() => window.location.reload()); },
-  toggleCorrections() { app.toggle('showAllCorrections'); },
   /* ---- Requests §3: stat segments, selects, pager — no round-trip ---- */
   setRequestFilter(_ctx, f) { applyRequestFilter(f); },
   openReqMenu(ctx, key) {
     openOverlay(ctx, key, { key: 'reqMenu', posKey: 'reqMenuPos', h: REQ_MENU_H, gap: 4, clampW: REQ_MENU_W });
-    if (!placeReqMenu(ctx.node, key)) requestAnimationFrame(() => placeReqMenu(ctx.node, key));
+    const m = { key: 'reqMenu', posKey: 'reqMenuPos', sel: '.selectmenu.reqmenu' };
+    if (!placeMeasured(ctx.node, key, m)) requestAnimationFrame(() => placeMeasured(ctx.node, key, m));
   },
   pickReqFilter(_ctx, key, value) {
     app.set({ reqMenu: null, [key]: value }); // '' = All, which clears that filter
@@ -1679,22 +1768,22 @@ app.on({
     }
     const idx = app.get('requests').findIndex((x) => x.mc_number === mc);
     const row = app.get(`requests.${idx}`);
-    const prev = { note: row.note, status: row.status, blob: row.blob };
+    const prev = { note: row.note, blob: row.blob };
     // clarify_reason is legacy-only — a new write always nulls it
     const note = remark === null && !d.clarify ? null : { remark, clarify: d.clarify, clarify_reason: null };
-    /* Optimistic, in ONE set — three keypaths, one runloop flush, so the
-       filter, the sort and the option lists recompute once instead of thrice
-       and no frame renders the new note against the old badge. status is
-       derived, so it mirrors the server's derivation (FR-11.3); the search
-       blob is REBUILT, or the filter (which reads blob) and the cell (which
-       reads the note) disagree until the next successful load — and the
-       refetch below is explicitly allowed to fail. */
+    /* Optimistic, in ONE set — two keypaths, one runloop flush, so the filter,
+       the sort and the option lists recompute once instead of twice and no
+       frame renders the new note against the old cell. STATUS IS NOT PATCHED
+       (owls #34/#35): a note never moves status, so the only thing a note save
+       can change is the note itself. The badge is unaffected; the Remarks cell
+       and the FOR CLARIFICATION segment both re-derive from `clarified()`,
+       which reads the note this set just wrote. The search blob is REBUILT, or
+       the filter (which reads blob) and the cell (which reads the note)
+       disagree until the next successful load — and the refetch below is
+       explicitly allowed to fail. */
     app.set({
       [`requests.${idx}.note`]: note,
       [`requests.${idx}.blob`]: requestBlob({ ...row, note }),
-      ...(row.status !== STATUS_FILED
-        ? { [`requests.${idx}.status`]: d.clarify ? STATUS_CLARIFY : STATUS_TO_FILE }
-        : {}),
       noteEditing: null,
       noteError: '',
     });
@@ -1708,7 +1797,6 @@ app.on({
     } catch (err) {
       app.set({
         [`requests.${idx}.note`]: prev.note,
-        [`requests.${idx}.status`]: prev.status,
         [`requests.${idx}.blob`]: prev.blob,
       });
       flashBanner(`Note save failed — reverted. ${errText(err)}`);
@@ -1853,6 +1941,17 @@ app.on({
       h: DUE_POP_H, gap: 4, clampW: DUE_POP_W, // clamped both ways — the box stays fully on screen
       extra: { dueStaged: current, dueBaseline: current, dueMonth: monthOf(current || manilaToday()) },
     });
+  },
+  /* ---- incomplete-card popover (owl #36, node 537:69135) ----
+     Read-only: it explains what Trello is missing and links out. Same placer,
+     same dismissers, same focus return as every other overlay — the only thing
+     it brings of its own is its box size. */
+  openWarnPop(ctx, cardId) {
+    openOverlay(ctx, cardId, { key: 'warnPop', posKey: 'warnPopPos', h: WARN_POP_H, gap: 4, clampW: WARN_POP_W });
+    // the height is one list-item per missing field, each wrapping — measure
+    // the rendered box and place it again, exactly as the Requests select does
+    const m = { key: 'warnPop', posKey: 'warnPopPos', sel: '.warnpop' };
+    if (!placeMeasured(ctx.node, cardId, m)) requestAnimationFrame(() => placeMeasured(ctx.node, cardId, m));
   },
   duePick(_ctx, iso) { app.set('dueStaged', iso); }, // stages only — Apply writes
   dueNav(_ctx, dir) { app.set('dueMonth', monthShiftYm(app.get('dueMonth'), dir)); },

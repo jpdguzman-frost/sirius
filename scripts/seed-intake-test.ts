@@ -74,7 +74,9 @@ filedMcs.forEach((mc, i) => {
   const [year, month] = PERIODS[i % PERIODS.length]!;
   rows.push(row(mc, `Filed fixture ${i + 1}`, `2026-09-${String(10 + i).padStart(2, '0')}`, year!, month!));
 });
-// unfiled rows → 'To File'; targets for frost-note testing (flag → 'For Clarification')
+// unfiled rows → 'For Filing'; targets for frost-note testing. The
+// clarification flag does NOT change status (owls #34–#35) — it shows in the
+// Remarks cell and drives the FOR CLARIFICATION tile only.
 rows.push(row('MC-9101', 'Unfiled fixture — flag me for clarification', '2026-09-18', '2026', 'September'));
 rows.push(row('MC-9102', 'Unfiled fixture — add a remark to me', '2026-09-21', '2026', '8'));
 rows.push(row('MC-9103', 'Unfiled fixture — plain', '2026-09-25', '2025', 'December'));

@@ -125,8 +125,9 @@ describe('requests route (FR-3.2, FR-3.3, FR-3.6, FR-8.6)', () => {
     await agent.post('/__test/login').send({ userId: String(user._id), email: user.email }).expect(200);
 
     const all = await getRequests(agent, p._id);
-    // FR-11.3 (owls #13–#15, 2026-08-14): three-state — no note on these, so unfiled = To File
-    expect(all.requests.map((r) => r.status)).toEqual(['In Pipeline', 'To File']);
+    // FR-11.3 (owls #34–#35, 2026-08-17): two-state — status is the Trello
+    // join alone, so an unfiled row reads 'For Filing' whatever its note says
+    expect(all.requests.map((r) => r.status)).toEqual(['In Pipeline', 'For Filing']);
     expect(all.counts).toEqual({ requests: 2, inPipeline: 1, toFile: 1, forClarification: 0 });
     expect(all.sync.lastAttemptOk).toBe(true);
     expect(all.sync.lastSuccessAt).toBeTruthy();

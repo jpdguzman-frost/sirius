@@ -6,8 +6,10 @@
 .shellnav { background: var(--surface-background); padding: 40px var(--page-inset) 0; }
 
 /* per-row sprite icons — one size class per glyph box the frames measure
-   (13 = the Gantt row action cluster, owl #27; 15 = the warning triangle in
-   the sprints modal's alert banner, node 328:38162) */
+   (10 = the Pipeline row's warning message, node 537:69131; 13 = the Gantt row
+   action cluster, owl #27; 15 = the warning triangle in the sprints modal's
+   alert banner, node 328:38162) */
+.i10 { width: 10px; height: 10px; display: block; }
 .i13 { width: 13px; height: 13px; display: block; }
 .i15 { width: 15px; height: 15px; display: block; }
 .i16 { width: 16px; height: 16px; display: block; }
@@ -83,27 +85,9 @@
    (frame geometry, confirmed against node 17:2063 child positions) ---- */
 .pipestack { display: flex; flex-direction: column; gap: var(--space-16); }
 
-/* ---- incomplete panel (annotations 70:1358/970/914) ---- */
-.ipanel {
-  background: var(--amber-50); border: 1px solid var(--amber-300); border-radius: 6px;
-  display: flex; flex-direction: column; gap: var(--space-8); padding: 17px 17px 13px;
-}
-.ipanel .ihead { display: flex; align-items: center; gap: var(--space-8); color: var(--amber-800); font-size: var(--text-body); font-weight: 600; line-height: 1.4; }
-.ipanel .ihead svg { display: block; color: var(--amber-700); }
-.ipanel .irow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }
-.ipanel .irow .ideets { display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap; }
-.ipanel .rowtag {
-  background: var(--amber-50); border: 1px solid var(--amber-300); border-radius: var(--radius-sm);
-  color: var(--amber-700); font-size: var(--text-label); font-weight: 600; line-height: 1; padding: 6px 7px 5px;
-}
-.ipanel .iname { font-size: var(--text-body); line-height: 1.5; color: var(--slate-700); }
-.ipanel .ireason { font-size: var(--text-body); line-height: 1.5; color: var(--amber-700); }
-.ipanel .iopen {
-  border: none; background: none; cursor: pointer; font-family: var(--font-sans);
-  color: var(--blue-700); font-size: var(--text-label); font-weight: 600; line-height: 1;
-  padding: 7px 12px 6px; border-radius: var(--radius-sm); text-decoration: none; white-space: nowrap;
-}
-.ipanel .iwhy { max-width: 700px; color: var(--amber-700); font-size: var(--text-label); line-height: 1.4; }
+/* the incomplete-card PANEL (annotations 70:1358/970/914) was deleted in owl
+   #36 — the state moved onto the row it describes (.prow.warn / .warnmsg /
+   .warnpop, below). Nothing replaces it above the table. */
 
 /* ---- search + callout (annotations 17:2057, 70:1211) ---- */
 .searchbar {
@@ -191,9 +175,9 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .ubadge.urgent { background: var(--status-destructive-light); border-color: var(--red-300); color: var(--status-destructive-strong); }
 .ubadge.nonurgent, .ubadge.unset { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
 .ubadge.saving { opacity: 0.5; pointer-events: none; }
-/* both are fixed boxes that escape the .pscroll clip (review finding 3), with
-   their flipped/clamped coords set inline — one recipe, two sizes */
-.selectmenu, .duepop {
+/* all three are fixed boxes that escape the .pscroll clip (review finding 3),
+   with their flipped/clamped coords set inline — one recipe, three sizes */
+.selectmenu, .duepop, .warnpop {
   position: fixed;
   background: var(--white); border: 1px solid var(--slate-200);
   box-shadow: var(--shadow-xs); display: flex; flex-direction: column;
@@ -228,7 +212,8 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .datefield .dpdate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .datefield:hover:not(.readonly) { border-color: var(--surface-foreground); color: var(--surface-foreground); }
 /* one focus ring for the table's interactive chrome */
-.datefield:focus-visible, .duepop button:focus-visible, a.srclink:focus-visible {
+.datefield:focus-visible, .duepop button:focus-visible, a.srclink:focus-visible,
+.warnmsg:focus-visible, .warnpop a:focus-visible {
   outline: 2px solid var(--blue-500); outline-offset: 1px;
 }
 .datefield.missing { border-color: var(--amber-400); color: var(--amber-600); }
@@ -295,6 +280,52 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
   font-weight: 600; padding: 8px 16px 7px;
 }
 .duepop .dueapply:hover { background: var(--slate-700); border-color: var(--slate-700); }
+
+/* ---- incomplete-card row state + popover (owl #36, nodes 537:69131 /
+   537:69135) — replaces the deleted table banner ----
+
+   R-warn-a: the frame draws the amber-300 as a full "stroke" around the row
+   and grows the row to 113px with a 280px name column. Neither is buildable
+   against this table without breaking it: .col-name is fluid (width:auto) and
+   the row height is content-derived from td padding, so the accent is a 3px
+   LEFT inset on the first cell and the geometry stays the table's. Declared
+   ONCE, here — no other rule draws it. */
+.ptable tr.prow.warn > td { background: var(--amber-50); }
+.ptable tr.prow.warn > td:first-child { box-shadow: inset 3px 0 0 0 var(--amber-300); }
+/* a 🛑 blocker is the stronger signal, and it held the row red before this
+   state existed — the amber fill must not quietly demote it. The left accent
+   still draws, so a row that is both reads "blocked, and also incomplete". */
+.ptable tr.prow.warn.blocked > td { background: var(--red-50); }
+/* the frame's `content › subtone-offset` gap under the card name. 6px matches
+   the popover's first-list-item gap; the annotation carries no px value. */
+.warnwrap { display: block; margin-top: 6px; }
+/* THE click target — the row itself stays presentation only */
+.warnmsg {
+  display: inline-flex; align-items: center; gap: var(--space-4);
+  border: none; background: none; padding: 0; cursor: pointer;
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; line-height: 1.4;
+  color: var(--amber-600); text-decoration: underline;
+}
+.warnmsg svg { color: var(--amber-600); flex: none; }
+/* shares .selectmenu/.duepop's fixed-box recipe above; the annotation's
+   slate-100 stroke is the ONE value that forks from it */
+.warnpop {
+  width: 235px; z-index: 40; box-sizing: border-box; border-radius: var(--radius-md);
+  padding: var(--space-16); gap: 12px; font-family: var(--font-sans);
+  border-color: var(--slate-100);
+}
+.wphead { display: flex; align-items: center; gap: var(--space-8); }
+.wphead svg { color: var(--amber-700); }
+.wptitle { font-size: var(--text-body); font-weight: 600; color: var(--amber-700); }
+.wpitems { display: flex; flex-direction: column; gap: 12px; }
+.wpitem { display: flex; flex-direction: column; gap: 4px; }
+/* the frame gaps the card-identity item wider than the problem items */
+.wpitems .wpitem:first-child { gap: 6px; }
+.wplabel { font-size: var(--text-label); font-weight: 600; color: var(--slate-900); }
+.wpwhy { font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
+.wpsep { height: 1px; background: var(--slate-300); }
+/* underlined per the annotation, which overrules the frame's own render */
+.wpopen { font-size: var(--text-label); font-weight: 600; color: var(--blue-700); text-decoration: underline; }
 
 /* links (node 431:17017) — both icons always render; the absent one is a
    non-interactive span at 30% */

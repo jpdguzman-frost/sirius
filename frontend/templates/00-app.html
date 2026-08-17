@@ -145,16 +145,21 @@
               <!-- invariant 14: the server resolves Trello due over sheet deadline; the tooltip names which -->
               <td class="col-rdue">{{#if r.deadline}}<span class="rtext nowrap" title="{{r.deadline_source === 'trello' ? 'From Trello due date' : 'From intake sheet'}}">{{fmtLong(r.deadline)}}</span>{{else}}<span class="nopill">none</span>{{/if}}</td>
               <td class="col-rbrief">{{#if r.brief}}<span class="rtext" title="{{r.brief}}">{{{hlr(clip180(r.brief))}}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
-              <td class="col-rstatus"><span class="sbadge {{r.status === statusFiled ? 'pipe' : r.status === statusClarify ? 'clar' : 'file'}}">{{r.status}}</span></td>
+              <!-- STATUS is two-valued (owls #34/#35): filed or not. There is no
+                   third badge, so the class map is a straight either/or and the
+                   TEXT is the server's own string, never re-typed here. -->
+              <td class="col-rstatus"><span class="sbadge {{r.status === statusFiled ? 'pipe' : 'file'}}">{{r.status}}</span></td>
               <!-- FR-11 note cell. ONE freeform box in the editor (owl #15) and
                    one resolved text everywhere else — noteText() joins any
                    legacy clarify_reason in, so no branch repeats that. The
-                   clarification block keys on the derived STATUS, so a FILED
-                   row that still carries the flag renders the plain remark box
-                   (In Pipeline wins, FR-11.3). The buttons name themselves with
-                   the note TEXT: an aria-label overrides the contents of a
-                   button, so a bare "Edit note for MC-###" would read the
-                   affordance aloud and hide the note it is showing. -->
+                   clarification block keys on the SHARED clarified() predicate
+                   — the same one the FOR CLARIFICATION segment uses — so a
+                   FILED row that still carries the flag renders the plain
+                   remark box (In Pipeline wins, FR-11.3) and the clarification
+                   signal lives only here, never in the status. The buttons name
+                   themselves with the note TEXT: an aria-label overrides the
+                   contents of a button, so a bare "Edit note for MC-###" would
+                   read the affordance aloud and hide the note it is showing. -->
               <td class="col-rnote"><div class="notewrap">
                 {{#if noteEditing === r.mc_number}}
                   <div class="noteedit" on-keydown="['noteKeydown']">
@@ -164,7 +169,7 @@
                     {{#if noteError}}<span class="nerr">{{noteError}}</span>{{/if}}
                     <div class="nbtns"><button class="nghost" on-click="['cancelNote']">Cancel</button><button class="nsubmit" on-click="['submitNote', r.mc_number]">Submit</button></div>
                   </div>
-                {{elseif r.status === statusClarify}}
+                {{elseif clarified(r)}}
                   <button class="notebox flagged" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}} — with clarification: {{noteText(r.note)}}">
                     <span class="clarpill">With Clarification</span>
                     <span class="clarnote">{{{hlr(noteText(r.note))}}}</span>
@@ -219,23 +224,11 @@
   </div>
 
   <div class="pipestack">
-  {{#if corrections.length}}
-    <div class="ipanel">
-      <div class="ihead">{{{icon.warning}}} {{corrections.length}} {{corrections.length === 1 ? 'card' : 'cards'}} incomplete in Trello</div>
-      {{#each visibleCorrections as c}}
-        <div class="irow">
-          <span class="ideets">
-            <span class="rowtag">{{c.displayId}}</span>
-            <span class="iname">{{c.name}}</span>
-            <span class="ireason">Missing {{c.missing.join(' and ')}}</span>
-          </span>
-          {{#if c.trelloUrl}}<a class="iopen" href="{{c.trelloUrl}}" target="_blank">Open Card</a>{{/if}}
-        </div>
-      {{/each}}
-      {{#if corrections.length > 5}}<button class="iopen" style="align-self:flex-start;" on-click="['toggleCorrections']">{{showAllCorrections ? 'Show fewer' : 'Show all ' + corrections.length}}</button>{{/if}}
-      <div class="iwhy">Without a difficulty label the card cannot forecast; without a due date it cannot raise a deadline conflict. Fix in Trello and it corrects on the next sync.</div>
-    </div>
-  {{/if}}
+  <!-- owl #36: the incomplete-card banner that used to sit here is gone. The
+       same three conditions now speak on the row that owns them (.prow.warn
+       below); the aggregate is the OPEN WORK metric above, which still counts
+       `corrections`. A warned row the search hides stays hidden — no special
+       case, which is exactly why the KPI keeps carrying the total. -->
 
   <div class="searchbar">{{{icon.search}}}<input name="pipeline-search" placeholder="Search cards or MC#" value="{{searchQ}}" lazy="250" aria-label="Search cards or MC number" /></div>
 
@@ -250,12 +243,43 @@
         </tr></thead>
         <tbody>
         {{#each pipelineRows as row}}
-          <tr class="prow {{#if row.blocker}}blocked{{/if}}" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
+          <!-- .warn is PRESENTATION ONLY (owl #36): the row keeps its one
+               keyboard behaviour (Enter expands the group) and not one of its
+               controls is disabled by an incomplete card. The MESSAGE in
+               col-name is the only new click target. -->
+          <tr class="prow {{#if row.blocker}}blocked{{/if}} {{#if rowWarning(row)}}warn{{/if}}" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
             <td class="col-mc"><div class="mccell">
               <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{row.displayId}} work cards" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
               <span class="mcnum">{{{hl(row.mcLabel)}}}</span>
             </div></td>
-            <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}</td>
+            <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}
+              <!-- the label is a VARIABLE string (rowWarning().label) in all
+                   three places it appears — the message, its accessible name
+                   and the popover title — so renaming it renames it once. -->
+              {{#if rowWarning(row)}}
+                <div class="warnwrap">
+                  <button class="warnmsg" on-click="['openWarnPop', row.cardId]" aria-haspopup="dialog"
+                          aria-expanded="{{warnPop === row.cardId ? 'true' : 'false'}}"
+                          aria-label="{{rowWarning(row).label}} — {{row.mcLabel}} {{row.name}}">
+                    <svg class="i10" aria-hidden="true"><use href="#i-warning" /></svg><span class="warnlabel">{{rowWarning(row).label}}</span>
+                  </button>
+                  {{#if warnPop === row.cardId}}
+                    <div class="warnpop" role="dialog" aria-label="{{rowWarning(row).label}} — {{row.mcLabel}} {{row.name}}" style="left:{{warnPopPos.left}}px;top:{{warnPopPos.top}}px;">
+                      <div class="wphead"><svg class="i16" aria-hidden="true"><use href="#i-warning" /></svg><span class="wptitle">{{rowWarning(row).label}}</span></div>
+                      <div class="wpitems">
+                        {{#each rowWarning(row).items as it}}
+                          <div class="wpitem"><span class="wplabel">{{it.label}}</span><span class="wpwhy">{{it.why}}</span></div>
+                        {{/each}}
+                      </div>
+                      <!-- the separator exists only to divide the details from
+                           Open Card, so a card Trello has no URL for draws
+                           neither: one conditional, not two -->
+                      {{#if row.trelloUrl}}<div class="wpsep"></div><a class="wpopen" href="{{row.trelloUrl}}" target="_blank" rel="noopener">Open Card</a>{{/if}}
+                    </div>
+                  {{/if}}
+                </div>
+              {{/if}}
+            </td>
             <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{{hl(row.assetType)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-diff"><div class="ubadge-wrap">
               <button class="pbadge ubadge {{#if row.difficulty}}d-{{row.difficulty}}{{else}}unset{{/if}} {{#if savingDifficulty[row.cardId]}}saving{{/if}}"

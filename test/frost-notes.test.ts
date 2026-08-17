@@ -1,12 +1,19 @@
 /**
- * T094 — frost notes (FR-11; AC-21), corrected status model (owls #13–#15,
- * 2026-08-14): the one Sirius-owned annotation on an intake request.
+ * T094 — frost notes (FR-11; AC-21), two-valued status model (owls #34–#35,
+ * 2026-08-17): the one Sirius-owned annotation on an intake request.
  *
- * Remark alone never changes status (FR-11.4); the clarification flag flips an
- * unfiled request to 'For Clarification'; a filed request stays 'In Pipeline'
- * regardless (FR-11.3 — the pipeline wins over the flag). Counts are
- * CROSS-CUTTING: toFile is every unfiled row INCLUDING the flagged ones, so
- * requests = inPipeline + toFile, and forClarification is a subset of toFile.
+ * STATUS is the Trello join and nothing else (FR-11.3): 'In Pipeline' when the
+ * MC group has deliverables, 'For Filing' when it does not. NEITHER a remark
+ * NOR the clarification flag changes it (FR-11.4) — the flag is a property of
+ * the NOTE, read from `note.clarify`, and it surfaces in the Remarks cell.
+ * The former third value 'For Clarification' is retired; 'To File' is renamed
+ * 'For Filing' (the tile keeps its own TO FILE wording, owl #35).
+ *
+ * Counts are unchanged in every input, and still CROSS-CUTTING: toFile is
+ * every unfiled row INCLUDING the flagged ones, so requests = inPipeline +
+ * toFile, and forClarification stays a subset of toFile — now derived from
+ * (unfiled AND note.clarify), which is exactly the set the retired status
+ * value described. A filed+flagged row is In Pipeline only (owl #14).
  *
  * The note is a SINGLE box (owl #15): the remark carries both notes and
  * clarifications, so clarify=true requires the remark (REMARK_REQUIRED) and new
@@ -52,19 +59,25 @@ const rowOf = (body: RequestsBody, mc: string) => byMc(body.requests, mc);
 const statusOf = (body: RequestsBody, mc: string) => rowOf(body, mc)?.status;
 
 describe('frost notes (FR-11)', () => {
-  it('AC-21: a remark alone leaves status unchanged; the flag flips it', async () => {
+  it('AC-21: neither a remark nor the flag moves status — the flag lands on the note', async () => {
     const { p, agent } = await fixture();
 
     await putNote(agent, p._id, 'MC-702', { remark: 'Asked for the brand kit', clarify: false }).expect(200);
     let res = await getRequests(agent, p._id);
-    expect(statusOf(res, 'MC-702')).toBe('To File'); // remark alone: unchanged
+    expect(statusOf(res, 'MC-702')).toBe('For Filing'); // remark alone: unchanged
     expect(rowOf(res, 'MC-702').note?.remark).toBe('Asked for the brand kit');
+    const before = res.counts;
 
     await putNote(agent, p._id, 'MC-702', { remark: 'Asked for the brand kit', clarify: true }).expect(200);
     res = await getRequests(agent, p._id);
-    expect(statusOf(res, 'MC-702')).toBe('For Clarification');
+    // owls #34–#35: the flag no longer rewrites STATUS. It is readable only on
+    // the note — which is where the Remarks cell renders it.
+    expect(statusOf(res, 'MC-702')).toBe('For Filing');
+    expect(rowOf(res, 'MC-702').note?.clarify).toBe(true);
     // cross-cutting: the flagged row is still unfiled, so it stays in toFile
     expect(res.counts).toMatchObject({ requests: 2, inPipeline: 1, toFile: 1, forClarification: 1 });
+    // and the note save moved NOTHING but forClarification
+    expect(before).toMatchObject({ requests: 2, inPipeline: 1, toFile: 1, forClarification: 0 });
   });
 
   it('counts are cross-cutting: an unfiled flagged row lands in BOTH toFile and forClarification', async () => {
@@ -76,8 +89,12 @@ describe('frost notes (FR-11)', () => {
     await putNote(agent, p._id, 'MC-702', { remark: 'No target size given', clarify: true }).expect(200);
     const res = await getRequests(agent, p._id);
 
-    expect(statusOf(res, 'MC-702')).toBe('For Clarification');
-    expect(statusOf(res, 'MC-703')).toBe('To File');
+    // the flagged and the unflagged unfiled row now read IDENTICALLY in the
+    // STATUS column — that is the point of owls #34–#35; only the note differs
+    expect(statusOf(res, 'MC-702')).toBe('For Filing');
+    expect(statusOf(res, 'MC-703')).toBe('For Filing');
+    expect(rowOf(res, 'MC-702').note?.clarify).toBe(true);
+    expect(rowOf(res, 'MC-703').note).toBeNull();
     // REQUESTS = IN PIPELINE + TO FILE; FOR CLARIFICATION is a subset of TO FILE
     expect(res.counts).toEqual({ requests: 3, inPipeline: 1, toFile: 2, forClarification: 1 });
     expect(res.counts.requests).toBe(res.counts.inPipeline + res.counts.toFile);
@@ -142,7 +159,7 @@ describe('frost notes (FR-11)', () => {
     });
 
     const res = await getRequests(agent, p._id);
-    expect(statusOf(res, 'MC-702')).toBe('For Clarification');
+    expect(statusOf(res, 'MC-702')).toBe('For Filing');
     expect(rowOf(res, 'MC-702').note).toEqual({
       remark: null, clarify: true, clarify_reason: 'Legacy: no target size given',
     });
@@ -165,7 +182,7 @@ describe('frost notes (FR-11)', () => {
     });
 
     const res = await getRequests(agent, p._id);
-    expect(statusOf(res, 'MC-702')).toBe('For Clarification');
+    expect(statusOf(res, 'MC-702')).toBe('For Filing');
     expect(rowOf(res, 'MC-702').note).toEqual({
       remark: 'Asked for the brand kit', clarify: true, clarify_reason: 'No target size given',
     });
@@ -178,14 +195,15 @@ describe('frost notes (FR-11)', () => {
     await putNote(agent, p._id, 'MC-702', { remark: 'hello', clarify: false }).expect(404);
   });
 
-  it('clearing removes the row, restores To File, and audits both directions', async () => {
+  it('clearing removes the row, leaves status For Filing, and audits both directions', async () => {
     const { p, agent } = await fixture();
     await putNote(agent, p._id, 'MC-702', { remark: 'missing sizes', clarify: true }).expect(200);
     await putNote(agent, p._id, 'MC-702', { remark: null, clarify: false }).expect(200);
 
     expect(await FrostNote.countDocuments({})).toBe(0);
     const res = await getRequests(agent, p._id);
-    expect(statusOf(res, 'MC-702')).toBe('To File');
+    expect(statusOf(res, 'MC-702')).toBe('For Filing');
+    expect(res.counts).toEqual({ requests: 2, inPipeline: 1, toFile: 1, forClarification: 0 });
 
     const trail = await AuditLog.find({ entity: 'request', entity_id: 'MC-702' }).sort({ at: 1 });
     expect(trail.map((a) => a.action)).toEqual(['frost_note.set', 'frost_note.cleared']);
@@ -217,10 +235,20 @@ describe('frost notes (FR-11)', () => {
     }
   });
 
-  it('filter=clarification serves the tile', async () => {
+  it('filter=clarification serves the tile, and a FILED flagged row never matches', async () => {
     const { p, agent } = await fixture();
     await putNote(agent, p._id, 'MC-702', { remark: 'r', clarify: true }).expect(200);
+    // MC-655 is the FILED row in fixture(): flagging it must not enrol it in
+    // the clarification segment, or forClarification stops being a subset of
+    // the unfiled set (owl #14, preserved through the owl #34–#35 rewrite)
+    await putNote(agent, p._id, 'MC-655', { remark: 'late', clarify: true }).expect(200);
+
     const res = await getRequests(agent, p._id, '?filter=clarification');
     expect(mcsOf(res.requests)).toEqual(['MC-702']);
+
+    const all = await getRequests(agent, p._id);
+    expect(statusOf(all, 'MC-655')).toBe('In Pipeline');
+    expect(rowOf(all, 'MC-655').note?.clarify).toBe(true); // flag readable, status untouched
+    expect(all.counts).toEqual({ requests: 2, inPipeline: 1, toFile: 1, forClarification: 1 });
   });
 });

@@ -162,15 +162,15 @@
 }
 
 /* STATUS (FR-11.3 derivation, one recipe per derived value). Owl #17 corrected
-   two of the three to the 500 weights — these are the TABLE badges only; the
-   breakdown segment above keeps green-600, which is a different element and
-   pinned to its own frame. */
+   both to the 500 weights — these are the TABLE badges only; the breakdown
+   segment above keeps green-600, which is a different element and pinned to
+   its own frame. Two values, two recipes: owls #34/#35 removed the third
+   (clarification is a NOTE property now, so `.sbadge.clar` went with it). */
 .rtable .sbadge { padding: var(--space-4) 10px; white-space: nowrap; }
 .rtable .sbadge.file { background: var(--amber-100); border: 1px solid var(--amber-500); color: var(--amber-600); }
 .rtable .sbadge.pipe { background: var(--green-50); border: 1px solid var(--green-500); color: var(--green-500); }
-/* ONE clarification colourway for the status badge and the note-cell pill —
-   owl #17's retune had to be applied twice because they were two rules */
-.rtable .sbadge.clar, .notewrap .clarpill { background: var(--red-50); border: 1px solid var(--red-500); color: var(--red-500); }
+/* the clarification colourway now dresses ONE element — the note-cell pill */
+.notewrap .clarpill { background: var(--red-50); border: 1px solid var(--red-500); color: var(--red-500); }
 
 /* ---- FROST NOTES (FR-11) — three display states + the inline editor ---- */
 .rtable .col-rnote .notewrap { width: 100%; }

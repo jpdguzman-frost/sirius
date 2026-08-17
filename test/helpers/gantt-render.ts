@@ -13,10 +13,12 @@
  * `frontend/build.js` already parse-checks with. `toHTML()` needs no DOM, so
  * the assertions run in plain Node.
  *
- * Only the `.gantt` subtree is rendered: it is self-contained (the rest of the
- * template would drag in every tab's computeds), and the block's own div
- * nesting is balanced inside each `{{#if}}` branch, so the extractor can find
- * its end by counting tags.
+ * Only one subtree is rendered per call: each is self-contained (the rest of
+ * the template would drag in every tab's computeds), and its own div nesting
+ * is balanced inside each `{{#if}}` branch, so the extractor can find its end
+ * by counting tags. It has since grown past the Gantt — the Suggest bar, the
+ * sprints modal and (batch 5) the Pipeline and Requests tables all render
+ * through the same `divFragment` + `toHTML` path.
  */
 
 import fs from 'node:fs';
@@ -51,6 +53,10 @@ export const TEMPLATE = readFrontend('templates', '00-app.html');
 export const GANTT_CSS = readFrontend('styles', '35-gantt.css');
 /** The sprints modal's recipes live here, not in the Gantt sheet. */
 export const UI_CSS = readFrontend('styles', '10-ui.css');
+/** The Pipeline table, its row states and every popover that escapes its clip. */
+export const PIPELINE_CSS = readFrontend('styles', '20-pipeline.css');
+/** The Requests table — status badges and the frost-note cell. */
+export const REQUESTS_CSS = readFrontend('styles', '25-requests.css');
 export const APP_JS = readFrontend('scripts', '01-app.js');
 export const ICONS_JS = readFrontend('scripts', '00-icons.js');
 
@@ -255,6 +261,201 @@ export function renderSprintModal(state: SprintModalState = {}): string {
     },
   });
   return instance.toHTML();
+}
+
+/* ------------------------------------------------------------------ *
+ * Pipeline + Requests tables (batch 5, owls #34–#36)
+ *
+ * Same contract as the blocks above: the SHIPPED template is rendered, and
+ * every helper whose maths is proven elsewhere is stubbed. Two rules the
+ * stubs follow, both learned the hard way in this file:
+ *
+ *   - every array the template iterates MUST be stubbed, or the section
+ *     renders nothing and the assertion passes on an empty string;
+ *   - the recipe UNDER TEST is never stubbed. `rowWarning` and `clarified`
+ *     are therefore required arguments, extracted from the shipped
+ *     frontend/scripts/01-app.js by the suites that use them, so a render
+ *     test proves the real function and the real markup together.
+ * ------------------------------------------------------------------ */
+
+/** A Pipeline row as `src/services/pipeline.ts toRow()` puts it on the wire. */
+export interface PipeRow {
+  cardId: string;
+  mcNumber: string;
+  mcLabel: string;
+  displayId: string;
+  name: string;
+  /** the read-only Trello gaps — 'difficulty label' · 'due date' · 'Figma attachment' */
+  missing: string[];
+  trelloUrl: string | null;
+  figmaUrl?: string | null;
+  blocker?: string | null;
+  assetType?: string | null;
+  difficulty?: string | null;
+  urgency?: string;
+  currentList?: string | null;
+  status?: string;
+  statusNote?: string | null;
+  requestor?: string | null;
+  deadline?: string | null;
+  overdue?: boolean;
+  workStarted?: string | null;
+  workDone?: string | null;
+}
+
+export interface PipelineTableState {
+  pipelineRows: PipeRow[];
+  /** cardId whose warning popover is open, or null for every row closed */
+  warnPop?: string | null;
+  /** the SHIPPED recipe, executed out of 01-app.js — never a stub */
+  rowWarning: (row: PipeRow) => unknown;
+}
+
+/**
+ * Renders the Pipeline table (`<div class="pscrollwrap">`, which occurs
+ * exactly once — the Requests and Gantt wrappers carry a second class).
+ *
+ * `writesEnabled: false` is deliberate: it takes the read-only Due branch and
+ * so avoids stubbing the whole date-picker calendar for a test about a
+ * different cell. The urgency/difficulty menus and the due popover are all
+ * closed for the same reason.
+ */
+export function renderPipelineTable(state: PipelineTableState): string {
+  const instance = new Ractive({
+    template: divFragment('<div class="pscrollwrap">'),
+    data: {
+      pipelineRows: state.pipelineRows,
+      rowWarning: state.rowWarning,
+      warnPop: state.warnPop ?? null,
+      warnPopPos: { left: 0, top: 0 },
+      expanded: {},
+      workCardsByMc: {},
+      writesEnabled: false,
+      savingUrgency: {},
+      savingDifficulty: {},
+      savingDeadline: {},
+      urgencyMenu: null,
+      diffMenu: null,
+      duePopover: null,
+      urgencyMenuPos: { left: 0, top: 0 },
+      diffMenuPos: { left: 0, top: 0 },
+      pipeThumb: { needed: false },
+      icon: {},
+      // the highlighter wraps query matches in <mark>; with no query it is
+      // identity, which is what these assertions want to read
+      hl: (s: unknown) => String(s ?? ''),
+      fmtLong: (s: unknown) => String(s ?? ''),
+      fmtInstant: () => '',
+    },
+  });
+  return instance.toHTML();
+}
+
+/** One frost note as `/requests` puts it on the wire. */
+export interface ReqNote {
+  remark: string | null;
+  clarify: boolean;
+  clarify_reason: string | null;
+}
+
+/** A Requests row as `src/routes/requests.ts` puts it on the wire. */
+export interface ReqRow {
+  mc_number: string;
+  sheet_row?: number | null;
+  name: string;
+  asset_type?: string | null;
+  use_case?: string | null;
+  requestor?: string | null;
+  deadline?: string | null;
+  deadline_source?: string | null;
+  brief?: string | null;
+  year?: number | null;
+  month?: string | null;
+  /** two-valued since owls #34/#35: 'In Pipeline' | 'For Filing' */
+  status: string;
+  note: ReqNote | null;
+}
+
+export interface RequestsTableState {
+  reqRows: ReqRow[];
+  /** STATUS_FILED out of the shipped source — the one status literal the client owns */
+  statusFiled: string;
+  /** the SHIPPED clarification predicate, executed out of 01-app.js */
+  clarified: (r: ReqRow) => boolean;
+  /** the shipped noteText() — resolves a legacy clarify_reason into one string */
+  noteText: (n: ReqNote | null) => string;
+  /** mc_number whose inline editor is open (null = every row in display state) */
+  noteEditing?: string | null;
+}
+
+/**
+ * The header columns, by `cls`/`label`/`sort` only. REQ_COLS also carries the
+ * sort accessors and comparators, which test/requests-sort coverage owns —
+ * what the table needs to render is the three display fields.
+ */
+const REQ_COLS_STUB = [
+  { cls: 'col-ryear', label: 'Year', sort: 'year' },
+  { cls: 'col-rmonth', label: 'Month', sort: 'month' },
+  { cls: 'col-rmc', label: 'MC #', sort: 'mc' },
+  { cls: 'col-rname', label: 'Deliverable', sort: 'name' },
+  { cls: 'col-rtype', label: 'Type', sort: 'type' },
+  { cls: 'col-rcase', label: 'Use Case', sort: 'case' },
+  { cls: 'col-rwho', label: 'Requestor', sort: 'who' },
+  { cls: 'col-rdue', label: 'Deadline', sort: 'due' },
+  { cls: 'col-rbrief', label: 'Brief', sort: '' },
+  { cls: 'col-rstatus', label: 'Status', sort: 'status' },
+  { cls: 'col-rnote', label: 'Frost Notes', sort: '' },
+];
+
+/** Renders the Requests table (`<div class="pscrollwrap reqwrap">`). */
+export function renderRequestsTable(state: RequestsTableState): string {
+  const instance = new Ractive({
+    template: divFragment('<div class="pscrollwrap reqwrap">'),
+    data: {
+      reqRows: state.reqRows,
+      statusFiled: state.statusFiled,
+      clarified: state.clarified,
+      noteText: state.noteText,
+      noteEditing: state.noteEditing ?? null,
+      reqCols: REQ_COLS_STUB,
+      reqSortKey: '',
+      reqSortDir: 'desc',
+      reqThumb: { needed: false },
+      noteDraft: { remark: '', clarify: false },
+      noteError: '',
+      icon: {},
+      // no sheet URL is derivable in tests, so the row link renders as the
+      // plain-text branch — the note cell is what these suites read
+      sheetRowUrl: () => '',
+      hlr: (s: unknown) => String(s ?? ''),
+      fmtLong: (s: unknown) => String(s ?? ''),
+      monthShort: (s: unknown) => String(s ?? ''),
+      clip180: (s: unknown) => String(s ?? ''),
+    },
+  });
+  return instance.toHTML();
+}
+
+/**
+ * One top-level `const NAME = …;` declaration, sliced out of the shipped
+ * frontend source so a test can EXECUTE the recipe the browser runs rather
+ * than a retyped copy of it. The declaration ends at the first `;` outside
+ * any bracket — which is why every shared recipe has to be a column-0 `const`
+ * rather than an inline arrow inside the `data:` object or a `computed:`
+ * method. (test/suggest-counts.test.ts keeps its own copy of this plus a
+ * `method()` slicer for computeds; this one serves the batch-5 suites.)
+ */
+export function decl(src: string, name: string): string {
+  const at = src.indexOf(`\nconst ${name} =`);
+  if (at < 0) throw new Error(`gantt-render: no declaration of \`${name}\` in the shipped frontend source`);
+  let depth = 0;
+  for (let i = at + 1; i < src.length; i++) {
+    const c = src[i]!;
+    if (c === '{' || c === '[' || c === '(') depth++;
+    else if (c === '}' || c === ']' || c === ')') depth--;
+    else if (c === ';' && depth === 0) return src.slice(at, i + 1);
+  }
+  throw new Error(`gantt-render: unterminated declaration \`${name}\``);
 }
 
 /** One CSS rule body, sliced by its selector line. */
