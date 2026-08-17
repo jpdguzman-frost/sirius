@@ -8,16 +8,16 @@ Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning 
 
 ## Invariants — never violate, never "improve"
 
-1. **Every collection carries `project_id`. Every query filters on it.** No exceptions, including audit and sync collections where the schema defines it.
+1. **Every collection carries** `project_id`**. Every query filters on it.** No exceptions, including audit and sync collections where the schema defines it.
 2. **Read-only everywhere except the write registry.** (Amended 2026-08-04; registry grown 2026-08-12.) No write path to Google Sheets, ever. No write to Trello except the enumerated write registry in `specs/001-sirius-v1/contracts/trello-write.md` — today exactly three entries, all via `lib/trello.ts`: the `Urgent` label (`setUrgency()`), the card due date (`setDue()`), and the `Difficulty: …` label (`setDifficulty()`, approved by JP 2026-08-12 per BRD-§9-A1). Growing the registry is a constitution amendment, never a code change. If you find yourself writing anything else to a source system, you have misread the task — stop.
-3. **`mc_number` is NOT a unique key.** Identity is `(project_id, trello_card_id)`. MC-825 carries 99 deliverables. `display_id` (e.g. `MC-655.3`) is for humans.
+3. `mc_number` **is NOT a unique key.** Identity is `(project_id, trello_card_id)`. MC-825 carries 99 deliverables. `display_id` (e.g. `MC-655.3`) is for humans.
 4. **Work cards attach to the MC group, not to a single deliverable.** There is no reliable task→deliverable edge (1 of 27 titles matched). Do not model one.
-5. **`lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` are ported verbatim from `frost-sirius-v1.jsx`.** They are validated. Do not refactor, rename, or "clean up" their logic. Golden tests prove the port before anything else uses them. (Amended 2026-08-15, JP: `lib/calendar.ts` date-string derivation is TZ-safe — week keys are the local Monday; `isHoliday` matches the local calendar date — and the holiday set is injectable via `setHolidays()`. **The ARES working-day calendar is canonical**; the static `HOLIDAYS` list is only the offline seed. Golden tests amended to a TZ-true reference, oracle parity kept where the oracle is correct. Everything else stays verbatim; the `toFriday` quirk is preserved.)
-6. **`lib/forecast.legacy.ts` (the spreadsheet formula) is for migration tests only.** It is never imported by UI code. It overstates review waits 2.6–4.6× (BR-3). The empirical model is the only forecast users see.
+5. `lib/forecast.ts`**,** `lib/planner.ts`**,** `lib/calendar.ts` **are ported verbatim from** `frost-sirius-v1.jsx`**.** They are validated. Do not refactor, rename, or "clean up" their logic. Golden tests prove the port before anything else uses them. (Amended 2026-08-15, JP: `lib/calendar.ts` date-string derivation is TZ-safe — week keys are the local Monday; `isHoliday` matches the local calendar date — and the holiday set is injectable via `setHolidays()`. **The ARES working-day calendar is canonical**; the static `HOLIDAYS` list is only the offline seed. Golden tests amended to a TZ-true reference, oracle parity kept where the oracle is correct. Everything else stays verbatim; the `toFriday` quirk is preserved.)
+6. `lib/forecast.legacy.ts` **(the spreadsheet formula) is for migration tests only.** It is never imported by UI code. It overstates review waits 2.6–4.6× (BR-3). The empirical model is the only forecast users see.
 7. **The empirical model is a release gate, not a feature** (Sequence item 6). Do not build UI that displays forecast dates until the model refresh produces dates the PM recognises.
 8. **Every Trello write is optimistic with rollback.** (Amended 2026-08-04; was urgency-only.) A failed Trello write reverts the local change. Sirius never displays a state Trello lacks. Every write logs to `audit_log` and `sync_runs`. Trello-owned fields — including the written ones — reconcile from ARES reads, so a manual change made in Trello always surfaces in Sirius.
 9. **Auth is four server-side checks:** verified email, `hd` claim = `frostdesigngroup.com`, matching email domain, active allow-list row. Every API route re-checks session AND project membership. Hiding a tab is not access control.
-10. **Every state change writes to the immutable `audit_log`** — schedule moves, pins, SLA overrides, urgency, conflict acknowledgements, project settings.
+10. **Every state change writes to the immutable** `audit_log` — schedule moves, pins, SLA overrides, urgency, conflict acknowledgements, project settings.
 11. **Store UTC, render and compute Asia/Manila.** Workday math uses `lib/calendar.ts` only.
 12. **Sprints are editable data, not a cadence.** Overlapping sprints rejected on save. Gaps allowed and surfaced as *Outside any sprint*.
 13. **Conflict acknowledgements are keyed on the situation:** `week | rule | capacity | sorted card:phase pairs`. Any change to the cards involved — or to the project's weekly capacity — invalidates the acknowledgement, and the week re-surfaces for re-acknowledgement. (Amended 2026-08-17, JP ruling on OD-4's capacity slice, raised by product in owl #23; the broader OD-4 expiry question stays open.) Card-level indicators (red bar, late flag) are never suppressed by an acknowledgement.
@@ -25,6 +25,8 @@ Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning 
 15. **Secrets live in server-side environment configuration only** (dotenv on the host, per the ARES pattern). Never in the client bundle, never in the repo, never in logs. The ARES API key is read-only and never leaves the server. The Sheets service-account credential is provisioned as a server-side secret, never committed.
 16. **Seed from fixtures, never from a production dump.** Real briefs never touch a developer laptop.
 17. **Staging and local point at a NON-PRODUCTION TEST board that mirrors the production board's structure** — same lists and label taxonomy (`Main Card`, `Difficulty: …`, 🛑 blockers); a dozen sample cards suffice. (Amended 2026-08-04: the production board is too large to duplicate.) Before any urgency write runs, verify the configured board ID is not a production board.
+
+
 
 ## Stack — fixed, do not re-litigate
 
@@ -36,11 +38,13 @@ Do NOT: split into SPA + separate API domain · apply schema or index changes by
 
 ## Working style
 
-- **Tests first for anything in `lib/` and any business rule (BR-1 through BR-10).** The forecast golden tests are the highest-value tests in the project.
+- **Tests first for anything in** `lib/` **and any business rule (BR-1 through BR-10).** The forecast golden tests are the highest-value tests in the project.
 - Reference requirements by ID (FR-x.y, BR-n, AC-n, NFR-n) in commit messages and PR descriptions.
 - When a task depends on an undecided item (OD-1, OD-6, OD-7, OD-8), stop and ask JP. Do not pick a default silently.
 - Small commits, one concern each. Migrations are version-controlled from the first line.
 - Update `STATE.md` at the end of every working session: what's done, what's in flight, what's blocked, which ACs pass.
+
+
 
 ## Reply format — always
 
@@ -51,6 +55,49 @@ Every reply to JP follows this shape, in this order:
 3. **STATUS** — max 5 bullets. One line each. Facts, not narration.
 4. **DETAIL** — collapsed at the bottom under `---`. Evidence, logs, reasoning. JP reads it only by choice.
 
+
+
+## WHAT I NEED FROM YOU — rules
+
+Ask JP only when the answer is one-way: hard to undo, costs money,
+touches live client data, or changes a promise already made.
+Everything reversible: decide it yourself, report it under DECIDED WITHOUT YOU.
+
+Max 3 asks per reply. If there are more, pick the 3 that block work
+and hold the rest.
+
+One ask = one change. Never bundle two changes into one yes.
+
+Every ask uses exactly this shape:
+
+**N. [Short plain title]**
+
+- What's happening: one sentence, no ticket numbers, no names,
+no file paths, no feature nicknames. A smart person outside
+the project must understand it.
+- If yes: what becomes true.
+- If no: what stays true.
+- Undo: easy / hard / impossible.
+- I'd pick: X, because [one reason].
+
+Banned inside an ask: acronyms, code identifiers, issue numbers,
+teammate names, words like "gate", "flag", "state", "handler",
+"migration" without a plain-word gloss. Put all of that in DETAIL.
+
+Test before sending: could JP answer this correctly at 11pm
+without opening the codebase? If no, rewrite it.
+
+## DECIDED WITHOUT YOU
+
+Max 3 bullets. Reversible calls I made on my own. Plain words.
+JP can veto any of them; say so if a veto is expensive.
+
+## Anti-rubber-stamp
+
+If JP replies with a bare "ok", "yes", "go", or "sure" to a reply
+containing 2+ asks, do NOT proceed. Re-ask them one at a time,
+starting with the least reversible.
+
 Hard rules:
 
 - Never narrate process ("first I checked…", "I then realized…"). Conclusions only. Reasoning goes in DETAIL.
@@ -59,6 +106,8 @@ Hard rules:
 - No hedging paragraphs. Tag uncertainty inline: [sure] / [likely] / [guess].
 - Tables over prose for anything with 3+ comparable items.
 - When asking JP to decide: keep it short, use simple words, lay out the options plainly. Never complicate a decision.
+
+
 
 ## Definition of done, per phase
 
