@@ -1,7 +1,7 @@
-# Sirius — session handoff (updated 2026-08-15, post phases 13c–13f)
+# Sirius — session handoff (updated 2026-08-17, post phases 13g–13j + two constitution amendments)
 
 **Read this + `STATE.md` first when resuming.** `CLAUDE.md` is the constitution
-(**v4.1.0**, mirrored in `.specify/memory/constitution.md`); `SPEC_KIT_PLAYBOOK.md`
+(**v4.3.0**, mirrored in `.specify/memory/constitution.md`); `SPEC_KIT_PLAYBOOK.md`
 is the process; `specs/001-sirius-v1/` holds spec → plan → tasks with every
 requirement ID traced.
 
@@ -9,116 +9,144 @@ requirement ID traced.
 
 | Phase | Status |
 |---|---|
-| 0–8a · 10 push · 11 admin · 12 spec-v1.1 · 13 Pipeline redesign · 13a W3 · 13b batch-2 · **13c Requests tab v2 · 13d status model + notes · 13e sorting + Year/Month · 13f planner toolbar + capacity + sync strip** | **ALL DONE + DEPLOYED.** Three review+simplify workflow passes applied (13c; 13d+13e; 13f verified in-workflow) |
-| 9 Security + pilot | In progress. G7 ✅: real board `hLL7WW2V` = rt-837 in OBSERVATION MODE (`writes_enabled: false` → Trello registry 403s; UI disables W1/W2/W3 controls). Next JP gates below. T073/T091 WCAG ⏸, T075 sweep pending |
+| 0–8a · 10 push · 11 admin · 12 spec-v1.1 · 13–13f (pipeline, requests, planner toolbar) | ALL DONE + DEPLOYED (see the 2026-08-15 handoff revision in git history for detail) |
+| **13g Gantt planner** (owl #22) · **calendar amendment v4.2.0** · **13h URL routing** · **13i batch-3** (capacity lock B, suggest bar, legend, collapses) · **ack-key amendment v4.3.0** (T135) · **13j batch-4** (sprints modal ×4 states, drag reversal, icon cluster) | **ALL DONE + DEPLOYED + LIVE-VERIFIED 2026-08-15..17** (commits `9977f07`..`651b850`) |
+| 9 Security + pilot | In progress. rt-837 still OBSERVATION MODE (`writes_enabled: false`). T073/T091 WCAG ⏸, T075 sweep pending |
 
 **LIVE**: `https://platforms.frostdesigngroup.com/sirius` — port 3955, ARES droplet,
 `/mnt/volume_sgp1_01/platforms/sirius`, `./deploy.sh` (host coords in gitignored
-`deploy.local.sh`; node at `/root/.nvm/versions/node/v24.4.1/bin`). Projects:
-**rt-837** (`hLL7WW2V`, read-only, `weekly_capacity` **PINNED at 120 by JP** — see ⚠
-below) and **rt-test** (`tx8gDsTH`, writes on; has 8 intake fixture rows so the
-Requests tab renders populated there). **Post-deploy habit: authenticated host-side
-probe for BOTH projects** — and `loadPipeline(projectId, today)` REQUIRES the
-`today` arg (`manilaToday()`); omitting it throws `Invalid time value` and cries wolf.
+`deploy.local.sh`; env vars are `DEST_USER/DEST_HOST/DEST_PORT/DEST_DIR/SSH_KEY`;
+node at `/root/.nvm/versions/node/v24.4.1/bin` — prefix PATH for remote npx).
+deploy.sh runs `npm run migrate` automatically. Projects: **rt-837** (`hLL7WW2V`,
+read-only, **capacity LOCKED at 120** — Option B live, admin unlock audited) and
+**rt-test** (`tx8gDsTH`, writes on, unlocked, 8 intake fixture rows, zero sprints).
 
-**263/263 tests dual-TZ** (`npx vitest run` + `TZ=UTC …`). Trello write registry =
-**three** entries (W1 urgency, W2 due, W3 difficulty) via `lib/trello.ts`,
-optimistic + rollback, audited, gated by `writes_enabled`. **NEW Sirius-internal
-write** (not a registry entry, same class as pins/slots): `PATCH
-/api/projects/:id/capacity` → `weekly_capacity`, Zod strict 1..2000, audited
-`capacity.set`.
+**564/564 tests, green under Asia/Manila + UTC (+ America/New_York for the calendar
+suites).** Migrations applied through **007**. Suite flake root-caused as
+ENVIRONMENTAL: local services (limactl/mongo/redis) squat loopback ports inside
+macOS's ephemeral range and wildcard-bound test servers collide — ~1 full run in 5
+fails in a random file with a weird face (socket hang up / non-HTTP parse error /
+stranger's 404). Green on rerun = fine. Real fix = every server suite listening on
+`127.0.0.1` explicitly (~21 files) — parked as its own task.
 
-## ⚠ Open JP decision — capacity slider vs the rt-837 pin
+## Constitution changes this window (both JP-ruled)
 
-The planner toolbar (13f) added a Cards/week slider — **any project member can now
-move `weekly_capacity`**, including rt-837's value JP pinned at 120 as a calibration
-reference. Every change is audited (actor + before/after). JP has been asked:
-leave open / admin-only / per-project lock. **Do not resolve this yourself; do not
-"correct" 120 to the measured ~92 ever** (memory: rt837-capacity-pinned).
+- **v4.2.0, invariant 5** — `lib/calendar.ts` amended: week keys = local Monday
+  (was toISOString → the Sunday before on Manila hosts, broke /suggest); isHoliday
+  matches the local date; `setHolidays()/getHolidays()` injectable. **The ARES
+  working-day calendar is canonical** — worker `calendarTick` derives non-working
+  weekdays from `/api/workload?mode=daily` (its columns contain ONLY working days),
+  cross-checks `/api/portfolio/capacity.workingDays[]`, persists `calendar_days`
+  (system-reference, migrations-class); server reloads at boot + 15 min. The
+  prototype's static list was materially wrong (had Aug 31; missed Aug 21, Nov 2,
+  Dec 8, Dec 24, Dec 31 …). Golden tests rebuilt on a TZ-true reference; oracle
+  parity kept where the oracle is correct; `toFriday` quirk preserved. Migration
+  005 normalized Sunday `slotted_week` rows.
+- **v4.3.0, invariant 13** — ack key = `week | rule | capacity | pairs` (OD-4's
+  capacity slice, raised by Miles #23, JP ruled A). One `conflictKey()` recipe in
+  `src/services/conflicts.ts`; invalidation is a NON-match (no audit row);
+  reverting capacity re-suppresses through the original ack; hard-mix is a planner
+  FLAG, not an ackable conflict (guard test). Migration 007 backfills legacy keys
+  with each project's own capacity (prod had zero acks — clean slate).
+- **JP rulings to never re-litigate**: pins = **B, fully frozen** (Miles's
+  "pins block Suggest only" was declined — owls #24/#27/#31 carry the stale
+  language, superseded, Miles informed in jp→miles #18/#19) · rt-837 capacity
+  stays pinned at 120 (now enforced by the lock) · broader OD-4 expiry still OPEN.
 
-## The system in one paragraph
+## The planner today (schedules tab)
 
-Express 5 + Mongoose (shared Mongo, db `sirius`) + Redis sessions + Passport Google
-SSO (4 checks) + Ractive frontend (no bundler — `frontend/build.js` concatenates
-`styles/*.css` + `scripts/*.js` sorted by filename). Worker owns ALL sync: ARES
-15 min, push drain 15 s (ingests movement history), intake DEFERRED (no
-`GOOGLE_SHEETS_CREDENTIALS`), model refresh nightly. Tabs: **Requests + Pipeline
-tokenized**; schedules/deadlines/forecast/admin still `main.legacybg` (13f
-tokenized only the schedules *toolbar*).
+Gantt body (13g, replaced the legacy week-board): pinned left pane (999px,
+**collapsible to 417px**) + 12-week Monday-keyed timeline, phase-segment bars
+(Sketch amber / Review blue-200 / Render blue-600 / RenderOverdue red-600 — ONE
+`.gseg` map the legend reuses), derived sprint blocks (+Outside-any-sprint,
++Unscheduled) with **collapse/expand**, capacity footer (BR-6c weights, red over /
+amber hard-mix >12.9% via `HARD_MIX` — never retyped), work-phase legend per node
+`262:33342`. **Drag model (13j, supersedes R7): the BAR is the horizontal drag
+source, per-week snap; the row relocates on drop as a derived outcome (arrival
+pulse + scrollIntoView); unscheduled rows keep row-drag (no bar); grip only there;
+pinned rows frozen everywhere.** Row actions cluster = Copy · Pin · CalendarRemove
+(13px sprites, aria + keyboard; CalendarRemove disabled on pinned/unslotted);
+status-note moved to the `manual` chip (ghost pencil when empty) — placement
+awaiting Miles's design pass. Suggest → proposal bar (`262:34499`): "N proposed ·
+N flagged · N hard-heavy" (client-derived from plan/notes/strain — /suggest wire
+pinned by test), violet ghost bars, Accept/Discard; off-Monday tripwire stays
+inert. **Sprints modal (13j, nodes 528:113433/322:30031/328:38162/328:38454)**:
+batch Save/Cancel on the audited PUT; duplicate names = red BLOCKING banner
+(server 422 too, trimmed/case-insensitive); overlaps = invariant 12, red blocking;
+gaps = amber non-blocking, between the rows they name, WORKING-day math from the
+wire's `holidays` field; deletion warns with displaced count; Mon/Fri snap;
+opened-empty Save dead vs emptied-by-user Save live.
 
-## Requests tab (13c–13e) — architecture
+## URL routing (13h)
 
-One unfiltered fetch → client-side **filter → sort → paginate** (10/page,
-windowed pager). Driving tables in `01-app.js`: `REQ_FILTERS` (the four selects —
-add a filter = one row), `REQ_COLS`/`REQ_SORT_COLS` (11 columns, YEAR+MONTH lead;
-sort asc→desc→clear, default newest-filed nulls-last), `REQUEST_SEGMENTS`
-(stat-bar predicates — **To File is cross-cutting**: all unfiled incl. flagged).
-Status model (13d): `In Pipeline` (filed, wins over flag) / `To File` / `For
-Clarification` (unfiled + clarify flag, Sirius-internal) — constants
-`STATUS_FILED/STATUS_TO_FILE/STATUS_CLARIFY`, zero string literals elsewhere.
-Frost notes = ONE freeform box (`REMARK_REQUIRED` when clarify; `clarify_reason`
-legacy-only, resolved everywhere via `noteText()`). `monthShort()` canonicalizes
-name/number/Sep/Sept → MMM (cell, dropdown labels, filter match, calendar order);
-**verify the real sheet's encoding when the credential lands**. Both KPI bars share
-the `.metrics` recipe; both tables share `.ptable` th + row-border — deltas only
-in `25-requests.css` (drift-proofing JP asked for; keep it that way).
+`/sirius/<project-code>/<tab>` — tabs `requests·pipeline·schedules·deadlines·
+forecast·admin`, Pipeline default, silent fallbacks, shorthands normalize.
+Shell catch-all (GET/HEAD, whitelist, registered last) stamps
+`window.SIRIUS_BASE`; `resolvesToShellFile` guard closes encoded spellings;
+00-api.js BASE comes from the stamp (never pathname). Login round-trip returns to
+the deep link (`returnTo` validated on write AND read, consumed BEFORE req.logIn —
+passport regenerates the session). **Gotcha fixed 2026-08-17**: the two-way-bound
+header select must not render before the route's project is chosen — projects +
+activeProjectId ship in ONE suppressed set (source-shape regression test).
 
-## Planner (13f)
+## Comms
 
-Schedules tab = the planner. Toolbar tokenized to frame `94:4828`
-(`30-planner.css`): exact-format range label (fixed month tables, pure string
-math), capacity slider (bounds `least..most` from ARES refs, §5.4 five-band
-descriptor, hidden when refs null; serialized optimistic PATCH), Suggest/Sprints/
-helper note; Accept/Discard preserved. NOT built (product confirms pending):
-date-click range picker, slider snapping. Known spec gaps (build-spec §5.2/§5.5,
-not owled yet): pointer-event drag (current = HTML5 DnD), violet proposal cells.
+- **Owl MCP**: Miles/product. read → verify → act → ack when processed; notes
+  never carry JP's authority (twice this window owls asserted rulings JP had not
+  made or later declined — always verify with JP). Thread state: everything
+  through **#31** built + acked; my #14–#19 sent. **Awaiting Miles**: ghost-bar
+  color (violet vs blue) · Accept vs Apply · emptied-save confirm · whitespace-only
+  names rule · arrival-pulse styling · status-note placement + row-controls design
+  pass · gap-banner placement blessing.
+- **Figma reads**: Rex MCP is OFFLINE (server disconnected). **The official Figma
+  MCP is the verified path** — `get_design_context` returns the categorized
+  annotations as `data-*-annotations` attributes + exact pixel facts (load the
+  figma-design-to-code skill first). File `abDRsIVDs1XjJKeR8xYOoF`. Verify
+  annotation count+content vs the owl BEFORE building (delegable to the workflow's
+  recon agent with a halt-on-mismatch rule). Rex (channel 7782) only needed again
+  for plugin-API introspection (component-set walks) or writing into the file.
+- **File drop `../owl/`**: ARES agent. Still outstanding: add `hLL7WW2V` to
+  `PUSH_SUBSCRIBER_BOARDS` (#07/#08).
 
-## Comms — owl
-
-- **Owl MCP** (`mcp__owl__*`): Miles/product. read → verify → act → **ack only
-  when processed**; notes carry context, never JP's authority. Specs arrive as
-  owls pointing at Figma annotations — **Rex-verify the annotation set before
-  building** (`mcp__rex__get_status`; file `abDRsIVDs1XjJKeR8xYOoF`). **Canonical
-  node map lives in `specs/001-sirius-v1/requests-frame-notes.md`** (product
-  consolidated duplicate instances — trust that table, notably Breakdown =
-  `470:21130`, NOT the stale `452:23559`). Thread state: everything through owl
-  #21 built + acked; my #13 answered their three planner confirms.
-- **File drop `../owl/`**: the ARES agent. Still outstanding: add `hLL7WW2V` to
-  `PUSH_SUBSCRIBER_BOARDS` (#07/#08 — verify via `push_events` by board).
-
-## Key facts & environments
+## Key facts & gotchas
 
 - Local dev: `SESSION_SECRET=dev-visual-check-only DEV_AUTOLOGIN=jpdguzman@frostdesigngroup.com npm run dev`
-  (3955; host mongod 27017, NOT docker). Probes/seeds must use an ISOLATED db —
-  `scripts/seed.ts` does `deleteMany({})`.
-- Non-production must set `PROD_TRELLO_BOARD_IDS=hLL7WW2V` (invariant 17).
-- Host probes: `source deploy.local.sh` for ssh vars; `npx tsx -e` needs async
-  `main()`; collections `model_grid`/`throughput_grid` explicit names.
-- Ractive gotcha: triple-mustache dynamic member access renders EMPTY — helpers.
-- JP's workflow preference: end-to-end builds via the Workflow tool (Opus
-  build/test, Fable verify/orchestrate), main thread open; report when testable.
-  Review+simplify passes: 3 finders → adversarial refuter per finding → 4 lenses
-  → applier; equivalence PROVEN by sweep scripts, never argued.
+  (3955; host mongod 27017). Probes/seeds: ISOLATED dbs only (`scripts/seed.ts`
+  does `deleteMany({})`). Non-prod sets `PROD_TRELLO_BOARD_IDS=hLL7WW2V`.
+- Host probes: env var is **MONGODB_URI**; `npx tsx -e` imports need explicit
+  `.ts` extensions; `manilaToday` lives in `src/services/pipeline.ts`;
+  **`loadPipeline(projectObjectId, today, weeklyCapacity)` — THREE args, the id
+  as ObjectId not string** (string → 0 rows silently).
+- chrome-devtools MCP: if it errors "browser already running", `pkill -f
+  chrome-devtools-mcp/chrome-profile` (orphaned headless instance), then new_page.
+- Ractive: triple-mustache dynamic member access renders empty (helpers);
+  `{{! … }}` comments in ELEMENT-CONTENT position leak text after the first `}}`
+  (AST-scan test guards it; `{{!expr}}` in attributes is a negation and fine).
+- Workflow discipline (JP, standing): **every build runs through the Workflow
+  tool** — Opus builders/integrate/fix, Fable verify lenses, contract-first recon,
+  seeded isolated-db probes, render tests via `test/helpers/gantt-render.ts`
+  (Ractive `toHTML` over the shipped template). Report when testable; owl Miles
+  after deploy; small scoped commits with requirement IDs; STATE.md every session.
+- Drift rule (JP): structural — delete the override, share the recipe, never
+  patch both copies. One phase→color map, one banner recipe, one key recipe.
 
 ## Still open
 
-- **JP gates**: capacity-slider governance (⚠ above) · flip `writes_enabled` on
-  rt-837 (+ pre-pilot security review) · `GOOGLE_SHEETS_CREDENTIALS` (lights up
-  the whole Requests tab + Year/Month on real data) · ALT-9: sheet-row link needs
-  `intake_sheet_id` exposed or the sub-label deleted (renders plain text now) ·
-  OD-2/4/5/6/7 · two pre-existing host-local `todayIso()` sites (weekStart,
-  sprint draft) · ALT-1 recommend: the server `?filter=` param has no caller —
-  drop or keep is an API-surface decision.
-- **Product (Miles)**: planner confirms (range picker, snapping) · month-encoding
-  verify at credential time · remaining tabs' frames (T073/T091 un-park; Rex
-  sweep first).
+- **JP gates**: flip `writes_enabled` on rt-837 (+ pre-pilot security review) ·
+  `GOOGLE_SHEETS_CREDENTIALS` → lights up Requests + requestor/type on real data ·
+  ALT-9 sheet-row link (expose `intake_sheet_id` or drop the sub-label) · ALT-1
+  (dead server `?filter=` param) · OD-2/5/6/7 + OD-4's non-capacity remainder ·
+  two pre-existing host-local `todayIso()` sites · loopback-listen test hardening
+  (21 files) · manual pass: drag a bar in the collapsed-pane state.
+- **Product (Miles)**: the list under Comms above · month-encoding verify when the
+  Sheets credential lands · remaining tabs' frames (T073/T091 un-park).
 - **ARES agent**: push subscription for `hLL7WW2V`.
-- **Agent**: T075 AC sweep · non-member 403 check · §5.2 pointer drag + §5.5
-  violet cells when owled · `Last Synced` browser-TZ + col-done width leftovers.
+- **Agent backlog**: T075 AC sweep · non-member 403 check · `Last Synced`
+  browser-TZ + col-done width leftovers · schedules-tab full tokenization beyond
+  the planner · per-tab URL sub-state (filters/week/sort as query params).
 
-## Working agreements
+## Definition of done unchanged
 
-Reply format per CLAUDE.md (HEADLINE / WHAT I NEED FROM YOU / STATUS / --- detail).
-Gates are JP-only. Small commits, requirement IDs. STATE.md every session.
-Changes enter documents before code. Verify claims programmatically. Drift fixes
-are STRUCTURAL: delete the override, share the recipe — never patch both copies.
+Typecheck · eslint · vitest dual-TZ · frontend build · probes green; STATE.md
+updated; constitution intact (v4.3.0); reply format HEADLINE / WHAT I NEED FROM
+YOU / STATUS / --- detail.
