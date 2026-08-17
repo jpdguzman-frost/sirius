@@ -236,49 +236,76 @@ describe('a scheduled row is moved by its BAR, not by itself', () => {
     expect(TEMPLATE).toMatch(/\{\{#if !row\.slottedWeek\}\}draggable="\{\{ row\.pinned \? 'false' : 'true' \}\}" on-dragstart=/);
   });
 
-  it('keeps the segments the only hit area, so week cells stay droppable', () => {
-    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \{[^}]*pointer-events: none/);
+  it('is hit-testable at all times and owns its own drop; the week cells keep theirs (batch 7)', () => {
+    // REVERSED from 13g/13j. `pointer-events: none` here is what cancelled
+    // every real drag: Chrome starts the drag from the draggable ancestor and
+    // abandons it in the same tick when that ancestor cannot be hit. The bar
+    // is solid now and takes its own dragover/drop instead of relying on
+    // hit-testing falling through.
+    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \{[^}]*pointer-events: auto/);
     expect(GANTT_CSS).toMatch(/\.gantt \.gbar \.gseg \{[^}]*pointer-events: auto/);
-    // `on-drop` is a directive too — it never renders; the .gweek cells do
+    // `on-drop` is a directive too — it never renders; the .gweek cells do, and
+    // they still serve the UNSCHEDULED rows, which draw no bar over them
     expect([...html.matchAll(/<div class="gweek"><\/div>/g)]).toHaveLength(2);
     expect(TEMPLATE).toContain('<div class="gweek" on-dragover="[\'dragOver\']" on-drop="[\'dropOnWeek\', wk.key]">');
   });
 });
 
 /**
- * The grab necessarily STARTS on a segment, so a segment left solid for the
- * duration of the drag is the hit-test winner for every short horizontal move —
- * and gseg → gbar → gtrack → growr → gbrows carries no dragover handler, so
- * nothing calls preventDefault and the drop is refused. Whether the browser
- * actually completes the drop is a live-browser question (still T134); what is
- * testable here is that the state flag, the class and the rule that make it
- * possible all exist and agree.
+ * Batch 7 correction, and the reason the flag was NOT deleted.
+ *
+ * 13g/13j reasoned that the bar overlay had to go transparent so hit-testing
+ * would fall through to the `.gweek` cells. That is precisely what broke the
+ * feature: a drag source Chrome cannot hit is a drag Chrome abandons in the
+ * same tick, and turning the source transparent *during* the drag cancels it
+ * just as surely as turning it transparent at rest. The bar stays solid now and
+ * owns its own drop (`dropOnBar` → the same `moveRows`).
+ *
+ * `ganttDragging` survives with one clause instead of two. `.gdl` is a later
+ * sibling of `.gbar` in the same positioned `.gtrack`, both absolute at z-index
+ * auto, so the tick paints OVER the bar and wins hit-testing at its 2px column;
+ * carrying no dragover handler, it would refuse the drop at exactly the
+ * deadline. It hides for the duration — and only for the duration, because at
+ * rest its `title` is a real affordance.
+ *
+ * Whether the browser completes the drop is still a live-browser question
+ * (T134/R5). No assertion here, and no synthetic DragEvent anywhere, can
+ * answer it — that is the whole reason this bug shipped.
  */
-describe('a live drag makes the bar transparent so the week cells can take the drop', () => {
+describe('a live drag hides only the deadline tick, so the solid bar can take its own drop', () => {
   it('carries the state on the planner root, only while dragging', () => {
     const classes = (h: string) => (/^<div class="([^"]*)"/.exec(h)?.[1] ?? '').split(/\s+/).filter(Boolean);
     expect(classes(renderGantt({ ganttDragging: true }))).toEqual(['gantt', 'gdragging']);
     expect(renderGantt()).not.toContain('gdragging');
   });
 
-  it('lifts pointer-events off the segments AND the deadline tick for the duration', () => {
-    expect(GANTT_CSS).toMatch(
-      /\.gantt\.gdragging \.gbar \.gseg,\s*\n\.gantt\.gdragging \.gdl \{[^}]*pointer-events: none/,
-    );
+  it('lifts pointer-events off the deadline tick ALONE, never off the segments', () => {
+    expect(GANTT_CSS).toMatch(/\.gantt\.gdragging \.gdl \{[^}]*pointer-events: none/);
+    // nothing needs the segments transparent now that the solid bar beneath
+    // them takes the drop. Keeping the whole drag source hittable is the
+    // stricter line on purpose: control 3 of the real-input diagnosis blanked
+    // the WRAPPER mid-drag and got the same-tick cancel, and a blanked `.gseg`
+    // becomes that same cancel the moment `draggable` moves down onto it — the
+    // variant batch 7 rejected.
+    expect(GANTT_CSS).not.toContain('.gantt.gdragging .gbar .gseg');
   });
 
-  it('outranks the resting rule it overrides', () => {
-    // 4 classes beats 3 — otherwise the `pointer-events: auto` above wins and
-    // nothing changes during the drag
-    const dragging = GANTT_CSS.indexOf('.gantt.gdragging .gbar .gseg');
-    expect(dragging).toBeGreaterThan(GANTT_CSS.indexOf('.gantt .gbar .gseg {'));
+  it('never turns the bar transparent, in any state — that is the batch-7 bug', () => {
+    // replaces the old specificity test: `.gdl` has no resting
+    // `pointer-events: auto` rule to out-rank, so "4 classes beats 3" no longer
+    // has a subject. What matters instead is the SCOPE of the transparency.
+    // The exhaustive sweep — every stylesheet, every drag source, ancestors
+    // included — lives in test/drag-hittest.test.ts; this keeps the local rule
+    // honest next to the assertions it belongs with.
+    expect(GANTT_CSS).not.toMatch(/\.gbar[^{,]*\{[^}]*pointer-events: none/);
   });
 
   it('sets the flag on dragstart and clears it on dragend and at the write', () => {
     expect(APP_JS).toMatch(/dragRow\(ctx, cardId\) \{[\s\S]*?app\.set\('ganttDragging', true\);/);
     expect(APP_JS).toContain("dragEnd() { app.set('ganttDragging', false); }");
-    // belt and braces: a re-render that eats the source node would swallow
-    // dragend and leave every bar un-grabbable
+    // belt and braces: a re-render that eats the source node swallows dragend,
+    // and a stuck flag would leave every deadline tick permanently transparent
+    // — a lost tooltip now rather than an un-grabbable bar, but still wrong
     expect(APP_JS).toMatch(/async function moveRows\([\s\S]*?app\.set\('ganttDragging', false\);/);
   });
 

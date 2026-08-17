@@ -309,30 +309,44 @@
 .gseg.review { background: var(--blue-200); }
 .gseg.render { background: var(--blue-600); }
 .gseg.renderOverdue { background: var(--red-600); }
-/* owl #31 — `.gbar` is the DRAG SOURCE. It spans the whole track rather than
-   the run's own box on purpose: `.gseg` offsets are percentages OF THE TRACK,
-   so a narrower wrapper would re-base every one of them and move the shipped
-   bars. `inset: 0` keeps the containing block identical, and pointer-events
-   none/auto makes the SEGMENTS the only hit area — the week columns below stay
-   droppable (the `.gunsched` pattern), and the grab target is exactly the bar
-   the user sees. Motion is horizontal by construction: the drop target is a
-   week COLUMN and nothing reads which row it sits in. */
-.gantt .gbar { position: absolute; inset: 0; pointer-events: none; cursor: grab; }
+/* owl #31, corrected in batch 7 (T153) — `.gbar` is the DRAG SOURCE. It spans
+   the whole track rather than the run's own box on purpose: `.gseg` offsets are
+   percentages OF THE TRACK, so a narrower wrapper would re-base every one of
+   them and move the shipped bars. `inset: 0` keeps the containing block
+   identical.
+   `pointer-events` is `auto` here and it must STAY `auto` in every state.
+   Chrome hit-tests the draggable ancestor when a drag begins and CANCELS the
+   drag in the same tick if that ancestor cannot be hit — proven with real mouse
+   input (CDP): the shipped `none` produced dragstart → dragend, dropEffect
+   "none", no drag/dragenter/dragover/drop at all. `auto` is written out rather
+   than simply omitted because `pointer-events` INHERITS: the explicit value
+   also defends the drag source against any future ancestor rule.
+   Because the wrapper is solid, the `.gweek` cells beneath a scheduled row no
+   longer see the drag — so the bar OWNS its own dragover/drop (template) and
+   maps the pointer's X to a week column itself (`weekAtX`, 01-app.js §3.1). The
+   week cells keep their handlers for unscheduled rows, whose track renders
+   `.gunsched` (pointer-events: none) instead of a bar. Motion is horizontal by
+   construction: the drop target is a week COLUMN and nothing reads which row it
+   sits in. */
+.gantt .gbar { position: absolute; inset: 0; pointer-events: auto; cursor: grab; }
 .gantt .gbar .gseg { pointer-events: auto; cursor: inherit; }
 .gantt .gbar .gseg:active { cursor: grabbing; }
-/* …but ONLY while nothing is being dragged. During a drag the drop target is
-   whatever hit-testing finds under the pointer, and hit-testing honours
-   pointer-events: a pointer sitting over a `.gseg` (or the `.gdl` tick) fires
-   `dragover` there, and that path — gseg → gbar → gtrack → growr → gbrows —
-   carries NO dragover handler, so nothing calls preventDefault and the browser
-   refuses the drop. The grab starts ON a segment by construction, so every move
-   shorter than the distance to the bar's own edge — the ±1-week reslot the
-   affordance advertises — would snap back. `.gdragging` (set on dragstart,
-   cleared on dragend) makes the overlay transparent for the duration so the
-   `.gweek` columns underneath keep receiving the drag, which leaves ONE drop
-   recipe: the week cell. It covers the row-drag of an unscheduled row too —
-   that pointer crosses other rows' bars on its way to a week. */
-.gantt.gdragging .gbar .gseg,
+/* The ONE thing that still hides for the duration of a drag is the deadline
+   tick. `.gdl` is a later sibling of `.gbar` inside the same `position:
+   relative` `.gtrack`, both absolute at `z-index: auto`, so it paints ON TOP of
+   the bar and wins hit-testing across its 2px column. Left solid it would take
+   the `dragover` there, carry no handler, call no preventDefault, and the drop
+   would be refused at exactly the deadline. It cannot simply be made
+   permanently transparent: at rest it carries a real `title="deadline …"`
+   affordance. `.gdragging` is set on dragstart and cleared on dragend (and
+   defensively in moveRows, for the re-render that eats the source node).
+   The segments are NOT in this rule any more, and nothing needs them to be: the
+   bar beneath them is solid and carries the dragover/drop itself, so an event
+   over a transparent `.gseg` would simply hit `.gbar` instead. They are kept
+   solid anyway, and the guard bans the alternative outright — blanking a
+   segment mid-drag would abort the drag only if `draggable` ever moved onto
+   `.gseg` (the variant batch 7 rejected), and that is exactly the move the ban
+   stops from silently re-creating the cancel. */
 .gantt.gdragging .gdl { pointer-events: none; }
 /* pins stay FULLY frozen (JP, 2026-08-17) — the bar refuses the grab and says why */
 .gantt .growr.pinned .gbar,

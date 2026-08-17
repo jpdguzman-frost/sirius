@@ -491,11 +491,13 @@ const app = new Ractive({
     /* owl #31 — cardId → true for the rows a drop just moved, cleared after the
        pulse. View state, never persisted. */
     arrived: {},
-    /* true from dragstart to dragend. The ONLY thing it does is make the bar
-       overlay transparent to hit-testing for the duration (`.gantt.gdragging`),
-       so the `.gweek` cells underneath keep receiving `dragover` while the
-       pointer is still over the segment it was grabbed by. Without it every
-       short reslot is refused. View state, never persisted. */
+    /* true from dragstart to dragend. The ONLY thing it does is make the
+       DEADLINE TICK transparent to hit-testing for the duration
+       (`.gantt.gdragging .gdl`): the tick paints over the bar and carries no
+       dragover handler, so left solid it refuses the drop across its own
+       column. It no longer touches the bar or its segments — those are the drag
+       source, and a source that is not hit-testable makes Chrome cancel the
+       drag in the same tick (T153). View state, never persisted. */
     ganttDragging: false,
     ganttThumb: { needed: false, left: 0, width: 100 },
     /* per-week capacity totals, keyed by slotted-week Monday. `perWeek` is the
@@ -1050,6 +1052,27 @@ function dayIndex(iso) {
 }
 const clampUnits = (u) => Math.max(0, Math.min(TOTAL_UNITS, u));
 const unitPct = (u) => ((u / TOTAL_UNITS) * 100).toFixed(2);
+
+/* The inverse of the geometry above (T153): a pointer's viewport X → the week
+   COLUMN it is over. The bar owns its own drop now, so something has to do this
+   mapping that the `.gweek` cells used to do by simply being hit.
+   Pure on purpose — the caller passes the track's MEASURED rect and the week
+   list, which is what lets a test execute this exact source out of the shipped
+   file, and what keeps `document`/`window` out of it.
+   The columns are equal by construction: `--gw` is declared once on `.gantt`,
+   `.gweek` is `flex: none` at `width: var(--gw)`, and the universal
+   `box-sizing: border-box` absorbs the 1px border — so the measured width is
+   divided by the COUNT rather than a hard-coded 92, and browser zoom / DPR
+   rounding then spreads evenly instead of drifting a column at the far end.
+   Half-open: column i owns [left + i·w, left + (i+1)·w), so a pointer exactly on
+   a boundary belongs to the RIGHT column. Clamped at both ends, so a drop can
+   never fall off the track; null only when there is nothing to map onto. */
+const weekAtX = (clientX, rect, weeks) => {
+  const n = weeks ? weeks.length : 0;
+  if (!n || !(rect.width > 0)) return null;
+  const col = Math.floor((clientX - rect.left) / (rect.width / n));
+  return weeks[Math.min(n - 1, Math.max(0, col))].key;
+};
 
 /* R3 — the bar IS the server's phase segments (absolute, half-open ISO dates
    built from lib/forecast output). No forecast math runs here: a segment that
@@ -2081,14 +2104,18 @@ app.on({
      so they commit too. */
   capSlide(ctx) { app.set('capDraft', Number(ctx.node.value)); },
   async capCommit(ctx) { await writeCapacity(Number(ctx.node.value)); },
-  /* the drag flag is what keeps the drop reachable: `.gbar`'s segments are the
-     grab area, so the pointer starts ON one, and a solid segment would be the
-     hit-test winner for every dragover on a short horizontal move — a path with
-     no dragover handler, hence no preventDefault, hence a refused drop. It is a
-     class toggle only (no geometry, no text), so the drag image the browser
-     snapshots at dragstart is unaffected. dragend always fires, drop or cancel,
-     and moveRows clears it a second time for the case where a re-render eats
-     the source node first. */
+  /* the drag flag hides ONE thing for the duration: the deadline tick. `.gdl`
+     paints over the bar (later sibling, same absolute containing block) and
+     carries no dragover handler, so left solid it refuses the drop across its
+     own 2px column; it cannot be transparent at rest because it owns a real
+     `title` there. It is a class toggle only (no geometry, no text), so the
+     drag image the browser snapshots at dragstart is unaffected. dragend always
+     fires, drop or cancel, and moveRows clears it a second time for the case
+     where a re-render eats the source node first. The SEGMENTS left that rule
+     because nothing needs them transparent any more — the solid bar beneath
+     them takes the drop — and they stay solid so that no pixel inside the drag
+     source can be blanked, which is what brings back Chrome's same-tick cancel
+     the moment anyone moves `draggable` down onto a segment (T153). */
   dragRow(ctx, cardId) {
     ctx.event.dataTransfer.setData('text/plain', cardId);
     ctx.event.dataTransfer.effectAllowed = 'move';
@@ -2099,6 +2126,23 @@ app.on({
   async dropOnWeek(ctx, weekKey) {
     ctx.event.preventDefault();
     await moveRows(ctx.event.dataTransfer.getData('text/plain'), weekKey);
+  },
+  /* the bar is the drag source AND its own drop target (T153). Chrome aborts a
+     drag whose source is not hit-testable, so the bar can no longer go
+     transparent and let the `.gweek` cells underneath take the drop — it maps
+     the pointer to a week column from the TRACK's own geometry and then runs
+     the SAME `moveRows` recipe `dropOnWeek` runs: one write, one audit row, no
+     second path. `ctx.node`, never `ctx.event.target`: with the segments
+     hit-testable the event fires on a 26px `.gseg` and bubbles up to the bar
+     carrying this directive, and measuring the target would map a fraction of a
+     column. The id comes off the dataTransfer and never off this bar's own row,
+     because an UNSCHEDULED row dragged across a scheduled row lands here. */
+  async dropOnBar(ctx) {
+    ctx.event.preventDefault();
+    const track = ctx.node.closest('.gtrack') || ctx.node;
+    const week = weekAtX(ctx.event.clientX, track.getBoundingClientRect(), app.get('plannerWeeks'));
+    if (!week) return;
+    await moveRows(ctx.event.dataTransfer.getData('text/plain'), week);
   },
   /* the Unscheduled block's bar is the one unslot target — the sprint bars
      take the same handlers and refuse the drop, so the markup has one path
@@ -2436,9 +2480,9 @@ function announceArrival(cardIds) {
    selected row. A null target unslots instead — /replot takes `week: null`,
    and an interval has no meaning when there is no week to land on. */
 async function moveRows(grabbedId, targetWeek) {
-  /* the drop has landed, so the bar overlay can stop hiding from hit-testing
+  /* the drop has landed, so the deadline ticks can stop hiding from hit-testing
      even if dragend has not fired yet (a re-render that eats the source node
-     would swallow it, and a stuck flag means no bar can be grabbed again).
+     would swallow it, and a stuck flag would leave every tick's tooltip dead).
      Harmless on the keyboard path, where the flag was never set. */
   app.set('ganttDragging', false);
   const selected = app.get('selected');

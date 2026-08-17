@@ -155,8 +155,10 @@ export function renderGantt(state: GanttState = {}): string {
       selected: {},
       // T139: cardId → true for the rows a drop just moved (the arrival pulse)
       arrived: state.arrived ?? {},
-      // T139 review fix: live from dragstart to dragend — it makes the bar
-      // overlay transparent to hit-testing so the .gweek cells stay droppable
+      // T139, rescoped in batch 7 (T153): live from dragstart to dragend. It
+      // no longer touches the bar — a drag source that is not hit-testable is a
+      // drag Chrome cancels — and now hides only the `.gdl` deadline tick,
+      // which paints over the bar and carries no dragover handler of its own.
       ganttDragging: state.ganttDragging ?? false,
       footCaption: '92 / wk',
       ganttThumb: { needed: false },

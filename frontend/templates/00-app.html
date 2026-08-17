@@ -647,26 +647,39 @@
                   </div>
                   <div class="gtrack">
                     <div class="gweeks">{{#each plannerWeeks as wk}}<div class="gweek" on-dragover="['dragOver']" on-drop="['dropOnWeek', wk.key]"></div>{{/each}}</div>
-                    {{! owl #31 — `.gbar` is the drag SOURCE and the segments are
-                        its only hit area. It spans the whole track rather than
-                        the run's own box on purpose: `.gseg` positions are
-                        percentages OF THE TRACK, so a narrower wrapper would
-                        re-base every one of them and move the shipped bars.
-                        `pointer-events` is none on the wrapper and auto on the
-                        segments (the `.gunsched` pattern), so the week cells
-                        underneath stay droppable and the grab area is exactly
-                        the bar the user sees. Dragging is horizontal by
-                        construction — the drop target is a week COLUMN, and
-                        which row it belongs to is never read.
-                        WHILE a drag is live the segments go transparent again
-                        (`.gantt.gdragging`, set by dragstart and cleared by
-                        dragend): the drop target is hit-tested under the
-                        pointer, and the grab necessarily STARTS on a segment,
-                        so leaving them solid would swallow every dragover on
-                        the way to the week cell and refuse the drop. }}
+                    {{! owl #31 as corrected in batch 7 (T153) — `.gbar` is the
+                        drag SOURCE, and it is hit-testable at all times. It
+                        spans the whole track rather than the run's own box on
+                        purpose: `.gseg` positions are percentages OF THE TRACK,
+                        so a narrower wrapper would re-base every one of them
+                        and move the shipped bars.
+                        The wrapper used to be `pointer-events: none` so the
+                        week cells underneath could take the drop. That is what
+                        broke the drag: Chrome hit-tests the draggable ancestor
+                        at dragstart and cancels the drag in the same tick when
+                        it cannot be hit — proven with real mouse input, which
+                        produced dragstart then dragend and nothing between.
+                        So the bar stays solid and OWNS its drop: `dragOver`
+                        (the same preventDefault the week cells use) plus
+                        `dropOnBar`, which maps the pointer's X to a week COLUMN
+                        through `weekAtX` and then runs the SAME `moveRows`
+                        recipe `dropOnWeek` runs — one write, one audit row.
+                        The week cells keep their own handlers below: an
+                        unscheduled row's track renders `.gunsched`, not a bar,
+                        so nothing covers them there.
+                        A pinned row keeps draggable false and its refusal
+                        message, but still carries the drop handlers on purpose
+                        — the pin freezes that ROW, not the column, so its bar
+                        stays a valid landing strip for someone else's drag.
+                        Dragging is horizontal by construction: the drop target
+                        is a week COLUMN and which row it belongs to is never
+                        read — the moved card id comes off the dataTransfer.
+                        Only `.gdl` still goes transparent mid-drag; it paints
+                        over the bar and carries no dragover handler. }}
                     {{#if row.slottedWeek}}
                       <div class="gbar" draggable="{{ row.pinned ? 'false' : 'true' }}"
                            on-dragstart="['dragRow', row.cardId]" on-dragend="['dragEnd']"
+                           on-dragover="['dragOver']" on-drop="['dropOnBar']"
                            title="{{ row.pinned ? 'Pinned — unpin to move' : 'Drag along the timeline to reslot' }}">
                         {{#each phaseBars(row) as b}}<div class="gseg {{b.cls}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}{{ row.pinned ? ' · Pinned — unpin to move' : '' }}"></div>{{/each}}
                       </div>
