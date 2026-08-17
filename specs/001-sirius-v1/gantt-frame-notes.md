@@ -357,7 +357,7 @@ unchanged.** The build follows JP:
 **Flag the supersession in the deploy owl.** Miles was informed in jp→miles #18;
 the two annotations still need correcting at source.
 
-## Rulings R-f-1 … R-f-9, R-drag-a/b — R-f-1…8 and R-drag-a/b issued in the contract, R-f-9 at review; with what shipped
+## Rulings R-f-1 … R-f-11, R-drag-a/b — R-f-1…8 and R-drag-a/b issued in the contract, R-f-9 at review, R-f-10/11 by Miles in owl #37; with what shipped
 
 | ID | Ruling | Shipped |
 |---|---|---|
@@ -372,6 +372,115 @@ the two annotations still need correcting at source.
 | **R-drag-a** | Unscheduled rows have **no bar**, so they keep the current **row-drag** onto week cells. A necessary asymmetry. **Flagged.** | Yes — and the hint line already said so |
 | **R-drag-b** | The gutter **grip is removed for scheduled rows** and kept **only on unscheduled** ones; the BR-8 multi-select checkbox stays on both and the keyboard arrows still reslot. Answers #31's confirm. **Flagged.** | Yes |
 | **R-f-9** | The contract's three `#000` facts — the modal title, "No sprints yet" and the enabled Save fill — ship as **tokens**, not as a raw hex: text takes `--surface-foreground` (`#0f172a`), the Save fill takes `--neutral-950` (`#0a0a0a`). A raw hex in component CSS is a declared defect in this repo and there is no `#000` token. A ~1–2% luminance departure from the frame, deliberate. **Flagged to Miles** — add a true black token if the frame's `#000` is load-bearing. | Yes — no raw hex anywhere in the modal's CSS |
+| **R-f-10** | Save gates on **unsaved changes**, not on empty-vs-not. It is live when there is something to persist and nothing blocking it. **Supersedes R7** and retires `sprintOpenedEmpty` outright. | Yes — a `sprintDirty` computed over a baseline captured at open; the flag is gone from both shipped files and a test asserts its absence |
+| **R-f-11** | A sprint name is **required**: trim, then reject `''` and whitespace alike, surfaced like the duplicate-name error (red blocking banner, Save gated). A blank reports **once, as a blank**, and never also as a duplicate. | Yes — `sprintBlankNames` beside `sprintDupNames`, and a matching `blankNameIssues` on the route's existing 422; the server's duplicate check gained the blank guard the client already had |
+
+## Owl #37 — the two sprints-modal rulings (batch 5b)
+
+Miles answered the three questions the batch-4 deploy owl put to her. Item 3
+(the arrival pulse) she ruled **keep as built** — 1.2s plus `scrollIntoView`,
+including the reduced-motion fallback — so nothing changed there. The other two
+are R-f-10 and R-f-11.
+
+### R-f-10 — Save gates on unsaved changes, superseding R7
+
+Her ruling: *"Don't decide empty vs not, decide **unsaved changes vs not**: Save
+is enabled when there's something to persist. Opening an empty modal = nothing
+changed = dead. Deleting every sprint = a real change = saveable. Both of your
+current behaviours then fall out correctly, and it fixes the whole class rather
+than this one case."*
+
+This **reframes** the question the R7 note flagged rather than settling it.
+`openSprints` now captures a `sprintBaseline` beside the draft — a fresh copy of
+the three fields a save PUTs (`{name, start, end}`), mapped off the stored list
+so an edit can never drag the baseline with it — and `sprintDirty` compares the
+two. Save is live iff `sprintDirty && no blocking banner`.
+
+Both R7 behaviours survive as **consequences**, and a third case comes free:
+
+| State | Dirty? | Save | Was it reachable before? |
+|---|---|---|---|
+| Opened with no sprints | no — `[]` vs `[]` | dead | yes, via the flag |
+| Emptied by the user | yes — length changed | live | yes, via the flag |
+| A field edited and put back | no — fields match again | dead | **no** — the flag said "live" |
+
+The third row is the whole point: it is the class the flag could not see, and it
+is why the reframe is worth more than a fix. Comparison is on the three
+persisted fields, in **draft order**, with **no trimming** — a name the user
+changed to `"Sprint 1 "` is an edit they made; whether the route trims on store
+is a separate question and was not touched. A length change is dirty.
+
+`sprintOpenedEmpty` is **deleted outright** — state, the set at open, and the
+template reference. A leftover key expressing a case the dirty check subsumes is
+exactly the drift the rule forbids, so a test asserts the identifier appears
+nowhere in either shipped file, and the probe leg checks the built output too.
+
+Cancel's `dim` (`!sprintDraft.length`) was **left alone**: it tracks the rendered
+empty branch, not Save's state, and dim-Cancel beside live-Save was already the
+shipped pairing for emptied-by-the-user in batch 4. No contradiction is
+introduced; verified by render, not by reading.
+
+### R-f-11 — a sprint name is required
+
+Her ruling: *"Trim and reject empty, surfaced like the duplicate-name error (red
+blocking banner, Save gated). A nameless sprint is unidentifiable in the Gantt's
+sprint headers, and two blanks already collide as duplicates — so it's
+half-enforced by accident today."*
+
+Blank is `String(name || '').trim() === ''` on both sides. It follows the
+existing banner recipe — `variant: 'err'`, carrying the draft index of its row so
+placement stays data (R-f-4), no CTA (R-f-5) — with title **"Sprint name
+required"**. One banner **per blank ROW**, unlike duplicates which are one per
+NAME: there is no shared name to collapse them onto, and each row is its own fix.
+
+**The copy, verbatim, and identical on both sides:**
+
+> A sprint starting 17 Aug 2026 has no name. Name every sprint to save.
+
+Only the date interpolates. It keeps the duplicate-name copy's two-clause house
+shape — *[the problem in the user's own data]. [imperative fix] **to save.*** —
+and the "to save" tail that explains the dead button. It points at the row by the
+one identity a nameless row still has: its start date. `fmtLongIso` renders
+`17 Aug 2026` from a fixed month table, never `toLocaleDateString` (en-GB emits
+"Sept"); the route's `longDate` reproduces it with the same pure string math, so
+no `Date` is constructed on either side and the two strings are byte-identical
+for the same input (invariant 11). A test asserts the shared sentence exists
+exactly once per interpolated form, so a third copy cannot drift in.
+
+**Client-only fallback**, when the row's start has been cleared:
+
+> This sprint has no name. Name every sprint to save.
+
+This is **not** the parity sentence — only its second clause is shared. It is
+reachable on the client because `snapSprintStart` sets `start` to `''` when the
+picker is cleared, which would otherwise render "A sprint starting␣␣has no
+name."; it is unreachable on the server by construction, where `start` is
+`DATE_ONLY`-required. The asymmetry is deliberate and pinned by test.
+
+**The two sides disagreed, and the server was wrong.** `duplicateNameIssues`
+did not skip blanks, so two unnamed rows collided on the key `''` and were
+reported as `Multiple sprints are named ""` — wrong and unreadable. The client's
+`if (key)` guards already skipped them. The server now mirrors the client: a
+blank reports once, as a blank, and never also as a duplicate.
+
+**One Zod constraint was relaxed**: `name` lost its `.min(1)` and kept `.max(80)`.
+An empty name is a user mistake with a friendly fix, not a malformed body — Zod
+answered `400 INVALID_BODY`, an envelope carrying **no `issues[]` at all**, so
+the modal's `issues[0].text` fallback would have printed a raw developer string
+at the user. The 422 now owns the whole blank class. A test pins that `''`
+returns `SPRINT_CONFLICT` and never `INVALID_BODY`, and another pins that an
+81-character name is still a 400.
+
+Rejection **writes nothing and audits nothing** — the 422 returns before
+`deleteMany`, exactly as the duplicate path does.
+
+### One judgement call taken at build, recorded here
+
+`saveSprints` gained a second lock: `if (!app.get('sprintDirty')) return;`
+alongside the blocking-issue lock. A no-op PUT would write a `sprints.replace`
+audit row for a non-change, which is precisely the defect batch 4 fixed for
+Calendar Remove — **invariant 10 logs changes, not attempts.** The button is
+already dead in that state, so this is belt-and-braces on the same rule.
 
 ## #27's divergence, answered
 
@@ -427,6 +536,13 @@ specified icons. **Placement flagged to Miles.**
   route already accepted an empty list and audits the replace like any other;
   a probe leg proves it end to end. **Flag to Miles** — this is the one place the
   build reads the contract's risk row over its §3.2.4 rule.
+
+  > **SUPERSEDED by R-f-10 (owl #37 item 1, batch 5b).** The flag it describes,
+  > `sprintOpenedEmpty`, no longer exists anywhere in the build. Miles answered
+  > the flag by reframing the question rather than picking a side of it — see
+  > *Owl #37 — the two sprints-modal rulings* below. Both behaviours recorded
+  > here still hold; they are now consequences of the dirty rule, not cases in
+  > their own right.
 
 ## Two defects fixed at review (batch 4)
 
