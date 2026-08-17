@@ -36,6 +36,52 @@ const planningPatch = z
 
 const SIRIUS_FIELDS = ['slotted_week', 'pinned', 'confidence', 'sla_sketch', 'sla_render', 'status_note'] as const;
 
+/**
+ * One sprint-save rejection. Widens `SprintIssue.kind` (lib/planner) with the
+ * route-owned `duplicate-name` so both classes travel in the SAME
+ * 422 SPRINT_CONFLICT envelope the client already reads.
+ */
+interface SprintSaveIssue {
+  id: string;
+  kind: string;
+  text: string;
+}
+
+/**
+ * Per-project duplicate sprint name rejection (owl #28, batch 4) — SERVER
+ * TRUTH beside the modal's live check. Names compare trimmed and
+ * case-insensitively, so `Sprint 46` and ` sprint 46 ` collide. Uniqueness is
+ * per project by construction: the route only ever sees one project's list,
+ * and the same name in another project is untouched (invariant 1).
+ *
+ * It lives here, NOT in lib/** — lib/planner.ts is constitution-frozen
+ * (invariant 5) and this is a route-layer validation, not planner logic.
+ * One issue per duplicated name, never one per extra row, so a triple reports
+ * once. The copy matches the modal's error banner verbatim so the client's
+ * `issues[0].text` fallback reads identically to the live banner.
+ */
+function duplicateNameIssues(sprints: { id?: string; name: string }[]): SprintSaveIssue[] {
+  const firstSeen = new Map<string, string>();
+  const reported = new Set<string>();
+  const issues: SprintSaveIssue[] = [];
+  sprints.forEach((s, i) => {
+    const key = s.name.trim().toLocaleLowerCase();
+    const first = firstSeen.get(key);
+    if (first === undefined) {
+      firstSeen.set(key, s.name.trim());
+      return;
+    }
+    if (reported.has(key)) return;
+    reported.add(key);
+    issues.push({
+      id: s.id ?? `new-${i}`,
+      kind: 'duplicate-name',
+      text: `Multiple sprints are named "${first}". Give each sprint a unique name to save.`,
+    });
+  });
+  return issues;
+}
+
 export function scheduleRouter(): Router {
   const router = Router();
 
@@ -180,9 +226,17 @@ export function scheduleRouter(): Router {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
       }
-      const issues = sprintIssues(
-        body.data.sprints.map((s, i) => ({ id: s.id ?? `new-${i}`, name: s.name, start: s.start, end: s.end })),
-      ).filter((i) => i.kind !== 'gap'); // gaps are legal and surfaced, not rejected (BR-5)
+      // Both validators run BEFORE any write: a rejected save must leave the
+      // collection exactly as it was (the replace below is destructive).
+      // Overlaps/inversions are invariant 12, already enforced by sprintIssues;
+      // duplicate names are the batch-4 addition. Same envelope, so the client
+      // reads one issues[] whichever class fired.
+      const issues: SprintSaveIssue[] = [
+        ...sprintIssues(
+          body.data.sprints.map((s, i) => ({ id: s.id ?? `new-${i}`, name: s.name, start: s.start, end: s.end })),
+        ).filter((i) => i.kind !== 'gap'), // gaps are legal and surfaced, not rejected (BR-5)
+        ...duplicateNameIssues(body.data.sprints),
+      ];
       if (issues.length > 0) {
         res.status(422).json({ ok: false, error: { code: 'SPRINT_CONFLICT', issues } });
         return;

@@ -12,6 +12,7 @@ import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { AuditLog, Deliverable, Project, Sprint, SyncRun, User, UserProject } from '../src/models/index.ts';
+import { getHolidays, setHolidays } from '../lib/calendar.ts';
 
 const env = validateEnv({ NODE_ENV: 'test' });
 
@@ -94,7 +95,7 @@ describe('multi-row replot (AC-14 API side, BR-8)', () => {
 });
 
 describe('sprints (FR-5.14, FR-5.15, BR-5)', () => {
-  it('rejects overlapping sprints on save; allows gaps', async () => {
+  it('rejects overlapping sprints on save; allows gaps (invariant 12)', async () => {
     const { project, agent } = await setup();
     const overlap = await agent.put(`/api/projects/${project._id}/sprints`).send({
       sprints: [
@@ -104,7 +105,11 @@ describe('sprints (FR-5.14, FR-5.15, BR-5)', () => {
     });
     expect(overlap.status).toBe(422);
     expect(overlap.body.error.code).toBe('SPRINT_CONFLICT');
+    expect(overlap.body.error.issues[0].kind).toBe('overlap');
+    expect(overlap.body.error.issues[0].text).toBeTruthy(); // the client renders issues[0].text
     expect(await Sprint.countDocuments({})).toBe(0);
+    // a refusal is not a state change — it must not reach the audit log
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(0);
 
     await agent.put(`/api/projects/${project._id}/sprints`).send({
       sprints: [
@@ -114,6 +119,80 @@ describe('sprints (FR-5.14, FR-5.15, BR-5)', () => {
     }).expect(200);
     expect(await Sprint.countDocuments({})).toBe(2);
     expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(1);
+    const saved = await Sprint.find({ project_id: project._id }).sort({ position: 1 });
+    expect(saved.map((s) => s.position)).toEqual([1, 2]); // position derived from start order
+    expect(saved.map((s) => s.name)).toEqual(['S1', 'S2']);
+  });
+
+  // Owl #28 / batch 4: the modal blocks Save on duplicates client-side; this is
+  // the server truth behind it. Names are unique PER PROJECT.
+  it('rejects duplicate sprint names before writing anything', async () => {
+    const { project, agent } = await setup();
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' },
+        { name: 'Sprint 46', start: '2026-08-17', end: '2026-08-28' },
+      ],
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('SPRINT_CONFLICT');
+    expect(res.body.error.issues[0].kind).toBe('duplicate-name');
+    expect(res.body.error.issues[0].text).toBe(
+      'Multiple sprints are named "Sprint 46". Give each sprint a unique name to save.',
+    );
+    expect(res.body.error.issues).toHaveLength(1); // one issue per duplicated NAME, not per row
+    expect(await Sprint.countDocuments({})).toBe(0); // rejected before deleteMany
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(0);
+  });
+
+  it('compares names trimmed and case-insensitively, and never destroys the stored list', async () => {
+    const { project, agent } = await setup();
+    await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' },
+        { name: 'Sprint 47', start: '2026-08-17', end: '2026-08-28' },
+      ],
+    }).expect(200);
+
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' },
+        { name: '  sprint 46  ', start: '2026-08-17', end: '2026-08-28' },
+      ],
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.error.issues[0].kind).toBe('duplicate-name');
+    // the replace is destructive — a rejected save must leave the two good rows
+    expect(await Sprint.countDocuments({ project_id: project._id })).toBe(2);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(1); // only the good save
+  });
+
+  it('scopes name uniqueness to the project (invariant 1)', async () => {
+    const { project, user, agent } = await setup();
+    const other = await Project.create({ code: 'rt-2', name: 'Second', trello_board_id: 'fxB', weekly_capacity: 3 });
+    await UserProject.create({ user_id: user._id, project_id: other._id });
+
+    const span = [{ name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' }];
+    await agent.put(`/api/projects/${project._id}/sprints`).send({ sprints: span }).expect(200);
+    await agent.put(`/api/projects/${other._id}/sprints`).send({ sprints: span }).expect(200);
+
+    expect(await Sprint.countDocuments({ project_id: project._id })).toBe(1);
+    expect(await Sprint.countDocuments({ project_id: other._id })).toBe(1);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(2);
+  });
+
+  it('reports one issue per duplicated name even when a name repeats three times', async () => {
+    const { project, agent } = await setup();
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { name: 'Alpha', start: '2026-08-03', end: '2026-08-07' },
+        { name: 'alpha', start: '2026-08-10', end: '2026-08-14' },
+        { name: 'ALPHA', start: '2026-08-17', end: '2026-08-21' },
+      ],
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.error.issues.filter((i: { kind: string }) => i.kind === 'duplicate-name')).toHaveLength(1);
+    expect(await Sprint.countDocuments({})).toBe(0);
   });
 });
 
@@ -249,6 +328,23 @@ describe('pipeline read (FR-4.1–4.4)', () => {
     expect(res.body.sync.ok).toBe(false); // the attempt state the chip renders
     expect(res.body.sync.error).toBe('ARES unavailable');
     expect(new Date(res.body.sync.lastSuccessAt).toISOString()).toBe(good.toISOString());
+  });
+
+  // S4 / R-f-8: the sprints modal counts WORKING days in a gap, so it needs
+  // the server's active (ARES-canonical) holiday set on the wire. Without it
+  // the client would grow a second calendar and drift.
+  it('serves the active holiday calendar on the deliverables payload', async () => {
+    const { project, agent } = await setup();
+    const restore = getHolidays();
+    try {
+      setHolidays(['2026-08-21', '2026-12-25']);
+      const res = await agent.get(`/api/projects/${project._id}/deliverables`).expect(200);
+      expect(Array.isArray(res.body.holidays)).toBe(true);
+      expect(res.body.holidays).toEqual(['2026-08-21', '2026-12-25']);
+      expect(res.body.holidays).toEqual(getHolidays()); // the wire IS the active set, not a copy of the seed
+    } finally {
+      setHolidays(restore);
+    }
   });
 
   it('has no lastSuccessAt when no ares run has ever succeeded (FR-8.6)', async () => {

@@ -11,6 +11,7 @@ import { loadProjectModel } from '../services/model-grid.ts';
 import { loadPipeline, manilaToday, toMilestones } from '../services/pipeline.ts';
 import { detectConflicts, replotList } from '../services/conflicts.ts';
 import { dayCapacities } from '../../lib/dayplan.ts';
+import { getHolidays } from '../../lib/calendar.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
 import { ConflictAcknowledgement, MilestoneDayPlan, PushEvent, Sprint, SyncRun } from '../models/index.ts';
 
@@ -43,6 +44,13 @@ export function deliverablesRouter(): Router {
         ...pipeline,
         writesEnabled: res.locals.project.writes_enabled !== false, // G7 observation mode
         sprints: sprints.map((s) => ({ id: String(s._id), name: s.name, start: s.starts_on, end: s.ends_on, position: s.position })),
+        // R-f-8: the sprints modal's gap warning counts WORKING days, never
+        // raw weekdays, so the client needs the same holiday set the server
+        // computes with — the ARES-canonical calendar loaded at boot and
+        // refreshed every 15 min (server.js → loadCalendar → setHolidays).
+        // Read-only, no collection of its own; sending it is what keeps the
+        // client's weekend/holiday skip from drifting into a second calendar.
+        holidays: getHolidays(),
         capacity: {
           weekly: res.locals.project.weekly_capacity,
           least: res.locals.project.ref_week_least ?? null,
