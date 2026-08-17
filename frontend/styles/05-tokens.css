@@ -33,6 +33,7 @@
   --blue-50: #eff6ff; /* Requests filter-bar active select (build-spec v1.2 §3) */
   --blue-100: #dbeafe;
   --blue-200: #bfdbfe;
+  --blue-300: #93c5fd; /* Suggest-plan expanded bar border (node 262:34499) */
   --blue-500: #3b82f6;
   --blue-600: #2563eb; /* planner cards-per-week slider fill + thumb (node 94:4828) */
   --blue-700: #1d4ed8;

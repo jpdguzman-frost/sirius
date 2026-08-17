@@ -22,22 +22,32 @@
   font-family: var(--font-sans);
 }
 
-/* ---- 1. phase legend (R4) ----
+/* ---- 1. phase legend (R4, node 262:33342) ----
    The frame carries no legend, but four bar colours with no key is a worse
    defect than one extra row: the swatches reuse the phase classes below, so
-   there is exactly ONE phase→colour map in the codebase. */
+   there is exactly ONE phase→colour map in the codebase.
+
+   Owl #26 tightened it to the node's own facts: a 12px-tall RIGHT-aligned
+   strip, 16px between items, Row-scope swatches at 20×10 r4, 12/400 slate-500
+   labels 6px off their swatch, and the client-deadline tick reusing the shared
+   `.gantt .gdl` recipe at 8px. It is a KEY, not a filter — no hover, no click,
+   no focusable child — and it sits outside `.pscroll`, so it stays put while
+   the timeline scrolls. `flex-wrap` is gone with the fixed height: a wrapped
+   row cannot live in a 12px box. */
 .glegend {
-  display: flex; align-items: center; gap: var(--space-16); flex-wrap: wrap;
-  margin: 0 0 var(--space-8);
-  font-size: var(--text-label); line-height: 1; color: var(--surface-muted-foreground);
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--space-16);
+  height: 12px; padding-right: var(--space-4); margin: 0 0 var(--space-8);
+  font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--surface-muted-foreground);
 }
-.glegend .gleg { display: inline-flex; align-items: center; gap: var(--space-4); }
-.glegend .gseg { display: inline-block; width: 22px; height: 10px; border-radius: var(--radius-xs); }
-/* the deadline swatch borrows `.gantt .gdl`'s colour but not its geometry, and
-   that rule is declared LATER at equal specificity — so this one carries the
-   `.gantt` prefix too, or the swatch keeps `position: absolute` and escapes
-   the legend to the top-left of the page (found at integrate). */
-.gantt .glegend .gdl { position: static; width: 3px; height: 12px; }
+.glegend .gleg { display: inline-flex; align-items: center; gap: 6px; } /* frame 262:33342 — the 26px offset = 20 swatch + 6 gap; no 6px token */
+.glegend .gleg-dl { gap: var(--space-8); } /* the deadline entry alone reads 8px */
+.glegend .gseg { display: inline-block; width: 20px; height: 10px; border-radius: var(--radius-sm); }
+/* the deadline swatch borrows `.gantt .gdl`'s colour AND its 2px stroke — one
+   deadline-marker recipe, never a second — but not its absolute placement, and
+   that rule is declared LATER at equal specificity, so this one carries the
+   `.gantt` prefix too or the swatch escapes the legend to the top-left of the
+   page (found at integrate). Declaring no `width` here is deliberate. */
+.gantt .glegend .gdl { position: static; height: 12px; }
 
 /* ---- 2. the card + its scroller ---- */
 .gantt .gwrap {
@@ -97,7 +107,10 @@
 .gantt .gwksub { font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--slate-400); white-space: nowrap; }
 
 /* ---- 4. sprint / outside / unscheduled block headers (36px) ----
-   R6: the frame's header checkbox and collapse/expand are NOT built. */
+   R6 (closed, owl #24): the chevron collapses the block's ROWS; the header and
+   its meta counts stay, and the capacity footer keeps counting the hidden rows
+   — the footer is DATA, not visibility. The frame's header CHECKBOX is still
+   not built. */
 .gantt .gblockhead {
   display: flex; align-items: center; min-height: 36px;
   background: var(--slate-100); border-bottom: 1px solid var(--slate-200);
@@ -113,9 +126,23 @@
    '#items'), so they are two spans, not one string */
 .gantt .gbmeta { font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--surface-muted-foreground); }
 .gantt .gbcount { font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--slate-400); }
-/* the one unslot drop zone (contract §3.8) — the Unscheduled block's own bar */
+/* the one unslot drop zone (contract §3.8) — the Unscheduled block's own bar.
+   It keeps its drop handlers WHILE COLLAPSED: the toggle is a real <button>
+   inside the header, so click and drag never contend for the same node. */
 .gantt .gblockhead.dropzone { cursor: copy; }
 .gantt .gblockhead.dropzone .gbcount::after { content: ' · drop a row here to unslot it'; }
+/* one chevron in the sprite, rotated — the same trick .ptoolbar .rangenav
+   .flipx uses (30-planner.css). No new icon. */
+.gantt .gbtoggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; flex: none; padding: 0;
+  border: none; background: none; color: var(--slate-400); cursor: pointer; border-radius: var(--radius-xs);
+}
+.gantt .gbtoggle:hover { background: var(--slate-200); color: var(--slate-700); }
+.gantt .gbtoggle:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.gantt .gbtoggle svg { display: block; transition: transform 0.12s ease; }
+.gantt .gbchev-o { transform: rotate(90deg); } /* expanded: chevron points down */
+.gantt .gbchev-c { transform: none; }          /* collapsed: points right */
 
 /* ---- 5. deliverable row (84px base, grows when the badges wrap) ---- */
 .gantt .growr {
@@ -142,6 +169,34 @@
 .gantt .gdetails .c-req { width: 136px; }
 .gantt .gdetails .c-type { width: 146px; }
 .gantt .gdetails .c-status { width: 300px; display: flex; align-items: flex-start; gap: var(--space-8); }
+
+/* owl #24 — the collapsed pane: MC# + name only (155 + 262 = 417). ONE
+   variable moves the sticky pins, the sheet's intrinsic width and the footer
+   caption together, so the week columns and every drop target keep their
+   geometry and no JS width maths exists to keep in sync (.gsheet is
+   `width: max-content`). The header cells share these class names, so the
+   header hides in step with the rows and the two can never disagree.
+   KNOWN CONSEQUENCE: the row action cluster lives in c-status, so pin /
+   duplicate / status-note are unavailable while collapsed — expand to use
+   them (recorded in the frame notes). */
+.gantt.lpc { --gleft: 417px; }
+.gantt.lpc .c-req,
+.gantt.lpc .c-type,
+.gantt.lpc .c-status,
+.gantt.lpc .gchips { display: none; }
+/* absolutely positioned so it cannot disturb the five-column measure that adds
+   up to --gleft; the .gcolhead .gpin it sits in is `position: sticky`, i.e. a
+   positioned ancestor, so `right` is the PANE's right edge in both states and
+   at any scroll offset. Treatment is flagged for Miles's design pass. */
+.gantt .lpctoggle {
+  position: absolute; right: var(--space-4); top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0;
+  border: none; background: none; color: var(--slate-400); cursor: pointer; border-radius: var(--radius-xs);
+}
+.gantt .lpctoggle:hover { background: var(--slate-200); color: var(--slate-700); }
+.gantt .lpctoggle:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.gantt .lpctoggle .flipx { transform: rotate(180deg); }
 
 .gantt .gsel { position: absolute; left: var(--space-16); top: 20px; width: 14px; height: 14px; margin: 0; cursor: pointer; }
 /* R11: the frame's 16px chevron is the drag-handle affordance and nothing else */

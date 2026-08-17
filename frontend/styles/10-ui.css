@@ -160,5 +160,10 @@ th.slahead { background: #fef3c7 !important; color: #b45309 !important; }
 .admin-projects { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; }
 .chk { font-size: 0.78rem; color: #475569; display: inline-flex; gap: 0.3rem; align-items: center; white-space: nowrap; }
 .addbtn { font-weight: 700; }
+/* owl #23 — one row per project, state badge then the toggle. This tab still
+   rides the legacy 10-ui recipes (the planner's tokenised recipes are scoped
+   to .ptoolbar / .gantt), so it matches its neighbours' units. */
+.caplockrow { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; margin-top: 0.4rem; }
+.caplockrow > span:first-child { min-width: 220px; }
 .inactive-row td { opacity: 0.55; }
 .note.danger { background: #fee2e2; border: 1px solid #fca5a5; color: #b91c1c; border-radius: 10px; padding: 0.5rem 0.8rem; margin-bottom: 0.8rem; }

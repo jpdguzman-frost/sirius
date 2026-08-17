@@ -377,30 +377,44 @@
     {{! §5.4: a real range input — bounded by the reference weeks, live while
         dragging, committed on release. twoway="false" keeps the model out of
         the drag loop: capSlide owns the live value, capCommit owns the write. }}
-    <div class="cardsweek">
+    <div class="cardsweek {{#if capacity.locked}}locked{{/if}}">
       <svg class="i16 cwicon" aria-hidden="true"><use href="#i-sliders" /></svg>
       <label class="cwlabel" for="cards-per-week">Cards / week</label>
       <input id="cards-per-week" class="cwrange" type="range" twoway="false"
              min="{{capMin}}" max="{{capMax}}" step="1" value="{{capDraft}}"
              style="--cwfill:{{capFill}}%;"
+             disabled="{{capacity.locked}}"
+             title="{{capacity.locked ? 'Capacity locked — admin can unlock' : ''}}"
              on-input="['capSlide']" on-change="['capCommit']"
              aria-valuetext="{{capDraft}}{{#if capBand}} — {{capBand}}{{/if}}" />
       <span class="cwvalue">{{capDraft}}</span>
+      {{#if capacity.locked}}<span class="cwlock" title="Capacity locked — admin can unlock" aria-label="Capacity locked — admin can unlock">🔒</span>{{/if}}
       {{#if capBand}}<span class="cwband">{{capBand}}</span>{{/if}}
       {{#if savingCapacity}}<span class="cwband">saving…</span>{{/if}}
     </div>
 
+    {{! Owl #25 / node 262:34499 — while a proposal is pending the expanded bar
+        takes the Suggest button's OWN slot, so Sprints and the helper note keep
+        theirs and the toolbar never reflows. Every count is derived from the
+        /suggest payload the client already holds (no second request, no
+        re-forecast); `suggestBlockedWhy` is one computed driving both the
+        disabled state and its reason — a non-empty string is truthy. The label
+        stays "Accept": the frame says "Apply", Miles delegated naming here. }}
     <div class="fnbox">
-      <button class="fnbtn primary" on-click="['runSuggest']"><svg class="i16" aria-hidden="true"><use href="#i-sparkle" /></svg>Suggest plan</button>
-      <button class="fnbtn ghost" on-click="['openSprints']"><svg class="i16" aria-hidden="true"><use href="#i-calendar" /></svg>Sprints</button>
       {{#if suggest}}
-        {{#if suggestOffWeeks.length}}
-          <button class="fnbtn accept" disabled title="The proposed weeks are not Mondays — accepting would corrupt the slotted weeks.">Accept blocked</button>
-        {{else}}
-          <button class="fnbtn accept" on-click="['acceptSuggest']">Accept {{suggestCount}} moves</button>
-        {{/if}}
-        <button class="fnbtn discard" on-click="['clearSuggest']">Discard</button>
+        <div class="sgbar" role="status" aria-live="polite">
+          <span class="sgprop"><svg class="i16" aria-hidden="true"><use href="#i-sparkle" /></svg>{{suggestProposed}} proposed</span>
+          <span class="sgflag" title="Proposals the planner had to compromise: capacity, hard ceiling, deadline or blocker.">{{suggestFlagged}} flagged</span>
+          <span class="pbadge sgheavy" title="Weeks whose hard-difficulty share exceeds the measured ceiling under this plan.">{{suggestHardHeavy}} hard-heavy</span>
+          <span class="sgbtns">
+            <button class="fnbtn primary" on-click="['acceptSuggest']" disabled="{{suggestBlockedWhy}}" title="{{suggestBlockedWhy}}">Accept</button>
+            <button class="fnbtn discard" on-click="['clearSuggest']">Discard</button>
+          </span>
+        </div>
+      {{else}}
+        <button class="fnbtn primary" on-click="['runSuggest']"><svg class="i16" aria-hidden="true"><use href="#i-sparkle" /></svg>Suggest plan</button>
       {{/if}}
+      <button class="fnbtn ghost" on-click="['openSprints']"><svg class="i16" aria-hidden="true"><use href="#i-calendar" /></svg>Sprints</button>
       <span class="fnnote">Grab a row to reslot it. Pinned rows are never moved by a suggestion.</span>
     </div>
   </div>
@@ -424,13 +438,18 @@
       capacity footer (R9) and the timeline's own horizontal slider (§3.7).
       Ractive renders dynamic member access in a TRIPLE mustache as empty, so
       every per-row lookup here goes through a helper function. }}
-  <div class="gantt">
+  <div class="gantt {{#if leftCollapsed}}lpc{{/if}}">
+    {{! Owl #26 / node 262:33342 — a KEY, not a filter: aria-hidden, no
+        handler, no focusable child, and a sibling of .gwrap so it sits OUTSIDE
+        the horizontal scroller and stays put as the timeline moves. The four
+        phase swatches reuse the .gseg classes and the deadline tick reuses the
+        .gdl recipe, so there is exactly one colour map and one marker recipe. }}
     <div class="glegend" aria-hidden="true">
       <span class="gleg"><span class="gseg sketch"></span>Sketch</span>
       <span class="gleg"><span class="gseg review"></span>Review</span>
       <span class="gleg"><span class="gseg render"></span>Render</span>
       <span class="gleg"><span class="gseg renderOverdue"></span>Render past deadline</span>
-      <span class="gleg"><span class="gdl"></span>Client deadline</span>
+      <span class="gleg gleg-dl"><span class="gdl"></span>Client deadline</span>
     </div>
 
     {{#if plannerGroups.length}}
@@ -445,12 +464,21 @@
             {{#each plannerMonths as m}}<div class="gmonth" style="width:calc(var(--gw) * {{m.span}});">{{m.month}}</div>{{/each}}
           </div>
           <div class="gcolhead">
+            {{! owl #24 — the pane toggle rides the STICKY header block, so it
+                keeps the pane's top-right edge at any scroll offset. Collapsed
+                keeps MC# + name (155 + 262 = 417) and the CSS --gleft moves the
+                four pinned surfaces together. }}
             <div class="gpin gdetails">
               <span class="gcell c-mc">MC no.</span>
               <span class="gcell c-scope">Scope</span>
               <span class="gcell c-req">Requestor</span>
               <span class="gcell c-type">Type</span>
               <span class="gcell c-status">Status</span>
+              <button class="lpctoggle" type="button" on-click="['toggleLeftPane']"
+                      aria-label="{{ leftCollapsed ? 'Expand the deliverable columns' : 'Collapse the deliverable columns' }}"
+                      title="{{ leftCollapsed ? 'Expand columns' : 'Collapse columns' }}">
+                <svg class="i16 {{#if leftCollapsed}}flipx{{/if}}" aria-hidden="true"><use href="#i-rowChevron" /></svg>
+              </button>
             </div>
             {{#each plannerWeeks as wk}}
               <div class="gwkcell"><span class="gwkn">{{wk.wk}}</span><span class="gwksub">{{wk.sub}}</span></div>
@@ -463,8 +491,28 @@
                   handlers take the kind so sprint bars reject the drop }}
               <div class="gblockhead {{#if g.kind === 'unscheduled'}}dropzone{{/if}}"
                    on-dragover="['dragOverBlock', g.kind]" on-drop="['dropBlock', g.kind]">
-                <div class="gbhinner"><span class="gbname">{{g.name}}</span><span class="gbmeta">{{g.meta}}</span><span class="gbcount">{{g.count}}</span></div>
+                {{! owl #24 — the chevron hides the block's ROWS only. The name,
+                    the meta line and the count stay, the Unscheduled bar keeps
+                    its unslot drop handlers while collapsed, and the capacity
+                    footer keeps counting the hidden rows.
+                    HAZARD: a bang immediately after an opening double brace
+                    opens a Ractive COMMENT, so a negation written that way is
+                    swallowed silently. Inside a section tag it is safe (the
+                    hash comes first); in an interpolation always use the
+                    explicit ternary, as the three attributes below do. }}
+                <div class="gbhinner">
+                  <button class="gbtoggle" type="button" on-click="['toggleBlock', g.id]"
+                          aria-expanded="{{ collapsedBlocks[g.id] ? 'false' : 'true' }}"
+                          aria-controls="gbrows-{{g.id}}"
+                          aria-label="{{ collapsedBlocks[g.id] ? 'Expand' : 'Collapse' }} {{g.name}}"
+                          title="{{ collapsedBlocks[g.id] ? 'Expand' : 'Collapse' }}">
+                    <svg class="i16 {{#if collapsedBlocks[g.id]}}gbchev-c{{else}}gbchev-o{{/if}}" aria-hidden="true"><use href="#i-rowChevron" /></svg>
+                  </button>
+                  <span class="gbname">{{g.name}}</span><span class="gbmeta">{{g.meta}}</span><span class="gbcount">{{g.count}}</span>
+                </div>
               </div>
+              <div class="gbrows" id="gbrows-{{g.id}}">
+              {{#if !collapsedBlocks[g.id]}}
               {{#each g.rows as row}}
                 <div class="growr {{#if selected[row.cardId]}}sel{{/if}} {{#if row.pinned}}pinned{{/if}}"
                      tabindex="0" draggable="{{row.pinned ? 'false' : 'true'}}"
@@ -508,6 +556,8 @@
                   </div>
                 </div>
               {{/each}}
+              {{/if}}
+              </div>
             </div>
           {{/each}}
 
@@ -698,6 +748,26 @@
       <button class="badge togglable addbtn" on-click="['adminAdd']">＋ Add person</button>
     </div>
     <div class="dim">Only @frostdesigngroup.com accounts — they sign in with Google after being added here. No emails are sent. Admins are managed from the server, not this screen.</div>
+  </div>
+
+  {{! Owl #23 — capacity lock, admin-only. Reuses the shipped badge recipes
+      (.badge ok / .badge bad / .badge togglable) rather than a second button
+      recipe; every toggle is audited server-side. }}
+  <div class="admin-add">
+    <h3>Capacity lock</h3>
+    <div class="dim">A locked project refuses every cards/week change until an admin unlocks it. The planner slider renders locked, with the reason on it.</div>
+    {{#each adminProjects as p}}
+      <div class="caplockrow">
+        <span>{{p.code}} · {{p.name}}</span>
+        {{#if p.capacityLocked}}
+          <span class="badge bad">locked</span>
+          <button class="badge togglable" on-click="['adminSetCapacityLock', p.id, false]">unlock</button>
+        {{else}}
+          <span class="badge ok">unlocked</span>
+          <button class="badge togglable" on-click="['adminSetCapacityLock', p.id, true]">lock</button>
+        {{/if}}
+      </div>
+    {{/each}}
   </div>
 
   <div class="tablewrap"><table>

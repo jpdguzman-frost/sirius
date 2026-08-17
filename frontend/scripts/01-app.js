@@ -372,7 +372,14 @@ const app = new Ractive({
     iconSprite: ICON_SPRITE,
     weekStart: mondayIso(todayIso()),
     suggest: null,
-    suggestCount: 0,
+    /* owl #24: block id → true = collapsed. VIEW state only, no persistence —
+       keyed on plannerGroups' `id` (a sprint's _id, or 'outside'/'unscheduled'),
+       never the sprint NAME, and cleared on a project switch because sprint ids
+       are per-project. */
+    collapsedBlocks: {},
+    // owl #24: view state; SURVIVES a project switch — it is a reader
+    // preference about the pane, not project data.
+    leftCollapsed: false,
     sprintModal: false,
     sprintDraft: [],
     sprintError: '',
@@ -705,6 +712,45 @@ const app = new Ractive({
       return off.length === 1
         ? `the plan proposes ${off[0]}, which is not a Monday`
         : `the plan proposes ${off.length} weeks that are not Mondays (${off.join(', ')})`;
+    },
+    /* ---- owl #25 expanded-bar counts (node 262:34499) ----
+
+       All three read the /suggest payload the client ALREADY holds — no second
+       request, no re-forecast (invariants 5–7: no forecast math runs here), and
+       the measured hard-mix ceiling stays inside lib/planner — it is never
+       retyped here, not even to check a share. `strain` is the server's
+       own answer to "which weeks are hard-heavy UNDER THE PROPOSED PLAN", so it
+       is read, never recomputed. Deriving from `suggest` rather than banking a
+       count at fetch time means the numbers can never drift from the proposal.
+
+       R-a: flagged and hard-heavy are INDEPENDENT counts in different units
+       (proposals vs weeks) — separate sources, no cross-check, no total. */
+    suggestProposed() {
+      const s = this.get('suggest');
+      return s && s.plan ? Object.keys(s.plan).length : 0;
+    },
+    /* `notes` is suggestPlan's own per-card exception channel — over-capacity,
+       past the hard ceiling, unmeetable deadline, or a 🛑 blocker. Intersected
+       with `plan` so the unit is PROPOSALS: a note on a card the planner could
+       not place at all is not a proposal and does not count. (detectConflicts
+       is not reusable here — it consumes forecast milestones for the PERSISTED
+       plan, so a proposal would need a re-forecast the client must not do.) */
+    suggestFlagged() {
+      const s = this.get('suggest');
+      if (!s || !s.plan || !s.notes) return 0;
+      return Object.keys(s.plan).filter((id) => s.notes[id]).length;
+    },
+    suggestHardHeavy() {
+      const s = this.get('suggest');
+      return s && Array.isArray(s.strain) ? s.strain.length : 0;
+    },
+    /* One computed drives both the Accept button's disabled state and its
+       reason — a non-empty string is truthy. R-e: nothing to apply is not an
+       error, so the bar still shows and Discard still reverts; the off-week
+       tripwire keeps precedence because a non-Monday week corrupts silently. */
+    suggestBlockedWhy() {
+      if (this.get('suggestOffWeeks').length) return 'The proposed weeks are not Mondays — accepting would corrupt the slotted weeks.';
+      return this.get('suggestProposed') === 0 ? 'Nothing to apply — this suggestion proposes no moves.' : '';
     },
     /* the hard-mix thresholds the server measured (lib/planner.constants
        HARD_MIX), with the module constants as the pre-payload fallback */
@@ -1110,6 +1156,14 @@ let capQueued = null;
 let capFlushing = false;
 
 async function writeCapacity(next) {
+  /* owl #23 — the SECOND lock. The disabled input fires no events, but the
+     write path is shared (a queued commit, another tab flipping the lock), and
+     the server refuses with 403 CAPACITY_LOCKED anyway; snapping the thumb back
+     here means the reader never sees a number the server would not accept. */
+  if (app.get('capacity').locked) {
+    app.set('capDraft', app.get('capacity').weekly);
+    return;
+  }
   const prev = app.get('capacity').weekly;
   if (!Number.isInteger(next) || next === prev) {
     app.set('capDraft', prev); // snap the thumb back to the committed number
@@ -1354,6 +1408,13 @@ async function resetForProjectSwitch() {
   // unique per project and NOT globally (invariant 3), so leaving it open
   // re-attaches project A's draft to project B's same-numbered row and
   // Submit would write it there.
+  //
+  // Planner view state is per-project too (R-d, owl #25): a pending suggestion
+  // is a plan for THIS project's cards — its cardIds mean nothing in the next
+  // one, and Accept would post them to /replot regardless. `collapsedBlocks` is
+  // keyed on sprint ids, which are per-project, and on 'outside'/'unscheduled',
+  // which would otherwise carry over. `leftCollapsed` deliberately does NOT
+  // reset — it is a reader preference about the pane, not project data.
   app.set({
     ...reqFiltersCleared(),
     requestFilter: 'all',
@@ -1365,6 +1426,8 @@ async function resetForProjectSwitch() {
     noteEditing: null,
     noteDraft: { remark: '', clarify: false },
     noteError: '',
+    suggest: null,
+    collapsedBlocks: {},
   });
   await loadAll();
 }
@@ -1575,6 +1638,19 @@ app.on({
       app.set('adminError', errText(err));
     }
   },
+  /* owl #23 — capacity lock. The server audits both directions and refuses a
+     no-op silently, so this only has to re-read. When the toggled project is
+     the ACTIVE one, loadAll re-seats `capacity` in the same click, so the
+     planner slider shows its new lock state without a reload. */
+  async adminSetCapacityLock(_ctx, id, locked) {
+    try {
+      await api.send('PATCH', `/api/admin/projects/${id}/capacity-lock`, { locked });
+      await loadAdmin();
+      if (id === app.get('activeProjectId')) await loadAll();
+    } catch (err) {
+      app.set('adminError', errText(err));
+    }
+  },
   adminEdit(_ctx, id) {
     const u = app.get('adminUsers').find((x) => x.id === id);
     const sel = {};
@@ -1694,23 +1770,40 @@ app.on({
       from: app.get('weekStart'),
       weeks: WEEK_COUNT,
     });
-    app.set({ suggest: res, suggestCount: Object.keys(res.plan).length });
+    // the whole SuggestResult is the state; every count in the bar is a
+    // computed over it, so there is no second number to keep in step
+    app.set('suggest', res);
   },
-  clearSuggest() { app.set({ suggest: null, suggestCount: 0 }); },
+  clearSuggest() { app.set('suggest', null); },
   async acceptSuggest() {
     const s = app.get('suggest');
     if (!s) return;
-    /* see the suggestOffWeeks note — the button is already hidden in this
+    /* see the suggestOffWeeks note — the button is already disabled in this
        state; this is the second lock, because a persisted non-Monday week
        corrupts the slot silently and is not recoverable from the UI */
     if (app.get('suggestOffWeeks').length) {
       flashBanner(`Suggestion not applied — ${app.get('suggestOffWeeksText')}. Accepting would corrupt the slotted weeks.`);
       return;
     }
+    if (app.get('suggestProposed') === 0) return; // R-e: nothing to apply, and no empty /replot
     const moves = Object.entries(s.plan).map(([cardId, week]) => ({ cardId, week }));
     await api.send('POST', `/api/projects/${app.get('activeProjectId')}/replot`, { moves });
-    app.set({ suggest: null, suggestCount: 0 });
+    app.set('suggest', null);
     await loadAll();
+  },
+  /* owl #24 — collapse is PRESENTATION only: plannerGroups, the block header's
+     meta/count and the capacity footer all keep reading every row, so a hidden
+     row still counts against capacity (the footer is data, not visibility). */
+  toggleBlock(_ctx, id) {
+    app.set(`collapsedBlocks.${id}`, !app.get(`collapsedBlocks.${id}`));
+    requestAnimationFrame(refreshThumbs); // the sheet just changed height
+  },
+  /* owl #24 — collapsing the pane narrows --gleft, so the sheet's scrollWidth
+     moves with it; without the refresh the timeline thumb keeps the old ratio
+     and lies about how much timeline is off-screen. */
+  toggleLeftPane() {
+    app.set('leftCollapsed', !app.get('leftCollapsed'));
+    requestAnimationFrame(refreshThumbs);
   },
 
   openSprints() {
