@@ -624,3 +624,223 @@ specified icons. **Placement flagged to Miles.**
   multi-week bar**, where the pointer never leaves the row's own segment. That is
   exactly the drop the hit-testing defect refused, and no `toHTML()` assertion
   can prove the browser now takes it — only a real drag can.
+
+---
+
+# Batch 6 — Requestor cell truncation (phase 13k cont., 2026-08-17)
+
+Owl **#39 as corrected by #40**, node `262:33394` (file `abDRsIVDs1XjJKeR8xYOoF`),
+two annotations — Design Specs (marked BUG FIX) and Interaction. One cell,
+frontend only: no server, no wire, no schema, no migration, no write registry
+anywhere near it. T150 / T151. Requirements: **FR-5.1** (the fixed list pane)
+and **NFR-9** (WCAG 2.1 AA — the keyboard half of the tooltip is not optional).
+
+## The defect — two of them, in one cell
+
+`.gantt .gdetails .c-req` is a fixed **136px** box and the badge inside it hugs
+its text. `.gcell` carried `overflow: hidden`, so:
+
+1. a long requestor was cut **mid-character**, with no visual sign it was cut; and
+2. because the clip belonged to the CELL and not to the badge, roughly **8px of
+   text painted outside the badge's own 1px stroke** before the cell cut it.
+
+Both have the same cause: `text-overflow: ellipsis` can only act on the box that
+owns the overflow, and the badge did not own it.
+
+## Miles's ruling (both owls), and what shipped
+
+| # | Ruling | Shipped |
+|---|---|---|
+| 1 | Truncate with a trailing ellipsis at the badge's max width; never exceed the cell's inner width | `.clipbadge .cliptext { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }` — the cap is `.pbadge`'s **existing** `max-width: 100%` |
+| 2 | Full value in a tooltip, on hover **and** on keyboard focus | one CSS rule, two selectors: `:hover::after` + `:focus-visible::after`, `content: attr(aria-label)` |
+| 3 | Truncate by AVAILABLE WIDTH, not character count | `refreshClips()` measures `scrollWidth > clientWidth` after render; a value that fits gets no ellipsis, no tooltip and no tab stop |
+| 4 | Do NOT wrap | `white-space: nowrap` kept; the tooltip is `position: absolute`, so it is not a flex item and adds no layout — row heights stay aligned to the timeline bars |
+| 5 | Do NOT widen the column | `.c-req` is still `width: 136px`; the only change to it is `overflow: visible` |
+
+**#40's correction, recorded because it is the reason not to widen:** production
+requestors are short names — "Andy", "Chev". The clipped value in the frames is a
+fixture `@handle`, longer than anything the intake sheet produces. The bug is
+real (the app must not cut a name mid-glyph) but it is a *robustness* fix, not a
+sizing fix, and treating it as a sizing fix would have cost 100+px of the pinned
+pane and fought the collapsible left pane for nothing.
+
+## The design question, and why the clip moved INWARD
+
+`.gcell { overflow: hidden }` clips anything a tooltip could be. Three ways past
+it; two were rejected.
+
+| Option | Verdict |
+|---|---|
+| `position: fixed` overlay placed by JS, reusing `openOverlay`/`placeBox` and the `.selectmenu, .duepop, .warnpop` recipe | **Rejected.** It is the house clip-escape, but it needs Ractive state, per-row hover handlers and a positioner — for a static string in an informational cell. |
+| Anchor the tooltip to `.gpin` (sticky, so a positioned descendant escapes the cell's clip) | **Rejected.** Correct, but placement then needs `left: 417px` — a pane-width constant in a stylesheet that deliberately keeps none, and `test/gantt-collapse.test.ts` already forbids the number in JS. |
+| **Release the clip on `.c-req` alone and move it into the badge** | **Chosen.** |
+
+**This does not weaken the fixed-box rule.** What holds the pinned block to
+`--gleft` is `flex: none` + the column's own `width`, not the overflow — and both
+are unchanged. The cell's clip only ever prevented visual spill; once the badge
+clips its own text the cell has nothing left to spill, so the clip is redundant
+where it stood and useful one level in. The other four columns keep `.gcell`'s
+clip untouched. `.gantt .gdetails .c-req` and `.gantt .gdetails .gcell` are the
+same specificity (0,3,0), so the fix wins on **source order** with no new
+selector — asserted, because a tidy-up that moves the rule above `.gcell`
+silently restores the bug.
+
+## The measurement, and where it runs
+
+`refreshClips()` sits beside `refreshThumbs()` in `frontend/scripts/01-app.js`
+and mirrors its shape. Three properties matter:
+
+- It is a **measurement**, never a string-length guess. A character count clips
+  "Andy" on one font and misses a long value on another.
+- The comparison is **strict** — `scrollWidth > clientWidth`, deliberately *not*
+  `updateThumb()`'s `+ 1` epsilon. It shipped with the epsilon and a review
+  caught it in a real browser: `text-overflow: ellipsis` fires on **any**
+  overflow, so `scrollWidth === clientWidth + 1` is a badge the user can see
+  truncated (ellipsis drawn, 2–3 characters gone) that got no tooltip and no tab
+  stop — this exact bug surviving inside a ~1px band. The costs are asymmetric,
+  which is why the two sweeps differ: a false positive here is a harmless
+  tooltip on a value that only just fits, a false negative hides the identifying
+  part of a name with no way to reach it. `updateThumb()` guards the opposite
+  trade (do not draw a useless slider for 1px of scroll) and keeps its epsilon.
+  Both metrics are integer-rounded anyway, which absorbs the sub-pixel noise the
+  epsilon was there for.
+- It **clears as well as sets**. `{{#each g.rows as row}}` is unkeyed, so Ractive
+  reuses badge nodes by index and only rewrites their text — a node that held a
+  long value and now holds a short one would keep a stale tab stop and a stale
+  tooltip forever if the sweep only added. Neither `data-clipped` nor `tabindex`
+  appears in the template, so Ractive does not own them and will not fight the
+  sweep between renders.
+
+It rides the rAF seams that already existed — no observer was added, and the
+codebase still contains no `ResizeObserver`, `MutationObserver` or
+`IntersectionObserver`:
+
+| Seam | Covers |
+|---|---|
+| `loadAll()` | every reload **and** the project switch — `resetForProjectSwitch()` and `popstate` both end there |
+| `selectTab(id)` | returning to Sprint Schedules remounts the whole sheet |
+| `toggleBlock` | an expanded block's rows did not exist a frame ago |
+| `toggleLeftPane` | collapse strips the tab stop, expand restores it |
+| `document.fonts.ready` (module level, once) | `frontend/index.html` loads Google Sans Flex with `display=swap`, so the FIRST paint measures fallback metrics and every width shifts when the real font lands |
+
+Deliberately **not** hooked to `resize`: every width in the pinned pane is a
+literal px with no responsive rule, so the viewport cannot change this verdict.
+
+**The left-pane collapse needs no special case.** `.gantt.lpc` changes only
+`--gleft` (999 → 417) and `display`; it never touches `.c-req`'s 136px. Collapsed,
+`.c-req` is `display: none`, both widths read 0, `0 > 0` is false, and the hidden
+cell is stripped of its tab stop — which is what a hidden cell should have.
+Expanding re-measures and gives it back.
+
+## No tab stop on a badge that is not truncated
+
+The template emits **no `tabindex`**. The measurement is the only thing that
+grants one, and only to a badge that is actually clipped. Both the tab stop and
+the tooltip hang off the same `data-clipped` attribute, so ruling 3 and the
+"do not add a tab stop to every row" constraint are one mechanism, not two.
+
+The badge also carries `on-keydown="['noop']"` — the **existing** handler, whose
+whole body is `stopPropagation`. `.growr` carries `on-keydown="['rowKey', …]"`,
+and `rowKey` **reslots the deliverable a week** on ArrowLeft/ArrowRight through
+`POST /replot`. Keydown bubbles, so without the guard, tabbing to a purely
+informational badge and pressing an arrow would move data. (The hazard is
+pre-existing for `.gact` and `.gsel`, but this batch adds the first
+*informational* focus target, where a destructive side effect is indefensible.)
+
+## The accessible name needs a role to be legal
+
+The badge is a `<span>`, i.e. **`role=generic`**, and ARIA 1.2 lists
+name-from-author as **prohibited** on generic. Chrome exposes the `aria-label`
+anyway (verified in its accessibility tree), and the full value is the element's
+text content regardless, so nothing was ever *lost* — but a conforming AT stack
+may drop the label, and the badge enters the tab order once truncated. It
+therefore carries **`role="note"`**: the weakest role that permits an author
+name, on both branches (focusable or not), so the markup never varies with a
+measurement. `aria-label` stays because `content: attr(aria-label)` is the
+anti-drift mechanism — one attribute is the accessible name and the tooltip
+text, and they cannot disagree.
+
+## Known gaps, recorded rather than built around
+
+**WCAG 1.4.13 (Content on Hover or Focus)** asks for three things. Two are met:
+the tooltip is **hoverable and persistent** — `top: 100%` leaves no dead zone, so
+the pointer can travel onto it, and hovering a pseudo-element keeps `:hover` on
+its originating element. The third, **dismissible with Escape**, a pure-CSS
+`:hover`/`:focus-visible` tooltip cannot do. Answering it means putting JS state
+and a keydown listener behind an informational cell — more machinery than the
+ruling asked for, on the element least likely to need it. **Flagged to Miles as
+open, not fixed.** If she wants Escape dismissal, it is a deliberate second
+change, not a patch. **T152 carries it as an explicit question for Miles/JP** so
+the decision is made rather than left sitting in a CSS comment — NFR-9 names
+WCAG 2.1 AA, which makes 1.4.13 a requirement and not polish.
+
+**Touch has no reveal path.** No hover, no Tab, so a truncated value cannot be
+read on a touch device. Not a 1.4.13 failure (the criterion governs hover and
+focus content where it exists), and Sirius is a desktop tool, but it is the same
+question in a different input mode and goes to Miles with the Escape gap rather
+than being answered here.
+
+## What was verified at integrate (batch 6)
+
+- Gates: `npx tsc --noEmit` ✅ · `npx eslint .` ✅ · `node frontend/build.js` ✅ ·
+  `npx vitest run` **682 / 682, 56 files** ✅ · `TZ=UTC npx vitest run` **682 /
+  682** ✅. Suite **645 → 682** (+37, one new file).
+- **Flake honesty (T149).** One `TZ=UTC` run out of six went red with **3**
+  supertest *transport* failures in server files this batch does not touch;
+  three default runs and the other three `TZ=UTC` runs were 682/682, and
+  `test/gantt-requestor-clip.test.ts` is 37/37 on both timezones in isolation.
+  A fifth file, `test/schedule.test.ts`, was seen failing in setup with
+  `POST /__test/login` → `404` during this review and is now on T149's list.
+- Constitution: `git diff lib/` **empty**; `CLAUDE.md`, `.specify/` and every
+  `src/**` file untouched; the write registry unchanged at **W1 / W2 / W3**; no
+  Trello or Sheets path exists in this batch by construction — it is four
+  frontend files and one test.
+- Template behaviour is **rendered, not grepped**: `test/gantt-requestor-clip.test.ts`
+  drives the SHIPPED template through the harness's `toHTML()`. The two Ractive
+  **directives** (`on-keydown` on the badge, `on-keydown` on the row) are
+  asserted against source with that stated in the test name, because directives
+  never reach `toHTML()`.
+- **The measurement itself is not exercised.** There is no vitest config and no
+  jsdom in this repo, so vitest runs in `node` and nothing has a layout. Every
+  assertion about `refreshClips()` reads the shipped `frontend/scripts/01-app.js`,
+  and the suite's header says so.
+- The suite was proved to **bite**: ten negative controls, each reverted —
+  dropping `min-width: 0` (1 red), restoring the cell's clip (1), dropping the
+  `noop` guard (1), adding a `tabindex` to every badge (2), swapping the
+  measurement for a character count (1), making the sweep add-only (1), removing
+  the webfont re-measure (1), drifting `aria-label` away from the visible
+  text (1), reinstating the `+ 1` epsilon (1), and dropping `role="note"` (1).
+
+### One test-plan assertion relaxed, deliberately
+
+The plan asked for `expect(APP_JS).not.toContain('136')`. It fails on
+**pre-existing prose**: `frontend/scripts/01-app.js:17` has documented the column
+arithmetic (`58 gutter + 97 + 262 + 136 + 146 + 300`) since phase 13i, and that
+comment points AT the stylesheet rather than duplicating a constant. Deleting a
+correct comment to satisfy a substring match makes the codebase worse, so the
+ban is enforced **where it means something** — a `widthInCode()` scanner ignores
+block and line comments and asserts no *executable* line carries the number, with
+its own negative control proving the scanner is not vacuous. The standing
+`expect(APP_JS).not.toMatch(/\b(999|417)\b/)` is re-asserted untouched.
+
+## Owed: a live-browser pass (T152)
+
+Nothing below can be proved without a DOM, and all of it is load-bearing:
+
+- (a) a short name ("Andy") renders in full — no ellipsis, no focus ring, and
+  **no tab stop**;
+- (b) the fixture `@handle` renders with an ellipsis, is reachable by Tab, and
+  shows the full value on `:focus-visible` as well as on hover;
+- (c) the tooltip is not clipped by the cell, does not cover the row-action
+  cluster, and clears the sheet's bottom edge on the LAST row (it occupies
+  y≈41–63 inside an 84px row, and `.gfoot` sits below the last block in the same
+  scroller — checked on paper, not in a browser);
+- (d) collapsing the left pane removes the tab stop and expanding restores it;
+- (e) the verdict is correct **after** the webfont swaps, not only before;
+- (f) an arrow key on a focused badge does **not** move the row;
+- (g) the **boundary**: a value whose text lands 1px past the badge's inner box
+  (the review found `efnnbggtgubwkidx` sits in that band at the shipped
+  geometry) shows the ellipsis **and** gets the tooltip and the tab stop — the
+  case the `+ 1` epsilon used to miss;
+- (h) Miles/JP rule on the two recorded gaps: Escape dismissal (WCAG 1.4.13) and
+  touch having no reveal path.
