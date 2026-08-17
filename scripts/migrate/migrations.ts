@@ -147,6 +147,58 @@ export const MIGRATIONS: Migration[] = [
       });
     },
   },
+  {
+    // JP ruling A (2026-08-17), invariant 13 v4.3.0: the ack situation key
+    // gains the project's weekly capacity — week | rule | capacity | pairs.
+    // Existing acks are lifted to their own project's CURRENT capacity, which
+    // preserves today's suppression state exactly: nothing that is silenced
+    // today un-silences on deploy, and the NEXT capacity change is what
+    // re-surfaces the week. Idempotent by key shape (legacy keys have 3
+    // components, amended keys 4) and audited per changed row (invariant 10),
+    // before/after included — same shape as 005 and 006.
+    id: '007-ack-capacity',
+    up: async (conn) => {
+      const db = conn.db;
+      if (!db) throw new Error('no database on connection');
+      const { audit } = await import('../../src/services/audit.ts');
+      const { isLegacyConflictKey, upgradeConflictKey } = await import('../../src/services/conflicts.ts');
+
+      const rows = await db
+        .collection('conflict_acknowledgements')
+        .find({})
+        .project({ conflict_key: 1, project_id: 1 })
+        .toArray();
+      const capByProject = new Map<string, number>();
+
+      for (const r of rows) {
+        const key = String(r.conflict_key);
+        if (!isLegacyConflictKey(key)) continue; // already amended — idempotent
+        if (!r.project_id) continue; // invariant 1: never guess a project
+        const pid = String(r.project_id);
+        if (!capByProject.has(pid)) {
+          const p = await db
+            .collection('projects')
+            .findOne({ _id: r.project_id }, { projection: { weekly_capacity: 1 } });
+          if (!p || typeof p.weekly_capacity !== 'number') continue; // project gone — leave the row alone
+          capByProject.set(pid, p.weekly_capacity); // EACH project's OWN capacity (invariant 1)
+        }
+        const next = upgradeConflictKey(key, capByProject.get(pid)!);
+        if (next === key) continue;
+        await db
+          .collection('conflict_acknowledgements')
+          .updateOne({ _id: r._id }, { $set: { conflict_key: next } });
+        await audit({
+          project_id: pid,
+          actor: 'migration:007-ack-capacity',
+          action: 'ack.backfill-capacity',
+          entity: 'conflict_ack',
+          entity_id: String(r._id),
+          before: { conflict_key: key },
+          after: { conflict_key: next },
+        });
+      }
+    },
+  },
 ];
 
 /** Applies pending migrations in order; records each in `migrations`. */

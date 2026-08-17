@@ -175,7 +175,7 @@ describe('idempotency & situation keys', () => {
     const pid = projectId();
     const ack = {
       project_id: pid,
-      conflict_key: '2026-W34|urgent-overlap|c1:render,c2:render',
+      conflict_key: '2026-08-17|urgent-overlap|120|c1:render,c2:render',
       acknowledged_by: 'PM@frostdesigngroup.com',
     };
     const created = await ConflictAcknowledgement.create(ack);

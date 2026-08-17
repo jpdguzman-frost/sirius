@@ -4,9 +4,12 @@
  *   over capacity   cards due exceed the week's cap    → non-urgent, displaced
  *   past deadline   forecast date after client deadline → the breaching items
  *
- * conflict_key = week | rule | sorted card:phase pairs (invariant 13) — any
- * change to the cards involved produces a different key, so a phase-8a
- * acknowledgement lapses automatically.
+ * conflict_key = week | rule | capacity | sorted card:phase pairs
+ * (invariant 13, v4.3.0 — JP ruling A, 2026-08-17). Any change to the cards
+ * involved OR to the project's weekly capacity produces a different key, so
+ * the acknowledgement lapses automatically and the week re-surfaces. The
+ * capacity component is uniform across all three rules: it is the planning
+ * frame the whole week was acknowledged under, not an over-capacity detail.
  */
 
 export interface Milestone {
@@ -42,6 +45,45 @@ export interface Conflict {
 const pairKey = (items: Array<{ cardId: string; phase: string }>) =>
   items.map((i) => `${i.cardId}:${i.phase}`).sort().join(',');
 
+/**
+ * The capacity token — String(n), deliberately NOT rounded or normalised.
+ * PATCH /capacity enforces an integer, but seed scripts type the field freely;
+ * rounding here would make the key disagree with the number the over-capacity
+ * explanation below already prints.
+ */
+const CAP = (weeklyCapacity: number): string => String(weeklyCapacity);
+
+/**
+ * The ONE place the pipe layout is written, anywhere in the repo. Nothing
+ * outside this module composes, splits or rebuilds a conflict key — the
+ * routes and the client both treat it as an opaque string.
+ */
+const compose = (week: string, rule: string, weeklyCapacity: number, pairs: string): string =>
+  `${week}|${rule}|${CAP(weeklyCapacity)}|${pairs}`;
+
+/** The acknowledgement situation key (invariant 13). */
+export const conflictKey = (
+  week: string,
+  rule: Conflict['rule'],
+  weeklyCapacity: number,
+  items: Array<{ cardId: string; phase: string }>,
+): string => compose(week, rule, weeklyCapacity, pairKey(items));
+
+/**
+ * Pre-007 keys have 3 components, amended keys 4. Card ids and phases never
+ * contain '|', and an empty pair list is legal (`week|over-capacity|50|`),
+ * so the component count discriminates cleanly in both directions.
+ */
+export const KEY_PARTS = 4;
+export const isLegacyConflictKey = (key: string): boolean => key.split('|').length === KEY_PARTS - 1;
+
+/** Migration 007's one lift — the same recipe, applied to an existing key. */
+export const upgradeConflictKey = (key: string, weeklyCapacity: number): string => {
+  const p = key.split('|');
+  if (p.length !== KEY_PARTS - 1) return key; // already amended, or unrecognised — leave it alone
+  return compose(p[0]!, p[1]!, weeklyCapacity, p[2]!);
+};
+
 export function detectConflicts(milestones: Milestone[], weeklyCapacity: number): Conflict[] {
   const byWeek = new Map<string, Milestone[]>();
   for (const m of milestones) {
@@ -54,7 +96,7 @@ export function detectConflicts(milestones: Milestone[], weeklyCapacity: number)
     const urgent = items.filter((m) => m.urgent);
     if (urgent.length >= 2) {
       conflicts.push({
-        key: `${week}|urgent-overlap|${pairKey(urgent)}`,
+        key: conflictKey(week, 'urgent-overlap', weeklyCapacity, urgent),
         week,
         rule: 'urgent-overlap',
         explanation: `${urgent.length} urgent milestones land in this week — they compete for the same attention.`,
@@ -69,7 +111,7 @@ export function detectConflicts(milestones: Milestone[], weeklyCapacity: number)
     if (load > weeklyCapacity) {
       const displaced = items.filter((m) => !m.urgent);
       conflicts.push({
-        key: `${week}|over-capacity|${pairKey(displaced)}`,
+        key: conflictKey(week, 'over-capacity', weeklyCapacity, displaced),
         week,
         rule: 'over-capacity',
         explanation: `${fmtLoad(load)} cards' worth of milestones against a capacity of ${weeklyCapacity} cards — the non-urgent items listed are displaced.`,
@@ -80,7 +122,7 @@ export function detectConflicts(milestones: Milestone[], weeklyCapacity: number)
     const breaching = items.filter((m) => m.late);
     if (breaching.length > 0) {
       conflicts.push({
-        key: `${week}|past-deadline|${pairKey(breaching)}`,
+        key: conflictKey(week, 'past-deadline', weeklyCapacity, breaching),
         week,
         rule: 'past-deadline',
         explanation: 'Forecast dates fall after the client deadline for the items listed.',

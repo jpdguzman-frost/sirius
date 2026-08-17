@@ -301,7 +301,10 @@ const throughputGridSchema = new Schema(
 throughputGridSchema.index({ project_id: 1, difficulty: 1 }, { unique: true });
 
 // ============ conflict acknowledgements ============
-// Keyed on the situation: week | rule | sorted card:phase pairs (invariant 13).
+// Keyed on the situation: week | rule | capacity | sorted card:phase pairs
+// (invariant 13 v4.3.0). The key is composed in ONE place — src/services/
+// conflicts.ts — and is opaque everywhere else: a superseded ack simply stops
+// matching and its row stays put (a non-match is not a state change).
 
 const conflictAckSchema = new Schema(
   {

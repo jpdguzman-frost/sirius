@@ -97,7 +97,10 @@ export function deliverablesRouter(): Router {
 
       const all = detectConflicts(milestones, res.locals.project.weekly_capacity);
       // BR-9a: an acknowledgement silences ONE situation — its key carries the
-      // exact cards, so any change re-surfaces the conflict (invariant 13).
+      // exact cards AND the weekly capacity they were acknowledged under, so a
+      // change to either re-surfaces the conflict (invariant 13 v4.3.0). The
+      // match is one set-membership test on an opaque string; the mismatch that
+      // re-surfaces a week writes nothing (it is a non-match, not a change).
       // Card-level indicators (late flags on milestones) are NEVER suppressed.
       const acks = await ConflictAcknowledgement.find({ project_id: projectId });
       const ackedKeys = new Set(acks.map((a) => a.conflict_key));

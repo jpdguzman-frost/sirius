@@ -204,8 +204,9 @@ describe('deadlines view (AC-17, AC-18; BR-6, BR-9a)', () => {
     expect(late[0].displayId).toBe('MC-3');
     expect(res.body.replot.map((r: { displayId: string }) => r.displayId)).toContain('MC-3');
 
-    // conflict keys carry the situation (invariant 13)
-    expect(urgentConflicts[0].key).toMatch(/^2026-08-\d{2}\|urgent-overlap\|c1:sketch,c2:sketch$/);
+    // conflict keys carry the situation (invariant 13 v4.3.0): week | rule |
+    // capacity | sorted card:phase pairs — this project's capacity is 3.
+    expect(urgentConflicts[0].key).toMatch(/^2026-08-\d{2}\|urgent-overlap\|3\|c1:sketch,c2:sketch$/);
   });
 
   it('a card with no deadline cannot raise a deadline conflict (BR-9)', async () => {
