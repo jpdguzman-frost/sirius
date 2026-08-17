@@ -53,12 +53,16 @@ function collectAdminRoutes(app: ReturnType<typeof createApp>) {
 
 describe('FR-10.5 — admin routes are walled, mechanically', () => {
   it('every /api/admin route: 401 anonymous, 403 active non-admin', async () => {
-    const { app, asMember, member } = await setup();
+    const { app, asMember, member, project } = await setup();
     const routes = collectAdminRoutes(app);
     expect(routes.length).toBeGreaterThanOrEqual(4);
+    // every param is substituted with a REAL id, so the refusal is proved to
+    // come from the wall and not from a 404 on an unparseable path (owl #23
+    // added /api/admin/projects/:projectId/capacity-lock to this walk)
     const anon = request(app);
     for (const r of routes) {
-      const path = r.path.replace(':userId', String(member._id));
+      const path = r.path.replace(':userId', String(member._id)).replace(':projectId', String(project._id));
+      expect(path, `${r.method} ${r.path} has an unsubstituted param`).not.toContain(':');
       const method = r.method.toLowerCase() as 'get' | 'post' | 'patch' | 'put';
       expect((await anon[method](path)).status, `${r.method} ${r.path} anon`).toBe(401);
       expect((await asMember[method](path)).status, `${r.method} ${r.path} member`).toBe(403);

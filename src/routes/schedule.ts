@@ -329,6 +329,20 @@ export function scheduleRouter(): Router {
     ensureAuthenticated,
     ensureProjectMember,
     async (req, res) => {
+      // Capacity lock (owl #23): refuse BEFORE the body is even read — a locked
+      // project has no valid capacity write, whatever the payload says, so a
+      // malformed body on a locked project answers 403 and not 400. No audit
+      // row: a refusal is not a state change (invariant 10 logs changes).
+      if (res.locals.project.capacity_locked === true) {
+        res.status(403).json({
+          ok: false,
+          error: {
+            code: 'CAPACITY_LOCKED',
+            message: 'Capacity is locked for this project — an admin can unlock it.',
+          },
+        });
+        return;
+      }
       const body = z.object({ weekly: z.number().int().min(1).max(2000) }).strict().safeParse(req.body);
       if (!body.success) {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY', issues: body.error.issues } });
@@ -360,6 +374,10 @@ export function scheduleRouter(): Router {
           effectiveWeeklyRate: project.effective_weekly_rate ?? null,
           hardIdeal: HARD_MIX.ideal,
           hardCeiling: HARD_MIX.ceiling,
+          // Always false here by construction (a locked project never reaches
+          // this echo), but the key must exist: the client re-seats `capacity`
+          // wholesale, so omitting it would strip the slider's lock state.
+          locked: project.capacity_locked === true,
         },
       });
     },

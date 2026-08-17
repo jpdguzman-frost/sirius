@@ -7,6 +7,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request, { type Agent } from 'supertest';
+import { readFile } from 'node:fs/promises';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
@@ -131,6 +132,41 @@ describe('suggest plan (AC-15, AC-16; BR-7)', () => {
     expect(res.body.plan.c3).toBeUndefined(); // pinned (AC-16)
     // nothing applied (AC-15)
     expect((await Deliverable.findOne({ trello_card_id: 'c1' }))?.slotted_week ?? null).toBeNull();
+  });
+
+  // Owl #25: the expanded Suggest bar's three counts are derived CLIENT-SIDE
+  // from this payload — proposed = |plan|, flagged = |plan ∩ notes|,
+  // hard-heavy = |strain|. No response field was added for them, so this test
+  // is the contract that keeps the three source fields on the wire; if one
+  // ever disappears the bar would silently read 0 instead of failing.
+  it('carries plan, notes and strain — the fields the suggest bar counts from', async () => {
+    const { project, agent, mk } = await setup();
+    for (let i = 1; i <= 9; i++) await mk(i, { difficulty: i % 2 ? 'Hard' : 'Easy' });
+    const res = await agent
+      .post(`/api/projects/${project._id}/suggest`)
+      .send({ from: '2026-08-03', weeks: 4 })
+      .expect(200);
+
+    expect(res.body.plan).toBeTypeOf('object');
+    expect(res.body.notes).toBeTypeOf('object');
+    expect(Array.isArray(res.body.strain)).toBe(true);
+    expect(Array.isArray(res.body.weekKeys)).toBe(true);
+    // strain is a set of WEEK keys (its unit is weeks, not proposals — R-a)
+    for (const k of res.body.strain) expect(res.body.weekKeys).toContain(k);
+
+    const proposed = Object.keys(res.body.plan).length;
+    const flagged = Object.keys(res.body.plan).filter((id) => res.body.notes[id]).length;
+    const hardHeavy = res.body.strain.length;
+    expect(proposed).toBeGreaterThan(0);
+    expect(flagged).toBeLessThanOrEqual(proposed); // flagged intersects plan
+    expect(hardHeavy).toBeLessThanOrEqual(res.body.weekKeys.length);
+  });
+
+  // BR-6b: the 12.9% ceiling that decides `strain` is computed inside
+  // lib/planner against HARD_MIX — it is never retyped on a route.
+  it('never retypes the hard-mix ceiling in the route layer', async () => {
+    const src = await readFile(new URL('../src/routes/schedule.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/0\.129|12\.9/);
   });
 });
 

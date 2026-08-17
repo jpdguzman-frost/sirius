@@ -25,7 +25,7 @@ export function adminRouter(): Router {
     const [users, memberships, projects] = await Promise.all([
       User.find().sort({ email: 1 }),
       UserProject.find(),
-      Project.find().select('code name'),
+      Project.find().select('code name capacity_locked'),
     ]);
     const byUser = new Map<string, string[]>();
     for (const m of memberships) {
@@ -44,7 +44,12 @@ export function adminRouter(): Router {
         lastLoginAt: u.last_login_at ?? null,
         projectIds: byUser.get(String(u._id)) ?? [],
       })),
-      projects: projects.map((p) => ({ id: String(p._id), code: p.code, name: p.name })),
+      projects: projects.map((p) => ({
+        id: String(p._id),
+        code: p.code,
+        name: p.name,
+        capacityLocked: p.capacity_locked === true, // owl #23 — drives the admin lock/unlock row
+      })),
     });
   });
 
@@ -126,6 +131,43 @@ export function adminRouter(): Router {
       await audit({ actor, action: 'memberships.set', entity: 'user', entity_id: user.email, before: { projects: beforeProjects }, after: { projects: projects.map((p) => p.code) } });
     }
     res.json({ ok: true, projectIds: afterIds });
+  });
+
+  // Capacity lock (owl #23, JP-endorsed 2026-08-17) — admin-only lock/unlock of
+  // a project's cards/week. Deliberately NO ensureProjectMember: the admin
+  // surface is global by construction (PUT .../memberships above already writes
+  // membership rows for projects the admin need not belong to), and requiring
+  // membership would lock out the admin who has to unlock the project. Audited
+  // on every real change (invariant 10); a no-op writes nothing.
+  router.patch('/api/admin/projects/:projectId/capacity-lock', ensureAuthenticated, ensureAdmin, async (req, res) => {
+    const body = z.object({ locked: z.boolean() }).strict().safeParse(req.body);
+    const projectId = String(req.params.projectId);
+    if (!body.success || !Types.ObjectId.isValid(projectId)) {
+      res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
+      return;
+    }
+    const project = await Project.findById(projectId);
+    if (!project) {
+      res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+      return;
+    }
+    const before = project.capacity_locked === true;
+    if (body.data.locked === before) {
+      res.json({ ok: true, capacityLocked: before }); // no change, no audit row
+      return;
+    }
+    project.capacity_locked = body.data.locked;
+    await project.save();
+    await audit({
+      project_id: project._id,
+      actor: (req.user as SessionUser).email,
+      action: body.data.locked ? 'capacity.lock' : 'capacity.unlock',
+      entity: 'project',
+      entity_id: String(project._id),
+      before: { capacity_locked: before },
+      after: { capacity_locked: body.data.locked },
+    });
+    res.json({ ok: true, capacityLocked: body.data.locked });
   });
 
   return router;

@@ -53,6 +53,9 @@ export function deliverablesRouter(): Router {
           // the measured ceiling instead of a second hardcoded copy.
           hardIdeal: HARD_MIX.ideal,
           hardCeiling: HARD_MIX.ceiling,
+          // Capacity lock (owl #23): the slider reads its disabled state from
+          // here. Absent/false = unlocked, so the test is `=== true`.
+          locked: res.locals.project.capacity_locked === true,
         },
         sync: lastAres
           ? {

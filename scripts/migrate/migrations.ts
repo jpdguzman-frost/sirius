@@ -121,6 +121,32 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    // Owl #23 (JP-endorsed 2026-08-17): rt-837's capacity is JP-held
+    // calibration (120 vs the live 92) and must not be nudged from the
+    // toolbar. Locks that ONE project by code; rt-test stays unlocked.
+    // Idempotent, and every change writes to audit_log (invariant 10),
+    // before/after included — same shape as 005.
+    id: '006-capacity-lock-rt837',
+    up: async (conn) => {
+      const db = conn.db;
+      if (!db) throw new Error('no database on connection');
+      const { audit } = await import('../../src/services/audit.ts');
+      const doc = await db.collection('projects').findOne({ code: 'rt-837' });
+      if (!doc) return; // fresh/empty db (tests) — nothing to lock
+      if (doc.capacity_locked === true) return; // idempotent
+      await db.collection('projects').updateOne({ _id: doc._id }, { $set: { capacity_locked: true } });
+      await audit({
+        project_id: String(doc._id),
+        actor: 'migration:006-capacity-lock-rt837',
+        action: 'capacity.lock',
+        entity: 'project',
+        entity_id: String(doc._id),
+        before: { capacity_locked: doc.capacity_locked === true },
+        after: { capacity_locked: true },
+      });
+    },
+  },
 ];
 
 /** Applies pending migrations in order; records each in `migrations`. */

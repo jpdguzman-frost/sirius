@@ -48,6 +48,7 @@ describe('capacity write (BR-6a)', () => {
     expect(res.body.capacity).toEqual({
       weekly: 120, least: 40, typical: 92, most: 160, effectiveWeeklyRate: 88,
       hardIdeal: HARD_MIX.ideal, hardCeiling: HARD_MIX.ceiling,
+      locked: false, // owl #23 — the slider's lock state rides the same object
     });
     expect((await Project.findById(project._id).orFail()).weekly_capacity).toBe(120);
     // the planner reads it back from the same place (deliverables.ts capacity)

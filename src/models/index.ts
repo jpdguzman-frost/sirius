@@ -53,6 +53,13 @@ const projectSchema = new Schema(
     // the write registry (W1/W2) until JP flips it — absent/true = writes on
     writes_enabled: { type: Boolean, default: true },
 
+    // Capacity lock (owl #23, JP-endorsed 2026-08-17): a locked project refuses
+    // PATCH /capacity with 403 CAPACITY_LOCKED. Admin-only toggle; absent/false
+    // = unlocked, so every pre-flag project keeps its slider. NOTE the polarity
+    // is the mirror of writes_enabled above: the truth test is `=== true`
+    // (locked), never `!== false`.
+    capacity_locked: { type: Boolean, default: false },
+
     // planning settings — cards/week, seeded from ARES referenceWeeks (BR-6a)
     weekly_capacity: { type: Number, required: true },
     ref_week_least: Number,
