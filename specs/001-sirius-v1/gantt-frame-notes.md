@@ -48,7 +48,7 @@ silent defaults.
 | R3 | **Bar span = empirical forecast phases.** Bar starts at the deliverable's slotted week; phase segments (design/review/render waits) come from `lib/forecast.ts` output at workday resolution via `lib/calendar.ts`. NO new forecast math; NO edits to lib/*. | As issued. Segments are built server-side in `toRow` as the differences between the forecast's four dates, half-open `[startIso, endIso)`, zero/negative-width dropped; the client only maps them onto a workday-indexed axis (1 unit = 92px ÷ 5 = 18.4px). `git diff --stat lib/` is empty. |
 | R4 | **Phase palette**: Sketch #f59e0b · Review #bfdbfe · Render #2563eb · RenderOverdue #dc2626 (the component set's Row-scope palette; the Board-scope Review=amber variant contradicts it and is judged a stale copy). ONE phase→color map, single source. FLAG to product. | As issued, as four CSS classes (`--amber-500 / --blue-200 / --blue-600 / --red-600`) that the legend swatches reuse, so a retune cannot leave the key disagreeing with the chart. The stale-copy judgement is corroborated by the extracted facts: every Board-scope bar dump (`251:27897`, `251:28043`, `251:28196`) paints its second segment `#f59e0b`, i.e. sketch and review the same colour, which reads as an unmerged copy rather than a decision. **Still flagged.** |
 | R5 | **Sprint membership is DERIVED**: slotted week ∈ sprint date range (invariant 12). Dragging a row to a week in another sprint's range *is* the sprint move; there is no separate sprint-assignment write. Weeks outside any sprint group under an "Outside any sprint" block (same sub-header recipe) — invariant 12 requires surfacing gaps. Unscheduled = no slotted week. | As issued. No row on the wire carries any sprint reference (asserted in `test/planner-payload.test.ts` and in the integrate probe). Group order: each sprint in `position` order → Outside any sprint → Unscheduled; empty groups dropped. |
-| R6 | **Not built, flagged**: sprint-header Checkbox (no annotation explains it) · block collapse/expand (annotation says confirm) · dragging the bar itself (rows drag; bar is display-only). | As issued — none of the three built. A click-to-open range picker is also not built (contract §3.11). |
+| R6 | **Not built, flagged**: sprint-header Checkbox (no annotation explains it) · block collapse/expand (annotation says confirm) · dragging the bar itself (rows drag; bar is display-only). | As issued at the time — none of the three built. A click-to-open range picker is also not built (contract §3.11). **Partly closed 2026-08-17 (owl #24, phase 13i): block collapse/expand IS now built** — see the batch-3 section below. The header checkbox and bar-dragging stay not built, by product. |
 | R7 | **Drag mechanics default**: whole row drags (HTML5 DnD, consistent with the current board), drop targets = week columns (and the unscheduled zone to unslot if the current board supports it — recon decides), snap = per week, persistence = the EXISTING Sirius-internal slot-move API with its audit_log entry. Pinned rows still drag manually (pins only block Suggest). Capacity footer recomputes optimistically on drop. | **Adjusted in two places.** (a) *Pinned rows do not drag.* `POST /replot` skips pinned rows server-side (`src/routes/schedule.ts:108`, FR-5.9), so a draggable pinned row would be a silent no-op; they render `draggable="false"`, `cursor: not-allowed`, `title="Pinned — unpin to move"`. R7's "pins only block Suggest" is false against the code as built — **this needs a product decision: change FR-5.9, or keep pins immovable.** (b) *The unslot zone is the Unscheduled block's header bar*, not the unscheduled rows' tracks — those tracks keep their 12 week drop targets so an unscheduled row can be slotted by dropping on its own row, which is what its hint text tells the user to do. Everything else as issued; persistence is the existing audited `POST /replot`, one `audit_log` row per applied move. |
 | R8 | **Suggest proposals**: while a suggestion is pending, affected rows render a ghost/outline bar (violet #8b5cf6 outline, no fill) in the proposed week alongside the current bar; Accept persists, Discard clears. Minimal, preserves the 13f Accept/Discard flow. FLAG treatment to product. | Built as issued (`--violet-500`, the only new token). **It cannot render against real data today** — see "Live defect" below. Kept strict (exact week-key match) rather than snapping the key, which would mask the bug and could paint the wrong week; the fix pass added a loud guard so Accept can no longer persist the bad weeks. Treatment still flagged. |
 | R9 | **Footer warnings default**: per-week total > capacity → total cell red #dc2626; hard-mix share > 12.9% → amber #d97706; both → red. Ceiling label renders "13%" (rounded from the real 12.9% constant — do not hardcode a separate 13). | As issued, with the threshold semantics made explicit: over capacity **or** over the 12.9% ceiling → red; the ideal (8.3%) to ceiling band → amber; empty week → dimmed `—`. `hardIdeal` / `hardCeiling` ride down in the `capacity` block from `HARD_MIX` (`lib/planner.constants.ts`) on both `GET /deliverables` and the `PATCH /capacity` echo, so the optimistic re-seat cannot strip them and "13%" is always `Math.round(hardCeiling * 100)`. |
@@ -139,14 +139,14 @@ in every forecast date. Same file, same fix window.
 
 | # | Point |
 |---|---|
-| 1 | **12 columns do not fit.** Measured at integrate: at a 1600px viewport the scroller is 1470px, so the 999px pinned block leaves **5.1 of 12** week columns visible; at 1180px, 0.6 of a column. The page body correctly never scrolls horizontally and the left block stays pinned, but the view needs a call — narrower left pane, a collapsible column block, or a minimum supported width. |
-| 2 | **`WEEK_COUNT` 8 → 12** also widens the `/suggest` horizon, which changes `suggestPlan` output. No code change needed (`POST /suggest` already accepts up to 26 weeks); the behavioural change is real and unaddressed. |
-| 3 | **MC NO. renders `mcLabel` (the control number)**, per contract §2 — so MC-825's 99 deliverables all read "MC-825" in the column, with `display_id` only in the tooltip. Correct against invariant 3, but on a real board it will read as 99 identical rows. Worth a product look at showing `display_id` in the cell. |
-| 4 | **Board-scope Review = amber** in the component set contradicts the Row-scope `#bfdbfe`; judged a stale copy (R4). |
+| 1 | **12 columns do not fit.** Measured at integrate: at a 1600px viewport the scroller is 1470px, so the 999px pinned block leaves **5.1 of 12** week columns visible; at 1180px, 0.6 of a column. The page body correctly never scrolls horizontally and the left block stays pinned, but the view needs a call — narrower left pane, a collapsible column block, or a minimum supported width. — **CLOSED 2026-08-17 (owl #24): collapsible left pane.** `--gleft` 999 → 417 (MC# + Scope only), ~5 → ~11 visible columns at 1600px. Neither a narrower default pane nor a minimum width was adopted. |
+| 2 | **`WEEK_COUNT` 8 → 12** also widens the `/suggest` horizon, which changes `suggestPlan` output. No code change needed (`POST /suggest` already accepts up to 26 weeks); the behavioural change is real and unaddressed. — **CLOSED 2026-08-17 (owl #24): 12 kept.** Product accepts the wider horizon as the intended planning window; the suggest bar's counts (below) are what makes its effect legible. |
+| 3 | **MC NO. renders `mcLabel` (the control number)**, per contract §2 — so MC-825's 99 deliverables all read "MC-825" in the column, with `display_id` only in the tooltip. Correct against invariant 3, but on a real board it will read as 99 identical rows. Worth a product look at showing `display_id` in the cell. — **CLOSED 2026-08-17 (owl #24): MC stays bare.** `display_id` remains tooltip-only; no code change. |
+| 4 | **Board-scope Review = amber** in the component set contradicts the Row-scope `#bfdbfe`; judged a stale copy (R4). — **CLOSED 2026-08-17 (owl #26): the Row-scope palette is correct**, i.e. the build was already right and the Board-scope variant is stale. No code change; the legend now states the four colours on screen. |
 | 5 | **Medium difficulty fill** is absent from the extracted facts; the build uses the existing `.pbadge.d-Medium` token pair (`--amber-50` / `--amber-500`). |
 | 5b | **Easy difficulty fill disagrees with the frame.** The frame measures Easy at `#dcfce7` / `#16a34a` (= `--green-100` / `--green-600`); the shared `.pbadge.d-Easy` recipe — product's W3 tokens, Miles owl #04 — is `--green-50` / `--green-500`. Contract §3.10 mandates the ONE shared `.pbadge.d-*` map, so the build follows W3 and no CSS changed. Hard matches the frame exactly, so Easy is the only difficulty value where the frame and W3 disagree. **Product owns the call: retune W3, or accept the frame value as stale.** |
 | 6 | **`.pbadge.s-ongoing` text** is `--blue-500`; the frame shows `--blue-700`. Left unchanged to avoid re-tinting the verified Pipeline tab. |
-| 7 | Ghost-bar treatment (R8), footer warning treatment (R9) and the not-built list (R6) all need a product decision. |
+| 7 | Ghost-bar treatment (R8), footer warning treatment (R9) and the not-built list (R6) all need a product decision. — **Partly closed 2026-08-17: R6 (collapse/expand built, checkbox skipped) and the ghost treatment (R-b: ghosts stay violet) are settled; footer warning treatment (R9) is still open.** |
 
 ## Data reality
 
@@ -209,3 +209,123 @@ ruling change, and no shared recipe moved.
 Also corrected: the toolbar comment in `00-app.html` still said the phase legend
 was on the legacy recipe, which stopped being true when this pass deleted the
 legacy `.legend` rules and rebuilt it as `.glegend`.
+
+---
+
+# Batch 3 — capacity lock, suggest bar, legend, collapse (phase 13i, 2026-08-17)
+
+Owls #23–#26. Node map: the suggest bar is `262:34499`, the work-phase legend is
+`262:33342`; the capacity lock and both collapse features carry no frame and are
+product-specified in the owls. Two items were explicitly **excluded pending JP**
+and are NOT built: the FR-5.9 change (pins block Suggest only, allow manual
+drag) and the conflict-ack key gaining capacity (invariant 13 amendment).
+
+## Rulings R-a … R-e (verbatim from the build brief, with what shipped)
+
+| # | Ruling (verbatim) | Shipped |
+|---|---|---|
+| R-a | "flagged" and "hard-heavy" are INDEPENDENT counts (different units — proposals vs weeks); the frame's 1-vs-2 sample is filler. | As issued. Two computeds over two different sources — `plan ∩ notes` (proposals) and `strain` (weeks) — with no cross-check, no clamp and no derived total. Proved both ways: a fixture where hard-heavy *exceeds* proposed (`test/suggest-counts.test.ts`), and a seeded board where flagged is 2 while hard-heavy is 0 (`scripts/batch3-probe.ts` fixture B). |
+| R-b | Ghost bars STAY violet (bar = chrome, ghosts = content); Miles rules after seeing. | As issued — `.gghost` untouched. Still awaiting Miles's look. |
+| R-c | Rows CAN still be dragged while a proposal is pending; a manual drag does not mutate the proposal. | As issued. `dragRow` / `dropOnWeek` / `rowKey` / `moveRows` are untouched and never read or write `suggest`. |
+| R-d | Proposal does NOT survive a project switch; surviving tab switches within the project is fine. | **Was not true — fixed this pass.** `resetForProjectSwitch` now clears `suggest` (its cardIds are meaningless in the next project, and Accept would post them to `/replot` regardless) and `collapsedBlocks` (keyed on per-project sprint ids). A *tab* switch still clears nothing, as before. |
+| R-e | A suggestion returning 0 proposed shows the bar with "0 proposed", Accept disabled, Discard reverts. | As issued, via one computed — `suggestBlockedWhy` drives both the `disabled` attribute and the tooltip, so the button can never be dead without a stated reason. The off-week (non-Monday) tripwire keeps precedence over the empty-plan reason. `acceptSuggest` re-guards both, so a 0-proposal Accept can never fire an empty `/replot`. |
+
+## Count definitions — the rulings behind the three numbers
+
+| count | source | why |
+|---|---|---|
+| **N proposed** | `Object.keys(suggest.plan).length` | The number the Accept button *acts on*. The alternative ("only rows whose week actually changes") would print a figure Accept does not honour and would need a row join. **Flagged for Miles.** |
+| **N flagged** | `plan ∩ notes` | `notes` is `suggestPlan`'s own per-card exception channel, and its four strings map exactly onto over-capacity, the BR-6b hard ceiling, past-deadline and 🛑 blocker. `detectConflicts` is NOT reusable here: it consumes forecast *milestones* for the **persisted** plan, so scoring a proposal would need a re-forecast the client is forbidden to run (invariants 5–7). Intersecting with `plan` makes the unit *proposals* — a card the planner could not place at all is not a proposal. |
+| **N hard-heavy** | `suggest.strain.length` | The server's own answer to "which weeks exceed the measured ceiling **under the proposed plan**", computed inside `lib/planner.ts` against `HARD_MIX.ceiling`. The client never recomputes a hard share for this bar, so 12.9% is never retyped. |
+
+**Cards carrying a note but absent from `plan` (unplaceable) are surfaced
+nowhere in the UI.** That was already true and stays true this pass — flagged.
+
+**No `/suggest` response field was added.** All three counts are client-side
+reads of a payload the planner already holds; `test/schedule.test.ts` pins
+`plan`, `notes` and `strain` to the wire so they cannot quietly leave it.
+
+## Capacity lock (owl #23, Option B)
+
+- `projects.capacity_locked` (default false). **Polarity is deliberately the
+  mirror of `writes_enabled`:** absent means *unlocked*, so every read is
+  `=== true`, never `!== false`. The two are not symmetric and must not be
+  copy-pasted onto each other.
+- `PATCH /api/projects/:id/capacity` answers **403 `CAPACITY_LOCKED`** as the
+  first statement of the handler. **Ruling: the lock precedes the Zod parse, so
+  a locked project plus a malformed body answers 403, not 400** — a locked
+  project has no valid capacity write whatever the payload says, which is how
+  `writeGuards` already treats project-level refusals. **Flagged.**
+- **No audit row on a refusal.** Invariant 10 logs state *changes*; a refusal
+  changed nothing.
+- Admin toggle `PATCH /api/admin/projects/:projectId/capacity-lock`, audited
+  `capacity.lock` / `capacity.unlock` with actor and before/after. A no-op
+  toggle answers 200 and writes nothing.
+- **Ruling: the admin route deliberately omits `ensureProjectMember`.** The
+  admin surface is global by construction — `PUT /api/admin/users/:id/memberships`
+  already writes membership rows for projects the admin need not belong to — and
+  requiring membership would lock out the very admin who has to unlock a
+  project. Invariant 9's membership half applies to `/api/projects/:projectId/…`
+  routes, which this is not. **Flagged.**
+- Migration `006-capacity-lock-rt837` locks **rt-837 only** (its 120 is JP-held
+  calibration against the live 92), idempotent, audited. rt-test stays unlocked,
+  and because the test runner applies migrations to an empty database, no
+  existing fixture is retro-locked.
+- The pin is **visible, not tribal knowledge** (Miles): the control dims, the
+  rail refuses the cursor, a padlock states the reason, and the same string
+  rides the input's `title`. A second guard sits at the top of `writeCapacity`
+  because a lock can flip in another tab.
+
+## Known consequences and treatments still owed
+
+| # | Point |
+|---|---|
+| 1 | **The row action cluster is unavailable while the left pane is collapsed.** Pin / duplicate / status-note live in `c-status`, which the collapsed pane hides — expand to use them. Accepted this pass; if it bites, the cluster moves to `c-mc`. |
+| 2 | **The left-pane toggle is a placeholder treatment** — a 20×20 transparent button with a 16px slate-400 chevron, no resting chrome. Flagged for Miles's design pass. |
+| 3 | **Accept keeps the label "Accept"**; the frame says "Apply". Miles delegated naming to the build. Flagged. |
+| 4 | **`.sgbar .pbadge.sgheavy` measures 23px, not the frame's ~25.** The shared `.pbadge` geometry is authoritative (drift rule) and only the colour trio is local, so no height override was added. Flagged — 2px. |
+| 5 | **`leftCollapsed` survives a project switch; `collapsedBlocks` and `suggest` do not.** Deliberate: the pane is a reader preference, the other two are per-project data. Documented inline at `resetForProjectSwitch`. |
+| 6 | Rows inside a collapsed block leave the tab order because they are not rendered — intended. The toggles are real `<button>`s, so Enter/Space work without a handler. |
+
+## Ractive comment hazard — a build gate that does not exist
+
+`{{! … }}` terminates at the **first** `}}`, so a comment that quotes a mustache
+leaks the rest of itself into the DOM as literal text — and
+`Ractive.parse` accepts it happily, which means `node frontend/build.js` cannot
+catch it. Builder B hit exactly this and reworded the comment in prose.
+
+Two things now guard it: `test/gantt-collapse.test.ts` walks the parsed template
+for text nodes still carrying `{{`/`}}` (with a negative control, so an
+always-empty scan cannot pass silently). Note that a blanket grep for `{{!` is
+wrong — in **attribute** position `{{!x}}` is a negation, not a comment
+(`disabled="{{!row.trelloDue}}"` at `00-app.html:320` is correct and
+pre-existing). The hazard is element-content position only.
+
+## What was verified at integrate (batch 3)
+
+- Gates: `npx tsc --noEmit`, `npx eslint .`, `node frontend/build.js`,
+  `npx vitest run` **and** `TZ=UTC npx vitest run` — 50 files / **443** tests,
+  from the 375 this batch started at.
+- Constitution: `git diff --stat lib/` empty; no Trello or Sheets write path in
+  the diff; the write registry is unchanged at three entries; every new query is
+  either on `projects` (the tenant root) or already project-filtered; both
+  toggle directions audited with actor and before/after.
+- `scripts/batch3-probe.ts` — 28 checks against an **isolated** in-memory
+  mongod (never a real database, no Trello call): migration 006 locks rt-837
+  idempotently; the 403 writes nothing; the admin unlock is audited and the
+  write then lands; re-locking closes it; a non-admin is refused. Both suggest
+  fixtures assert **hand-computed** counts, not inequalities — fixture A
+  (20 cards, 7 Hard, capacity 14, 4 weeks) must read proposed 20 / flagged 0 /
+  hard-heavy 4, and fixture B (4 Medium cards, 2 blocked) must read 4 / 2 / 0.
+- Template behaviour is rendered, not grepped: `test/helpers/gantt-render.ts`
+  runs the shipped template through Ractive's own `toHTML()`, which is what
+  proves the legend's five entries and their classes, that a collapsed block
+  keeps its header meta byte-for-byte while dropping its rows, that the
+  Unscheduled drop zone survives collapse, and that
+  `disabled="{{suggestBlockedWhy}}"` really drops the attribute when the reason
+  is empty — the whole R-e mechanism.
+- **Not run: a browser pass against the running app.** Builder B measured
+  geometry, computed styles, sticky/footer alignment and chevron rotation in
+  Chrome against a standalone harness built from the shipped CSS, but live
+  drag-and-drop, `ArrowLeft`/`ArrowRight` reslot and the real slider thumb ratio
+  in both pane states are still owed.
