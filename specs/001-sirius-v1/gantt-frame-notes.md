@@ -568,6 +568,18 @@ specified icons. **Placement flagged to Miles.**
   fixes the unscheduled row-drag, whose pointer crosses other rows' bars on its
   way to a week. Verification is a **live-browser** case (a 1-week drag on a
   multi-week bar), folded into the still-open T134.
+
+  > **SUPERSEDED by R-g-1 (batch 7, T153).** The diagnosis above is right about
+  > the symptom and wrong about the cause, and the fix it describes made the
+  > feature worse rather than better: it left `pointer-events: none` on the drag
+  > SOURCE and then blanked the source's own children mid-drag. Chrome hit-tests
+  > the draggable ancestor when a drag begins and abandons the drag in the same
+  > tick if that ancestor cannot be hit, so from batch 4 onwards the bar could
+  > not be dragged at all — no `drag`, no `dragenter`, no `dragover`, no `drop`.
+  > The reasoning was never tested against a real pointer; every check since drove
+  > the path with synthetic `DragEvent`s, which call the app's handlers directly
+  > and never enter Chrome's drag machinery. See *Batch 7* below. `ganttDragging`
+  > survives, with `.gdl` as its only subject.
 - **The empty state's Cancel shipped at full strength.** Contract §1.1 draws
   Cancel's label `--slate-400` in the empty state and `--slate-900` in the other
   three; `.smbtn.ghost` was `--slate-900` unconditionally with no state modifier
@@ -844,3 +856,190 @@ Nothing below can be proved without a DOM, and all of it is load-bearing:
   case the `+ 1` epsilon used to miss;
 - (h) Miles/JP rule on the two recorded gaps: Escape dismissal (WCAG 1.4.13) and
   touch having no reveal path.
+
+---
+
+# Batch 7 — the bar owns its drop (phase 13k cont., 2026-08-18)
+
+JP reported against the live site that the phase bar can no longer be dragged
+along its row. Root-caused by the orchestrator with **real mouse input** (CDP)
+before any code was written, and the diagnosis handed to the builders as fact to
+verify rather than re-derive.
+
+## R-g-1 — a drag source must stay hit-testable, in every state
+
+**The ruling.** `.gbar` is `pointer-events: auto` at rest and stays `auto` for
+the whole life of a drag, and the bar therefore **owns its own drop**. The
+strategy of making the bar transparent so hit-testing falls through to the
+`.gweek` cells underneath is withdrawn; it could never have worked.
+
+**Why it could never have worked.** The wrapper carries `draggable="true"`; its
+`.gseg` children carry the pixels. Chrome begins a drag from the draggable
+**ancestor**, and hit-tests that ancestor — not the child the pointer happened
+to be over. An ancestor that cannot be hit is a drag Chrome creates and cancels
+in the same tick. With real input the shipped code produced exactly:
+
+    mousedown:.gseg → mousemove → dragstart:.gbar → dragend:.gbar   (dropEffect "none")
+
+No `drag`, no `dragenter`, no `dragover`, no `drop`. At `dragstart` everything
+looked correct — `dataTransfer` carried `text/plain`, `effectAllowed: "move"`,
+`.gantt.gdragging` was applied, the source node was still connected, nothing
+called `preventDefault`. The app's handlers were never the problem; they were
+never reached.
+
+Three controls, all with real input, close it:
+
+| # | Control | Result |
+|---|---|---|
+| 1 | The unscheduled **row** drag, same tool, `.growr` is `pointer-events: auto` | Full sequence, `dropEffect: "move"`, the row slotted — the tooling and the app are both sound |
+| 2 | Force `pointer-events: auto` onto `.gbar` | `dragstart → drag → dragenter → dragover ×N → dragend` — the drag lives (it still did not drop: nothing on that path called `preventDefault` yet) |
+| 3 | Force `.gantt.gdragging .gbar { pointer-events: none }` | The instant-cancel signature returns — "hit-testable at mousedown only" is **not** enough |
+
+Control 3 is why the minimal patch fails and why moving `draggable` onto `.gseg`
+was also ruled out: the shipped `.gantt.gdragging .gbar .gseg { pointer-events:
+none }` would then blank the source mid-drag and abort it the same way.
+
+**What shipped.**
+
+- `35-gantt.css` — `.gantt .gbar { … pointer-events: auto … }`, written out
+  explicitly rather than merely omitted: `pointer-events` **inherits**, so the
+  stated value also defends the source against any future ancestor rule, and it
+  is what the new guard reads as its positive assertion. `.gseg` is deleted from
+  the `.gdragging` rule; `.gantt.gdragging .gdl { pointer-events: none; }` stands
+  alone. Nothing was restyled — segment geometry, the phase→colour map and the
+  legend are byte-unchanged.
+- `00-app.html` — the `.gbar` open tag gains a third attribute line,
+  `on-dragover="['dragOver']" on-drop="['dropOnBar']"`. The existing `dragOver`
+  is reused (it is already exactly `preventDefault()`); no `on-dragenter`, which
+  mirrors the shipped `.gweek` recipe. Lines 1 and 2 of the tag and the `title`
+  line are byte-identical, so the render tests that pin them keep matching.
+- `01-app.js` — one named pure function `weekAtX(clientX, rect, weeks)` beside
+  the other gantt geometry helpers, and one handler `dropOnBar(ctx)` beside
+  `dropOnWeek`.
+
+## Why `ganttDragging` was NOT deleted
+
+The brief allowed deleting the flag if the transparency rule left it with no
+consumer. It has one, and it is load-bearing. `.gdl` is a **later sibling** of
+`.gbar` inside the same `position: relative` `.gtrack`, both `position:
+absolute` at `z-index: auto`, so the deadline tick paints **over** the bar and
+wins hit-testing across its 2px column. Left solid for the duration it takes the
+`dragover` there, carries no handler, calls no `preventDefault`, and the drop is
+refused at exactly the deadline — the one column a user is most likely to aim
+for. Making it permanently transparent is not a free swap: at rest it owns a real
+`title="deadline …"` affordance. So the flag stays; only its `.gseg` clause is
+gone, and `moveRows`' defensive clear stays too (a re-render that eats the source
+node swallows `dragend`, and a stuck flag now costs every tick its tooltip).
+
+## The X→week mapping
+
+With the bar solid, the `.gweek` cells beneath a **scheduled** row no longer see
+the drag, so the mapping they used to do by simply being hit has to be done in
+code:
+
+```js
+const weekAtX = (clientX, rect, weeks) => {
+  const n = weeks ? weeks.length : 0;
+  if (!n || !(rect.width > 0)) return null;
+  const col = Math.floor((clientX - rect.left) / (rect.width / n));
+  return weeks[Math.min(n - 1, Math.max(0, col))].key;
+};
+```
+
+- **Named and pure**, not an expression inside the handler, so a test can
+  execute *this exact source* out of the shipped file. No `document`, no
+  `window`, no `app.get`, no `WEEK_PX`, no `WEEK_COUNT` — the caller passes the
+  measured rect and the week list in.
+- **Divides the measured width by the count**, never the hard-coded 92px. Zoom
+  and DPR rounding then spread evenly instead of drifting a column at the far
+  end, and the function survives a retune of `--gw`.
+- **Half-open**: column *i* owns `[left + i·w, left + (i+1)·w)`, so a pointer
+  exactly on a boundary belongs to the **right** column.
+- **Clamped both ends**, so a drop can never fall off the track; `null` only when
+  there is nothing to measure, and the handler bails without writing.
+- The equal-column premise is real, not assumed — `--gw` is declared once on
+  `.gantt`, `.gweek` is `flex: none` at `width: var(--gw)`, `.gtrack` is
+  `flex: none`, and the universal `box-sizing: border-box` absorbs the 1px
+  border so the first column costs the same as the rest. It is **pinned by a
+  test**, so a future variable-width layout fails loudly instead of silently
+  skewing every drop.
+- `ctx.node.closest('.gtrack')`, never `ctx.event.target`: with `.gseg`
+  hit-testable again the event fires on a 26px segment and bubbles to the bar
+  carrying the directive, and measuring the target would map a fraction of a
+  column.
+
+## One write recipe, unchanged
+
+`dropOnBar` calls the same `moveRows` `dropOnWeek` calls. No second endpoint, no
+second audit path: `01-app.js` still holds exactly the two pre-existing
+`POST …/replot` call sites (Accept-suggestions and `moveRows`) it held at
+`1e13088`, and BR-8 group resolution, the optimistic footer, the rollback banner
+and the arrival pulse are byte-unchanged. `lib/**` is untouched and the write
+registry stands at W1 / W2 / W3.
+
+The card id comes off `dataTransfer.getData('text/plain')`, **never** off the
+bar's own `row.cardId` — an unscheduled row dragged across a scheduled row now
+lands on that row's bar, and reading the landing row would move the wrong card.
+
+## Three consequences, all intended
+
+| # | Consequence |
+|---|---|
+| 1 | On a **scheduled** row the `.gweek` cells no longer receive the drag — the bar covers the whole 1104px track. Their handlers stay live exactly where there is no bar: an **unscheduled** row renders `.gunsched` (`pointer-events: none`) instead, so week cells still serve it. `.gweek` markup is untouched |
+| 2 | A **pinned** row's bar keeps `draggable="false"` and its refusal title, but **does** carry the drop handlers. The pin freezes the pinned ROW, not the column; suppressing them would carve a dead 1104px strip that silently refuses every drop. The directives sit outside any pinned conditional, which is what makes that true for every row state at once |
+| 3 | Cosmetic, and true after the fix: `cursor: grab` and the bar's `title` now apply across the whole track rather than only on a coloured segment. The whole wrapper really is the drag source and the drop target, so both statements are honest. Moving `cursor: grab` to `.gseg` would restore pixel-identical hover at the cost of making the cursor lie — not taken |
+
+## Why no test in this repo could see this, and the guard that answers it
+
+There is **no jsdom and no browser runner** in Sirius — no vitest config, no
+`environment` anywhere. Every planner test is Ractive `toHTML()` or a regex over
+the shipped source. A synthetic `DragEvent` dispatched in a test runner calls the
+app's handlers **directly** and never enters Chrome's drag machinery, so it
+proves the handlers are wired and proves nothing about whether a drag can start.
+That is the entire reason this bug shipped past every check from 13g/13j to
+batch 6 while the live feature was dead. **Say so in the test names**: this class
+of defect is invisible to synthetic events, and pretending otherwise is how it
+comes back.
+
+`test/drag-hittest.test.ts` (44 tests) is the standing answer. It does not
+simulate a drag; it asserts the **conditions Chrome needs**:
+
+- Drag sources are enumerated **from the shipped template** — every element open
+  tag carrying a `draggable` directive, with its conditional class tokens — and
+  the count is pinned at 3, so a fourth drag source joins the guard
+  automatically instead of slipping past a hard-coded list.
+- Every `pointer-events: none` rule in **all seven stylesheets**, read off disk
+  so the bug cannot move to a new file, with `@media`/`@supports` walked into.
+  For each selector the **rightmost compound** is the subject; if its class-token
+  set is a subset of any drag source's possible tokens, the guard fails.
+- An **ancestor sweep**, because `pointer-events` inherits; a **class-less
+  subject** check, because `* { pointer-events: none }` names no class and would
+  slip a subset test while disabling everything; and **parser self-tests**,
+  because a guard whose parser silently matches nothing is worse than no guard.
+- **Proven non-vacuous twice**: by permanent in-file fixtures (the shipped rule,
+  the mid-drag variant of control 3, a state-scoped `.growr.pinned` variant, an
+  `:active` variant, plus negative controls that must *not* fire), and — at
+  integrate — by reintroducing `pointer-events: none` on `.gantt .gbar` in the
+  real tree and confirming the guard goes red with
+  ``35-gantt.css: `.gantt .gbar` makes the .gbar drag source un-hit-testable``.
+  The line was restored immediately.
+
+## Owed: a live-browser pass (T155)
+
+Nothing in the suite can close this. With a real mouse, on the deployed build:
+
+- (a) dragging a bar produces `dragstart → drag → dragenter → dragover ×N →
+  drop → dragend` with `dropEffect: "move"`, and the row lands;
+- (b) a **±1-week** move — the reslot the bar's own title advertises, and the
+  case batch 4 could never do — lands rather than snapping back;
+- (c) a drop **at the deadline tick's column** lands (this is the `.gdl` clause
+  earning its keep);
+- (d) an **unscheduled** row still drops onto a bare `.gweek` cell, **and** onto
+  another row's bar, moving the dragged card and not the landing row;
+- (e) a **pinned** row still refuses the grab and shows its message, while
+  remaining a valid landing strip for someone else's drag;
+- (f) the Unscheduled block header still unslots, and the keyboard ±1-week
+  reslot is unaffected;
+- (g) BR-8 multi-select still moves the whole group through one `/replot`;
+- (h) the cosmetic spread of `cursor: grab` and the bar `title` across the full
+  track reads as acceptable to JP, or consequence 3 above is revisited.
