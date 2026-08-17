@@ -85,6 +85,42 @@ suggestion — same last-known-good display guarantee, safer worst case (see
 missing-difficulty fix path). On projects with `writes_enabled: false` (rt-837 observation
 mode) the dropdown is disabled with the read-only tooltip.
 
+## Batch 5 — the incomplete-card panel becomes a row state (owl #36, 2026-08-17)
+
+Nodes: `537:69131` (warned row) and `537:69135` (popover); dark variant
+`528:112097` noted but not built. The `70:1358` Alert Banner above (§4.4 panel)
+is **deleted** — the three conditions it covered now speak on the row that owns
+them, and the aggregate signal is the OPEN WORK metric (`28:3666`), which still
+counts `corrections` off the same payload.
+
+**Migration completeness — the answer owed to Miles (#36 item 1).** The Pipeline
+tab had exactly ONE top-of-table notice: the incomplete-card panel, covering
+missing **difficulty label** · missing **due date** · missing **Figma
+attachment**, all three derived read-only from the ARES read. Everything else
+already lives on the row (the 🛑 blocker badge) or is an app-level flash strip
+(sync error / load failure / write rollback), which is not a table banner and
+stays. So the row state expresses three conditions, one variable label covers
+all three today, and the popover carries one list-item per missing field.
+
+**Search interaction, stated deliberately:** a warned row the search hides stays
+hidden. No special case — which is exactly why the OPEN WORK KPI keeps carrying
+the total.
+
+| ID | Ruling | Shipped |
+|---|---|---|
+| **R-warn-a** | The frame draws the amber-300 as a "stroke" around the row and grows the row to **113px** in a **280px** card-name column. Built as a **3px LEFT accent** (`box-shadow: inset 3px 0 0 0 var(--amber-300)` on the first cell) over an amber-50 fill, with the table's own geometry left alone. `.ptable .col-name` is fluid (`width: auto`, `min-width: 158px`) and row height is content-derived from the 16px cell padding — hardcoding either frame number would break the table. **Divergence recorded, asked of Miles.** | Yes — accent declared exactly once, asserted; a render test proves neither frame number was pinned |
+| **R-warn-b** | The Figma-attachment rationale is **new copy**: *"Without the Figma attachment the deliverable cannot be opened from the plan."* The other two are the deleted banner's own wording, carried over verbatim. All three live in ONE constant keyed by the server's `missing` tokens. **Proposed, asked of Miles.** | Yes — the probe reads the tokens off a real incomplete card and asserts every one has a non-empty rationale, so a server token the map does not know can never render blank unnoticed |
+| **R-warn-c** | The label is a **variable string** (`WARN_LABEL`, "Needs Info" today) in all three places it appears — the row message, its accessible name, and the popover title. Never a literal at a render site. | Yes — a test asserts the template contains no literal `Needs Info` |
+| **R-warn-d** | The **message** is the click target, not the row: a real `<button>` with `aria-haspopup="dialog"`, `aria-expanded` and an accessible name of label + MC# + deliverable. The `.warn` class is presentation only and **no control is disabled** by the warning state. | Yes — a render test compares the `disabled` count of a warned row against a clean one |
+| **R-warn-e** | The popover **joins the existing fixed-box recipe** (`.selectmenu, .duepop, .warnpop`) rather than forking it; the annotation's `#f1f5f9` stroke is the single forked value. There is **no dark popover recipe in this codebase** to share a base with — the brief's "already in use on Sprint Schedules" is a Figma statement, not a code one. | Yes — asserted as one selector group |
+| **R-warn-f** | **Focus return** did not exist on any of the four pre-existing overlays. Added **once**, in the shared close path: a module-scope `overlayTrigger` captured in `openOverlay` and replayed by `closeMenus()`. It fires on Escape (`{ restoreFocus: true }`) and on **any** dismissal that unmounts the element currently holding focus — a scroll or trackpad nudge while the user is tabbed onto `Open Card` would otherwise drop them at `<body>`. Outside-click still does not restore (it would steal focus from whatever was clicked) and the toggle-off re-click does not need to (focus is already there). | Yes — one mechanism now serving all five overlays, not a per-caller fix |
+| **R-warn-h** | The popover's height is **data-derived** — one wrapping list-item per missing field, ~202px for one problem and ~346px for all three — so `WARN_POP_H` can only ever be a pre-measure for the first flip decision, exactly as `REQ_MENU_H` is the Requests select's cap. `openWarnPop` therefore **measures the rendered box and places it a second time**, through the same `placeBox`; the Requests select's `placeReqMenu` was generalised to `placeMeasured(trigger, id, {key, posKey, sel})` so both share one recipe. Without it a three-problem card opened low in the table ran ~70–80px off the bottom of a 900px viewport, putting the separator and `Open Card` out of reach — `.warnpop` deliberately has no `max-height`/`overflow-y` (it must stay out of the scroll dismisser's self-scroll exemption, which only `.duepop`/`.selectmenu` hold). | Yes — the live-browser pass (T145) is the only place a real `offsetHeight` exists |
+| **R-warn-g** | A **blocked + warned** row keeps the red blocker fill. `.ptable tr.prow.warn > td` (0,3,2) outranks the pre-existing `.ptable tr.blocked td` (0,2,2), so the amber would have silently demoted the stronger signal; one added rule restores it and the amber left accent still draws, so the row reads "blocked, and also incomplete". Not specified anywhere — **flagged to Miles**, and one line to revert if amber should win. | Yes |
+
+**Unresolved measurement:** the frame's `content › subtone-offset` gap between
+the card name and the message carries no px value. Built at **6px** (matching
+the popover's first-list-item gap). Recorded rather than ruled.
+
 ## Build mechanics
 
 - Tokens: extracted variable set (slate/red/amber/blue/green scales, text/caption 10 · label 12 · body 14 · title 24 · display 32, radius/xs 2 · sm 4, space/4 · 8 · 24, Shadow/xs) → CSS custom properties, names preserved (`--slate-50`, `--text-body`, `--radius-sm`…).

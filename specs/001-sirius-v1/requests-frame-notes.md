@@ -57,6 +57,40 @@ build per the standing Rex-first rule.
 | 19 | Sorting (owl #18) | All columns except Brief + Frost Notes; asc→desc→clear; default newest-filed, nulls last; page-1 reset. The annotation's "server-side over the full dataset" is implemented client-side over the full filtered set — identical semantics, the client holds every row from the one fetch. Row-click and cell links: **closed as none.** |
 | 20 | Status badge tokens (owl #17) | For Clarification red-50/**red-500** (was inferred red-600); In Pipeline green-50/**#22c55e** (product-derived); To File amber confirmed as built. Breakdown segment colors unchanged (frame-pinned green-600). |
 
+## Batch 5 — STATUS is two-valued (owls #34/#35, 2026-08-17)
+
+Nodes re-read for this pass: `452:24800` (Request Tab Table) and `452:24801`
+(Frost Remarks display block). Six annotations across the two, verified against
+the owl text before build; no material mismatch.
+
+**The rule.** STATUS derives from the Trello join and nothing else —
+`In Pipeline` when the MC group has deliverables, `For Filing` when it does
+not. `To File` is renamed to `For Filing`; the third value `For Clarification`
+is **retired**. A clarification flag is a property of the NOTE and surfaces
+only in the Remarks cell, as the red `With Clarification` pill. Ruling 14 above
+(the three-state model) is superseded by this; ruling 15 (filed wins) survives
+unchanged and is now true *by construction* rather than by a precedence branch.
+
+Counts are unchanged in every input. `forClarification` re-keys from
+"status === For Clarification" to "unfiled AND `note.clarify`" — precisely the
+set the old derivation produced — so owl #14's cross-cutting rule still holds:
+REQUESTS = IN PIPELINE + TO FILE, and FOR CLARIFICATION ⊂ TO FILE.
+
+| ID | Ruling | Shipped |
+|---|---|---|
+| **21** | **Card/badge asymmetry is deliberate** (Miles, owl #35): the Breakdown card keeps reading `TO FILE` and the `FOR CLARIFICATION` card stays, while the row badge reads `For Filing`. The counts key `counts.toFile` keeps its name for the same reason. Do not "fix" this and do not report it later as drift. | Yes — `reqStats` labels untouched; a comment at each site says why |
+| **R-req-a** | A **FILED + flagged** row renders the plain remark box and is `In Pipeline` only — no clarification pill, excluded from the count and the filter. The frame calls clarification "orthogonal", which could be read as showing the badge on filed rows too, but that would break the `forClarification ⊂ toFile` count Miles asked us to agree with in #14. **Default built as unchanged; asked of Miles.** | Yes — one shared `clarified()` predicate serves the segment filter *and* the template branch, so the two can never disagree. Proven both ways: `test/requests-render.test.ts` renders MC-D with a plain `notebox`, and `scripts/batch5-probe.ts` excludes it from `?filter=clarification` |
+| **22** | The client stops owning the clarification vocabulary entirely. `STATUS_TO_FILE` and `STATUS_CLARIFY` are **deleted**, not renamed — the client never needs to spell `For Filing` (the server sends `r.status` and the cell prints it), and keeping an unused const would fail `no-unused-vars`. `STATUS_FILED` survives as the one literal the badge branches on. | Yes — the probe asserts `For Filing` appears nowhere in `frontend/scripts/01-app.js` outside a comment |
+| **23** | A note save **cannot move status**. The optimistic patch that rewrote `requests.N.status`, its `prev.status` capture and its rollback keypath are all removed; only the note and the search blob are patched. | Yes — the badge and the Remarks cell both re-derive from the note the patch just wrote |
+| **24** | Remarks-cell nits from the verified render: note text is **red-600 `#dc2626`** (already true, `.clarnote` needed no change) and the frame's container border reads as a **~3.9px LEFT** border where the annotation text says "a red-500 border". The build's 1px all-round is the *annotation* reading and is **ACCEPTABLE** — recorded, not churned. | Recorded only |
+
+**Open to Miles — the Remarks cell's own annotation contradicts the feature.**
+`452:24801` states the cell is a READ-ONLY display, "no editing here". But the
+frost-note editor's only entry point *is* that cell (owl #15, ruling 10 above),
+and the feature is Sirius-owned and audit-logged — read-only applies to the
+source systems, not to this column. The editor is kept. **Asked of Miles: if
+the cell is genuinely read-only, where should the edit affordance live?**
+
 ## Data reality
 
 Production intake is empty (`GOOGLE_SHEETS_CREDENTIALS` deferred), so both live
