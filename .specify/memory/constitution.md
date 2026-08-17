@@ -1,6 +1,13 @@
 <!--
 Sync Impact Report
-- Version change: 4.2.0 -> 4.3.0 (MINOR: invariant 13 amended by JP on
+- Version change: 4.3.0 -> 4.4.0 (MINOR: reply contract amended by JP on
+  2026-08-17 — WHAT I NEED FROM YOU is reserved for one-way calls; reversible
+  decisions are made and reported under a new DECIDED WITHOUT YOU section;
+  asks take a fixed plain-words shape, max 3 per reply, one change each; a bare
+  "ok" to 2+ asks is not consent. No invariant touched. JP ruled the older
+  Working-style line survives: work blocked on an undecided item (OD-1, OD-6,
+  OD-7, OD-8) still stops and asks.)
+- Prior: 4.2.0 -> 4.3.0 (MINOR: invariant 13 amended by JP on
   2026-08-17 — weekly capacity joins the acknowledgement key, so a capacity
   change invalidates affected acks and the week re-surfaces. OD-4's broader
   expiry question stays open. Raised by product (owl #23), ruled A by JP.)
@@ -91,6 +98,36 @@ Hard rules:
 - Tables over prose for anything with 3+ comparable items.
 - When asking JP to decide: keep it short, use simple words, lay out the options plainly. Never complicate a decision.
 
+## WHAT I NEED FROM YOU — rules
+
+*(Amended by JP, 2026-08-17.)*
+
+Ask JP only when the answer is one-way: hard to undo, costs money, touches live client data, or changes a promise already made. Everything reversible: decide it yourself, report it under DECIDED WITHOUT YOU. The one carve-out, ruled by JP the same day: work blocked on an undecided item (OD-1, OD-6, OD-7, OD-8) still stops and asks, reversible or not — those are product calls with downstream cost.
+
+Max 3 asks per reply. If there are more, pick the 3 that block work and hold the rest. One ask = one change; never bundle two changes into one yes.
+
+Every ask uses exactly this shape:
+
+**N. [Short plain title]**
+
+- What's happening: one sentence, no ticket numbers, no names, no file paths, no feature nicknames. A smart person outside the project must understand it.
+- If yes: what becomes true.
+- If no: what stays true.
+- Undo: easy / hard / impossible.
+- I'd pick: X, because [one reason].
+
+Banned inside an ask: acronyms, code identifiers, issue numbers, teammate names, words like "gate", "flag", "state", "handler", "migration" without a plain-word gloss. Put all of that in DETAIL.
+
+Test before sending: could JP answer this correctly at 11pm without opening the codebase? If no, rewrite it.
+
+## DECIDED WITHOUT YOU
+
+Max 3 bullets. Reversible calls made without asking. Plain words. JP can veto any of them; say so if a veto is expensive.
+
+## Anti-rubber-stamp
+
+If JP replies with a bare "ok", "yes", "go", or "sure" to a reply containing 2+ asks, do NOT proceed. Re-ask them one at a time, starting with the least reversible.
+
 ## Definition of done, per phase
 
 A phase is done when: its acceptance criteria (AC-1 to AC-20, as mapped in the phase prompt) pass as automated tests where testable; typecheck, lint, and vitest are green; `STATE.md` is updated; and nothing in this file was violated.
@@ -113,4 +150,4 @@ A phase is done when: its acceptance criteria (AC-1 to AC-20, as mapped in the p
 - **Open decisions.** OD items (BRD §13) are resolved by JP, recorded in the spec's
   clarifications, and only then do blocked tasks unblock. No defaults picked silently.
 
-**Version**: 4.3.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-17
+**Version**: 4.4.0 | **Ratified**: 2026-08-03 | **Last Amended**: 2026-08-17
