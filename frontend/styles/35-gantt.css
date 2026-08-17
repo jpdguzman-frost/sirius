@@ -144,18 +144,35 @@
 .gantt .gbchev-o { transform: rotate(90deg); } /* expanded: chevron points down */
 .gantt .gbchev-c { transform: none; }          /* collapsed: points right */
 
-/* ---- 5. deliverable row (84px base, grows when the badges wrap) ---- */
+/* ---- 5. deliverable row (84px base, grows when the badges wrap) ----
+   owl #31 — the row itself is no longer a drag source: a SCHEDULED row is
+   moved by its bar (§6), so only an UNSCHEDULED row (which has no bar) still
+   carries the grab cursor and the row-drag it goes with (R-drag-a). */
 .gantt .growr {
   display: flex; min-height: 84px;
   background: var(--surface-background); border-bottom: 1px solid var(--slate-200);
-  cursor: grab;
 }
+.gantt .growr.unsched { cursor: grab; }
 .gantt .growr:focus { outline: 2px solid var(--blue-500); outline-offset: -2px; }
 .gantt .growr.sel { background: var(--blue-50); }
 .gantt .growr.sel .gpin { background: var(--blue-50); }
 /* /replot skips pinned rows server-side (FR-5.9), so a pinned row does not
-   drag at all rather than fail silently (contract §3.8) */
-.gantt .growr.pinned { cursor: not-allowed; }
+   drag at all rather than fail silently — JP's ruling B (2026-08-17) keeps
+   pins FULLY frozen, bar and row alike */
+.gantt .growr.unsched.pinned { cursor: not-allowed; }
+/* the arrival pulse: a drop rewrites the slotted week, and the row's move into
+   another block is a RE-RENDER of the derivation, so the row has to say where
+   it landed. 1.2s, then the class is dropped from the Ractive state. */
+@keyframes garrive {
+  0% { background-color: var(--blue-100); }
+  100% { background-color: var(--surface-background); }
+}
+.gantt .growr.arrived,
+.gantt .growr.arrived .gpin { animation: garrive 1.2s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .gantt .growr.arrived,
+  .gantt .growr.arrived .gpin { animation: none; background-color: var(--blue-100); }
+}
 
 .gantt .gdetails { display: flex; align-items: stretch; }
 /* a cell is a fixed box: it clips rather than pushing its neighbours, so no
@@ -176,9 +193,10 @@
    geometry and no JS width maths exists to keep in sync (.gsheet is
    `width: max-content`). The header cells share these class names, so the
    header hides in step with the rows and the two can never disagree.
-   KNOWN CONSEQUENCE: the row action cluster lives in c-status, so pin /
-   duplicate / status-note are unavailable while collapsed — expand to use
-   them (recorded in the frame notes). */
+   KNOWN CONSEQUENCE (R11, carried forward from T133): the action cluster lives
+   in c-status and the status-note affordance in .gchips, and BOTH are hidden
+   here — so Copy / Pin / Calendar Remove and the note editor are unavailable
+   while collapsed. Expand to use them (recorded in the frame notes). */
 .gantt.lpc { --gleft: 417px; }
 .gantt.lpc .c-req,
 .gantt.lpc .c-type,
@@ -198,8 +216,12 @@
 .gantt .lpctoggle:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
 .gantt .lpctoggle .flipx { transform: rotate(180deg); }
 
+/* BR-8's multi-select stays on BOTH row kinds — only the grip is conditional */
 .gantt .gsel { position: absolute; left: var(--space-16); top: 20px; width: 14px; height: 14px; margin: 0; cursor: pointer; }
-/* R11: the frame's 16px chevron is the drag-handle affordance and nothing else */
+/* R11: the frame's 16px chevron is the drag-handle affordance and nothing else.
+   R-drag-b (owl #31): it now renders ONLY on unscheduled rows. With the row
+   drag gone from scheduled rows the grip there would be a handle that drags
+   nothing — the same trap R-f-6 deletes from the sprints table's column 1. */
 .gantt .ghandle {
   position: absolute; left: 36px; top: 18px;
   display: inline-flex; color: var(--slate-400); cursor: grab;
@@ -229,21 +251,40 @@
 .gantt .pbadge.u-off { background: var(--slate-100); border-color: var(--slate-200); color: var(--slate-500); }
 .gantt .pbadge.gnote { background: var(--amber-100); border-color: var(--amber-300); color: var(--amber-700); }
 
-/* row actions — pin (FR-5.9), duplicate, status note. The frame draws no such
-   cluster, so it stays out of the resting look: hover or keyboard focus
+/* row actions — Copy · Pin · Calendar Remove, the design's own 55×13 cluster
+   (owl #27, node I262:33396;251:27040): three 13px glyphs 8px apart, stroked
+   --slate-400. It stays out of the resting look — hover or keyboard focus
    reveals it, and a PINNED row keeps it visible because state must never hide
-   behind a hover. (A manual note announces itself with its own chip, and
-   opacity 0 leaves every button in the tab order regardless.) */
-.gantt .gactions { display: inline-flex; gap: var(--space-4); margin-left: auto; opacity: 0; transition: opacity 0.12s ease; }
+   behind a hover. `opacity: 0` rather than `display: none` is what leaves all
+   three in the tab order at rest. */
+.gantt .gactions { display: inline-flex; align-items: center; gap: var(--space-8); margin-left: auto; opacity: 0; transition: opacity 0.12s ease; }
 .gantt .growr:hover .gactions,
 .gantt .growr:focus-within .gactions,
 .gantt .growr.pinned .gactions { opacity: 1; }
 .gantt .gact {
-  border: none; background: none; cursor: pointer; padding: 2px 4px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: none; cursor: pointer; padding: var(--space-4); line-height: 1;
   font-family: var(--font-sans); font-size: var(--text-label); color: var(--slate-400); border-radius: var(--radius-xs);
 }
+.gantt .gact svg { display: block; }
 .gantt .gact:hover { background: var(--slate-100); color: var(--slate-700); }
+.gantt .gact:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
 .gantt .gact.on { color: var(--surface-foreground); }
+/* JP's ruling B — Calendar Remove is DISABLED on a pinned row, not merely
+   warned about: /replot skips pinned rows server-side, so an enabled control
+   would be a round trip that changes nothing */
+.gantt .gact[disabled] { cursor: not-allowed; opacity: 0.45; }
+.gantt .gact[disabled]:hover { background: none; color: var(--slate-400); }
+
+/* owl #27 — the status-note affordance, kept OUTSIDE badge-icons-container so
+   the cluster is exactly the three icons the design specifies. With a note the
+   chip that announces it IS the edit control (same pixels, no new chrome);
+   without one, a ghost pencil in the same chips row appears on the same
+   hover/focus the cluster answers to. */
+.gantt button.pbadge { font-family: var(--font-sans); cursor: pointer; }
+.gantt .gnoteadd { opacity: 0; transition: opacity 0.12s ease; }
+.gantt .growr:hover .gnoteadd,
+.gantt .growr:focus-within .gnoteadd { opacity: 1; }
 
 /* ---- 6. the timeline track + the bars ---- */
 .gantt .gtrack { position: relative; flex: none; display: flex; }
@@ -260,6 +301,34 @@
 .gseg.review { background: var(--blue-200); }
 .gseg.render { background: var(--blue-600); }
 .gseg.renderOverdue { background: var(--red-600); }
+/* owl #31 — `.gbar` is the DRAG SOURCE. It spans the whole track rather than
+   the run's own box on purpose: `.gseg` offsets are percentages OF THE TRACK,
+   so a narrower wrapper would re-base every one of them and move the shipped
+   bars. `inset: 0` keeps the containing block identical, and pointer-events
+   none/auto makes the SEGMENTS the only hit area — the week columns below stay
+   droppable (the `.gunsched` pattern), and the grab target is exactly the bar
+   the user sees. Motion is horizontal by construction: the drop target is a
+   week COLUMN and nothing reads which row it sits in. */
+.gantt .gbar { position: absolute; inset: 0; pointer-events: none; cursor: grab; }
+.gantt .gbar .gseg { pointer-events: auto; cursor: inherit; }
+.gantt .gbar .gseg:active { cursor: grabbing; }
+/* …but ONLY while nothing is being dragged. During a drag the drop target is
+   whatever hit-testing finds under the pointer, and hit-testing honours
+   pointer-events: a pointer sitting over a `.gseg` (or the `.gdl` tick) fires
+   `dragover` there, and that path — gseg → gbar → gtrack → growr → gbrows —
+   carries NO dragover handler, so nothing calls preventDefault and the browser
+   refuses the drop. The grab starts ON a segment by construction, so every move
+   shorter than the distance to the bar's own edge — the ±1-week reslot the
+   affordance advertises — would snap back. `.gdragging` (set on dragstart,
+   cleared on dragend) makes the overlay transparent for the duration so the
+   `.gweek` columns underneath keep receiving the drag, which leaves ONE drop
+   recipe: the week cell. It covers the row-drag of an unscheduled row too —
+   that pointer crosses other rows' bars on its way to a week. */
+.gantt.gdragging .gbar .gseg,
+.gantt.gdragging .gdl { pointer-events: none; }
+/* pins stay FULLY frozen (JP, 2026-08-17) — the bar refuses the grab and says why */
+.gantt .growr.pinned .gbar,
+.gantt .growr.pinned .gbar .gseg:active { cursor: not-allowed; }
 .gantt .gtrack .gseg {
   position: absolute; top: 50%; transform: translateY(-50%);
   height: var(--gbar-h); border-radius: var(--radius-xs);

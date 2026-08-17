@@ -227,7 +227,12 @@ describe('the bar itself (node 262:34499), rendered with Ractive', () => {
     expect(pending).toContain('3 hard-heavy');
     for (const html of [resting, pending]) {
       expect(html).toContain('Sprints');
-      expect(html).toContain('Grab a row to reslot it.');
+      // T139 / owl #31: the hint follows the interaction. A scheduled row is
+      // moved by its BAR now, so "grab a row" would be false for every row that
+      // has one; only an unscheduled row (no bar) still drags whole.
+      expect(html).toContain('Drag a bar along its row to reslot it');
+      expect(html).toContain('an unscheduled row drags onto a week');
+      expect(html).not.toContain('Grab a row to reslot it.');
     }
   });
 

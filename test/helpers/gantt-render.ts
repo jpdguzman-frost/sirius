@@ -49,7 +49,10 @@ const readFrontend = (...p: string[]) => fs.readFileSync(path.join(root, 'fronte
 
 export const TEMPLATE = readFrontend('templates', '00-app.html');
 export const GANTT_CSS = readFrontend('styles', '35-gantt.css');
+/** The sprints modal's recipes live here, not in the Gantt sheet. */
+export const UI_CSS = readFrontend('styles', '10-ui.css');
 export const APP_JS = readFrontend('scripts', '01-app.js');
+export const ICONS_JS = readFrontend('scripts', '00-icons.js');
 
 /**
  * One `<div …>` subtree of the shipped template, found by counting div tags to
@@ -121,6 +124,8 @@ export interface GanttState {
   leftCollapsed?: boolean;
   collapsedBlocks?: Record<string, boolean>;
   plannerGroups?: PlannerGroup[];
+  arrived?: Record<string, boolean>;
+  ganttDragging?: boolean;
 }
 
 /**
@@ -142,6 +147,11 @@ export function renderGantt(state: GanttState = {}): string {
       ],
       plannerMonths: [{ month: 'AUGUST', monthKey: '2026-08', span: 2 }],
       selected: {},
+      // T139: cardId → true for the rows a drop just moved (the arrival pulse)
+      arrived: state.arrived ?? {},
+      // T139 review fix: live from dragstart to dragend — it makes the bar
+      // overlay transparent to hit-testing so the .gweek cells stay droppable
+      ganttDragging: state.ganttDragging ?? false,
       footCaption: '92 / wk',
       ganttThumb: { needed: false },
       icon: {},
@@ -181,6 +191,67 @@ export function renderSuggestBar(state: SuggestBarState = {}): string {
       suggestFlagged: state.suggestFlagged ?? 0,
       suggestHardHeavy: state.suggestHardHeavy ?? 0,
       suggestBlockedWhy: state.suggestBlockedWhy ?? '',
+    },
+  });
+  return instance.toHTML();
+}
+
+export interface SprintDraftRow {
+  id?: string;
+  name: string;
+  start: string;
+  end: string;
+}
+
+/** One `.sbanner` payload as the computeds emit it. */
+export interface SprintBanner {
+  variant: 'err' | 'warn';
+  title: string;
+  text: string;
+  /** draft index this banner renders AFTER (gaps + overlaps only, R-f-4) */
+  after?: number;
+}
+
+export interface SprintModalState {
+  sprintDraft?: SprintDraftRow[];
+  sprintDupNames?: SprintBanner[];
+  sprintOverlaps?: SprintBanner[];
+  sprintGaps?: SprintBanner[];
+  sprintError?: string;
+  sprintDeleteConfirm?: { idx: number; name: string; count: number } | null;
+  /** R7: true only when the modal was OPENED with no sprints stored. */
+  sprintOpenedEmpty?: boolean;
+}
+
+/**
+ * Renders the sprints modal (owls #28–#30) for one view state.
+ *
+ * `modal-back` occurs exactly once in the shipped template, so the div counter
+ * lands on this subtree and nothing else. The three validators are STUBBED —
+ * their arithmetic is executed against the shipped source in
+ * test/sprints-modal.test.ts — because what this proves is the other half:
+ * which nodes each state emits, that neither banner carries a CTA, and that
+ * the component's unused 1450px variant slots never reach the markup.
+ *
+ * `sprintOverlaps` and `sprintGaps` must BOTH be arrays: the template iterates
+ * `sprintOverlaps.concat(sprintGaps)`, and a missing stub renders no banner at
+ * all rather than throwing — a silent pass. Defaulting both here is what stops
+ * a test from proving nothing.
+ */
+export function renderSprintModal(state: SprintModalState = {}): string {
+  const instance = new Ractive({
+    template: divFragment('<div class="modal-back"'),
+    data: {
+      sprintModal: true,
+      sprintDraft: state.sprintDraft ?? [],
+      sprintDupNames: state.sprintDupNames ?? [],
+      sprintOverlaps: state.sprintOverlaps ?? [],
+      sprintGaps: state.sprintGaps ?? [],
+      sprintError: state.sprintError ?? '',
+      sprintDeleteConfirm: state.sprintDeleteConfirm ?? null,
+      sprintOpenedEmpty: state.sprintOpenedEmpty ?? true,
+      // LENGTH is derived and read-only; the real helper is mondaysBetween
+      sprintLength: (s: SprintDraftRow) => (s && s.start && s.end ? '2 wk' : '0 wk'),
     },
   });
   return instance.toHTML();

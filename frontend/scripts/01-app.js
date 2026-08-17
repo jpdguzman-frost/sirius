@@ -297,6 +297,40 @@ function mondayIso(base) {
    all three block kinds, so a sprint can never read '1 items' */
 const itemCount = (n) => `· ${n} item${n === 1 ? '' : 's'}`;
 
+/* The Friday of the week `base` falls in — the sprints modal's END snap target
+   (R-f-2). START snaps to the same week's Monday, so a sprint always covers
+   whole working weeks and the derived LENGTH counts what it claims to count.
+   Snapping happens on PICK, never as a rejection. */
+function fridayIso(base) {
+  const d = new Date(mondayIso(base) + 'T00:00:00');
+  d.setDate(d.getDate() + 4);
+  return isoOf(d);
+}
+
+/* Working days STRICTLY between two ISO dates — R-f-8. The sprints modal's gap
+   warning counts the days the studio could actually have worked, so Saturdays,
+   Sundays and the ACTIVE holiday calendar all drop out; a "gap" that is only a
+   weekend, or a weekend plus a public holiday, is not a gap and draws nothing.
+   `lib/planner.ts`'s own gap rule counts RAW calendar days over a >2 threshold
+   and is frozen (invariant 5) — and the server filters gap issues out anyway,
+   so this is the first place the rule is expressed for a reader. The holiday
+   set is not a second calendar: it is `getHolidays()` itself, ARES-canonical,
+   shipped on the deliverables payload, so only the weekend skip is local. */
+function workingDaysBetween(startIso, endIso, holidays) {
+  if (!startIso || !endIso || endIso <= startIso) return 0;
+  const holiday = holidays instanceof Set ? holidays : new Set(holidays || []);
+  const d = new Date(startIso + 'T00:00:00');
+  let open = 0;
+  for (let step = 0; step < 3700; step += 1) { // ~10 years, a hard stop on a junk date
+    d.setDate(d.getDate() + 1);
+    const iso = isoOf(d);
+    if (iso >= endIso) break;
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6 && !holiday.has(iso)) open += 1;
+  }
+  return open;
+}
+
 /* how many Mondays a sprint covers — the '2 wk' in a sprint header. Counted,
    not divided: Aug 3–Aug 14 is 2 weeks even though it spans 12 days, and a
    sprint that starts mid-week owns only the Mondays inside it. */
@@ -383,6 +417,30 @@ const app = new Ractive({
     sprintModal: false,
     sprintDraft: [],
     sprintError: '',
+    /* Miles's ruling (#30): removing a sprint that covers slotted deliverables
+       warns with the count first. `{ idx, name, count }` while the confirm is
+       open, null otherwise. Draft-only — nothing persists until Save. */
+    sprintDeleteConfirm: null,
+    /* R7 — the empty TABLE and an emptied table are different states. Opened
+       with no sprints, Save has nothing to commit and renders disabled (the
+       frame's own empty-state treatment). Emptied BY the user, Save must stay
+       live or the last sprint could never be removed: the route accepts an
+       empty list and audits the replace like any other. This flag is the only
+       thing that tells the two apart, so it is set once at open. */
+    sprintOpenedEmpty: false,
+    /* the ACTIVE working-day calendar, straight off the deliverables payload
+       (getHolidays() — ARES-canonical). Only the sprints modal's gap warning
+       reads it; an empty array simply means weekends are the only skip. */
+    holidays: [],
+    /* owl #31 — cardId → true for the rows a drop just moved, cleared after the
+       pulse. View state, never persisted. */
+    arrived: {},
+    /* true from dragstart to dragend. The ONLY thing it does is make the bar
+       overlay transparent to hit-testing for the duration (`.gantt.gdragging`),
+       so the `.gweek` cells underneath keep receiving `dragover` while the
+       pointer is still over the segment it was grabbed by. Without it every
+       short reslot is refused. View state, never persisted. */
+    ganttDragging: false,
     ganttThumb: { needed: false, left: 0, width: 100 },
     /* per-week capacity totals, keyed by slotted-week Monday. `perWeek` is the
        server's (window-independent, every slotted row); `perWeekLocal` is the
@@ -771,6 +829,92 @@ const app = new Ractive({
     forecastRows() {
       return this.get('rows').filter((r) => r.status !== 'done');
     },
+
+    /* ---- sprints modal validation (owls #28–#30) ----
+
+       Three live computeds over the DRAFT, so a banner appears — and Save locks
+       or unlocks — as the user types, without a round trip. They are not the
+       truth: `PUT /sprints` rejects duplicate names and overlaps with a 422 and
+       writes nothing (invariant 12). They are the same rules said EARLY, and
+       the modal never claims a save will succeed that the server would refuse.
+
+       Each banner carries the DRAFT INDEX of the row it follows, so placement
+       is data rather than a second layout rule (R-f-4), and each one names the
+       pair it is about. Pairs are read in START order — the order the route
+       persists in — so a draft the user has not re-sorted still reads correctly
+       against what will be saved. */
+    sprintOrder() {
+      return this.get('sprintDraft')
+        .map((s, i) => ({ s, i }))
+        .filter((e) => e.s && e.s.start && e.s.end)
+        .sort((a, b) => (a.s.start < b.s.start ? -1 : a.s.start > b.s.start ? 1 : a.i - b.i));
+    },
+    /* BLOCKING. Names are unique per project, compared trimmed and
+       case-insensitively — the same comparison the route makes — and one banner
+       is emitted per clashing NAME, not per row, so three "Sprint 46"s say it
+       once. */
+    sprintDupNames() {
+      const draft = this.get('sprintDraft');
+      const counts = new Map();
+      for (const s of draft) {
+        const key = String((s && s.name) || '').trim().toLowerCase();
+        if (key) counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      const out = [];
+      for (const s of draft) {
+        const key = String((s && s.name) || '').trim().toLowerCase();
+        if (!key || counts.get(key) < 2 || out.some((b) => b.key === key)) continue;
+        out.push({
+          key,
+          variant: 'err',
+          title: 'Duplicate sprint names found',
+          text: `Multiple sprints are named "${String(s.name).trim()}". Give each sprint a unique name to save.`,
+        });
+      }
+      return out;
+    },
+    /* BLOCKING, and symmetric with duplicates by ruling (R-f-3): constitution
+       invariant 12 already rejects overlapping sprints on save, so the modal
+       says so in the error treatment rather than letting the PUT be the first
+       the user hears of it. */
+    sprintOverlaps() {
+      const order = this.get('sprintOrder');
+      const out = [];
+      for (let k = 1; k < order.length; k += 1) {
+        const l = order[k - 1];
+        const r = order[k];
+        if (r.s.start > l.s.end) continue;
+        out.push({
+          after: l.i,
+          variant: 'err',
+          title: 'Overlapping sprints',
+          text: `${l.s.name || 'This sprint'} and ${r.s.name || 'the next sprint'} cover the same weeks. Sprints cannot overlap, so this list will be rejected on save.`,
+        });
+      }
+      return out;
+    },
+    /* NON-blocking — gaps are legal (invariant 12 surfaces them as *Outside any
+       sprint*), so this warns and never disables Save. One banner PER gap,
+       between the two sprints it names, and only when at least one WORKING day
+       is left unallocated (R-f-8). */
+    sprintGaps() {
+      const order = this.get('sprintOrder');
+      const holidays = new Set(this.get('holidays') || []);
+      const out = [];
+      for (let k = 1; k < order.length; k += 1) {
+        const l = order[k - 1];
+        const r = order[k];
+        if (r.s.start <= l.s.end) continue; // an overlap is not a gap
+        if (workingDaysBetween(l.s.end, r.s.start, holidays) < 1) continue;
+        out.push({
+          after: l.i,
+          variant: 'warn',
+          title: 'Unscheduled Gap Detected',
+          text: `There are unallocated working days between ${l.s.name} and ${r.s.name}. Deliverables scheduled during this period won't belong to any sprint.`,
+        });
+      }
+      return out;
+    },
   },
 });
 
@@ -829,6 +973,11 @@ app.set('ghostBar', (row) => {
   if (at < 0) return [];
   return [{ left: unitPct(at * WORKDAYS_PER_WEEK), width: unitPct(WORKDAYS_PER_WEEK) }];
 });
+/* The sprints modal's LENGTH cell — DERIVED and read-only, never an input. It
+   is the same counted-Mondays helper the sprint block headers print ('2 wk'),
+   so the modal and the planner can never disagree about how long a sprint is. */
+app.set('sprintLength', (s) => `${mondaysBetween(s && s.start, s && s.end)} wk`);
+
 /* BR-6c: a row carries its MC group's work-card share, so the footer speaks
    the same unit as capacity (cards). Hard mix stays BR-6b's own test. */
 const rowLoad = (rows) => rows.reduce((a, r) => a + (r.weight || 1), 0);
@@ -1243,6 +1392,9 @@ async function loadAll() {
       workCardsByMc: pipeline.workCardsByMc,
       corrections: pipeline.corrections,
       sprints: pipeline.sprints,
+      // R-f-8: the ARES-canonical working-day calendar, so the sprints modal's
+      // gap warning counts the same open days the server's forecast does
+      holidays: pipeline.holidays || [],
       capacity: pipeline.capacity,
       capDraft: pipeline.capacity.weekly, // server truth re-seats the thumb
       perWeek: pipeline.perWeek || {},
@@ -1730,10 +1882,20 @@ app.on({
      so they commit too. */
   capSlide(ctx) { app.set('capDraft', Number(ctx.node.value)); },
   async capCommit(ctx) { await writeCapacity(Number(ctx.node.value)); },
+  /* the drag flag is what keeps the drop reachable: `.gbar`'s segments are the
+     grab area, so the pointer starts ON one, and a solid segment would be the
+     hit-test winner for every dragover on a short horizontal move — a path with
+     no dragover handler, hence no preventDefault, hence a refused drop. It is a
+     class toggle only (no geometry, no text), so the drag image the browser
+     snapshots at dragstart is unaffected. dragend always fires, drop or cancel,
+     and moveRows clears it a second time for the case where a re-render eats
+     the source node first. */
   dragRow(ctx, cardId) {
     ctx.event.dataTransfer.setData('text/plain', cardId);
     ctx.event.dataTransfer.effectAllowed = 'move';
+    app.set('ganttDragging', true);
   },
+  dragEnd() { app.set('ganttDragging', false); },
   dragOver(ctx) { ctx.event.preventDefault(); },
   async dropOnWeek(ctx, weekKey) {
     ctx.event.preventDefault();
@@ -1777,6 +1939,24 @@ app.on({
   async duplicateRow(_ctx, cardId) {
     await api.send('POST', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/duplicate`);
     await loadAll();
+  },
+  /* owl #27's Calendar Remove — unslot. It is the SAME audited path a drop on
+     the Unscheduled block header takes (`moveRows(id, null)` → POST /replot →
+     one `schedule.replot` audit row with `after.slotted_week = null`), not a
+     new endpoint and not a new audit action. The pinned guard is belt and
+     braces: the button is already `disabled` (JP's ruling B — pins stay fully
+     frozen), and /replot would skip the row server-side anyway. */
+  async unslotRow(_ctx, cardId) {
+    const row = app.get('schedRows').find((r) => r.cardId === cardId);
+    if (!row) return;
+    if (row.pinned) {
+      flashBanner('Pinned — unpin to move.');
+      return;
+    }
+    // a row with no slotted week is already off the schedule: /replot would
+    // still audit the no-op, and a non-change must not reach the audit log
+    if (!row.slottedWeek) return;
+    await moveRows(cardId, null);
   },
   async editNote(_ctx, cardId, current) {
     const note = window.prompt('Status override note (empty to clear — reverts to the Trello status):', current || '');
@@ -1825,19 +2005,76 @@ app.on({
     requestAnimationFrame(refreshThumbs);
   },
 
+  /* ---- sprints modal (owls #28–#30) ----
+     Every edit lands in `sprintDraft` and NOTHING is written per row: Save PUTs
+     the whole list once (a full replace the route audits as one
+     `sprints.replace`), and Cancel discards simply by not saving — openSprints
+     re-copies from `sprints` on the next open. */
   openSprints() {
-    app.set('sprintDraft', app.get('sprints').map((s) => ({ ...s })));
-    app.set({ sprintModal: true, sprintError: '' });
+    const stored = app.get('sprints');
+    app.set('sprintDraft', stored.map((s) => ({ ...s })));
+    app.set({
+      sprintModal: true, sprintError: '', sprintDeleteConfirm: null,
+      sprintOpenedEmpty: stored.length === 0, // R7: opened-with-none vs emptied-by-the-user
+    });
   },
-  closeSprints() { app.set('sprintModal', false); },
-  addSprint() { app.push('sprintDraft', { name: `Sprint ${app.get('sprintDraft').length + 1}`, start: todayIso(), end: todayIso() }); },
-  removeSprint(_ctx, idx) { app.splice('sprintDraft', idx, 1); },
+  closeSprints() { app.set({ sprintModal: false, sprintDeleteConfirm: null }); },
+  /* a new sprint starts the Monday AFTER the last one ends and runs to that
+     week's Friday — so the first thing the user sees is a valid whole week that
+     neither overlaps nor gaps, rather than a zero-length sprint on today */
+  addSprint() {
+    const draft = app.get('sprintDraft');
+    const lastEnd = draft.reduce((a, s) => (s && s.end && s.end > a ? s.end : a), '');
+    const start = lastEnd ? mondayShift(mondayIso(lastEnd), 1) : mondayIso(todayIso());
+    app.push('sprintDraft', { name: `Sprint ${draft.length + 1}`, start, end: fridayIso(start) });
+    app.set({ sprintDeleteConfirm: null, sprintError: '' });
+  },
+  /* R-f-2 — snap on PICK, never reject: START to the Monday of the week the
+     user chose, END to that week's Friday. Bound to `change`, not `input`:
+     some engines fire `input` per keystroke and would rewrite a half-typed
+     year. `ctx.node.value` is read rather than the model so the snap is applied
+     to what the picker actually committed. */
+  snapSprintStart(ctx, idx) {
+    const v = ctx.node.value;
+    app.set(`sprintDraft.${idx}.start`, v ? mondayIso(v) : v);
+  },
+  snapSprintEnd(ctx, idx) {
+    const v = ctx.node.value;
+    app.set(`sprintDraft.${idx}.end`, v ? fridayIso(v) : v);
+  },
+  /* Miles's ruling (#30): a sprint covering slotted deliverables warns with the
+     COUNT before it goes. The count is read off the rows already loaded — the
+     same `slottedWeek ∈ [start, end]` test that derives membership — so it is
+     the real number, not an estimate. Zero covered rows removes it outright. */
+  removeSprint(_ctx, idx) {
+    const s = app.get('sprintDraft')[idx];
+    if (!s) return;
+    const covered = app.get('schedRows').filter(
+      (r) => r.slottedWeek && s.start && s.end && r.slottedWeek >= s.start && r.slottedWeek <= s.end,
+    ).length;
+    if (!covered) {
+      app.splice('sprintDraft', idx, 1);
+      app.set('sprintDeleteConfirm', null);
+      return;
+    }
+    app.set('sprintDeleteConfirm', { idx, name: s.name, count: covered });
+  },
+  cancelRemoveSprint() { app.set('sprintDeleteConfirm', null); },
+  confirmRemoveSprint() {
+    const c = app.get('sprintDeleteConfirm');
+    if (!c) return;
+    app.splice('sprintDraft', c.idx, 1);
+    app.set('sprintDeleteConfirm', null);
+  },
   async saveSprints() {
+    // the button is already disabled in these states; this is the second lock,
+    // because the server rejects both and would write nothing either way
+    if (app.get('sprintDupNames').length || app.get('sprintOverlaps').length) return;
     try {
       await api.send('PUT', `/api/projects/${app.get('activeProjectId')}/sprints`, {
         sprints: app.get('sprintDraft').map((s) => ({ name: s.name, start: s.start, end: s.end })),
       });
-      app.set('sprintModal', false);
+      app.set({ sprintModal: false, sprintDeleteConfirm: null });
       await loadAll();
     } catch (err) {
       const issues = err.detail && err.detail.issues;
@@ -1952,10 +2189,49 @@ function bumpWeek(map, weekKey, row, sign) {
   };
 }
 
+/* ---- the arrival affordance (owl #31) ----
+
+   The row does NOT travel with the pointer any more: the bar moves, the write
+   lands, and the row's relocation into another block is an OUTCOME of
+   re-deriving `schedRows` — so something has to say where it went. A brief
+   background pulse plus a scroll into view is that something.
+
+   `loadAll()` re-renders the whole block, so the moved row's node identity
+   changes and any reference captured before the reload is stale. The class
+   therefore lives in Ractive state (it survives the re-render by construction)
+   and the DOM is re-queried by cardId inside a frame, the way refreshThumbs
+   already does. `block: 'nearest'` cannot disturb the timeline's own
+   horizontal scroller: a row is wider than the scrollport, so both its edges
+   are outside it and the inline axis is left alone. */
+const ARRIVAL_MS = 1200;
+let arrivalTimer = null;
+function announceArrival(cardIds) {
+  if (!cardIds.length) return;
+  const map = {};
+  for (const id of cardIds) map[id] = true;
+  app.set('arrived', map);
+  if (arrivalTimer) clearTimeout(arrivalTimer);
+  arrivalTimer = setTimeout(() => {
+    arrivalTimer = null;
+    app.set('arrived', {});
+  }, ARRIVAL_MS);
+  requestAnimationFrame(() => {
+    const node = [...document.querySelectorAll('.gantt .growr')].find((n) => cardIds.includes(n.dataset.card));
+    if (!node) return;
+    const box = node.getBoundingClientRect();
+    if (box.top < 0 || box.bottom > window.innerHeight) node.scrollIntoView({ block: 'nearest' });
+  });
+}
+
 /* BR-8: a multi-select drag applies the grabbed row's interval to every
    selected row. A null target unslots instead — /replot takes `week: null`,
    and an interval has no meaning when there is no week to land on. */
 async function moveRows(grabbedId, targetWeek) {
+  /* the drop has landed, so the bar overlay can stop hiding from hit-testing
+     even if dragend has not fired yet (a re-render that eats the source node
+     would swallow it, and a stuck flag means no bar can be grabbed again).
+     Harmless on the keyboard path, where the flag was never set. */
+  app.set('ganttDragging', false);
   const selected = app.get('selected');
   const rows = app.get('schedRows');
   const grabbed = rows.find((r) => r.cardId === grabbedId);
@@ -1988,6 +2264,12 @@ async function moveRows(grabbedId, targetWeek) {
     return;
   }
   await loadAll();
+  /* pinned members are skipped server-side, so they never arrive anywhere and
+     must not be pulsed as though they had */
+  announceArrival(moves.map((mv) => mv.cardId).filter((id) => {
+    const row = rows.find((r) => r.cardId === id);
+    return row && !row.pinned;
+  }));
 }
 
 /* ---------- URL routing — the impure half (phase 13h, JP 2026-08-15) ---------- */

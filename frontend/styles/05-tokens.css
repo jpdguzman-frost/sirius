@@ -57,9 +57,11 @@
   --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 8px;
+  --radius-input: 6px; /* text/date field radius — sprints modal (nodes 322:30031 et al) */
   --radius-full: 9999px;
   --space-4: 4px;
   --space-8: 8px;
+  --space-12: 12px; /* banner + table-cell inset, sprints modal (owls #28–#30) */
   --space-16: 16px; /* content-stack gap, measured from the frame (JP 2026-08-12) */
   --space-24: 24px;
   --page-inset: 64px; /* horizontal content inset — defines the 1472px content width */

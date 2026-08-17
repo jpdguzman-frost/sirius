@@ -415,7 +415,7 @@
         <button class="fnbtn primary" on-click="['runSuggest']"><svg class="i16" aria-hidden="true"><use href="#i-sparkle" /></svg>Suggest plan</button>
       {{/if}}
       <button class="fnbtn ghost" on-click="['openSprints']"><svg class="i16" aria-hidden="true"><use href="#i-calendar" /></svg>Sprints</button>
-      <span class="fnnote">Grab a row to reslot it. Pinned rows are never moved by a suggestion.</span>
+      <span class="fnnote">Drag a bar along its row to reslot it — an unscheduled row drags onto a week. Pinned rows never move.</span>
     </div>
   </div>
 
@@ -438,7 +438,7 @@
       capacity footer (R9) and the timeline's own horizontal slider (§3.7).
       Ractive renders dynamic member access in a TRIPLE mustache as empty, so
       every per-row lookup here goes through a helper function. }}
-  <div class="gantt {{#if leftCollapsed}}lpc{{/if}}">
+  <div class="gantt {{#if leftCollapsed}}lpc{{/if}} {{#if ganttDragging}}gdragging{{/if}}">
     {{! Owl #26 / node 262:33342 — a KEY, not a filter: aria-hidden, no
         handler, no focusable child, and a sibling of .gwrap so it sits OUTSIDE
         the horizontal scroller and stays put as the timeline moves. The four
@@ -513,15 +513,27 @@
               </div>
               <div class="gbrows" id="gbrows-{{g.id}}">
               {{#if !collapsedBlocks[g.id]}}
+              {{! owl #31 + JP's ruling B (2026-08-17) — the BAR is the drag
+                  target on a SCHEDULED row, so `draggable` and `on-dragstart`
+                  are gone from the row itself; an UNSCHEDULED row has no bar to
+                  grab, so it keeps the row-drag its hint line already names
+                  (R-drag-a). Both attributes sit INSIDE the section, because a
+                  scheduled row must emit neither — `draggable="false"` is still
+                  an attribute, and the gutter grip that went with the row-drag
+                  is dropped in the same breath (R-drag-b). The keyboard path
+                  (tabindex + on-keydown) is untouched on every row kind.
+                  `arrived` is the post-drop pulse: the row relocates as an
+                  OUTCOME of the re-render, so it says where it landed. }}
               {{#each g.rows as row}}
-                <div class="growr {{#if selected[row.cardId]}}sel{{/if}} {{#if row.pinned}}pinned{{/if}}"
-                     tabindex="0" draggable="{{row.pinned ? 'false' : 'true'}}"
-                     title="{{row.pinned ? 'Pinned — unpin to move' : ''}}"
-                     on-dragstart="['dragRow', row.cardId]" on-keydown="['rowKey', row.cardId]">
+                <div class="growr {{#if selected[row.cardId]}}sel{{/if}} {{#if row.pinned}}pinned{{/if}} {{#if !row.slottedWeek}}unsched{{/if}} {{#if arrived[row.cardId]}}arrived{{/if}}"
+                     data-card="{{row.cardId}}" tabindex="0"
+                     {{#if row.pinned}}title="Pinned — unpin to move"{{/if}}
+                     {{#if !row.slottedWeek}}draggable="{{ row.pinned ? 'false' : 'true' }}" on-dragstart="['dragRow', row.cardId]" on-dragend="['dragEnd']"{{/if}}
+                     on-keydown="['rowKey', row.cardId]">
                   <div class="gpin gdetails">
                     <div class="gcell c-mc">
                       <input class="gsel" type="checkbox" checked="{{selected[row.cardId]}}" aria-label="Select {{row.mcLabel}} for a multi-row move" />
-                      <span class="ghandle" aria-hidden="true"><svg class="i16"><use href="#i-rowChevron" /></svg></span>
+                      {{#if !row.slottedWeek}}<span class="ghandle" aria-hidden="true"><svg class="i16"><use href="#i-rowChevron" /></svg></span>{{/if}}
                       <span class="gmc" title="{{row.displayId}}">{{row.mcLabel}}</span>
                       {{#if row.forecast && row.forecast.late}}<span class="glate">Late</span>{{/if}}
                     </div>
@@ -529,7 +541,24 @@
                       <div class="gchips">
                         <span class="pbadge gsm {{row.urgency === 'Urgent' ? 'u-on' : 'u-off'}}">{{row.urgency === 'Urgent' ? '⚡ Urgent' : 'Non-Urgent'}}</span>
                         {{#if row.difficulty}}<span class="pbadge gsm d-{{row.difficulty}}">{{row.difficulty}}</span>{{else}}<span class="gdim">—</span>{{/if}}
-                        {{#if row.statusNote}}<span class="pbadge gsm gnote" title="{{row.statusNote}}">manual</span>{{/if}}
+                        {{! owl #27 — the design's row cluster is exactly three
+                            icons (Copy · Pin · Calendar Remove), and the build
+                            it replaces had pin / duplicate / STATUS-NOTE. The
+                            note editor is the app's only status-note edit
+                            surface anywhere, so it is preserved OUTSIDE
+                            badge-icons-container rather than dropped: the chip
+                            that already announces a note becomes the button
+                            that edits it (same pixels, no new chrome), and a
+                            row with no note gets a ghost pencil revealed by the
+                            SAME hover/focus rule as the cluster. Placement is
+                            flagged to Miles. }}
+                        {{#if row.statusNote}}
+                          <button class="pbadge gsm gnote" type="button" on-click="['editNote', row.cardId, row.statusNote]"
+                                  title="{{row.statusNote}}" aria-label="Edit the status note on {{row.mcLabel}}: {{row.statusNote}}">manual</button>
+                        {{else}}
+                          <button class="gact gnoteadd" type="button" on-click="['editNote', row.cardId, row.statusNote]"
+                                  title="Status override with note" aria-label="Add a status note to {{row.mcLabel}}">✎</button>
+                        {{/if}}
                       </div>
                       <span class="gname">{{row.name}}</span>
                     </div>
@@ -537,17 +566,67 @@
                     <div class="gcell c-type">{{#if row.assetType}}<span class="pbadge">{{row.assetType}}</span>{{else}}<span class="gdim">—</span>{{/if}}</div>
                     <div class="gcell c-status">
                       {{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{row.currentList}}</span>{{else}}<span class="gdim">—</span>{{/if}}
+                      {{! owl #27, node I262:33396;251:27040 — the library's
+                          three 13px utility icons, 8px apart, in the frame's
+                          own left-to-right order. Every one is a real <button>
+                          with a title AND an aria-label, and the cluster hides
+                          with `opacity`, never `display`, so all three stay in
+                          the tab order at rest. JP's ruling B (pins stay FULLY
+                          frozen) is why Calendar Remove is DISABLED on a pinned
+                          row rather than merely warning — it supersedes the
+                          "a pin blocks Suggest, not deliberate action" line
+                          still carried by two Figma annotations. }}
                       <span class="gactions">
-                        <button class="gact {{#if row.pinned}}on{{/if}}" on-click="['togglePin', row.cardId, row.pinned]" title="{{row.pinned ? 'Unpin — suggestions may move this' : 'Pin — suggestions leave this alone'}}">{{row.pinned ? '📌' : '📍'}}</button>
-                        <button class="gact" on-click="['duplicateRow', row.cardId]" title="Duplicate without links">⧉</button>
-                        <button class="gact" on-click="['editNote', row.cardId, row.statusNote]" title="Status override with note">✎</button>
+                        <button class="gact" type="button" on-click="['duplicateRow', row.cardId]"
+                                title="Duplicate without links" aria-label="Duplicate {{row.mcLabel}} without links">
+                          <svg class="i13" aria-hidden="true"><use href="#i-rowCopy" /></svg>
+                        </button>
+                        <button class="gact {{#if row.pinned}}on{{/if}}" type="button" on-click="['togglePin', row.cardId, row.pinned]"
+                                aria-pressed="{{ row.pinned ? 'true' : 'false' }}"
+                                title="{{ row.pinned ? 'Unpin — suggestions may move this' : 'Pin — suggestions leave this alone' }}"
+                                aria-label="{{ row.pinned ? 'Unpin' : 'Pin' }} {{row.mcLabel}}">
+                          <svg class="i13" aria-hidden="true"><use href="#i-rowPin" /></svg>
+                        </button>
+                        {{! Disabled in TWO states, for the same reason: the control
+                            would change nothing. A pinned row is skipped by
+                            /replot server-side (JP's ruling B), and a row with no
+                            slotted week is already off the schedule — unslotting it
+                            again would still write a `schedule.replot` audit row,
+                            and a refusal is not a state change (invariant 10). }}
+                        <button class="gact" type="button" on-click="['unslotRow', row.cardId]"
+                                disabled="{{ row.pinned || !row.slottedWeek }}"
+                                title="{{ row.pinned ? 'Pinned — unpin to move' : row.slottedWeek ? 'Remove from the schedule' : 'Already off the schedule' }}"
+                                aria-label="{{ row.pinned ? 'Pinned — unpin to move' : row.slottedWeek ? 'Remove from the schedule' : 'Already off the schedule' }}: {{row.mcLabel}}">
+                          <svg class="i13" aria-hidden="true"><use href="#i-rowCalRemove" /></svg>
+                        </button>
                       </span>
                     </div>
                   </div>
                   <div class="gtrack">
                     <div class="gweeks">{{#each plannerWeeks as wk}}<div class="gweek" on-dragover="['dragOver']" on-drop="['dropOnWeek', wk.key]"></div>{{/each}}</div>
+                    {{! owl #31 — `.gbar` is the drag SOURCE and the segments are
+                        its only hit area. It spans the whole track rather than
+                        the run's own box on purpose: `.gseg` positions are
+                        percentages OF THE TRACK, so a narrower wrapper would
+                        re-base every one of them and move the shipped bars.
+                        `pointer-events` is none on the wrapper and auto on the
+                        segments (the `.gunsched` pattern), so the week cells
+                        underneath stay droppable and the grab area is exactly
+                        the bar the user sees. Dragging is horizontal by
+                        construction — the drop target is a week COLUMN, and
+                        which row it belongs to is never read.
+                        WHILE a drag is live the segments go transparent again
+                        (`.gantt.gdragging`, set by dragstart and cleared by
+                        dragend): the drop target is hit-tested under the
+                        pointer, and the grab necessarily STARTS on a segment,
+                        so leaving them solid would swallow every dragover on
+                        the way to the week cell and refuse the drop. }}
                     {{#if row.slottedWeek}}
-                      {{#each phaseBars(row) as b}}<div class="gseg {{b.cls}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}"></div>{{/each}}
+                      <div class="gbar" draggable="{{ row.pinned ? 'false' : 'true' }}"
+                           on-dragstart="['dragRow', row.cardId]" on-dragend="['dragEnd']"
+                           title="{{ row.pinned ? 'Pinned — unpin to move' : 'Drag along the timeline to reslot' }}">
+                        {{#each phaseBars(row) as b}}<div class="gseg {{b.cls}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}{{ row.pinned ? ' · Pinned — unpin to move' : '' }}"></div>{{/each}}
+                      </div>
                       {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
                     {{else}}
                       <div class="gunsched">Not yet scheduled — drag the row onto a week</div>
@@ -580,22 +659,163 @@
     {{/if}}
   </div>
 
+  {{! ==== Sprints modal, four states (owls #28–#30; nodes 528:113433 empty,
+      322:30031 filled, 328:38162 alert/gap, 328:38454 error/duplicates) ====
+
+      One shell, one table, one banner recipe. Every edit is a DRAFT: Save
+      commits the whole list in a single PUT (the route is a full replace and
+      already audits it as one `sprints.replace`), Cancel discards because
+      openSprints re-copies from `sprints` on the next open. Nothing is written
+      per row, and no sprint reference is ever written onto a deliverable —
+      membership stays derived from the slotted week (invariant 12 / R5).
+
+      Two rulings the frame itself does not draw: column 1 holds the remove ✕
+      and NOT the frame's six-dot grip (R-f-6 — `position` is derived from the
+      sorted start dates on save, so a grip would drag nothing, the same trap
+      Feature 3 is deleting from the Gantt gutter), and the frame's hidden
+      `offset-subtone` hint strip is not rendered (R-f-7 — it is hidden in all
+      three table states and the stated 812×416 only adds up without it). }}
   {{#if sprintModal}}
-    <div class="modal-back" on-click="['closeSprints']"><div class="modal" on-click="['noop']">
-      <h3 style="margin-top:0;">Sprints — editable data, not a cadence</h3>
-      {{#each sprintDraft as s}}
-        <div class="sprintrow">
-          <input value="{{s.name}}" /><input type="date" value="{{s.start}}" /><input type="date" value="{{s.end}}" />
-          <button class="chip" on-click="['removeSprint', @index]">✕</button>
+    <div class="modal-back" on-click="['closeSprints']">
+      <div class="modal sprintmodal" on-click="['noop']" role="dialog" aria-modal="true" aria-label="Sprints">
+        <div class="smhead">
+          <h3 class="smtitle">Sprints</h3>
+          <button class="smclose" type="button" on-click="['closeSprints']" title="Close" aria-label="Close">
+            <svg class="i16" aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
         </div>
-      {{/each}}
-      <div class="toolbar">
-        <button class="chip" on-click="['addSprint']">Add sprint</button>
-        <button class="chip primary" on-click="['saveSprints']">Save</button>
-        {{#if sprintError}}<span class="badge bad">{{sprintError}}</span>{{/if}}
+        <p class="smexplain">Sprints are not a fixed cadence – set whatever periods the project actually runs. A deliverable belongs to whichever sprint contains  its slotted week.</p>
+
+        {{#if sprintDraft.length}}
+          <div class="stable">
+            <div class="sthead">
+              <span class="sthc sc-rm"></span>
+              <span class="sthc sc-name">NAME</span>
+              <span class="sthc sc-start">START (MON)</span>
+              <span class="sthc sc-end">END (FRI)</span>
+              <span class="sthc sc-len">LENGTH</span>
+            </div>
+            <div class="strows">
+              {{! ONE banner recipe, three modifiers: .warn = amber and
+                  non-blocking (gaps), .err = red and blocks Save (duplicate
+                  names, overlaps), .sconfirm = the deletion warning. Neither
+                  .warn nor .err carries a CTA — Miles removed the frame's
+                  "Delete sprint" / "Keep it" buttons (R-f-5) — and the Alert
+                  Banner component's unused 1450px List-Item / items-container
+                  variant slots are not in the markup at all.
+
+                  The markup appears at two positions rather than once through a
+                  partial because Ractive accepts partial DEFINITIONS only at
+                  the top level of a template, and the render harness slices
+                  this modal out of it as a subtree — a partial defined outside
+                  the slice would not resolve. Both copies are byte-identical
+                  and read `.variant`, and the styling is a single CSS recipe.
+
+                  Duplicates lead the list: they name no pair, so there is no
+                  "between" for them to sit in (R-f-4 governs gaps/overlaps). }}
+              {{#each sprintDupNames as b}}
+                <div class="sbanner {{b.variant}}" role="alert">
+                  <div class="sbhead">
+                    {{#if b.variant === 'err'}}<svg class="i16" aria-hidden="true"><use href="#i-alertCircle" /></svg>{{else}}<svg class="i15" aria-hidden="true"><use href="#i-warning" /></svg>{{/if}}
+                    <span class="sbtitle">{{b.title}}</span>
+                  </div>
+                  <p class="sbdesc">{{b.text}}</p>
+                </div>
+              {{/each}}
+              {{#each sprintDraft as s: i}}
+                <div class="strow">
+                  <span class="stc sc-rm">
+                    <button class="strm" type="button" on-click="['removeSprint', i]"
+                            title="Remove {{s.name}}" aria-label="Remove {{s.name}}">
+                      <svg class="i16" aria-hidden="true"><use href="#i-close" /></svg>
+                    </button>
+                  </span>
+                  <span class="stc sc-name">
+                    <input class="stin" type="text" value="{{s.name}}" aria-label="Sprint {{ i + 1 }} name" />
+                  </span>
+                  {{! R-f-2 — the picker SNAPS on change (never rejects): START
+                      to the Monday of the week picked, END to that week's
+                      Friday. `change`, not `input`: some engines fire `input`
+                      per keystroke and would rewrite a half-typed date. }}
+                  <span class="stc sc-start">
+                    <input class="stin stdate" type="date" value="{{s.start}}" on-change="['snapSprintStart', i]"
+                           aria-label="{{s.name}} start — snaps to Monday" />
+                  </span>
+                  <span class="stc sc-end">
+                    <input class="stin stdate" type="date" value="{{s.end}}" on-change="['snapSprintEnd', i]"
+                           aria-label="{{s.name}} end — snaps to Friday" />
+                  </span>
+                  <span class="stc sc-len"><span class="stlen">{{sprintLength(s)}}</span></span>
+                </div>
+                {{! Miles's ruling (#30): removing a sprint that covers slotted
+                    deliverables warns with the COUNT first. The count is read
+                    off the rows already loaded; nothing persists until Save. }}
+                {{#if sprintDeleteConfirm && sprintDeleteConfirm.idx === i}}
+                  <div class="sbanner sconfirm" role="alertdialog" aria-label="Confirm sprint removal">
+                    <div class="sbhead">
+                      <svg class="i15" aria-hidden="true"><use href="#i-warning" /></svg>
+                      <span class="sbtitle">Remove {{sprintDeleteConfirm.name}}?</span>
+                    </div>
+                    <p class="sbdesc">{{sprintDeleteConfirm.count}} deliverables will move to Outside any sprint.</p>
+                    <div class="sbctas">
+                      <button class="smbtn ghost" type="button" on-click="['cancelRemoveSprint']">Cancel</button>
+                      <button class="smbtn danger" type="button" on-click="['confirmRemoveSprint']">Remove sprint</button>
+                    </div>
+                  </div>
+                {{/if}}
+                {{! R-f-3 / R-f-4 — one banner per situation, rendered BETWEEN
+                    the two rows it names; each carries the draft index of the
+                    row it follows, so placement is data. Overlaps (blocking)
+                    are listed before gaps (advisory). }}
+                {{#each sprintOverlaps.concat(sprintGaps) as b}}
+                  {{#if b.after === i}}
+                    <div class="sbanner {{b.variant}}" role="{{ b.variant === 'err' ? 'alert' : 'status' }}">
+                      <div class="sbhead">
+                        {{#if b.variant === 'err'}}<svg class="i16" aria-hidden="true"><use href="#i-alertCircle" /></svg>{{else}}<svg class="i15" aria-hidden="true"><use href="#i-warning" /></svg>{{/if}}
+                        <span class="sbtitle">{{b.title}}</span>
+                      </div>
+                      <p class="sbdesc">{{b.text}}</p>
+                    </div>
+                  {{/if}}
+                {{/each}}
+              {{/each}}
+            </div>
+            <div class="staddrow">
+              <button class="stadd" type="button" on-click="['addSprint']">
+                <svg class="i16" aria-hidden="true"><use href="#i-plus" /></svg>Add Sprint
+              </button>
+            </div>
+          </div>
+        {{else}}
+          {{! R-f-1 — the copy is "Add Sprint" in BOTH states; the frame's empty
+              state reads "Add a Sprint" and flags its own inconsistency. }}
+          <div class="smempty">
+            <div class="smemptytop">
+              <span class="smemptyt">No sprints yet</span>
+              <span class="smemptysub">Until you add one, everything scheduled sits in a single ungrouped list.</span>
+            </div>
+            <button class="smbtn primary" type="button" on-click="['addSprint']">Add Sprint</button>
+          </div>
+        {{/if}}
+
+        <div class="smctas">
+          {{#if sprintError}}<span class="smerr" role="alert">{{sprintError}}</span>{{/if}}
+          {{! contract §1.1 — the empty state dims Cancel's LABEL to --slate-400.
+              It stays live (it always closes the modal); the state modifier
+              tracks the rendered branch, so it is on exactly when the empty
+              block above is. }}
+          <button class="smbtn ghost {{#if !sprintDraft.length}}dim{{/if}}" type="button" on-click="['closeSprints']">Cancel</button>
+          {{! R7 — Save is dead only when there is nothing to commit: errors, or
+              a modal OPENED with no sprints. A table the user has emptied is a
+              real edit (remove every sprint, save, everything falls to
+              *Outside any sprint*), so Save stays live for it — the route takes
+              an empty list and audits the replace like any other. }}
+          <button class="smbtn primary" type="button" on-click="['saveSprints']"
+                  disabled="{{ sprintDupNames.length || sprintOverlaps.length || (sprintDraft.length === 0 && sprintOpenedEmpty) }}"
+                  {{#if sprintDupNames.length || sprintOverlaps.length}}title="Fix the errors above to save"{{/if}}>Save sprints</button>
+        </div>
       </div>
-      <div class="dim">Overlaps reject on save. Gaps are legal — weeks outside any sprint say so.</div>
-    </div></div>
+    </div>
   {{/if}}
 {{/if}}
 

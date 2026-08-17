@@ -133,11 +133,153 @@
    phase→colour map is exactly the drift that makes a retune miss half the
    screen. */
 
-/* ---- modal / inputs ---- */
-.modal-back { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); display: flex; align-items: flex-start; justify-content: center; padding: 3rem 1rem; z-index: 50; }
-.modal { background: #fff; border-radius: 16px; padding: 1.6rem; width: 100%; max-width: 36rem; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25); }
-.sprintrow { display: flex; gap: 0.4rem; margin: 0.3rem 0; }
-.sprintrow input { font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 8px; }
+/* ---- modal / inputs ----
+   The overlay + shell are ONE recipe with exactly one use site (the sprints
+   modal), so they are retuned in place to the frame rather than shadowed by a
+   second set: 860 wide, white, r8, 24px padding, a 16px content stack. Auto
+   margins do the centring — `align-items: center` would clip the top of the
+   722px alert state on a short viewport, and auto margins collapse to 0 the
+   moment there is no free space, so the overlay scrolls instead. */
+.modal-back {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); z-index: 50;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: var(--space-24); overflow-y: auto;
+}
+.modal {
+  margin: auto; background: var(--white); border-radius: var(--radius-md);
+  padding: var(--space-24); width: 860px; max-width: 100%;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+}
+
+/* ---- sprints modal, four states (owls #28–#30) ----
+   Shell → header · explainer · (empty block | table) · CTAs, 16px apart.
+   Column widths are declared ONCE on the .sc-* classes and shared by the
+   header and the body rows, so the two can never drift; only the per-column
+   padding differs between them. */
+.sprintmodal { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-16); }
+
+.sprintmodal .smhead { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-16); min-height: 29px; }
+.sprintmodal .smtitle {
+  margin: 0; padding-left: 2px;
+  font-size: var(--text-title); font-weight: 600; line-height: 1.2; color: var(--surface-foreground);
+}
+.sprintmodal .smclose {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 24px; height: 24px; padding: 0;
+  border: none; background: none; color: var(--slate-500); cursor: pointer; border-radius: var(--radius-xs);
+}
+.sprintmodal .smclose:hover { background: var(--slate-100); color: var(--surface-foreground); }
+.sprintmodal .smexplain {
+  margin: 0; padding: 0 2px;
+  font-size: var(--text-body); font-weight: 400; line-height: 1.5; color: var(--slate-500);
+}
+
+/* empty state (node 528:113433) — 174px content block, both axes centred */
+.sprintmodal .smempty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-24); padding: var(--space-16) 0 32px;
+}
+.sprintmodal .smemptytop { display: flex; flex-direction: column; align-items: center; gap: var(--space-8); text-align: center; }
+.sprintmodal .smemptyt { font-size: var(--text-title); font-weight: 600; line-height: 1.2; color: var(--surface-foreground); }
+.sprintmodal .smemptysub { font-size: var(--text-body); font-weight: 400; line-height: 1.5; color: var(--slate-500); }
+
+/* filled state (node 322:30031) — the table */
+.sprintmodal .stable {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--slate-200); border-radius: var(--radius-md); overflow: hidden;
+}
+.sprintmodal .sthead { display: flex; min-height: 50px; background: var(--slate-100); border-bottom: 1px solid var(--slate-200); }
+.sprintmodal .sthc {
+  display: flex; align-items: center; flex: none; padding: var(--space-16) var(--space-12);
+  font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--slate-500);
+}
+.sprintmodal .sthead .sc-rm { padding: var(--space-16); }
+.sprintmodal .sthead .sc-name { padding: var(--space-16) var(--space-12) var(--space-16) 0; }
+/* the five column measures (48 + 220 + 200 + 200 + flex) — one declaration,
+   two consumers (header cells and body cells) */
+.sprintmodal .sc-rm { width: 48px; }
+.sprintmodal .sc-name { width: 220px; }
+.sprintmodal .sc-start, .sprintmodal .sc-end { width: 200px; }
+.sprintmodal .sc-len { flex: 1; min-width: 0; }
+
+.sprintmodal .strow { display: flex; align-items: center; min-height: 78px; border-bottom: 1px solid var(--slate-200); }
+.sprintmodal .stc { display: flex; align-items: center; flex: none; }
+.sprintmodal .strow .sc-rm { padding: var(--space-16) var(--space-8); }
+.sprintmodal .strow .sc-name { padding: var(--space-16) var(--space-12) var(--space-16) 0; }
+.sprintmodal .strow .sc-start, .sprintmodal .strow .sc-end { padding: var(--space-16) var(--space-12); }
+.sprintmodal .strow .sc-len { padding: var(--space-16) var(--space-16) var(--space-16) var(--space-12); justify-content: center; }
+
+/* R-f-6: column 1 is the remove ✕ — no grip, and no manual reordering; the
+   server derives `position` from the sorted start dates on save */
+.sprintmodal .strm {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: var(--space-8);
+  border: none; background: none; color: var(--slate-500); cursor: pointer; border-radius: var(--radius-sm);
+}
+.sprintmodal .strm:hover { background: var(--red-50); color: var(--red-600); }
+
+.sprintmodal .stin {
+  width: 100%; min-width: 0; box-sizing: border-box;
+  font-family: var(--font-sans); font-size: var(--text-body); font-weight: 400; line-height: 1.5;
+  color: var(--slate-900); background: var(--white);
+  border: 1px solid var(--slate-300); border-radius: var(--radius-input);
+  padding: var(--space-12) var(--space-12) 11px;
+}
+.sprintmodal .stdate { padding: 11px 13px 10px; } /* the native picker indicator is the frame's trailing calendar glyph */
+.sprintmodal .stdate::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
+.sprintmodal .stin:focus-visible { outline: none; border-color: var(--blue-500); box-shadow: 0 0 0 2px var(--blue-100); }
+/* LENGTH is DERIVED — a read-only span, never an input */
+.sprintmodal .stlen { font-size: var(--text-body); font-weight: 400; line-height: 1.5; color: var(--slate-900); }
+
+.sprintmodal .staddrow { padding: var(--space-8) 0 var(--space-8) 1px; }
+.sprintmodal .stadd {
+  display: inline-flex; align-items: center; gap: var(--space-8); height: 36px;
+  padding: var(--space-8) var(--space-16);
+  border: none; background: none; border-radius: var(--radius-sm); cursor: pointer;
+  font-family: var(--font-sans); font-size: var(--text-body); font-weight: 600; line-height: 1; color: var(--blue-700);
+}
+.sprintmodal .stadd:hover { background: var(--blue-50); }
+
+/* ---- ONE banner recipe, three modifiers (nodes 328:38162 / 328:38454) ----
+   .warn = amber, non-blocking (gaps) · .err = red, blocks Save (duplicate
+   names, overlaps) · .sconfirm = the deletion warning. Neither .warn nor .err
+   carries a CTA — Miles removed the frame's two buttons (R-f-5) — and the
+   component's unused 1450px List-Item / items-container variant slots are not
+   in the markup at all. */
+.sbanner { display: flex; flex-direction: column; gap: var(--space-8); width: 100%; padding: var(--space-12) var(--space-16); }
+.sbanner .sbhead { display: flex; align-items: center; gap: var(--space-8); padding-left: 2px; }
+.sbanner .sbtitle { font-size: var(--text-body); font-weight: 600; line-height: 1.4; }
+.sbanner .sbdesc { margin: 0; padding-left: 2px; max-width: 700px; font-size: var(--text-label); font-weight: 400; line-height: 1.4; }
+.sbanner.warn { background: var(--amber-50); color: var(--amber-800); }
+.sbanner.warn .sbdesc { color: var(--amber-700); }
+.sbanner.err { background: var(--red-50); color: var(--red-600); }
+.sbanner.err .sbdesc { color: var(--red-500); }
+.sbanner.sconfirm { background: var(--amber-50); color: var(--amber-800); }
+.sbanner.sconfirm .sbdesc { color: var(--amber-700); }
+.sbanner .sbctas { display: flex; gap: var(--space-8); padding-left: 2px; margin-top: var(--space-4); }
+
+.sprintmodal .smctas { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-8); min-height: 52px; padding-top: var(--space-8); }
+.sprintmodal .smerr { margin-right: auto; font-size: var(--text-label); font-weight: 600; line-height: 1.4; color: var(--red-600); }
+.sprintmodal .smbtn {
+  font-family: var(--font-sans); font-size: var(--text-body); font-weight: 600; line-height: 1.4;
+  padding: var(--space-12) var(--space-16); border-radius: var(--radius-sm);
+  border: 1px solid transparent; cursor: pointer; white-space: nowrap;
+}
+.sprintmodal .smbtn.ghost { background: var(--white); border-color: var(--slate-200); color: var(--slate-900); }
+/* contract §1.1 — Cancel's label is --slate-900 in the filled/alert/error
+   states and --slate-400 in the EMPTY one. It is de-emphasis, not a disabled
+   treatment: the border, the fill, the hover and the click are all unchanged,
+   and the button still closes the modal. The empty state has nothing to cancel
+   yet, so the frame drops Cancel back behind "Add Sprint". */
+.sprintmodal .smbtn.ghost.dim { color: var(--slate-400); }
+.sprintmodal .smbtn.ghost:hover { background: var(--slate-50); }
+.sprintmodal .smbtn.primary { background: var(--neutral-950); border-color: var(--neutral-950); color: var(--white); }
+.sprintmodal .smbtn.danger { background: var(--red-600); border-color: var(--red-600); color: var(--white); }
+.sprintmodal .smbtn[disabled] { background: var(--slate-200); border-color: var(--slate-200); color: var(--slate-400); cursor: not-allowed; }
+.sprintmodal .smclose:focus-visible,
+.sprintmodal .strm:focus-visible,
+.sprintmodal .stadd:focus-visible,
+.sprintmodal .smbtn:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
 .sla { width: 4.2rem; font: inherit; padding: 0.25rem 0.4rem; border: 1.5px solid #fcd34d; background: #fffbeb; border-radius: 8px; }
 select { font: inherit; padding: 0.3rem; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 .provenance { margin-top: 0.9rem; color: var(--muted); font-size: 0.8rem; }

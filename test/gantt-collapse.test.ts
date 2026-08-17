@@ -158,8 +158,12 @@ describe('the collapsible left pane rides one variable', () => {
   it('flags the class on .gantt and flips the chevron, in both states', () => {
     const open = renderGantt();
     const shut = renderGantt({ leftCollapsed: true });
-    expect(open).toMatch(/^<div class="gantt "/);
-    expect(shut).toMatch(/^<div class="gantt lpc"/);
+    // the root carries a second, unrelated state class (`gdragging`, T139
+    // review fix), so the assertion reads the class LIST rather than the
+    // literal attribute — `lpc` is present or it is not
+    const classes = (h: string) => (/^<div class="([^"]*)"/.exec(h)?.[1] ?? '').split(/\s+/).filter(Boolean);
+    expect(classes(open)).toEqual(['gantt']);
+    expect(classes(shut)).toEqual(['gantt', 'lpc']);
     expect(open).not.toContain('flipx');
     expect(shut).toContain('flipx');
     expect(cssRule('.gantt .lpctoggle .flipx')).toContain('rotate(180deg)');
