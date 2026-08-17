@@ -1023,25 +1023,30 @@ async function loadShell() {
   const name = me.user.name || me.user.email || '';
   const tabs = app.get('tabs').filter((t) => t.id !== 'admin');
   if (me.user.admin) tabs.push({ id: 'admin', label: 'Admin', icon: 'tabAdmin' });
-  app.set({
-    projects: projects.projects,
-    userName: name,
-    userInitial: (name[0] || '?').toUpperCase(),
-    isAdmin: !!me.user.admin,
-    tabs,
-  });
   // URL-first selection (phase 13h, JP 2026-08-15). An unknown project code, a
   // project the caller is not a member of, and `admin` for a non-admin ALL fall
-  // through to the defaults silently — no error page. `tabs` above already
+  // through to the defaults silently — no error page. `tabs` below already
   // excludes admin for a non-admin, so no new access check is introduced here
   // and none is implied: the data still 403s server-side (invariant 9).
+  // The route's project MUST be chosen BEFORE `projects` renders: the header
+  // <select> is two-way bound to activeProjectId, so rendering the options
+  // against a null selection makes the browser pick option one and the binding
+  // write it back — which is why this is ONE set, not projects-then-choose
+  // (live defect found 2026-08-17: /rt-837/... always settled on projects[0]).
   const byCode = initialRoute.project
     ? projects.projects.find((p) => p.code === initialRoute.project)
     : null;
   const chosen = byCode || projects.projects[0] || null;
   // Suppressed: boot pushes no history entry — it normalizes once, below.
   withRouterSuppressed(() => {
-    if (chosen && !app.get('activeProjectId')) app.set('activeProjectId', chosen._id);
+    app.set({
+      projects: projects.projects,
+      activeProjectId: chosen ? chosen._id : null,
+      userName: name,
+      userInitial: (name[0] || '?').toUpperCase(),
+      isAdmin: !!me.user.admin,
+      tabs,
+    });
   });
   const wantTab = tabs.some((t) => t.id === initialRoute.tab) ? initialRoute.tab : ROUTE_DEFAULT_TAB;
 

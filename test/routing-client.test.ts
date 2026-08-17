@@ -127,3 +127,29 @@ describe('normalization is idempotent — the URL settles after exactly one pass
     }
   });
 });
+
+/**
+ * Regression — live defect 2026-08-17: cold-loading a NON-default project deep
+ * link (/rt-837/schedules) always settled on projects[0]. Root cause: the
+ * header <select> is two-way bound to activeProjectId, so rendering `projects`
+ * against a null selection makes the browser pick option one and the binding
+ * writes it back BEFORE the guarded route-apply ran — the guard then saw a
+ * project "already chosen" and skipped the route's. The fix chooses from the
+ * route FIRST and ships projects + activeProjectId in ONE suppressed set.
+ * This pins the shipped source shape so the ordering cannot silently regress.
+ */
+describe('boot applies the route project before the select can bind (source shape)', () => {
+  const src = fs.readFileSync(path.join(dir, '..', 'frontend/scripts/01-app.js'), 'utf8');
+  const shell = src.slice(src.indexOf('async function loadShell'), src.indexOf('async function loadAdmin'));
+
+  it('projects and activeProjectId land in the same set, after the route choice', () => {
+    const oneSet = /app\.set\(\{[^)]*projects:\s*projects\.projects[^)]*activeProjectId:/s;
+    expect(shell).toMatch(oneSet);
+    expect(shell.indexOf('const chosen')).toBeGreaterThan(-1);
+    expect(shell.indexOf('const chosen')).toBeLessThan(shell.search(oneSet));
+  });
+
+  it('the racy guarded form is gone', () => {
+    expect(shell).not.toContain("!app.get('activeProjectId')");
+  });
+});
