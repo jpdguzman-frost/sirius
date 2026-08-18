@@ -1051,7 +1051,23 @@ function dayIndex(iso) {
   return w * WORKDAYS_PER_WEEK + wd;
 }
 const clampUnits = (u) => Math.max(0, Math.min(TOTAL_UNITS, u));
-const unitPct = (u) => ((u / TOTAL_UNITS) * 100).toFixed(2);
+/* ONE rounding rule for the whole of the gantt geometry: n as a percentage of
+   d, two decimals. Two denominators use it — the run box is a percentage of the
+   TRACK, and each segment inside it is a percentage of the BOX — and having a
+   single formatter is what keeps those two roundings from drifting apart. */
+const pctOf = (n, d) => ((n / d) * 100).toFixed(2);
+const unitPct = (u) => pctOf(u, TOTAL_UNITS);
+/* The minimum GRAB width of the run box (JP, 2026-08-18, ruling 2). A one-day
+   phase draws a single unit — 18.4px — which is a fiddly thing to catch with a
+   mouse, so the box is never narrower than 24px. Stated in px for the same
+   reason WEEK_PX is: it mirrors a CSS px number, and the track is exactly
+   WEEK_COUNT columns wide (12 x 92 = 1104px), so the px/percent map is exact
+   and stable — 24px is 2.17% of the track, whatever the zoom. The widening is
+   arithmetic, never CSS: a `min-width` on the box would widen the RENDERED box
+   and every percentage-positioned segment inside it would visibly stretch. */
+const MIN_GRAB_PX = 24;
+const UNIT_PX = WEEK_PX / WORKDAYS_PER_WEEK; // 18.4 — mirrors --gw divided by 5
+const MIN_GRAB_UNITS = MIN_GRAB_PX / UNIT_PX; // 1.3043478260869565
 
 /* The inverse of the geometry above (T153): a pointer's viewport X → the week
    COLUMN it is over. The bar owns its own drop now, so something has to do this
@@ -1075,19 +1091,66 @@ const weekAtX = (clientX, rect, weeks) => {
 };
 
 /* R3 — the bar IS the server's phase segments (absolute, half-open ISO dates
-   built from lib/forecast output). No forecast math runs here: a segment that
-   the window clips to nothing is dropped, and that is the whole of it. */
-app.set('phaseBars', (row) => {
+   built from lib/forecast output). No forecast math runs here: the same
+   dayIndex/clampUnits pair is applied to the same server-supplied startIso and
+   endIso, in the same order, with the same drop rule for a segment the window
+   clips to nothing. Only the DENOMINATOR of the final division moved.
+
+   JP's structural ruling, 2026-08-18: the coloured run gets its own box inside
+   the track-wide wrapper, and THAT box is the drag source. One box over the
+   whole run, not one per segment — the segments touch, so it looks identical
+   and the handle cannot flicker across a seam. This helper therefore returns
+   the box AND its segments re-based to it, in one shape, so the template does
+   no arithmetic and no second helper exists to drift out of step with it.
+
+   The box: left is the leftmost segment edge, right is the rightmost, widened
+   to MIN_GRAB_UNITS if the run is narrower than that. The one-line clamp
+       L = max(0, min(R0, TOTAL_UNITS - W))
+   reads as: anchor the box at the run's left edge and let the invisible part
+   grow RIGHT; if the grown right edge would pass the end of the track, slide
+   the whole box left until its right edge sits exactly on the last unit; never
+   let the left edge go negative. One expression, no branch, no second path.
+
+   Why the widening is visually free. Composing the two percentages back gives
+       left + left'_i * width / 100
+         = 100*L/T + (100*(sL_i - L)/W) * (100*W/T) / 100
+         = 100*sL_i/T
+   which is exactly the percentage this helper emitted before the box existed —
+   W cancels identically, and so it does for the widths. The identity holds
+   whatever MIN_GRAB_UNITS is, whichever branch of the clamp fired, and however
+   many segments there are. After the shipped two-decimal rounding — on both
+   sides, since the position it is compared against was rounded too — the
+   residue measured across every fixture is at most 0.0075 percentage points,
+   under a tenth of a pixel on the 1104px track.
+   test/gantt-run-geometry.test.ts holds it to 0.02pp and shows the arithmetic.
+   (Do not restate that pixel figure as a decimal here: the drift guard in
+   test/suggest-counts.test.ts counts bare shares in this file and a stray
+   bare share reads as a second copy of one of them.)
+
+   An empty return means no segment survived the window — so the template emits
+   no box, no handle and no draggable at all, exactly as ghostBar's empty return
+   emits no ghost. There is no conditional anywhere in the geometry path. */
+const phaseRun = (row) => {
   const phases = Array.isArray(row.phases) ? row.phases : [];
-  const bars = [];
+  const segs = [];
   for (const p of phases) {
-    const left = clampUnits(dayIndex(p.startIso));
-    const right = clampUnits(dayIndex(p.endIso));
-    if (right <= left) continue; // zero-width, or clipped fully outside the window
-    bars.push({ cls: p.phase, left: unitPct(left), width: unitPct(right - left), title: `${p.phase} → ${fmtDate(p.endIso)}` });
+    const l = clampUnits(dayIndex(p.startIso));
+    const r = clampUnits(dayIndex(p.endIso));
+    if (r <= l) continue; // zero-width, or clipped fully outside the window
+    segs.push({ cls: p.phase, left: l, width: r - l, title: `${p.phase} → ${fmtDate(p.endIso)}` });
   }
-  return bars;
-});
+  if (!segs.length) return []; // nothing visible -> no box, no handle
+  const r0 = Math.min(...segs.map((s) => s.left));
+  const r1 = Math.max(...segs.map((s) => s.left + s.width));
+  const width = Math.max(r1 - r0, MIN_GRAB_UNITS);
+  const left = Math.max(0, Math.min(r0, TOTAL_UNITS - width));
+  return [{
+    left: unitPct(left),
+    width: unitPct(width),
+    segs: segs.map((s) => ({ cls: s.cls, title: s.title, left: pctOf(s.left - left, width), width: pctOf(s.width, width) })),
+  }];
+};
+app.set('phaseRun', phaseRun);
 app.set('deadlineTick', (row) => {
   if (!row.deadline) return null;
   const u = dayIndex(row.deadline);
@@ -2112,7 +2175,7 @@ app.on({
      drag image the browser snapshots at dragstart is unaffected. dragend always
      fires, drop or cancel, and moveRows clears it a second time for the case
      where a re-render eats the source node first. The SEGMENTS left that rule
-     because nothing needs them transparent any more — the solid bar beneath
+     because nothing needs them transparent any more — the solid run box beneath
      them takes the drop — and they stay solid so that no pixel inside the drag
      source can be blanked, which is what brings back Chrome's same-tick cancel
      the moment anyone moves `draggable` down onto a segment (T153). */
@@ -2127,16 +2190,23 @@ app.on({
     ctx.event.preventDefault();
     await moveRows(ctx.event.dataTransfer.getData('text/plain'), weekKey);
   },
-  /* the bar is the drag source AND its own drop target (T153). Chrome aborts a
-     drag whose source is not hit-testable, so the bar can no longer go
-     transparent and let the `.gweek` cells underneath take the drop — it maps
-     the pointer to a week column from the TRACK's own geometry and then runs
-     the SAME `moveRows` recipe `dropOnWeek` runs: one write, one audit row, no
-     second path. `ctx.node`, never `ctx.event.target`: with the segments
-     hit-testable the event fires on a 26px `.gseg` and bubbles up to the bar
-     carrying this directive, and measuring the target would map a fraction of a
-     column. The id comes off the dataTransfer and never off this bar's own row,
-     because an UNSCHEDULED row dragged across a scheduled row lands here. */
+  /* the run box is the drag source AND its own drop target (T153, re-seated on
+     `.grun` in batch 8). Chrome aborts a drag whose source is not hit-testable,
+     so the source can never go transparent — it maps the pointer to a week
+     column from the TRACK's own geometry and then runs the SAME `moveRows`
+     recipe `dropOnWeek` runs: one write, one audit row, no second path.
+     The body is unchanged by the move because it never measured the element it
+     is bound to. `ctx.node` is now the run's own box rather than the track-wide
+     wrapper, and `closest('.gtrack')` makes that a non-event: the rect that
+     gets measured is the TRACK's either way, so the column arithmetic is
+     identical whether this directive sits on a 1104px box or a 24px one.
+     `ctx.node`, never `ctx.event.target`: with the segments hit-testable the
+     event fires on a 26px `.gseg` and bubbles up to the box carrying this
+     directive, and measuring the target would map a fraction of a column.
+     Outside the run the track is transparent again, so the `.gweek` cells take
+     those drops themselves through `dropOnWeek` — the same `moveRows`.
+     The id comes off the dataTransfer and never off this row, because an
+     UNSCHEDULED row dragged across a scheduled row lands here. */
   async dropOnBar(ctx) {
     ctx.event.preventDefault();
     const track = ctx.node.closest('.gtrack') || ctx.node;

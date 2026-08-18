@@ -1117,3 +1117,366 @@ the same treatment plus a **negative subject guard** — no rule may name
 `.gantt .growr.pinned .gbar` as a subject again (`.gbar,` / `.gbar {`, but not
 `.gbar .gseg`). Every one of them was re-run against the pre-ruling CSS and
 flips, so none is vacuous.
+
+
+---
+
+# Batch 8 — the handle becomes the coloured run (phase 13k cont., 2026-08-18)
+
+Batch 7 made the drag work by making `.gbar` hit-testable, and batch 7b moved the
+*cursor* onto the coloured segments. Both left the *drag source* spanning the
+whole 1104px track. This batch moves the source itself.
+
+## JP's structural ruling, 2026-08-18 (verbatim)
+
+> "gbar is a draggable element, inside that is the actual bars. The issue is gbar
+> spans across the whole of the timeline so dragging it makes the whole thing
+> draggable. What I would like to be draggable are only the bars inside the
+> colored ones. However, for that to happen, those colored bars should be
+> wrapped into a draggable container instead. Gbar stays, but the colored bars
+> wrapped in a draggable container can now be dragged."
+
+Two shape rulings came with it and were not re-litigated:
+
+1. **ONE box over the whole coloured run**, not one handle per phase segment.
+   The segments touch, so it looks identical and the handle cannot flicker
+   across a seam.
+2. **A minimum grab width with an invisible extension.** A one-day phase draws
+   ~18px. The extra width must not paint, tint or outline anything.
+
+## The structure that shipped
+
+```
+.gtrack                 positioning context, unchanged
+  .gbar                 spans the track, pointer-events: none  ← wrapper only
+    .grun               NEW — the drag source, one box over the run
+      .gseg × N         re-based to .grun
+  .gdl                  deadline tick, unchanged
+  .gghost               suggest ghost, unchanged (still a child of .gtrack)
+```
+
+`.grun` carries all five directives — `draggable`, `on-dragstart`, `on-dragend`,
+`on-dragover`, `on-drop` — plus its own inline `left`/`width`. `.gbar` keeps its
+element and its class and carries **none** of them. Neither box carries a
+`title`.
+
+## SUPERSEDES the batch-7 line "`pointer-events: auto` on `.gbar` … is byte-unchanged"
+
+`.gantt .gbar` is now `pointer-events: none`, deliberately, and that is not a
+regression to the 13g/13j bug. The bug was a **drag source** that could not be
+hit. `.gbar` is no longer a drag source; it is the source's parent. It has to be
+transparent, because at 1104px it swallows every drop landing on the track
+outside the coloured run and the `.gweek` columns beneath never see them.
+
+That is legal only because `pointer-events` **inherits and a child's explicit
+value overrides an inherited one**: `.gantt .grun { pointer-events: auto }` is
+written out rather than omitted precisely so the wrapper's `none` cannot reach
+the source. **The two rules ship together or not at all**, and
+`test/drag-hittest.test.ts` now says so in an assertion that fails if either is
+deleted — plus one that strips the `auto` out of the *real* rule set and proves
+the sweep fires, so the escape is shown to be load-bearing on the shipped sheet
+rather than only on fixtures.
+
+## Why the geometry had to be recomputed — and why nothing moved
+
+`phaseBars(row)` emitted each segment as `left`/`width` **in percent of the
+60-workday window**. Put those numbers inside a narrower box and every one of
+them re-bases: the bars move on screen. So the geometry moved into **one**
+helper, `phaseRun(row)`, which returns the box *and* its segments already
+re-based, and `phaseBars` was **deleted** — no second helper, nothing to drift.
+
+All of it in units, one rounding at the end:
+
+```
+segments   sL = clampUnits(dayIndex(startIso))   sW = clampUnits(dayIndex(endIso)) − sL,  keep sW > 0
+raw run    R0 = min(sL)                          R1 = max(sL + sW)
+grab width W  = max(R1 − R0, MIN_GRAB_UNITS)
+box left   L  = max(0, min(R0, TOTAL_UNITS − W))
+box out    left = unitPct(L)                     width = unitPct(W)
+seg out    left' = pctOf(sL − L, W)              width' = pctOf(sW, W)
+```
+
+The invariant, exact in reals, is that composing the two percentages back gives
+today's number:
+
+```
+left + left'ᵢ · width / 100
+  = 100·L/T + (100·(sLᵢ − L)/W)·(100·W/T)/100
+  = 100·sLᵢ/T                        — exactly what phaseBars emitted
+```
+
+**W cancels.** That is the whole reason the minimum-width extension is free of
+visual consequence: it does not matter how wide the invisible box is, or which
+branch of the clamp fired, or how many segments there are.
+
+`unitPct` was redefined as `pctOf(u, TOTAL_UNITS)` so the file has exactly one
+rounding rule. Its output is byte-identical.
+
+**No forecast math changed.** `dayIndex`/`clampUnits` run on the same
+server-supplied `startIso`/`endIso`, in the same order, with the same drop rule.
+Only the denominator of the final division moved. `lib/**` untouched.
+
+## The minimum grab width is ARITHMETIC, never CSS — this was the trap
+
+`MIN_GRAB_PX = 24`, expressed as units inside the helper:
+`24 / (92 / 5) = 1.3043478…` units = **2.17% of the track**. The map is exact
+because `--gw` is declared once (`35-gantt.css:19`, pinned by two tests) and
+`.gtrack` is content-sized at 12 columns, so the track is exactly 1104px.
+
+A CSS `min-width: 24px` would have looked equivalent and been wrong. `.grun` is
+positioned in percent and its `.gseg` children resolve **their** percentages
+against its **rendered** box — so a CSS minimum widens the box *after* the
+arithmetic has run and every short bar visibly stretches. Same for `padding`, a
+`border`, or `min-inline-size`. Doing it in units means the re-basing divides by
+the already-widened width and the segments land unmoved. `test/gantt-run-geometry.test.ts`
+bans all five properties on the rule by name.
+
+## Direction, and the final column — one rule, one line
+
+```js
+L = Math.max(0, Math.min(R0, TOTAL_UNITS - W))
+```
+
+Anchor the box's left edge at the run's left edge and let the invisible part
+grow **right**; if the grown right edge would pass the end of the track, slide
+the whole box left until its right edge sits exactly on `TOTAL_UNITS`; never let
+the left edge go negative. One expression, no branch, no second path to test.
+
+A one-day run on the last workday (unit 59) gives `W = 1.3043`,
+`L = 58.6957` → box `left="97.83" width="2.17"`, right edge exactly `100.00%`.
+The left-edge mirror needs no special case: `R0 = 0` → `min(0, …) = 0` →
+`max(0, 0) = 0`.
+
+## Vertical extent: `top: 0; bottom: 0`, not a 26px box
+
+`.gantt .gtrack .gseg` centres each segment with `top: 50%; transform:
+translateY(-50%)` against its nearest positioned ancestor. That ancestor was
+`.gbar` (`inset: 0`, full track height) and is now `.grun`. Giving `.grun`
+`top: 0; bottom: 0` keeps the containing block the same height, so that rule is
+**byte-identical** and the segments provably cannot move vertically. It also
+makes `.grun` a purely horizontal box — one axis of geometry, one axis of CSS —
+and yields an 84px-tall grab target instead of 26px, free because the box paints
+nothing.
+
+## The invisible part stays invisible, and does not lie about the cursor
+
+`.grun` paints nothing: no background, border, outline, radius, shadow, opacity,
+transition, z-index, `::before`/`::after`, no hover rule. Only `.gseg` paints.
+The stylesheet gained exactly one rule.
+
+`cursor: default` on the box and `cursor: grab` on the segments is JP's own
+2026-08-18 affordance ruling applied at 24px instead of 1104px. The ~6px
+invisible extension is empty track to the eye, so it shows the plain arrow while
+still being grabbable — the same honest-hit-area / honest-cursor split, moved
+down one level. `.gbar` names no cursor now and needs none: a
+`pointer-events: none` box never receives hover.
+
+**Specificity is preserved exactly** by the substitution: the pinned rule stays
+(0,5,0) resting, still out-ranking `.gantt .grun .gseg` grab (0,3,0) and
+`.gantt .grun .gseg:active` grabbing (0,4,0).
+
+## A row with no visible phases has no handle
+
+`phaseRun` returns `[]` — the same idiom `ghostBar` already uses — so
+`{{#each}}` emits nothing and the row renders `<div class="gbar"></div>`: no
+box, no `draggable`, no segment, no directives. **There is no `{{#if}}` anywhere
+in the geometry path**; the absence falls out of the empty-array shape rather
+than a second code branch.
+
+## What "no visual change" was measured to mean
+
+Not asserted — **measured**, at integrate, by rendering the same fixture row
+through the OLD template + `phaseBars` at `1c571f1` and the NEW template +
+`phaseRun`, with real Ractive, and reading the absolute percent-of-track
+position back out of both HTML strings.
+
+| Fixture | segs | run box | right edge | worst Δ | on a 1104px track |
+|---|---|---|---|---|---|
+| F1 one segment mid-window | 1 | 16.67% w 6.67% | 23.34 | 0.0000 pp | 0.000 px |
+| F2 three touching segments | 3 | 8.33% w 25.00% | 33.33 | **0.0075 pp** | **0.083 px** |
+| F3 clipped at the LEFT edge | 2 | 0.00% w 15.00% | 15.00 | 0.0040 pp | 0.044 px |
+| F4 clipped at the RIGHT edge | 2 | 83.33% w 16.67% | 100.00 | 0.0050 pp | 0.055 px |
+| F5a/F5b all clipped away | 0 | *no box at all* | — | — | — |
+| F6 one-day run, FINAL column | 1 | 97.83% w 2.17% | 100.00 | 0.0063 pp | 0.069 px |
+| F7 one-day run mid-window | 1 | 20.00% w 2.17% | 22.17 | 0.0063 pp | 0.069 px |
+| F8 wider than the minimum | 1 | 41.67% w 15.00% | 56.67 | 0.0000 pp | 0.000 px |
+| F10 zero-width segment mixed in | 1 | 25.00% w 6.67% | 31.67 | 0.0000 pp | 0.000 px |
+
+Every fixture was rendered **pinned and unpinned**; segment count, `cls` and
+`title` strings are identical to the old render in every one. Plus the
+exhaustive statement: **every one-day run at every start unit 0…59, rendered
+both ways** — worst drift 0.0063 pp = 0.069px, **0** boxes off the end of the
+track, **0** boxes narrower than 2.17%.
+
+**The worst case is F2, not F6** — the build brief's arithmetic predicted F6, and
+the reason it is wrong is worth keeping. Three roundings feed the composed
+error, not two: the box's `left` (≤ 0.005 pp), the segment's `left'` scaled by
+W/T, and — the one the prediction omitted — **the 1c571f1 value being compared
+against, which was rounded too** (≤ 0.005 pp, and it does not cancel). A wide
+run lets the second through at full scale, which is why three touching segments
+beat the single-column case. The analytic bound is ≈0.02 pp; the test's
+tolerance is 0.02 pp and is therefore the bound, not a fudge. Both the helper's
+comment and the test's were corrected at integrate to the measured numbers.
+
+## The guard moved with the source — it did not shrink
+
+`test/drag-hittest.test.ts` pins the drag-source **count at 3** and their class
+names. The count is **unchanged**: `['entry', 'growr', 'grun']`. The source
+moved, it did not multiply — one handle per phase segment is the variant JP
+rejected, and this is what would catch it.
+
+The ban itself **grew a rule it did not have**: the ancestor sweep now knows that
+an inherited `none` is cured by the source's own explicit `auto`, and it applies
+that **per source** — `.gantt` and `.gbrows` are ancestors of both `.grun` and
+`.growr`, and `.growr` declares no `auto`, so a `none` up there is still caught.
+`declaresAuto` is evaluated against the same rule set being swept, so a fixture
+holding only a `none` still fires. The **source** sweep takes no exemption at
+all: a source's own `none` is banned outright, in any state or spelling. The
+`.gdragging` sweep takes no exemption either, and the reason is written down —
+`display: none` on an ancestor cannot be undone from inside it.
+
+Six fixtures pin the semantics, including the one that proves it is an exemption
+and not a hole:
+
+| Fixture | Offenders |
+|---|---|
+| `.gtrack { pointer-events: none }` | 1 |
+| `.gantt .gbar { pointer-events: none }` | 1 — uncured |
+| `.gantt .gbar { none } .gantt .grun { auto }` | **0** — the shipped shape |
+| `.gbrows { none } .gantt .grun { auto }` | 1 — still caught *for `.growr`* |
+| `.gscroll { pointer-events: none }` | 1 |
+| `.gseg { pointer-events: none }` | 0 — a child, not an ancestor |
+
+## Three contract deviations at build, all forced, none weakening
+
+1. **Sorted source names.** The contract wrote `['entry','grun','growr']`.
+   `.sort()` gives `['entry','growr','grun']` — `'o'(0x6F) < 'u'(0x75)`. The
+   contract was wrong about JS, not about the pin. Count still 3.
+2. **`draggable` adjacency is not assertable.** Ractive 1.4.4's `toHTML()` emits
+   `style` before `draggable` **whatever order the template writes them in** —
+   verified at integrate across three template variants including a fully static
+   one. So `'<div class="grun" draggable="false"'` can never match a render.
+   Three assertions read the extracted open tag instead
+   (`/<div class="grun"[^>]*>/`) and then `.toContain('draggable="false"')` —
+   same claim, order-independent. The **template source** assertions are
+   unaffected and keep the contract's exact form.
+3. **The ancestor sweep is a de-duplicated union** of the non-exempt sources'
+   chains, not a per-source concatenation. The contract's own fixture table
+   requires this: `.gscroll` is an ancestor of two sources, and concatenation
+   would report 2 where the table says 1. It is also what the pre-batch guard
+   already did — `dedupe()` is unchanged — so the shape is preserved, with the
+   per-source filter added in front of it.
+
+## What was verified at integrate (batch 8)
+
+- **`node frontend/build.js`** — `public/index.html`, 333,049 bytes. Run first,
+  because the rewritten Ractive `{{! … }}` block is the likeliest break; its
+  first `}}` is its own terminator and `leakedMustacheText()` gates it in four
+  suites.
+- **`npx tsc --noEmit`** clean · **`npx eslint .`** clean.
+- **`npx vitest run`** — **58 files / 783 tests**, and the same under
+  **`TZ=UTC`**. Baseline was 57 / 735. (780 at integrate; the fix pass added
+  three guard tests — see *Fix pass* below.)
+- The first run went red on **one** test in `test/dayplan-api.test.ts`
+  (`/__test/login` → 404), a file this batch does not touch — the T149
+  parallel-startup signature. Rerun clean, nothing retried, capped or adjusted.
+  The fix pass hit the same signature once more, in a different file again
+  (`test/routing-returnto.test.ts`, 3 tests, `location` header undefined);
+  green alone and green on the very next full run, both TZs. This is the
+  environmental flake documented in `docs/HANDOFF.md` (loopback-port collision,
+  ~1 full run in 5, random file), not batch 8.
+
+### Fix pass (post-integrate review) — two guard hardenings, one doc correction
+
+- **The `.gweek` cells got their own sweep.** The T158 exemption is correct for
+  a drag SOURCE — `.grun` cures itself, so its whole chain leaves the ancestor
+  sweep — but `.gtrack` is an ancestor of `.grun` and of nothing else that
+  drags, so the chain that also carries the week cells stopped being swept the
+  moment the source moved. Before T158 the cells were protected by accident;
+  after it they were protected by nothing, and T158 is what made them
+  load-bearing (`.gbar` is transparent precisely so a drop outside the coloured
+  run reaches a cell). A future `.gantt .gtrack { pointer-events: none }` would
+  have kept all three sources dragging, kept 780 tests green, and silently
+  refused every drop outside the run — check (j), reaching the browser
+  undetected. `WEEK_CELLS` (derived from the `dropOnWeek` handler, never
+  listed) + `weekCellOffenders()` now sweep the cell and its ancestors with the
+  same per-target `auto` cure, and the cells ride along in the `.gdragging`
+  sweep. Mutation-probed on the real sheet: appending
+  `.gantt .gtrack { pointer-events: none }` to `35-gantt.css` fails the new
+  test and **nothing else** — proof the old guard could not see it. Scoped to
+  the planner's week cells on purpose; `.gblockhead` and `.daycol` are other
+  people's drop zones and are left alone.
+- **A cure must hold for the whole drag.** `declaresAuto()` accepted any
+  `pointer-events: auto` whose subject matched, including a state-scoped one
+  (`subjectClasses` strips pseudo-classes, so `.growr:hover` read as `.growr`)
+  and one inside an `@media` block (the flattener walks those in). Either would
+  have exempted a source's entire ancestor chain on a cure that evaporates
+  mid-drag — control 2's signature wearing a cure's clothes. The cure now
+  requires a top-level rule (`CssRule.conditional === false`) with a state-free
+  subject compound. The asymmetry is deliberate and is stated in the test: a
+  BAN still counts `:active` and `@media`, because a rule that bites sometimes
+  is a bug sometimes.
+- **`node frontend/build.js` byte count corrected** to 333,049 across
+  `STATE.md`, `tasks.md` and this file: the 332,828 recorded at integrate
+  predated the comment corrections made at integrate itself. The build is
+  deterministic — two consecutive runs give the same bytes and the same sha1.
+  The "all six directives" count is corrected to **five** in the same three
+  places (`draggable`, `on-dragstart`, `on-dragend`, `on-dragover`, `on-drop`),
+  matching `test/drag-hittest.test.ts`'s own wording.
+- `test/gantt-legend.test.ts` and `test/planner-weeks.test.ts` **untouched and
+  green**, which is itself the check: the phase→colour map did not fork (each
+  `.gseg.<phase>` still declared exactly once, legend swatches untouched, and
+  `.glegend` sits outside `.gtrack` so no new selector reaches it) and
+  `TOTAL_UNITS`/`dayIndex` survived verbatim.
+- Every `dropOnBar` body assertion in `test/drag-hittest.test.ts` **unchanged and
+  green** — the proof that the drop path did not move. Both `weekAtX` suites
+  likewise.
+- `pointer-events` inventory across all seven stylesheets is now **8**
+  declarations: `20-pipeline.css:230, 276` + `.gbar` (none), `.grun` (auto),
+  `.grun .gseg` (auto), `.gdragging .gdl` (none), `.gghost` (none),
+  `.gunsched` (none).
+- `grep` confirms `phaseBars` appears **nowhere** in `frontend/` or `public/`.
+
+## One defect found at integrate, by an unrelated guard
+
+Correcting the helper's comment to the measured numbers turned
+`test/suggest-counts.test.ts` red on *"the client declares the hard-mix
+fallbacks exactly once and nowhere else"*. That drift guard strips lines
+beginning `/*`, `*` or `//` and then requires `0.083` to appear on **exactly
+one** line of `01-app.js`, matching `const HARD_IDEAL = 0.083;`. The block
+comments in this file are indented continuation lines with no leading `*`, so
+the prose measurement `0.083px` survived the strip and read as a second copy of
+the share.
+
+**The guard was right and the comment was changed**, not the guard: the pixel
+figure is now spelled in words ("under a tenth of a pixel"), with a note beside
+it saying why a bare decimal must not go back. Worth recording because it is a
+live constraint on this file that no comment declares — a prose number in
+`01-app.js` can collide with a drift guard reading it as code — and because it
+is the one thing in this batch that a green suite would have hidden had the
+comment not been corrected at all. The percentage figure is quoted precisely in
+this document and in `STATE.md`, which the guard does not read.
+
+## Owed: a live-browser pass (folds into T155)
+
+**Nothing here proves a drag works, and the tests say so in two file headers.**
+There is no jsdom and no browser runner in this repo; every assertion is Ractive
+`toHTML()` or a read of the shipped source text, and a synthetic `DragEvent`
+never enters Chrome's drag machinery — it calls the app's own handlers directly,
+which is exactly why every automated check from 13g/13j to batch 6 passed while
+the live bar was un-draggable. **No synthetic DragEvents were added, and none may
+be.** What the suite proves is that the conditions Chrome needs are present in
+the shipped files and cannot silently regress, and that the coloured bars did not
+move by a pixel.
+
+The real-mouse pass owed on top of T155(a)–(g):
+
+- (i) the drag now starts **only** from the coloured run — pressing empty track
+  in the same row starts nothing;
+- (j) a drop on empty track **outside** the run still lands, through the
+  `.gweek` cell and the same `moveRows`;
+- (k) a **one-day** phase is catchable at the 24px minimum, including one in the
+  **final** column, where the handle must not hang off the track;
+- (l) a **pinned** row still refuses the grab on its colour and still accepts
+  someone else's drop, both on its run and on its empty track;
+- (m) a **before/after screenshot** that is identical apart from the cursor.

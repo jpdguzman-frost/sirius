@@ -206,7 +206,7 @@ describe('the three sprites match the library components (§1.6)', () => {
 /* Feature 3 — drag reversal                                               */
 /* ---------------------------------------------------------------------- */
 
-describe('a scheduled row is moved by its BAR, not by itself', () => {
+describe('a scheduled row is moved by its COLOURED RUN, not by itself or by the whole track', () => {
   const html = renderGantt({ plannerGroups: groups([SCHEDULED]) });
   const r = row(html, 'c1');
 
@@ -215,10 +215,22 @@ describe('a scheduled row is moved by its BAR, not by itself', () => {
     expect(open).not.toContain('draggable');
   });
 
-  it('puts draggable on the .gbar wrapper instead, with the segments inside it', () => {
-    expect(r).toMatch(/<div class="gbar" draggable="true"[^>]*>/);
-    const bar = /<div class="gbar"[\s\S]*?<\/div>\s*<\/div>/.exec(r)![0];
-    expect(bar).toContain('class="gseg sketch"');
+  /**
+   * JP's 2026-08-18 structural ruling, made into an assertion: "Gbar stays, but
+   * the colored bars wrapped in a draggable container can now be dragged." The
+   * NESTING is the ruling — `.gbar` positions, `.grun` drags, `.gseg` paints —
+   * so all three levels are asserted in order rather than each in isolation.
+   */
+  it('puts draggable on the .grun box inside .gbar, with the segments inside THAT', () => {
+    // read off the extracted OPEN TAG, not by adjacency: Ractive's `toHTML()`
+    // emits `style` ahead of `draggable` whatever order the template writes
+    // them in, and an adjacency assertion would fail for a rendering detail
+    // that has nothing to do with the claim being made
+    expect(/<div class="grun"[^>]*>/.exec(r)![0]).toContain('draggable="true"');
+    expect(r).toMatch(/<div class="gbar">\s*<div class="grun"/);
+    expect(r).toMatch(/<div class="grun"[^>]*>\s*<div class="gseg sketch"/);
+    // the wrapper is a plain positioning box now — no draggable anywhere on it
+    expect(/<div class="gbar"[^>]*>/.exec(r)![0]).not.toContain('draggable');
   });
 
   /**
@@ -234,21 +246,28 @@ describe('a scheduled row is moved by its BAR, not by itself', () => {
    *   3. the instruction itself survives as STANDING text, not a tooltip, in
    *      the hint line above the Gantt (rendered by suggest-counts.test.ts).
    */
-  it('advertises nothing on the wrapper — hovering empty track says nothing', () => {
-    const bar = /<div class="gbar"[^>]*>/.exec(r)![0];
-    expect(bar).not.toContain('title=');
+  it('advertises nothing on either wrapper — hovering empty track says nothing', () => {
+    // T158 adds the second half: `.grun` extends invisibly by up to ~6px to
+    // reach the 24px minimum grab width, and a `title` there would pop a
+    // tooltip over what looks like empty track. Neither box speaks.
+    expect(/<div class="gbar"[^>]*>/.exec(r)![0]).not.toContain('title=');
+    expect(/<div class="grun"[^>]*>/.exec(r)![0]).not.toContain('title=');
     expect(r).not.toContain('Drag along the timeline to reslot');
   });
 
   it('puts the grab affordance on the coloured run, not across the track', () => {
-    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \{[^}]*cursor: default/);
-    expect(GANTT_CSS).not.toMatch(/\.gantt \.gbar \{[^}]*cursor: grab/);
-    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \.gseg \{[^}]*cursor: grab/);
-    // PRESERVATION GUARD, not a regression proof: this rule is byte-identical
-    // before and after the ruling, so it is the one assertion in this batch that
-    // does NOT flip against the pre-ruling stylesheet. It is here so that moving
-    // `grab` onto `.gseg` cannot later be "tidied" by dropping the pressed state.
-    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \.gseg:active \{[^}]*cursor: grabbing/);
+    // the cursor split is JP's 2026-08-18 affordance ruling applied at 24px
+    // instead of 1104px: `grab` over colour, plain arrow over empty track. The
+    // invisible extension reads as empty track to the eye, so the box is
+    // `default` and only the segments offer the grab.
+    expect(GANTT_CSS).toMatch(/\.gantt \.grun \{[^}]*cursor: default/);
+    expect(GANTT_CSS).not.toMatch(/\.gantt \.grun \{[^}]*cursor: grab/);
+    expect(GANTT_CSS).toMatch(/\.gantt \.grun \.gseg \{[^}]*cursor: grab/);
+    // PRESERVATION GUARD, not a regression proof: this rule's DECLARATIONS are
+    // byte-identical across both rulings — only its ancestor selector moved. It
+    // is here so that `grab` living on `.gseg` cannot later be "tidied" by
+    // dropping the pressed state.
+    expect(GANTT_CSS).toMatch(/\.gantt \.grun \.gseg:active \{[^}]*cursor: grabbing/);
   });
 
   it('keeps the reslot instruction as standing text, where no hover is needed', () => {
@@ -268,25 +287,40 @@ describe('a scheduled row is moved by its BAR, not by itself', () => {
     expect(r).not.toContain('ghandle');
   });
 
-  it('sources the dragstart from the bar; the row carries none (source, not render)', () => {
+  it('sources the dragstart from the run box; the row carries none (source, not render)', () => {
     // `on-dragstart` is a Ractive directive and never reaches toHTML() output
-    expect(TEMPLATE).toMatch(/<div class="gbar"[^>]*\n?\s*on-dragstart="\['dragRow', row\.cardId\]"/);
-    expect([...TEMPLATE.matchAll(/on-dragstart="\['dragRow', row\.cardId\]"/g)]).toHaveLength(2); // bar + unscheduled row
+    expect(TEMPLATE).toMatch(/<div class="grun"[^>]*on-dragstart="\['dragRow', row\.cardId\]"/);
+    expect([...TEMPLATE.matchAll(/on-dragstart="\['dragRow', row\.cardId\]"/g)]).toHaveLength(2); // run + unscheduled row
     expect(TEMPLATE).toMatch(/\{\{#if !row\.slottedWeek\}\}draggable="\{\{ row\.pinned \? 'false' : 'true' \}\}" on-dragstart=/);
   });
 
-  it('is hit-testable at all times and owns its own drop; the week cells keep theirs (batch 7)', () => {
-    // REVERSED from 13g/13j. `pointer-events: none` here is what cancelled
-    // every real drag: Chrome starts the drag from the draggable ancestor and
-    // abandons it in the same tick when that ancestor cannot be hit. The bar
-    // is solid now and takes its own dragover/drop instead of relying on
-    // hit-testing falling through.
-    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \{[^}]*pointer-events: auto/);
-    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \.gseg \{[^}]*pointer-events: auto/);
+  it('is hit-testable at all times and owns its own drop; the week cells keep theirs (batches 7 + 8)', () => {
+    // REVERSED from 13g/13j, and MOVED DOWN A LEVEL by T158.
+    // `pointer-events: none` on the DRAG SOURCE is what cancelled every real
+    // drag: Chrome starts the drag from the draggable element and abandons it
+    // in the same tick when that element cannot be hit. `.grun` is the source
+    // now, so `.grun` is what must stay solid — and `.gbar` goes back to
+    // transparent precisely so the `.gweek` columns get their drops back
+    // everywhere outside the coloured run.
+    expect(GANTT_CSS).toMatch(/\.gantt \.grun \{[^}]*pointer-events: auto/);
+    expect(GANTT_CSS).toMatch(/\.gantt \.grun \.gseg \{[^}]*pointer-events: auto/);
+    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \{[^}]*pointer-events: none/);
     // `on-drop` is a directive too — it never renders; the .gweek cells do, and
-    // they still serve the UNSCHEDULED rows, which draw no bar over them
+    // they serve the UNSCHEDULED rows and every pixel of track outside a run
     expect([...html.matchAll(/<div class="gweek"><\/div>/g)]).toHaveLength(2);
     expect(TEMPLATE).toContain('<div class="gweek" on-dragover="[\'dragOver\']" on-drop="[\'dropOnWeek\', wk.key]">');
+  });
+
+  it('draws NO run box at all when every phase is clipped out of the window', () => {
+    // `phaseRun` returns [] there, so `{{#each}}` emits nothing: no box, no
+    // `draggable`, no segment. A row with nothing visible has nothing to grab —
+    // and, because the geometry path carries no `{{#if}}`, that falls out of the
+    // empty-array shape rather than out of a second code path.
+    const blank = row(renderGantt({ plannerGroups: groups([SCHEDULED]), phaseRun: () => [] }), 'c1');
+    expect(blank).toContain('<div class="gbar">');
+    expect(blank).not.toContain('class="grun"');
+    expect(blank).not.toContain('draggable');
+    expect(blank).not.toContain('class="gseg');
   });
 });
 
@@ -329,14 +363,17 @@ describe('a live drag hides only the deadline tick, so the solid bar can take it
     expect(GANTT_CSS).not.toContain('.gantt.gdragging .gbar .gseg');
   });
 
-  it('never turns the bar transparent, in any state — that is the batch-7 bug', () => {
+  it('never turns the DRAG SOURCE transparent, in any state — that is the batch-7 bug', () => {
     // replaces the old specificity test: `.gdl` has no resting
     // `pointer-events: auto` rule to out-rank, so "4 classes beats 3" no longer
     // has a subject. What matters instead is the SCOPE of the transparency.
-    // The exhaustive sweep — every stylesheet, every drag source, ancestors
-    // included — lives in test/drag-hittest.test.ts; this keeps the local rule
-    // honest next to the assertions it belongs with.
-    expect(GANTT_CSS).not.toMatch(/\.gbar[^{,]*\{[^}]*pointer-events: none/);
+    // T158 repoints it: the subject that must never be transparent is `.grun`,
+    // the element that carries `draggable`. `.gbar` is transparent on purpose
+    // now — it is a positioning wrapper, not a handle. The exhaustive sweep,
+    // including the rule that an ancestor's `none` is legal only when the
+    // source re-declares `auto`, lives in test/drag-hittest.test.ts; this keeps
+    // the local rule honest next to the assertions it belongs with.
+    expect(GANTT_CSS).not.toMatch(/\.grun[^{,]*\{[^}]*pointer-events: none/);
   });
 
   it('sets the flag on dragstart and clears it on dragend and at the write', () => {
@@ -348,10 +385,10 @@ describe('a live drag hides only the deadline tick, so the solid bar can take it
     expect(APP_JS).toMatch(/async function moveRows\([\s\S]*?app\.set\('ganttDragging', false\);/);
   });
 
-  it('wires dragend to BOTH drag sources — the bar and the unscheduled row', () => {
+  it('wires dragend to BOTH drag sources — the run box and the unscheduled row', () => {
     // a directive again: it never reaches toHTML() for any row kind
     expect([...TEMPLATE.matchAll(/on-dragend="\['dragEnd'\]"/g)]).toHaveLength(2);
-    expect(TEMPLATE).toMatch(/<div class="gbar"[^>]*\n?\s*on-dragstart="\['dragRow', row\.cardId\]" on-dragend="\['dragEnd'\]"/);
+    expect(TEMPLATE).toMatch(/<div class="grun"[^>]*on-dragstart="\['dragRow', row\.cardId\]" on-dragend="\['dragEnd'\]"/);
     expect(TEMPLATE).toMatch(/\{\{#if !row\.slottedWeek\}\}draggable=[^\n]*on-dragstart="\['dragRow', row\.cardId\]" on-dragend="\['dragEnd'\]"/);
   });
 });
@@ -368,8 +405,9 @@ describe('an unscheduled row keeps the row-drag it has no bar to replace (R-drag
     expect(r).toContain('class="ghandle"');
   });
 
-  it('renders no .gbar — there is nothing scheduled to grab', () => {
+  it('renders neither .gbar nor .grun — there is nothing scheduled to grab', () => {
     expect(r).not.toContain('class="gbar"');
+    expect(r).not.toContain('class="grun"');
     expect(r).toContain('class="gunsched"');
   });
 
@@ -382,14 +420,17 @@ describe('a pinned row refuses both grabs (JP 2026-08-17, ruling B)', () => {
   const html = renderGantt({ plannerGroups: groups([PINNED]) });
   const r = row(html, 'c3');
 
-  it('marks the bar undraggable, and no longer speaks for the whole track', () => {
-    expect(r).toContain('<div class="gbar" draggable="false"');
+  it('marks the run box undraggable, and no longer speaks for the whole track', () => {
+    // the open tag, not adjacency — `toHTML()` puts `style` first (see above)
+    expect(/<div class="grun"[^>]*>/.exec(r)![0]).toContain('draggable="false"');
     // MOVED (2026-08-18): the wrapper's `title` is gone in BOTH branches, so the
     // refusal is asserted at its two surviving homes below rather than here.
     // Losing it would be invisible without those two — hence they are separate
     // failing assertions, not an `expect(r).toContain(…)` that any one of the
-    // row's several copies of the sentence could satisfy.
+    // row's several copies of the sentence could satisfy. T158 adds `.grun` to
+    // the silent list for the same reason it added it to `.gbar`.
     expect(/<div class="gbar"[^>]*>/.exec(r)![0]).not.toContain('title=');
+    expect(/<div class="grun"[^>]*>/.exec(r)![0]).not.toContain('title=');
   });
 
   it('carries the reason on the row, which is what the track inherits', () => {
@@ -410,9 +451,12 @@ describe('a pinned row refuses both grabs (JP 2026-08-17, ruling B)', () => {
     // one clause and keep the other's comment. Scoped off `.gbar` by JP's
     // 2026-08-18 ruling — a refusal is an affordance, and a 1104px `not-allowed`
     // would withhold a whole track that never offered anything.
-    expect(GANTT_CSS).toMatch(/\.gantt \.growr\.pinned \.gbar \.gseg,\s*\n\.gantt \.growr\.pinned \.gbar \.gseg:active \{[^}]*cursor: not-allowed/);
-    // `.gbar` must never be a SUBJECT again — matches `.gbar,` / `.gbar {` /
-    // `.gbar{`, and deliberately not `.gbar .gseg…`
+    expect(GANTT_CSS).toMatch(/\.gantt \.growr\.pinned \.grun \.gseg,\s*\n\.gantt \.growr\.pinned \.grun \.gseg:active \{[^}]*cursor: not-allowed/);
+    // neither wrapper may be a SUBJECT again — matches `.grun,` / `.grun {` /
+    // `.grun{`, and deliberately not `.grun .gseg…`. Specificity is unchanged
+    // by the substitution: (0,5,0) resting, still out-ranking `.gantt .grun
+    // .gseg`'s grab (0,3,0) and the `:active` grabbing (0,4,0).
+    expect(GANTT_CSS).not.toMatch(/\.gantt \.growr\.pinned \.grun\s*[,{]/);
     expect(GANTT_CSS).not.toMatch(/\.gantt \.growr\.pinned \.gbar\s*[,{]/);
   });
 

@@ -132,13 +132,21 @@ export interface GanttState {
   plannerGroups?: PlannerGroup[];
   arrived?: Record<string, boolean>;
   ganttDragging?: boolean;
+  /**
+   * Batch 8 (T158): `() => []` renders a scheduled row whose phases are ALL
+   * clipped away — no run box, so no handle to grab. Any suite that needs that
+   * state injects it here rather than reaching into the template.
+   */
+  phaseRun?: () => unknown[];
 }
 
 /**
- * Renders the block for one view state. The per-row helpers (`phaseBars`,
+ * Renders the block for one view state. The per-row helpers (`phaseRun`,
  * `deadlineTick`, `ghostBar`, `footText`, `footCls`) are stubbed: their maths
- * is covered by test/planner-weeks.test.ts and test/planner-payload.test.ts —
- * what matters here is which nodes the template emits, not what is inside a bar.
+ * is covered by test/gantt-run-geometry.test.ts (the run box and its re-based
+ * segments, executed out of the shipped 01-app.js), test/planner-weeks.test.ts
+ * and test/planner-payload.test.ts — what matters here is which nodes the
+ * template emits, not what is inside a bar.
  */
 export function renderGantt(state: GanttState = {}): string {
   const instance = new Ractive({
@@ -163,7 +171,11 @@ export function renderGantt(state: GanttState = {}): string {
       footCaption: '92 / wk',
       ganttThumb: { needed: false },
       icon: {},
-      phaseBars: () => [{ cls: 'sketch', left: 0, width: 10, title: 'Sketch' }],
+      // T158: one run box (percent of the TRACK) carrying its segments
+      // re-based to percent OF THE BOX. The default draws one run with one
+      // segment filling it; `phaseRun: () => []` draws a row with no box.
+      phaseRun: state.phaseRun
+        ?? (() => [{ left: 0, width: 10, segs: [{ cls: 'sketch', left: 0, width: 100, title: 'Sketch' }] }]),
       deadlineTick: () => null,
       ghostBar: () => [],
       fmt: (v: unknown) => String(v),

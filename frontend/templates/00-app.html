@@ -647,55 +647,71 @@
                   </div>
                   <div class="gtrack">
                     <div class="gweeks">{{#each plannerWeeks as wk}}<div class="gweek" on-dragover="['dragOver']" on-drop="['dropOnWeek', wk.key]"></div>{{/each}}</div>
-                    {{! owl #31 as corrected in batch 7 (T153) — `.gbar` is the
-                        drag SOURCE, and it is hit-testable at all times. It
-                        spans the whole track rather than the run's own box on
-                        purpose: `.gseg` positions are percentages OF THE TRACK,
-                        so a narrower wrapper would re-base every one of them
-                        and move the shipped bars.
-                        The wrapper used to be `pointer-events: none` so the
-                        week cells underneath could take the drop. That is what
-                        broke the drag: Chrome hit-tests the draggable ancestor
-                        at dragstart and cancels the drag in the same tick when
-                        it cannot be hit — proven with real mouse input, which
-                        produced dragstart then dragend and nothing between.
-                        So the bar stays solid and OWNS its drop: `dragOver`
-                        (the same preventDefault the week cells use) plus
-                        `dropOnBar`, which maps the pointer's X to a week COLUMN
-                        through `weekAtX` and then runs the SAME `moveRows`
-                        recipe `dropOnWeek` runs — one write, one audit row.
-                        The week cells keep their own handlers below: an
-                        unscheduled row's track renders `.gunsched`, not a bar,
-                        so nothing covers them there.
+                    {{! owl #31 (T153), re-seated on the run's own box by JP's
+                        structural ruling of 2026-08-18. The drag SOURCE is
+                        `.grun` — the coloured run's own box — not `.gbar`, and
+                        it is hit-testable at all times. Chrome hit-tests the
+                        draggable ancestor at dragstart and cancels the drag in
+                        the same tick when it cannot be hit; that was proven
+                        with real mouse input, which produced dragstart then
+                        dragend and nothing between. So `.grun` is solid in
+                        every state and OWNS its drop: `dragOver` (the same
+                        preventDefault the week cells use) plus `dropOnBar`,
+                        which maps the pointer's X to a week COLUMN through
+                        `weekAtX` and then runs the SAME `moveRows` recipe
+                        `dropOnWeek` runs — one write, one audit row.
+                        `.gbar` keeps its element and its class and goes back to
+                        `pointer-events: none`, which is the point of the whole
+                        change: outside the coloured run the track is
+                        transparent again, so the `.gweek` columns beneath get
+                        their drops back instead of a 1104px wrapper swallowing
+                        them. That is only safe because `.grun` re-declares
+                        `pointer-events: auto` — pointer-events inherits, and
+                        the child's explicit value beats the parent's.
+                        The box is one box over the WHOLE run, not one per
+                        segment: the segments touch, so it looks identical and
+                        the handle cannot flicker across a seam. It also carries
+                        a minimum grab width so a one-day phase is not a fiddly
+                        18px target — the extra width is invisible, paints
+                        nothing, and is arithmetic rather than CSS.
+                        All the geometry comes ready-made out of `phaseRun` in
+                        01-app.js: the box as a percentage of the TRACK, and
+                        each segment as a percentage of the BOX, already
+                        formatted. Nothing here multiplies, adds or branches on
+                        geometry, and the segments land where they have always
+                        landed — the re-basing cancels exactly.
+                        A run whose segments the window clips away returns an
+                        empty list, so such a row draws no box, no handle and no
+                        draggable at all — the same idiom `ghostBar` uses.
                         A pinned row keeps draggable false and its refusal
-                        message, but still carries the drop handlers on purpose
-                        — the pin freezes that ROW, not the column, so its bar
-                        stays a valid landing strip for someone else's drag.
+                        message, but still carries the drop pair on purpose —
+                        the pin freezes that ROW, not the column, so its run
+                        stays a valid landing strip for someone else's drag, and
+                        the rest of its track now lands through the week cells.
                         Dragging is horizontal by construction: the drop target
                         is a week COLUMN and which row it belongs to is never
                         read — the moved card id comes off the dataTransfer.
                         Only `.gdl` still goes transparent mid-drag; it paints
-                        over the bar and carries no dragover handler.
-                        The bar carries NO `title` (JP, 2026-08-18, closing
-                        T155(h)): the hit area spans 1104px for the reasons
-                        above, so a tooltip on it popped over empty track and
-                        offered a drag where there was nothing to grab. The
-                        affordance is the COLOURED RUNS only. What it said
-                        survives in two places that were already there and are
-                        not hover-gated — the standing hint above the Gantt
-                        ("Drag a bar along its row to reslot it … Pinned rows
-                        never move") and, on a pinned row, `.growr`'s own
-                        `title="Pinned — unpin to move"`, which a `title`-less
-                        descendant inherits, so the refusal still meets the user
-                        anywhere on the row. Each `.gseg` keeps its phase title
-                        and its appended pinned sentence, unchanged — the
-                        segments are NOT the place to restate the mechanic. }}
+                        over the track and carries no dragover handler.
+                        Neither `.gbar` nor `.grun` carries a `title` (JP,
+                        2026-08-18, closing T155(h)): a tooltip on the wrapper
+                        popped over empty track, and the box's invisible
+                        extension is empty track to the eye too. The affordance
+                        is the COLOURED RUNS only. What it said survives in two
+                        places that were already there and are not hover-gated —
+                        the standing hint above the Gantt ("Drag a bar along its
+                        row to reslot it … Pinned rows never move") and, on a
+                        pinned row, `.growr`'s own `title="Pinned — unpin to
+                        move"`, which a `title`-less descendant inherits, so the
+                        refusal still meets the user anywhere on the row. Each
+                        `.gseg` keeps its phase title and its appended pinned
+                        sentence, unchanged — the segments are NOT the place to
+                        restate the mechanic. }}
                     {{#if row.slottedWeek}}
-                      <div class="gbar" draggable="{{ row.pinned ? 'false' : 'true' }}"
+                      <div class="gbar">{{#each phaseRun(row) as run}}<div class="grun" draggable="{{ row.pinned ? 'false' : 'true' }}"
                            on-dragstart="['dragRow', row.cardId]" on-dragend="['dragEnd']"
-                           on-dragover="['dragOver']" on-drop="['dropOnBar']">
-                        {{#each phaseBars(row) as b}}<div class="gseg {{b.cls}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}{{ row.pinned ? ' · Pinned — unpin to move' : '' }}"></div>{{/each}}
-                      </div>
+                           on-dragover="['dragOver']" on-drop="['dropOnBar']"
+                           style="left:{{run.left}}%;width:{{run.width}}%;">{{#each run.segs as b}}<div class="gseg {{b.cls}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}{{ row.pinned ? ' · Pinned — unpin to move' : '' }}"></div>{{/each}}</div>{{/each}}</div>
                       {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
                     {{else}}
                       <div class="gunsched">Not yet scheduled — drag the row onto a week</div>

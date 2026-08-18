@@ -309,39 +309,52 @@
 .gseg.review { background: var(--blue-200); }
 .gseg.render { background: var(--blue-600); }
 .gseg.renderOverdue { background: var(--red-600); }
-/* owl #31, corrected in batch 7 (T153) — `.gbar` is the DRAG SOURCE. It spans
-   the whole track rather than the run's own box on purpose: `.gseg` offsets are
-   percentages OF THE TRACK, so a narrower wrapper would re-base every one of
-   them and move the shipped bars. `inset: 0` keeps the containing block
-   identical.
-   `pointer-events` is `auto` here and it must STAY `auto` in every state.
-   Chrome hit-tests the draggable ancestor when a drag begins and CANCELS the
-   drag in the same tick if that ancestor cannot be hit — proven with real mouse
-   input (CDP): the shipped `none` produced dragstart → dragend, dropEffect
-   "none", no drag/dragenter/dragover/drop at all. `auto` is written out rather
-   than simply omitted because `pointer-events` INHERITS: the explicit value
-   also defends the drag source against any future ancestor rule.
-   Because the wrapper is solid, the `.gweek` cells beneath a scheduled row no
-   longer see the drag — so the bar OWNS its own dragover/drop (template) and
-   maps the pointer's X to a week column itself (`weekAtX`, 01-app.js §3.1). The
-   week cells keep their handlers for unscheduled rows, whose track renders
-   `.gunsched` (pointer-events: none) instead of a bar. Motion is horizontal by
-   construction: the drop target is a week COLUMN and nothing reads which row it
-   sits in.
+/* owl #31 (T153), re-seated on the run's own box by JP's structural ruling of
+   2026-08-18. `.grun` is the DRAG SOURCE — the coloured run's own box, one box
+   over the whole run — and `.gbar` is the track-wide wrapper it sits inside.
+   (Do not misread the neighbours: `.growr` is a planner ROW and `.gunsched` is
+   the "not yet scheduled" caption. Only `.grun` is the handle.)
+   `pointer-events: auto` on `.grun` must STAY `auto` in every state. Chrome
+   hit-tests the draggable ancestor when a drag begins and CANCELS the drag in
+   the same tick if that ancestor cannot be hit — proven with real mouse input
+   (CDP): a `none` on the source produced dragstart → dragend, dropEffect
+   "none", no drag/dragenter/dragover/drop at all. That ban did not shrink when
+   the source moved; it moved with it. The `auto` is written out rather than
+   omitted for two reasons: `pointer-events` INHERITS, so the explicit value
+   defends the source against any future ancestor rule — and it is what makes
+   the wrapper's `none` legal at all, since a child's own `auto` overrides an
+   inherited `none`. Deleting it would silently re-create the cancel.
+   `.gbar` is `pointer-events: none` ON PURPOSE, and that is the point of the
+   change: it spans 1104px, so left solid it swallows every drop that lands on
+   the track OUTSIDE the coloured run, and the `.gweek` columns beneath never
+   see them. Transparent, it hands those columns their drops back while `.grun`
+   keeps its own. Both paths end in the same `moveRows` — the box maps the
+   pointer's X to a week column itself (`weekAtX`, 01-app.js §3.1), the cells
+   are simply hit. `inset: 0` keeps the wrapper's box identical to the track's.
+   `.grun` is `top: 0; bottom: 0` — a purely HORIZONTAL box. That is load-
+   bearing: `.gantt .gtrack .gseg` below centres each segment with `top: 50%;
+   transform: translateY(-50%)` against its nearest positioned ancestor, which
+   used to be `.gbar` at full track height and is now `.grun`. Same height, same
+   containing block, so the segments provably cannot move vertically — and the
+   grab target is the full 84px row rather than the 26px bar, which is free
+   because the box paints nothing.
+   The minimum grab width is ARITHMETIC, in `phaseRun`, never CSS. A `min-width`
+   (or padding, or a border) here would widen the RENDERED box, and the segments
+   inside are positioned in percentages OF THAT BOX — so every short run would
+   visibly stretch. The box must paint nothing at all: no background, border,
+   outline, shadow, hover tint or pseudo-element. Only `.gseg` paints.
    THE POINTER AFFORDANCE IS NOT THE HIT AREA (JP, 2026-08-18, closing T155(h)).
-   The wrapper has to span the track for the two reasons above, but a 1104px
-   `cursor: grab` told the user the empty air right of a two-week run was
-   grabbable, which is a lie about what the pixels mean even though the hit-test
-   is honest. The cursor now lives on `.gseg` — the coloured runs, the only thing
-   the user thinks of as "the bar" — and the wrapper reads `default`, which is
-   exactly what the rest of `.growr` reads (the row declares no cursor). `.gseg`
-   said `cursor: inherit` before, which is how it picked the wrapper's `grab` up;
-   it names its own value now, so the two can never drift back together.
-   `pointer-events` is untouched on both — the drag source and its children stay
-   solid. */
-.gantt .gbar { position: absolute; inset: 0; pointer-events: auto; cursor: default; }
-.gantt .gbar .gseg { pointer-events: auto; cursor: grab; }
-.gantt .gbar .gseg:active { cursor: grabbing; }
+   The cursor lives on `.gseg` — the coloured runs, the only thing the user
+   thinks of as "the bar" — and `.grun` reads `default`, which is what the rest
+   of `.growr` reads (the row declares no cursor). The box's invisible extension
+   is empty track to the eye, so it shows the plain arrow while still being
+   grabbable: an honest hit area with an honest cursor. `.gbar` names no cursor
+   now, and needs none — a `pointer-events: none` box never receives hover, so
+   the arrow over empty track comes from the cells and the row beneath. */
+.gantt .gbar { position: absolute; inset: 0; pointer-events: none; }
+.gantt .grun { position: absolute; top: 0; bottom: 0; pointer-events: auto; cursor: default; }
+.gantt .grun .gseg { pointer-events: auto; cursor: grab; }
+.gantt .grun .gseg:active { cursor: grabbing; }
 /* The ONE thing that still hides for the duration of a drag is the deadline
    tick. `.gdl` is a later sibling of `.gbar` inside the same `position:
    relative` `.gtrack`, both absolute at `z-index: auto`, so it paints ON TOP of
@@ -352,8 +365,8 @@
    affordance. `.gdragging` is set on dragstart and cleared on dragend (and
    defensively in moveRows, for the re-render that eats the source node).
    The segments are NOT in this rule any more, and nothing needs them to be: the
-   bar beneath them is solid and carries the dragover/drop itself, so an event
-   over a transparent `.gseg` would simply hit `.gbar` instead. They are kept
+   run box beneath them is solid and carries the dragover/drop itself, so an
+   event over a transparent `.gseg` would simply hit `.grun` instead. They are kept
    solid anyway, and the guard bans the alternative outright — blanking a
    segment mid-drag would abort the drag only if `draggable` ever moved onto
    `.gseg` (the variant batch 7 rejected), and that is exactly the move the ban
@@ -372,8 +385,8 @@
    in words on hover: `.growr` carries `title="Pinned — unpin to move"`, which
    covers the track it contains, and each `.gseg` appends the same sentence to
    its phase title. */
-.gantt .growr.pinned .gbar .gseg,
-.gantt .growr.pinned .gbar .gseg:active { cursor: not-allowed; }
+.gantt .growr.pinned .grun .gseg,
+.gantt .growr.pinned .grun .gseg:active { cursor: not-allowed; }
 .gantt .gtrack .gseg {
   position: absolute; top: 50%; transform: translateY(-50%);
   height: var(--gbar-h); border-radius: var(--radius-xs);
