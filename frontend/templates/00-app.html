@@ -684,11 +684,28 @@
                             that already announces a note becomes the button
                             that edits it (same pixels, no new chrome), and a
                             row with no note gets a ghost pencil revealed by the
-                            SAME hover/focus rule as the cluster. Placement is
-                            flagged to Miles. }}
+                            SAME hover/focus rule as the cluster. Placement
+                            confirmed good by product, owl #48.
+
+                            The chip carries the NOTE, not the fixed word
+                            'manual' it shipped with (product ruling, owl #48):
+                            a chip that says a note exists without saying what
+                            it says makes you open the editor to read your own
+                            note, which is the whole reason it is on the row.
+                            Same shared clip recipe as Requestor and Asset Type
+                            — measured, never counted — and neutral rather than
+                            amber (owl #49): coloured chips carry state,
+                            neutral chips carry content, so the base badge
+                            tokens are inherited rather than overridden.
+                            `data-note` and not `aria-label` feeds the tooltip
+                            here, because unlike its two non-interactive
+                            siblings this one is a BUTTON: its accessible name
+                            has to say what pressing it does, while the tooltip
+                            has to show the value. Both strings still come from
+                            the one expression, so they cannot drift. }}
                         {{#if row.statusNote}}
-                          <button class="pbadge gsm gnote" type="button" on-click="['editNote', row.cardId, row.statusNote]"
-                                  title="{{row.statusNote}}" aria-label="Edit the status note on {{row.mcLabel}}: {{row.statusNote}}">manual</button>
+                          <button class="pbadge gsm gnote clipbadge" type="button" on-click="['editNote', row.cardId, row.statusNote]"
+                                  data-note="{{row.statusNote}}" aria-label="Edit the status note on {{row.mcLabel}}: {{row.statusNote}}"><span class="cliptext">{{row.statusNote}}</span></button>
                         {{else}}
                           <button class="gact gnoteadd" type="button" on-click="['editNote', row.cardId, row.statusNote]"
                                   title="Status override with note" aria-label="Add a status note to {{row.mcLabel}}">✎</button>

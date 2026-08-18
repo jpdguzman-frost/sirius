@@ -17,13 +17,17 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 0–8a | Setup · schema · auth+audit · `lib/` port · ARES read · intake · model refresh · five tabs · urgency write · conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 gate ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 backup/restore ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸ (team UI update), T075 sweep pending, non-member 403 parked | G7 passed; write-enable on rt-837 = next JP gate |
 | 10–13k b11, ctx | Two-way sync · admin panel · Pipeline redesign · Gantt planner · batches 1–11 · context restructure (script split shipped with b11's deploy) | **DEPLOYED + LIVE-VERIFIED through 2026-08-18** (T077–T171) | per-batch detail: `docs/history/phase-log.md` |
-| 13k b12 | The expanded MC row to spec (owl #45) + the same-evening review pass: one-table column model · task due = W2's task-card half · first-sibling render (invariant 3) · Manila-true due slice both halves · sync hardening · kind-flip deactivation | **DEPLOYED 2026-08-18, review-pass fixes pending deploy** (`8765083`..; 962 + 24 todo dual-TZ) | `due-roundtrip.ts` on tx8gDsTH ✓; owed: task-due UI round-trip · sub-350px scroll check · Miles's confirms on the two defaults (jp→miles #41) |
+| 13k b12 | The expanded MC row to spec (owl #45) + the same-evening review pass: one-table column model · task due = W2's task-card half · first-sibling render (invariant 3) · Manila-true due slice both halves · sync hardening · kind-flip deactivation | **DEPLOYED + LIVE 2026-08-18** (`8765083`..`8b7bfcd`; both defaults later confirmed by product, owl #47 — nothing to flip) | `due-roundtrip.ts` on tx8gDsTH ✓; owed: task-due UI round-trip · sub-350px scroll check |
+| 13k b13 | Owls #47–#51: the stale-reconcile guard (decisions/0025 — a reconcile can no longer revert a registry write) · status-note chip carries the note, neutral, measured truncation · clarification note = 4px left accent | **BUILT, pending deploy** (976 + 24 todo dual-TZ) | product answered in jp→miles #42; owed: live pass over the note chip + the accent |
 
-**Build health (2026-08-18, post-review-pass):** 962/962 tests + 24 `it.todo`,
+**Build health (2026-08-18, post-batch-13):** 976/976 tests + 24 `it.todo`,
 61 files — green under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
-`TZ=America/New_York`). Migrations applied through **007**. The ~1-run-in-5
-loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md` rule 5; its
-real fix is parked below.
+`TZ=America/New_York`). Migrations applied through **007** (0025's guard
+needs none — an absent stamp already means "never written by Sirius"). The
+~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
+rule 5; its real fix is parked below. **Run the suite with `--dir test`** while
+a second session's worktree sits in `.claude/worktrees/` — a bare `vitest run`
+collects its copy of every suite and reports its failures as main's.
 
 ## Decisions needed from JP (blocking)
 
@@ -54,13 +58,14 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority: twice an owl
   asserted a ruling JP had not made or later declined, so verify with JP
-  before building on one. **Thread position**: miles→jp acked through **#46**;
-  jp→miles sent through **#41** (batch-12 live report). **Awaiting Miles**:
-  confirms on the two batch-12 defaults — childless-MC chevron removed and
-  SubTone expanded-only (both one-line flips, jp→miles #41) · a Sirius Smoke
-  pass over the expanded row incl. a task due set/clear · the row-controls
-  design pass incl. status-note placement · the gap-banner placement
-  blessing. Closed threads → `docs/history/state-log/`.
+  before building on one. **Thread position**: miles→jp acked through **#51**;
+  jp→miles sent through **#42** (batch-13 build + the cadence answer).
+  **Awaiting Miles**: the row-controls design pass — the checkbox, grip,
+  three-icon cluster and the note chip looked at together; it is the last
+  design item open on their side · a Sirius Smoke pass over the expanded row
+  incl. a task due set/clear · whether ARES's read path is cached (the one
+  part of the stale-reconcile guard this side cannot see). Closed threads →
+  `docs/history/state-log/`.
 - **Figma reads** — Rex MCP is OFFLINE (server disconnected). **The official
   Figma MCP is the verified path**: `get_design_context` returns the
   categorized annotations as `data-*-annotations` attributes plus exact pixel
@@ -84,7 +89,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   hardening (~21 files) · manual pass: drag a bar in the collapsed-pane
   state · whether to draw a custom drag image so
   Chrome's translucency/shadow go away entirely (only `setDragImage` can).
-- **Product (Miles)**: the batch-12 confirms + Smoke pass (see Comms) ·
+- **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
 - **ARES agent**: push subscription for `hLL7WW2V`.
@@ -105,13 +110,11 @@ archive entries as complete as ever; length there is fine. This window holds
 the newest 10 lines and older ones are deleted — `docs/history/state-log/`
 is self-indexing by date.
 
+- 2026-08-18 — **Batch 13: owls #47–#51** — the stale-reconcile guard (`decisions/0025`) stops an older ARES read reverting a registry write; product's other three cadence worries were impossible (no client refresh loop). Note chip carries the note, neutral; clarification note → left accent. 962 → 976 + 24 todo. → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — **Review pass over batches 11+12** (/simplify: 14 findings applied, `47c65e0` · /code-review high: 15 defects fixed, ten CONFIRMED — the worst: task lists rendering once per sibling row under multi-deliverable MCs, a stale-overwrite race the sweep itself introduced, one malformed ARES date aborting a project's sync). Manila-true due slice on both W2 halves is the one deliberate behaviour change; suite 947 → 962 + 24 todo. → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — **Batches 11 + 12 DEPLOYED LIVE** (T167–T178, `5934c26`..`5cd662e`): batch 11's four ruled changes live-verified (closing line ✓, 24×24 ✓; sub-350 scroll check owed — the pass discovered the browser was shared with JP); the #45 expanded MC row built to spec same-day and deployed — one-table column model, task due = W2's task-card half (route + sync chain + client), childless chevron and expanded-only SubTone as flagged defaults, expansion resets on project switch; `due-roundtrip.ts` smoke ✓ zero net change; 947 + 24 todo dual-TZ. The two deploys also carried the stage-5 script split into production. → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — Batch 11 build detail: owls #42–#46 processed end-to-end; R-warn-x/y/z; Asset Type clip; T152 closed; the 7 stale `01-app.js` comments repointed; #45 recon + jp→miles #40; JP's W2 task-card scope ruling → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — Context restructure stages 1–5 + JP's doc workflows: state-log rotation, gantt-rules, T-shape, decisions/, script split (baseline `4dd5186…`), hygiene audit + archival rulings → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — Batch 10: Pipeline warning becomes icon + hover card, amber wash removed; four lens-caught defects (T163–T166, R-warn-u/v/w) → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — Review sweep over batches 5–9: five defects, three hot paths, six duplicated rules collapsed (T162) → docs/history/state-log/2026-08-18.md
-- 2026-08-18 — Batch 9 built: drag ghost shows only the coloured bars (T160; live pass owed as T161) → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — Batch 8 built: drag handle becomes the coloured run (T158–T159); numbering note vs T157 → docs/history/state-log/2026-08-18.md
-- 2026-08-18 — Batch 8 ruling built: the drag affordance is the coloured bars only (T157, closes T155h) → docs/history/state-log/2026-08-18.md
-- 2026-08-18 — Batch 7 built: Gantt fixes from JP's live-site report (T153–T155, ruling R-g-1) → docs/history/state-log/2026-08-18.md

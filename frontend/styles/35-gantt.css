@@ -238,7 +238,11 @@
 .gantt .ghandle svg { display: block; }
 .gantt .gmc { display: block; font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
 .gantt .glate { display: block; font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--red-600); }
-.gantt .gchips { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-8); }
+/* nowrap since the note chip started carrying freeform text (owl #48): a
+   second chips line grows the row past its 84px floor and the pinned pane
+   stops lining up with the timeline bars. See the note-chip rules below for
+   which chip is allowed to shrink instead. */
+.gantt .gchips { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--space-4); margin-bottom: var(--space-8); }
 /* contract §2: a null difficulty prints the same dimmed dash as every other
    empty column, sized onto the badges' 19px baseline instead of pushing the
    chips row taller — those rows carry no bar either, so the dash is the only
@@ -257,7 +261,33 @@
 }
 .gantt .pbadge.u-on { background: var(--red-500); border-color: var(--red-500); color: var(--red-50); }
 .gantt .pbadge.u-off { background: var(--slate-100); border-color: var(--slate-200); color: var(--slate-500); }
-.gantt .pbadge.gnote { background: var(--amber-100); border-color: var(--amber-300); color: var(--amber-700); }
+/* With the line held to one row (above), the note is the only chip allowed to
+   shrink: urgency and difficulty carry fixed vocabularies and must never be
+   cut, while the note already has a truncation recipe and a hover reveal for
+   the part that does not fit. Its real budget is the cell minus those two
+   chips, which is exactly what the measurement sweep sees. */
+.gantt .gchips > * { flex-shrink: 0; }
+.gantt .pbadge.gnote { flex-shrink: 1; min-width: 0; }
+
+/* The status-note chip has NO colourway of its own (product ruling, owl #49):
+   it inherits the base badge — the same fill, stroke and ink the Requestor
+   badge wears — so the two content-bearing chips read as one family by
+   sharing a rule rather than by copying values. The grammar it settles:
+   coloured chips carry STATE (urgency, difficulty), neutral chips carry
+   CONTENT (requestor, note). The amber it replaces read as a severity that a
+   note like 'waiting on brief' does not have.
+
+   Its ONE deviation from the shared clip recipe is the tooltip measure. The
+   other two clipped values are a person and an asset type — short by nature —
+   so a single nowrap line always fits. A note is freeform, and a long one on
+   one line runs off the right of the viewport where no pointer can reach it.
+   Capped and wrapped here, and nowhere else, because no other clipped value
+   has that problem. */
+.gantt .gnote[data-clipped]:hover::after,
+.gantt .gnote[data-clipped]:focus-visible::after {
+  content: attr(data-note);
+  white-space: normal; width: max-content; max-width: 260px; line-height: 1.4;
+}
 
 /* row actions — Copy · Pin · Calendar Remove, the design's own 55×13 cluster
    (owl #27, node I262:33396;251:27040): three 13px glyphs 8px apart, stroked

@@ -36,6 +36,10 @@ export async function reconcileCard(
   project: ProjectDoc,
   cardId: string,
 ): Promise<'deliverable' | 'work_card' | 'descoped' | 'missing'> {
+  // Stamped BEFORE the read (owl #50): a registry write that lands while this
+  // read is in flight must win over the payload it returns, or the 37-second
+  // push reverts a change the user just made.
+  const readAt = new Date();
   const { card, movements } = await client.cardWithMovements(cardId);
   if (!card) return 'missing'; // the full board sync catches true deletions
   const mapped = mapTrello([card], project.trello_label ?? null);
@@ -44,7 +48,7 @@ export async function reconcileCard(
     const d = mapped.deliverables[0]!;
     const existing = await Deliverable.find({ project_id: project._id }).select('trello_card_id display_id');
     const ids = assignDisplayIds(new Map(existing.map((x) => [x.trello_card_id, x.display_id])), [d]);
-    await upsertDeliverable(project._id, d, ids.get(d.trello_card_id));
+    await upsertDeliverable(project._id, d, ids.get(d.trello_card_id), readAt);
     // a card that just GAINED the Main Card label may have lived in the other
     // collection: deactivate the twin here rather than waiting up to an hour
     // for the full sync's sweep, or the same trello_card_id is served — and
@@ -57,7 +61,7 @@ export async function reconcileCard(
     return 'deliverable';
   }
   if (mapped.workCards.length > 0) {
-    await upsertWorkCard(project._id, mapped.workCards[0]!);
+    await upsertWorkCard(project._id, mapped.workCards[0]!, readAt);
     // the mirror case: a card that just LOST the Main Card label
     await Deliverable.updateOne(
       { project_id: project._id, trello_card_id: cardId, active: true },

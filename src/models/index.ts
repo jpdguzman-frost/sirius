@@ -151,6 +151,14 @@ const deliverableSchema = new Schema(
     // ---- Urgent label on every sync (FR-9.5) — Trello is the truth
     urgency: { type: String, required: true, default: 'Non-Urgent' },
 
+    // The instant Sirius last wrote ANY registry-owned field on this card
+    // (urgency, due, difficulty). The reconcile compares it against the
+    // instant its ARES read was ISSUED and declines to overwrite those three
+    // fields with a payload that predates the write — otherwise a read taken
+    // mid-write reverts the user's change (product owl #50, 2026-08-18).
+    // Absent = Sirius has never written this card, which reconciles normally.
+    registry_written_at: Date,
+
     // ---- from the intake sheet, joined on mc_number ----
     sheet_deadline: DATE_ONLY,
     use_case: String,
@@ -200,6 +208,9 @@ const workCardSchema = new Schema(
     // deliverable half would.
     trello_due: DATE_ONLY,
     trello_due_at: Date,
+    // the same stale-reconcile guard as the deliverable — a task card's due is
+    // registry-owned too, so the same read-mid-write revert applies to it
+    registry_written_at: Date,
     work_started_at: Date,
     work_done_at: Date,
     active: { type: Boolean, required: true, default: true },
