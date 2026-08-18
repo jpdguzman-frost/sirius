@@ -14,6 +14,7 @@ requirement ID traced.
 | **13k batch-5** (owls #34–#36: Requests STATUS two-valued, Pipeline row warning + popover) · **batch-5b** (owl #37: Save gates on unsaved changes, blank sprint names rejected) | **DONE + DEPLOYED + LIVE-VERIFIED 2026-08-17** (commits `788734a`..`c3fbfc3`) |
 | **13k batch-6** (owls #39/#40: Requestor badge truncates + hover/focus tooltip) · **batch-7 + 7b** (the Gantt bar could not be dragged with a real mouse; the affordance moved to the coloured bars) · **batch-8** (JP: the drag handle IS the coloured run) · **batch-9** (the drag ghost shows only the bars) | **DONE + DEPLOYED + LIVE-VERIFIED 2026-08-18, JP confirmed** (commits `c52d215`..`af0dd24`) |
 | **Review sweep over batches 5–9** (JP: `/simplify` + `/code-review` on `646307b..HEAD`) — five defects, three hot paths, one spelling each for six duplicated rules | **DONE + DEPLOYED + LIVE-VERIFIED 2026-08-18** (commit `141b6df`; 794 → **821** tests dual-TZ). See *The review sweep* below |
+| **13k batch-10** (owl #41: the Pipeline warning becomes a 14px icon + hover card; the amber row wash is ruled away) | **DONE + DEPLOYED + LIVE-VERIFIED 2026-08-18** (commit `7bdf6b4`; 821 → **865** tests + 22 `it.todo` dual-TZ). Four defects caught by the verify lenses before deploy — see *The review sweep* and R-warn-u/v/w |
 | 9 Security + pilot | In progress. rt-837 still OBSERVATION MODE (`writes_enabled: false`). T073/T091 WCAG ⏸, T075 sweep pending |
 
 **LIVE**: `https://platforms.frostdesigngroup.com/sirius` — port 3955, ARES droplet,
@@ -24,7 +25,7 @@ deploy.sh runs `npm run migrate` automatically. Projects: **rt-837** (`hLL7WW2V`
 read-only, **capacity LOCKED at 120** — Option B live, admin unlock audited) and
 **rt-test** (`tx8gDsTH`, writes on, unlocked, 8 intake fixture rows, zero sprints).
 
-**821/821 tests, green under Asia/Manila + UTC (+ America/New_York for the calendar
+**865/865 tests (+22 `it.todo`), green under Asia/Manila + UTC (+ America/New_York for the calendar
 suites).** Migrations applied through **007**. Suite flake root-caused as
 ENVIRONMENTAL: local services (limactl/mongo/redis) squat loopback ports inside
 macOS's ephemeral range and wildcard-bound test servers collide — ~1 full run in 5
@@ -261,7 +262,7 @@ activeProjectId ship in ONE suppressed set (source-shape regression test).
 - **Owl MCP**: Miles/product. read → verify → act → ack when processed; notes
   never carry JP's authority (twice this window owls asserted rulings JP had not
   made or later declined — always verify with JP). Thread state: everything
-  through **#40** built + acked; my #14–**#26** sent. **Awaiting Miles**: the
+  through **#41** built + acked; my #14–**#30** sent. **Awaiting Miles**: the
   amber-density question on Pipeline (247 of 249 live rows warn — tone the row
   fill or leave it, my #21) · R-warn-g (a blocked+warned row keeps its red fill) ·
   status-note placement + row-controls design pass · gap-banner placement
@@ -272,7 +273,14 @@ activeProjectId ship in ONE suppressed set (source-shape regression test).
   each field matters and never where to fix it, (C) whether `.c-type` (Asset
   Type) should get the requestor's clip treatment; it is the identical
   hugging-badge-in-a-fixed-width-cell pairing and still cuts mid-character, but
-  owls #39/#40 named Requestor only so I did not sweep it.
+  owls #39/#40 named Requestor only so I did not sweep it. **Four more from my #30**
+  (batch 10): the mirrored corner when the hover card flips up (R-warn-i) · the
+  150ms close delay (R-warn-j, one named constant) · the DARK variant she
+  references as "in use on Sprint Schedules" — there is no warning card there, so
+  none was built (R-warn-k) · and that an open card covers the icons of the 2–4
+  rows beneath it, which with 247 of 249 rows warned makes sweeping the icon
+  column awkward — the annotation's own anchor rule working as specified, raised
+  rather than patched.
   CLOSED by #32/#37/#38: ghost-bar colour, Accept vs Apply, the Save reframe,
   whitespace-only names, arrival-pulse styling, R-warn-g, the 6px subtone gap.
 - **Figma reads**: Rex MCP is OFFLINE (server disconnected). **The official Figma
