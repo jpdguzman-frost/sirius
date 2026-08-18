@@ -3,6 +3,8 @@
 Auto-loaded when working under `frontend/`. This file stands alone; where a rule
 has an authoritative home elsewhere, this file points and never restates.
 
+_last-verified: 2026-08-18_
+
 ## Build convention [frontend/build.js]
 
 No bundler. `node frontend/build.js` assembles `public/index.html` from

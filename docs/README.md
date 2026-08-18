@@ -4,6 +4,8 @@ Verdict first, one line per file: which documents **govern**, which merely
 **record**. Precedence between the governing documents is set by the root
 `CLAUDE.md` (the constitution) — never re-derive it from this index.
 
+_last-verified: 2026-08-18_
+
 ## Anchors — read on resume
 
 - **HANDOFF.md** — READ FIRST on resume, together with root `STATE.md` (current phase table, decisions, AC scoreboard).

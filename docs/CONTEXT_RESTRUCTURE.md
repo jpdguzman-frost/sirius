@@ -118,7 +118,7 @@ Architecture locked in `docs/CONTEXT_ARCHITECTURE.md` (JP's layer definitions;
 file-per-area granularity provisional with a standing Rigidity log; skim
 replaces MAP.md). Sub-stages:
 
-### Stage 4a — skim + generator + guard test  `[in progress]`
+### Stage 4a — skim + generator + guard test  `[DONE 2026-08-18]`
 
 Rebuild `docs/MAP.md` as the Layer-0 skim (≤150 lines, standing rules with the
 two-way authority wording, fact+pointer only, marked HAND-WRITTEN block);
@@ -128,12 +128,23 @@ STATE.md's own tables, DOC MAP, module skeleton) idempotently between markers;
 index trimmed to the 10-session window with the window rule added to its
 convention note.
 
-- [ ] Workflow build (skim+generator, then guards+rotation)
-- [ ] Verify A: skim gates + generator idempotency (run twice, byte-compare)
-- [ ] Verify B: conservation (dropped index lines' targets exist), drift
-      (no skim line explains), tree scoped, guard test green
-- [ ] Gate: tsc · eslint · new guard suite green · idempotency re-run
-- [ ] Commit · owl record
+- [x] Workflow build — skim 127/150 lines, 74/75 purposes carried verbatim;
+      generator idempotent (3 runs byte-identical), `--check` proven on a
+      perturbed copy; guard suite born 19 tests; STATE.md 11.2KB after the
+      51-line index trim (targets verified before deletion)
+- [x] Verify A: PASS — generator read fully (no write path in --check,
+      HAND/marker splice traced); purposes conserved; 2 borderline
+      parentheticals accepted as one-clause guards
+- [x] Verify B: PASS — conservation exact (deleted lines byte-match HEAD),
+      tree exact, gates green; concerns became gate fixes
+- [x] Gate fixes: frontend/index.html into generator scope (was HAND-only) ·
+      decisions/README.md placeholder (standing rule pointed at a missing
+      dir) · rulebook + directory-CLAUDE.md caps became GLOBS (future files
+      auto-guarded) · "TODO: describe" banned at rest · staleness exclusions
+      documented in-test · architecture caps table trued to the guard
+      (24-soft/26-hard, 20–40-target/60-hard). Accepted as convention:
+      eslint ignores *.ts by design — tsc strict is the TS gate
+- [x] Commit · owl record
 
 ### Stage 4b — decision records  `[queued]`
 

@@ -4,6 +4,8 @@ Scope: everything under `test/`. Planner law is NOT restated here — its
 authoritative home is `specs/001-sirius-v1/gantt-rules.md`; constitution law
 is the root `CLAUDE.md`. Point at those, never copy them into assertions.
 
+_last-verified: 2026-08-18_
+
 1. **Guards assert the RULE, never a snapshot of the implementation.** The
    standing lesson: `expect(...matchAll(...)).toHaveLength(4)` on the rAF
    lambda text actively FORBADE extracting the duplicated lambda into

@@ -70,13 +70,13 @@ item.
 
 | Item | Bound |
 |---|---|
-| `docs/MAP.md` (skim) | ≤150 lines; both standing rules at top; every MODULES path exists on disk and every source file is listed (bijection) |
+| `docs/MAP.md` (skim) | ≤150 lines; both standing rules at top; every MODULES path exists on disk and every source file is listed (bijection); no `TODO: describe` persists |
 | `STATE.md` | ≤25KB; session index ≤12 lines (10-session window + slack) |
-| `docs/HANDOFF.md` | ≤24KB (soft — warn) |
-| Domain rulebooks | ≤20KB each |
-| Directory `CLAUDE.md` files | ≤4KB each |
-| `decisions/*.md` | 20–40 lines, one decision, required headings |
-| Hand-written Layer 0/1 docs + rulebooks | carry `last-verified: YYYY-MM-DD` |
+| `docs/HANDOFF.md` | ≤24KB target; the guard hard-stops at 26KB |
+| Domain rulebooks (`specs/**/*-rules.md`) | ≤20KB each — over the cap = split by sub-area |
+| Directory `CLAUDE.md` files | ≤4KB each (guard sweeps every top-level dir) |
+| `decisions/*.md` | 20–40 lines target (guard hard-stops at 60), one decision, required headings |
+| Hand-written Layer 0/2 docs + rulebooks | carry `last-verified: YYYY-MM-DD` (not the constitution — JP versions it; not STATE/HANDOFF — Layer 1 freshness is their content) |
 | `scripts/generate-index.ts` | idempotent — second run byte-identical |
 
 ## Rigidity log

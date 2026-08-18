@@ -7,6 +7,8 @@ and evidence. Pipeline-tab and Requests-tab rules (R-warn-*, the two-valued
 Requests STATUS, the requestor clip) are out of scope — see
 `pipeline-frame-notes.md` and `requests-frame-notes.md`.
 
+_last-verified: 2026-08-18_
+
 ## 1. The drag contract
 
 1. **A drag source must stay hit-testable in every state.** Chrome starts a
