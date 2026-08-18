@@ -245,9 +245,8 @@ activeProjectId ship in ONE suppressed set (source-shape regression test).
   /api/projects/:id/replot` with the original week) and check `audit_log` if a
   week looks unfamiliar. JP has an open question on moving this to a local dev
   server — see Still open.
-- Ractive: triple-mustache dynamic member access renders empty (helpers);
-  `{{! … }}` comments in ELEMENT-CONTENT position leak text after the first `}}`
-  (AST-scan test guards it; `{{!expr}}` in attributes is a negation and fine).
+- Frontend/Ractive hazards + performance law: frontend/CLAUDE.md (auto-loads
+  for agents working under frontend/).
 - Workflow discipline (JP, standing): **every build runs through the Workflow
   tool** — Opus builders/integrate/fix, Fable verify lenses, contract-first recon,
   seeded isolated-db probes, render tests via `test/helpers/gantt-render.ts`

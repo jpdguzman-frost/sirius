@@ -85,7 +85,7 @@ stage; same treatment later if the pattern proves out.
       collapse made explicit) · tree exact · commit
 - [x] Commit · owl record
 
-## Stage 3 — code map + contextual CLAUDE.md files + docs index  `[queued]`
+## Stage 3 — code map + contextual CLAUDE.md files + docs index  `[DONE 2026-08-18]`
 
 - `docs/MAP.md`: one line per source file — purpose, key exports, guarding tests.
 - `frontend/CLAUDE.md`: Ractive hazards, per-render helper rule, pointer to
@@ -95,11 +95,22 @@ stage; same treatment later if the pattern proves out.
 - `docs/README.md`: authoritative vs historical index (AGENTS.md §7–9
   historical, build-spec v1.1 superseded by v1.2, etc.).
 
-- [ ] Workflow build (parallel writers per file)
-- [ ] Verify: accuracy sweep — every MAP.md line spot-checked against the real
-      file; every claim in the CLAUDE.md files traced to a recorded ruling
-- [ ] Gate: quarantine hash · scoped status · MAP.md ≤ ~8KB
-- [ ] Commit · owl record
+- [x] Workflow build — 4 parallel writers, every claim from an opened file:
+      MAP.md 8.2KB (full src/lib/worker/frontend coverage + test-guard index),
+      frontend/CLAUDE.md 3.0KB, test/CLAUDE.md 3.4KB, docs/README.md 3.4KB
+      (authority index + where-law-lives; also fixed HANDOFF's R-warn-*
+      pointer gap). HANDOFF's Ractive gotcha bullet → pointer (one home)
+- [x] Verify accuracy: PASS — 28 MAP lines checked against real files, zero
+      omissions; every README classification opened and confirmed (incl.
+      AGENTS.md §2 wording corrected against the 3-entry registry)
+- [x] Verify traceability/drift/tree: PASS — every CLAUDE.md claim traced to
+      source; law pointed at, not restated; tree exact
+- [x] Gate: 6 verifier nits fixed (model name singular, 401 wording, suite
+      count 58, golden-suite location, circular Ractive citation retagged,
+      README indexes itself + MAP). Accepted concerns: the comments-trip-
+      guards lesson has 3 audience-tailored headline+pointer homes; MAP's
+      law-adjacent parentheticals are descriptors, not law
+- [x] Commit · owl record
 
 ## Stage 4 — split `frontend/scripts/01-app.js`  `[PARKED — blocked]`
 
@@ -133,3 +144,10 @@ touching `lib/**`, the wire, schema, or the write registry.
   PASS), gate green, STATE.md 123,191 → 22,123 bytes, 59 entries archived
   verbatim to docs/state-log/. Pipeline-warning work landed as `7bdf6b4`
   (another session) mid-stage; untouched by us, verified.
+- 2026-08-18 — Stage 2 DONE (`e8d14db`): gantt-rules.md, 56 rules; drift
+  verifier's one real finding fixed at gate. JP confirmed the restructure to
+  the concurrent session (`03da2dd`). Owl #29/#31.
+- 2026-08-18 — Stage 3 DONE: workflow wf_0f3b8602 (6 agents, both verifiers
+  PASS), 6 nits fixed at gate. The STATE.md rotation convention was followed
+  correctly by the concurrent batch-10 session unprompted — the Stage-1
+  design survived first contact.
