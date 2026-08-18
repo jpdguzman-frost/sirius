@@ -38,6 +38,14 @@ shape, unchanged), `setDue(cardId, isoDateTimeOrNull)`, and
 
 ## W2 semantics — due date
 
+- **Scope clarification (JP, 2026-08-18, for the expanded-MC-row build — owl miles→jp #45):**
+  W2 covers the due date of **any card Sirius surfaces in Pipeline** — the deliverable
+  (Main Card) row and the task cards revealed by expanding its MC group alike. Same field,
+  same `setDue()` interface, same rules 1–7; only the kind of card widens. This is a scope
+  note on the existing entry, not a registry growth: the registry enumerates *fields*, and
+  the field is unchanged. Task-card due dates play no part in deadline precedence
+  (invariant 14) or `deliverables_v` — those remain deliverable-only.
+
 - Sirius deadlines are Manila calendar days (`YYYY-MM-DD`); Trello `due` is a datetime.
 - **Canonical write time**: the chosen date at **17:00 Asia/Manila**. When the card already has
   a due date, preserve its existing time-of-day and change only the date. *(Default set in the
