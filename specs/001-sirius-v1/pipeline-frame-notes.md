@@ -183,6 +183,24 @@ same recipe to the planner's **Asset Type** cell (law and guards:
 `test/gantt-requestor-clip.test.ts`, the recipe comment in
 `frontend/styles/20-pipeline.css`).
 
+## Batch 12 — the expanded MC row (owl #45, node 520:54192, 2026-08-18)
+
+Expansion already shipped; this batch makes it the spec'd UI. The structural
+call, promised to Miles in jp→miles #40: parent and child are `<tr>`s of the
+SAME `<table>`, so both levels share one column model BY CONSTRUCTION — the
+frame's 1610-vs-1570 container question cannot arise here, and the child's
+empty first cell is simply an empty `<td>` in the parent's first column. Guards:
+`test/pipeline-expanded.test.ts`.
+
+| ID | Ruling / default | Shipped |
+|---|---|---|
+| **R-exp-a** | **The tint is the nesting cue, inverted from the earlier version**: parent stays the table's white ground, task rows are `--slate-50`, and NO rule paints a parent row's background (asserted by property walk, the amber-wall pattern). The frame's bordered inner container translates to the child cells' stronger `--slate-200` bottom border, with the indent cell's border transparent so the gutter under the MC# reads as one strip. | Yes |
+| **R-exp-b** | **Children show no type / difficulty / urgency / requestor** — MC-level attributes; repeating them per task would imply a task can diverge from its MC (Miles's own note in #45). Status, Due, Started, Done and Links render with the parent table's own recipes (`.cardname`, `.pbadge s-*`, `.plaincell`, `.srclink`/`.off`). | Yes — the four cells asserted EMPTY |
+| **R-exp-c** | **Childless MC: no expand affordance** (proposed in jp→miles #40, built as proposed pending Miles's confirm — one conditional to flip if he rules otherwise). Expanding a childless MC used to show nothing at all; now a glyph-box-wide spacer holds the column alignment and no chevron renders. | Yes — both halves asserted, spacer width pinned to the glyph box |
+| **R-exp-d** | **SubTone `Main Card` renders ONLY in the expanded state.** The frame specs the expanded composite and the SubTone's job is the parent-vs-children distinction, which does not exist collapsed — and the collapsed table is not this spec's to change. **Default taken, flagged to Miles** (the retrieved render also did not show the element — the annotation did; the MCP output truncated before a possible third annotation, re-verify on his answer). | Yes — expanded-only asserted both ways |
+| **R-exp-e** | **Task due = W2's task-card half** (JP 2026-08-18; `contracts/trello-write.md` §W2 scope). ONE route handler serves both kinds through the same `writeGuards` door — same Zod body, no-op guard, Trello-first rollback, board guard, `writes_enabled`, audit (+`entity: 'work_card'`) and sync-run rows; the client's `writeDeadline` stays the one door and routes a cardId `rows` does not know to the task half. A task due has no sheet fallback and no precedence part — its display field IS its Trello field, and Clear means cleared. The popover markup is duplicated in the task cell (two data shapes), but the CSS recipe, the calendar state keys and the handler set are ONE. | Yes — route halves cross-404 each other's kind; rollback, audit entity, time-of-day preservation all asserted server-side |
+| **R-exp-f** | **Expansion is per-project view state** and now resets on project switch — the recon found it keyed on `mc_number` alone, which repeats across projects (invariant 3), so project A's expanded MC-655 arrived pre-expanded in project B. Multi-expand stays (per-MC map); refresh persistence stays out (per-tab URL sub-state is the parked home if wanted). | Yes — reset asserted in the shared block; multi-expand rendered |
+
 ## Build mechanics
 
 - Tokens: extracted variable set (slate/red/amber/blue/green scales, text/caption 10 · label 12 · body 14 · title 24 · display 32, radius/xs 2 · sm 4, space/4 · 8 · 24, Shadow/xs) → CSS custom properties, names preserved (`--slate-50`, `--text-body`, `--radius-sm`…).
