@@ -757,6 +757,10 @@ describe('adding the drop did not re-arm the grab on a pinned row (JP 2026-08-17
 
   it('still refuses the grab, and still says why', () => {
     expect(html).toContain('<div class="gbar" draggable="false"');
+    // NOT a claim about the bar any more (JP, 2026-08-18): `.gbar` carries no
+    // `title` in either branch now. The refusal is on `.growr`, which a
+    // title-less `.gtrack`/`.gbar` inherits, so hovering anywhere on a pinned
+    // row still states it. Its placement is pinned in gantt-rowactions.test.ts.
     expect(html).toContain('title="Pinned — unpin to move"');
   });
 

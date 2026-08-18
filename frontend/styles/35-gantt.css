@@ -327,9 +327,20 @@
    week cells keep their handlers for unscheduled rows, whose track renders
    `.gunsched` (pointer-events: none) instead of a bar. Motion is horizontal by
    construction: the drop target is a week COLUMN and nothing reads which row it
-   sits in. */
-.gantt .gbar { position: absolute; inset: 0; pointer-events: auto; cursor: grab; }
-.gantt .gbar .gseg { pointer-events: auto; cursor: inherit; }
+   sits in.
+   THE POINTER AFFORDANCE IS NOT THE HIT AREA (JP, 2026-08-18, closing T155(h)).
+   The wrapper has to span the track for the two reasons above, but a 1104px
+   `cursor: grab` told the user the empty air right of a two-week run was
+   grabbable, which is a lie about what the pixels mean even though the hit-test
+   is honest. The cursor now lives on `.gseg` — the coloured runs, the only thing
+   the user thinks of as "the bar" — and the wrapper reads `default`, which is
+   exactly what the rest of `.growr` reads (the row declares no cursor). `.gseg`
+   said `cursor: inherit` before, which is how it picked the wrapper's `grab` up;
+   it names its own value now, so the two can never drift back together.
+   `pointer-events` is untouched on both — the drag source and its children stay
+   solid. */
+.gantt .gbar { position: absolute; inset: 0; pointer-events: auto; cursor: default; }
+.gantt .gbar .gseg { pointer-events: auto; cursor: grab; }
 .gantt .gbar .gseg:active { cursor: grabbing; }
 /* The ONE thing that still hides for the duration of a drag is the deadline
    tick. `.gdl` is a later sibling of `.gbar` inside the same `position:
@@ -348,8 +359,20 @@
    `.gseg` (the variant batch 7 rejected), and that is exactly the move the ban
    stops from silently re-creating the cancel. */
 .gantt.gdragging .gdl { pointer-events: none; }
-/* pins stay FULLY frozen (JP, 2026-08-17) — the bar refuses the grab and says why */
-.gantt .growr.pinned .gbar,
+/* pins stay FULLY frozen (JP, 2026-08-17) — the bar refuses the grab and says
+   why. Scoped to the SEGMENTS by the 2026-08-18 affordance ruling, for the same
+   reason `grab` was: a refusal is an affordance too, and a 1104px `not-allowed`
+   would claim the whole empty track had been withheld when nothing there was
+   ever offered. Only the RESTING clause is load-bearing. At (0,5,0) it already
+   outranks the grab rule above (0,3,0) AND the grabbing rule above (0,4,0 — one
+   pseudo-class), so a pressed pinned segment computes `not-allowed` even with
+   the `:active` clause deleted. That clause is kept defensively, not because the
+   cascade needs it today: it is what would still hold if anyone raised the
+   grabbing rule's specificity. The pinned row still states itself
+   in words on hover: `.growr` carries `title="Pinned — unpin to move"`, which
+   covers the track it contains, and each `.gseg` appends the same sentence to
+   its phase title. */
+.gantt .growr.pinned .gbar .gseg,
 .gantt .growr.pinned .gbar .gseg:active { cursor: not-allowed; }
 .gantt .gtrack .gseg {
   position: absolute; top: 50%; transform: translateY(-50%);

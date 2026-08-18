@@ -987,7 +987,7 @@ lands on that row's bar, and reading the landing row would move the wrong card.
 |---|---|
 | 1 | On a **scheduled** row the `.gweek` cells no longer receive the drag — the bar covers the whole 1104px track. Their handlers stay live exactly where there is no bar: an **unscheduled** row renders `.gunsched` (`pointer-events: none`) instead, so week cells still serve it. `.gweek` markup is untouched |
 | 2 | A **pinned** row's bar keeps `draggable="false"` and its refusal title, but **does** carry the drop handlers. The pin freezes the pinned ROW, not the column; suppressing them would carve a dead 1104px strip that silently refuses every drop. The directives sit outside any pinned conditional, which is what makes that true for every row state at once |
-| 3 | Cosmetic, and true after the fix: `cursor: grab` and the bar's `title` now apply across the whole track rather than only on a coloured segment. The whole wrapper really is the drag source and the drop target, so both statements are honest. Moving `cursor: grab` to `.gseg` would restore pixel-identical hover at the cost of making the cursor lie — not taken |
+| 3 | ~~Cosmetic, and true after the fix: `cursor: grab` and the bar's `title` now apply across the whole track rather than only on a coloured segment. The whole wrapper really is the drag source and the drop target, so both statements are honest. Moving `cursor: grab` to `.gseg` would restore pixel-identical hover at the cost of making the cursor lie — not taken~~ — **OVERRULED by JP, 2026-08-18. See "The affordance is the coloured bars only" below.** The batch-7 reasoning was sound about the *mechanism* and wrong about the *user*: the hit area is honest at 1104px, the invitation is not |
 
 ## Why no test in this repo could see this, and the guard that answers it
 
@@ -1041,5 +1041,79 @@ Nothing in the suite can close this. With a real mouse, on the deployed build:
 - (f) the Unscheduled block header still unslots, and the keyboard ±1-week
   reslot is unaffected;
 - (g) BR-8 multi-select still moves the whole group through one `/replot`;
-- (h) the cosmetic spread of `cursor: grab` and the bar `title` across the full
-  track reads as acceptable to JP, or consequence 3 above is revisited.
+- (h) ~~the cosmetic spread of `cursor: grab` and the bar `title` across the full
+  track reads as acceptable to JP, or consequence 3 above is revisited.~~
+  **RULED 2026-08-18 — revisited. Closed by T157; see below.** (a)–(g) remain
+  open and still owe a real mouse.
+
+## The affordance is the coloured bars only (JP, 2026-08-18)
+
+**The ruling.** The pointer affordance belongs to the coloured runs. Batch 7 had
+made `.gbar` span the whole 1104px track — correctly, and it must keep doing so
+— and `cursor: grab` plus `title="Drag along the timeline to reslot"` rode along
+with it, so the empty air to the right of a two-week run advertised itself as
+grabbable. Consequence 3 above argued that was honest because the wrapper really
+is the drag source. It is honest about the *mechanism* and wrong about the
+*user*: what the user calls "the bar" is the colour, and an invitation printed
+over blank track promises a handle that is not drawn there.
+
+**The hit area did not move.** This is a cursor-and-title change and nothing
+else. `pointer-events: auto` on `.gbar` and on `.gseg` is byte-unchanged, the
+five directives on the open tag are byte-unchanged, `weekAtX`, `dropOnBar`,
+`moveRows`, the geometry, the colours, the z-order and `.gantt.gdragging .gdl`
+are all untouched. **Nothing may put `pointer-events` back on a drag source** —
+that is the batch-7 bug, and `test/drag-hittest.test.ts` still bans it.
+
+**Cursor.**
+
+| Selector | Before | After |
+|---|---|---|
+| `.gantt .gbar` | `cursor: grab` | `cursor: default` |
+| `.gantt .gbar .gseg` | `cursor: inherit` (this is *how* it inherited `grab`) | `cursor: grab` |
+| `.gantt .gbar .gseg:active` | `cursor: grabbing` | unchanged |
+| `.gantt .growr.pinned .gbar,`<br>`.gantt .growr.pinned .gbar .gseg:active` | `cursor: not-allowed` | subject moves off the wrapper: `.gantt .growr.pinned .gbar .gseg,`<br>`.gantt .growr.pinned .gbar .gseg:active` |
+
+`default` is chosen over `auto` deliberately: `.growr` declares no cursor at all,
+so the track now reads exactly like the rest of the row. `.gseg` names its own
+value instead of `inherit`, so the two can never quietly re-merge. The pinned
+rule needs **both** clauses — the resting one to beat `.gseg`'s new `grab`, the
+`:active` one to beat `grabbing`; and it is scoped to the segments for the same
+reason `grab` was, since a refusal is an affordance too and a 1104px
+`not-allowed` would withhold a track that never offered anything.
+
+**Title — deleted from `.gbar`, in both branches.** Where the two sentences went,
+and why nothing new was invented:
+
+| What it said | Where it lives now | Why that is enough |
+|---|---|---|
+| "Drag along the timeline to reslot" | the standing hint above the Gantt — `.fnnote`: *"Drag a bar along its row to reslot it — an unscheduled row drags onto a week. Pinned rows never move."* | It was already there, it is **not hover-gated**, and a tooltip that only appears once the pointer is already on the bar teaches nobody how to find the bar. Standing text is strictly the better home |
+| "Pinned — unpin to move" (pinned branch) | `.growr`'s own `title="Pinned — unpin to move"`, plus each `.gseg`'s phase title with `· Pinned — unpin to move` appended | `title` is inherited by a title-less descendant, so the row's attribute covers the `.gtrack` and `.gbar` inside it. Deleting the bar's copy therefore removed a **duplicate**, not the message |
+
+Nothing was added to the segment titles: they name the phase and its end date
+(`Sketch → Aug 5`), and restating the drag mechanic on every run would make the
+one tooltip that carries real information noisy.
+
+**What a pinned row hovers as after the change — verified against the render:**
+
+| Where the pointer is | Cursor | Tooltip |
+|---|---|---|
+| empty track | `default` | **"Pinned — unpin to move"**, inherited from `.growr` |
+| a coloured segment | `not-allowed` (at rest **and** while pressed) | "Sketch · Pinned — unpin to move" |
+| pressing a segment | `not-allowed` — and `draggable="false"`, so no drag starts | — |
+
+An unpinned scheduled row, for contrast: empty track is `default` and **silent**;
+a segment is `grab`, `grabbing` while pressed, and shows its phase title only.
+The pinned row's bar keeps carrying the drop directives, unchanged — it is still
+a valid landing strip for someone else's drag (consequence 2 stands).
+
+**Tests moved, not weakened** (`test/gantt-rowactions.test.ts`). The old
+`expect(r).toContain('title="Drag along the timeline to reslot"')` is not
+softened, it is *wrong now* and was replaced by four assertions at the new
+homes: the wrapper emits no `title=` at all and the string is absent from the
+row; `.gbar` is `cursor: default` and **not** `grab` while `.gseg` is `grab` /
+`grabbing`; the instruction is present as standing template text; and the
+segment titles still carry a title with no `reslot` in it. The pinned block gains
+the same treatment plus a **negative subject guard** — no rule may name
+`.gantt .growr.pinned .gbar` as a subject again (`.gbar,` / `.gbar {`, but not
+`.gbar .gseg`). Every one of them was re-run against the pre-ruling CSS and
+flips, so none is vacuous.

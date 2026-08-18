@@ -221,8 +221,47 @@ describe('a scheduled row is moved by its BAR, not by itself', () => {
     expect(bar).toContain('class="gseg sketch"');
   });
 
-  it('names the bar as the grab target', () => {
-    expect(r).toContain('title="Drag along the timeline to reslot"');
+  /**
+   * MOVED, not weakened (JP, 2026-08-18 — T155(h)). This used to assert
+   * `title="Drag along the timeline to reslot"` on `.gbar`. That title is gone
+   * and the assertion would now be WRONG to keep: the wrapper spans the whole
+   * 1104px track for hit-testing reasons, so the hint popped over empty air and
+   * offered a grab where no bar exists. The same three claims are asserted
+   * here, at their new homes:
+   *   1. the bar advertises nothing — no title at all, so empty track is silent;
+   *   2. the grab affordance is the coloured run (`.gseg` owns `cursor: grab`,
+   *      the wrapper is neutral) — pinned in CSS below;
+   *   3. the instruction itself survives as STANDING text, not a tooltip, in
+   *      the hint line above the Gantt (rendered by suggest-counts.test.ts).
+   */
+  it('advertises nothing on the wrapper — hovering empty track says nothing', () => {
+    const bar = /<div class="gbar"[^>]*>/.exec(r)![0];
+    expect(bar).not.toContain('title=');
+    expect(r).not.toContain('Drag along the timeline to reslot');
+  });
+
+  it('puts the grab affordance on the coloured run, not across the track', () => {
+    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \{[^}]*cursor: default/);
+    expect(GANTT_CSS).not.toMatch(/\.gantt \.gbar \{[^}]*cursor: grab/);
+    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \.gseg \{[^}]*cursor: grab/);
+    // PRESERVATION GUARD, not a regression proof: this rule is byte-identical
+    // before and after the ruling, so it is the one assertion in this batch that
+    // does NOT flip against the pre-ruling stylesheet. It is here so that moving
+    // `grab` onto `.gseg` cannot later be "tidied" by dropping the pressed state.
+    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \.gseg:active \{[^}]*cursor: grabbing/);
+  });
+
+  it('keeps the reslot instruction as standing text, where no hover is needed', () => {
+    // Scoped to the `.fnnote` span on purpose. A bare `toContain` on TEMPLATE is
+    // satisfied by the Ractive comment at the bar (which quotes this sentence and
+    // never renders), so deleting the real hint would leave it green.
+    expect(TEMPLATE).toMatch(/<span class="fnnote">[^<]*Drag a bar along its row to reslot it/);
+  });
+
+  it('leaves the segments’ own titles alone — they name the phase, not the mechanic', () => {
+    const seg = /<div class="gseg sketch"[^>]*>/.exec(r)![0];
+    expect(seg).toContain('title=');
+    expect(seg).not.toContain('reslot');
   });
 
   it('drops the gutter grip — it would drag nothing (R-drag-b)', () => {
@@ -343,17 +382,38 @@ describe('a pinned row refuses both grabs (JP 2026-08-17, ruling B)', () => {
   const html = renderGantt({ plannerGroups: groups([PINNED]) });
   const r = row(html, 'c3');
 
-  it('marks the bar undraggable and says why', () => {
+  it('marks the bar undraggable, and no longer speaks for the whole track', () => {
     expect(r).toContain('<div class="gbar" draggable="false"');
-    expect(r).toContain('title="Pinned — unpin to move"');
+    // MOVED (2026-08-18): the wrapper's `title` is gone in BOTH branches, so the
+    // refusal is asserted at its two surviving homes below rather than here.
+    // Losing it would be invisible without those two — hence they are separate
+    // failing assertions, not an `expect(r).toContain(…)` that any one of the
+    // row's several copies of the sentence could satisfy.
+    expect(/<div class="gbar"[^>]*>/.exec(r)![0]).not.toContain('title=');
   });
 
-  it('carries the reason on the row as well', () => {
+  it('carries the reason on the row, which is what the track inherits', () => {
+    // `title` on an ancestor is what a title-less descendant shows, so this ONE
+    // attribute is why hovering a pinned row's empty track still states the pin
     expect(/<div class="growr[^>]*>/.exec(r)![0]).toContain('title="Pinned — unpin to move"');
   });
 
-  it('refuses the cursor', () => {
-    expect(GANTT_CSS).toMatch(/\.gantt \.growr\.pinned \.gbar,\s*\n\.gantt \.growr\.pinned \.gbar \.gseg:active \{[^}]*cursor: not-allowed/);
+  it('carries it on the coloured runs too, appended to the phase', () => {
+    expect(/<div class="gseg sketch"[^>]*>/.exec(r)![0]).toContain(' · Pinned — unpin to move"');
+  });
+
+  it('refuses the cursor — on the segments, where the grab was offered', () => {
+    // only the RESTING clause is load-bearing — at (0,5,0) it already outranks
+    // both `.gseg`'s `grab` (0,3,0) and `:active`'s `grabbing` (0,4,0), so a
+    // pressed pinned segment computes `not-allowed` even without the second
+    // clause. It is kept defensively and asserted so a later edit cannot drop
+    // one clause and keep the other's comment. Scoped off `.gbar` by JP's
+    // 2026-08-18 ruling — a refusal is an affordance, and a 1104px `not-allowed`
+    // would withhold a whole track that never offered anything.
+    expect(GANTT_CSS).toMatch(/\.gantt \.growr\.pinned \.gbar \.gseg,\s*\n\.gantt \.growr\.pinned \.gbar \.gseg:active \{[^}]*cursor: not-allowed/);
+    // `.gbar` must never be a SUBJECT again — matches `.gbar,` / `.gbar {` /
+    // `.gbar{`, and deliberately not `.gbar .gseg…`
+    expect(GANTT_CSS).not.toMatch(/\.gantt \.growr\.pinned \.gbar\s*[,{]/);
   });
 
   it('leaves the keyboard guard exactly as it was', () => {

@@ -675,12 +675,25 @@
                         is a week COLUMN and which row it belongs to is never
                         read — the moved card id comes off the dataTransfer.
                         Only `.gdl` still goes transparent mid-drag; it paints
-                        over the bar and carries no dragover handler. }}
+                        over the bar and carries no dragover handler.
+                        The bar carries NO `title` (JP, 2026-08-18, closing
+                        T155(h)): the hit area spans 1104px for the reasons
+                        above, so a tooltip on it popped over empty track and
+                        offered a drag where there was nothing to grab. The
+                        affordance is the COLOURED RUNS only. What it said
+                        survives in two places that were already there and are
+                        not hover-gated — the standing hint above the Gantt
+                        ("Drag a bar along its row to reslot it … Pinned rows
+                        never move") and, on a pinned row, `.growr`'s own
+                        `title="Pinned — unpin to move"`, which a `title`-less
+                        descendant inherits, so the refusal still meets the user
+                        anywhere on the row. Each `.gseg` keeps its phase title
+                        and its appended pinned sentence, unchanged — the
+                        segments are NOT the place to restate the mechanic. }}
                     {{#if row.slottedWeek}}
                       <div class="gbar" draggable="{{ row.pinned ? 'false' : 'true' }}"
                            on-dragstart="['dragRow', row.cardId]" on-dragend="['dragEnd']"
-                           on-dragover="['dragOver']" on-drop="['dropOnBar']"
-                           title="{{ row.pinned ? 'Pinned — unpin to move' : 'Drag along the timeline to reslot' }}">
+                           on-dragover="['dragOver']" on-drop="['dropOnBar']">
                         {{#each phaseBars(row) as b}}<div class="gseg {{b.cls}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}{{ row.pinned ? ' · Pinned — unpin to move' : '' }}"></div>{{/each}}
                       </div>
                       {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
