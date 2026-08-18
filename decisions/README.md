@@ -43,3 +43,4 @@ _last-verified: 2026-08-18_
 | 0021 | The layered context architecture (entry / state / task set / archive) | accepted | 2026-08-18 |
 | 0022 | Maps decomposed per area; the Layer-0 skim stays fixed-size | accepted | 2026-08-18 |
 | 0023 | docs/ reorganized into role folders; old paths redirect from here | accepted | 2026-08-18 |
+| 0024 | STATE.md rotates per section, not per file; two archives added | accepted | 2026-08-18 |

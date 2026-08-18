@@ -95,7 +95,8 @@ moves them.
 |---|---|
 | `docs/MAP.md` (main index) | ≤150 lines; both standing rules at top; AREAS/STATUS/DOCMAP generated; does NOT grow with codebase size — per-file lines live in the area maps |
 | Area maps (`docs/architecture/map-*.md`, Layer 2) | ≤150 lines each; GEN:MODULES bijection — the union of the maps lists every source file exactly once, each in the map its area names; no `TODO: describe` persists |
-| `STATE.md` | ≤25KB; session index ≤12 lines (10-session window + slack) |
+| `STATE.md` (Layer 1) | ≤10KB; **no settled row in either decision table** — answered ones rotate to `docs/history/decision-log.md`; phase table ≤10 rows (complete phases → `docs/history/phase-log.md`); session log = 10-line window of summaries, each ≤1200 chars and naming an existing `state-log/` file; must name all three archives |
+| `docs/history/**` (Layer 3 archives) | deliberately UNCAPPED — `phase-log.md`, `decision-log.md`, `state-log/`. They exist so Layer 1 can stay small; capping them would push content back up |
 | Domain rulebooks (`specs/**/*-rules.md`) | ≤20KB each — over the cap = split by sub-area |
 | Directory `CLAUDE.md` files | ≤4KB each (guard sweeps every top-level dir; the convention is top-level only — don't nest) |
 | `decisions/*.md` | 20–40 lines target (guard hard-stops at 60), one decision, `# Title` first line + Status/Context/Decision/Consequences/Alternatives rejected/Sources; README index must match the directory |
@@ -120,3 +121,16 @@ areas, a contract that fought the grouping. Empty log = the structure holds.
   (trigger: Test-guards section outgrows ~20 lines).
 - 2026-08-18 — docs/ reshaped into role folders and HANDOFF retired (JP);
   Layer 1 is STATE.md alone. Redirects: decisions/0023.
+- 2026-08-18 — **STATE.md rotated section by section (JP: "another context
+  bloat with growing text… has to follow the same index format per file").
+  Real friction, and the sharpest yet: the growth rule was written for
+  WHOLE files, so STATE.md passed every check while five of its eight
+  sections accreted forever** — 22.3KB against a 25KB cap, 7 of 8 blocking
+  decisions already answered, and one session narrative at 5,688 chars
+  (26% of the file) parked in Layer 1 for a session at a time. The lesson
+  generalises beyond this file: **rotation belongs at the section, not the
+  file.** A file made of sections rots one section at a time, and a byte cap
+  on the whole cannot see it. Two archives added (`phase-log.md`,
+  `decision-log.md`), the session-log convention INVERTED — narrative is
+  written straight into `state-log/`, never here first — cap 25KB → 10KB,
+  and five new assertions, each mutation-proved to redden. Decision: 0024.

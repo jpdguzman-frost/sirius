@@ -168,18 +168,97 @@ describe('docs/MAP.md — Test guards section', () => {
   });
 });
 
+/**
+ * STATE.md is Layer 1 — read on every resume, so it may never grow with the
+ * project. Byte cap alone cannot hold that: a file stays small only if
+ * settled things LEAVE. These assert the leaving, section by section
+ * (JP-ruled 2026-08-18; caps table in docs/architecture/context-architecture.md).
+ *
+ * Archives that receive the rotated content are Layer 3 and deliberately
+ * UNCAPPED: docs/history/phase-log.md · decision-log.md · state-log/.
+ */
 describe('STATE.md — Layer-1 rot protection', () => {
-  it('stays at or under 25KB', () => {
-    expect(bytesOf('STATE.md')).toBeLessThanOrEqual(25 * KB);
+  const state = (): string => read('STATE.md');
+
+  /** A `## `-delimited section's body, by exact heading. */
+  const sectionOf = (heading: string): string => {
+    const text = state();
+    const at = text.indexOf(`## ${heading}`);
+    expect(at, `STATE.md lacks the "## ${heading}" section`).toBeGreaterThan(-1);
+    const rest = text.slice(at + heading.length + 3);
+    const next = rest.search(/\n## /);
+    return next === -1 ? rest : rest.slice(0, next);
+  };
+
+  /** Body rows of the section's markdown table (header + separator dropped). */
+  const tableRows = (heading: string): string[] =>
+    sectionOf(heading)
+      .split('\n')
+      .filter((line) => line.startsWith('|'))
+      .slice(2);
+
+  it('stays at or under 10KB', () => {
+    // Was 25KB and 89% full on 2026-08-18. The cap is the backstop; the
+    // rotation assertions below are what actually hold the line.
+    expect(bytesOf('STATE.md')).toBeLessThanOrEqual(10 * KB);
   });
 
-  it('keeps the session index inside the rotation window (≤12 lines)', () => {
-    // 10-session window + slack, per the caps table
-    const state = read('STATE.md');
-    const at = state.indexOf('### Older sessions — index');
-    expect(at, 'the "Older sessions — index" section is missing').toBeGreaterThan(-1);
-    const indexLines = state.slice(at).split('\n').filter((line) => line.startsWith('- 20'));
-    expect(indexLines.length, 'rotate: keep the newest 10, delete the rest (targets live in docs/history/state-log/)').toBeLessThanOrEqual(12);
+  it('carries no settled decision — answered rows rotate to docs/history/decision-log.md', () => {
+    // The anti-accretion rule. Seven of eight blocking rows were answered and
+    // still sat here; the map generator already ignored them, so they were
+    // read-cost with no reader. An answered row leaves the session it is
+    // answered — its verbatim text lives on in the decision log.
+    for (const heading of ['Decisions needed from JP (blocking)', 'Decisions needed later (not blocking yet)']) {
+      for (const row of tableRows(heading)) {
+        expect(
+          row.includes('✅'),
+          `"${heading}" carries a settled row — move it verbatim to docs/history/decision-log.md:\n  ${row.slice(0, 100)}`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('keeps the phase table to open or undeployed work (≤10 rows)', () => {
+    // Complete phases move to docs/history/phase-log.md; roll-up rows stand
+    // in for them. Grew one row per batch before the 2026-08-18 rotation.
+    const rows = tableRows('Phase status');
+    expect(rows.length, 'roll up the shipped phases into docs/history/phase-log.md').toBeLessThanOrEqual(10);
+  });
+
+  it('keeps the session log to a 10-line window of summaries', () => {
+    const lines = sectionOf('Session log').split('\n').filter((line) => line.startsWith('- 20'));
+    expect(lines.length, 'the "Session log" window is empty — heading or line format changed').toBeGreaterThan(0);
+    expect(lines.length, 'rotate: keep the newest 10, delete the rest (docs/history/state-log/ is self-indexing by date)').toBeLessThanOrEqual(10);
+  });
+
+  it('narrates in the archive, not here — every session line ≤1200 chars', () => {
+    // The convention JP approved 2026-08-18: the full narrative is written
+    // STRAIGHT into docs/history/state-log/YYYY-MM-DD.md, never into this
+    // file. One entry had reached 5,688 chars — a quarter of STATE.md — while
+    // waiting to be rotated out next session.
+    for (const line of sectionOf('Session log').split('\n').filter((l) => l.startsWith('- 20'))) {
+      expect(
+        line.length,
+        `a session line is narrating; write the full entry into docs/history/state-log/ and summarise here:\n  ${line.slice(0, 100)}…`,
+      ).toBeLessThanOrEqual(1200);
+    }
+  });
+
+  it('every session line points at a state-log file that exists', () => {
+    for (const line of sectionOf('Session log').split('\n').filter((l) => l.startsWith('- 20'))) {
+      const target = line.match(/docs\/history\/state-log\/[\d-]+\.md/)?.[0];
+      expect(target, `a session line names no archive file:\n  ${line.slice(0, 100)}`).toBeDefined();
+      expect(fs.existsSync(path.join(ROOT, target!)), `session line points at missing \`${target}\``).toBe(true);
+    }
+  });
+
+  it('names its archives, so nothing rotated becomes unreachable', () => {
+    const text = state();
+    for (const rel of ['docs/history/phase-log.md', 'docs/history/decision-log.md', 'docs/history/state-log/']) {
+      expect(text, `STATE.md no longer points at \`${rel}\` — rotated content would be orphaned`).toContain(rel);
+      const onDisk = rel.endsWith('/') ? rel.slice(0, -1) : rel;
+      expect(fs.existsSync(path.join(ROOT, onDisk)), `archive \`${rel}\` is missing`).toBe(true);
+    }
   });
 });
 
