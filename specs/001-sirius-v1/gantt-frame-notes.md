@@ -1,5 +1,10 @@
 # Sprint Schedules — deliverables table + Gantt planner, frame notes (2026-08-15)
 
+> **BATCH-HISTORY ARCHIVE** — mechanisms, defects and verification
+> narratives, in build order. Current planner law lives in `gantt-rules.md`;
+> where this file and `gantt-rules.md` disagree, `gantt-rules.md` wins — fix
+> the narrative here, never the law there.
+
 The Figma annotations are the spec (product owl #22, 8 categorized annotations
 on `95:5795`), read via Rex. This file records the node map, the rulings the
 build made where the frame was silent or wrong, and where the shipped view
@@ -1422,8 +1427,9 @@ and not a hole:
   BAN still counts `:active` and `@media`, because a rule that bites sometimes
   is a bug sometimes.
 - **`node frontend/build.js` byte count corrected** to 333,049 across
-  `STATE.md`, `tasks.md` and this file: the 332,828 recorded at integrate
-  predated the comment corrections made at integrate itself. The build is
+  `docs/state-log/2026-08-18.md`, `tasks.md` and this file: the 332,828
+  recorded at integrate predated the comment corrections made at integrate
+  itself. The build is
   deterministic — two consecutive runs give the same bytes and the same sha1.
   The "all six directives" count is corrected to **five** in the same three
   places (`draggable`, `on-dragstart`, `on-dragend`, `on-dragover`, `on-drop`),
@@ -1460,7 +1466,8 @@ live constraint on this file that no comment declares — a prose number in
 `01-app.js` can collide with a drift guard reading it as code — and because it
 is the one thing in this batch that a green suite would have hidden had the
 comment not been corrected at all. The percentage figure is quoted precisely in
-this document and in `STATE.md`, which the guard does not read.
+this document and in `docs/state-log/2026-08-18.md`, which the guard does not
+read.
 
 ## Owed: a live-browser pass (folds into T155)
 

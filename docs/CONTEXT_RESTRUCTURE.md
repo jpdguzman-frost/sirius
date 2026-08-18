@@ -58,7 +58,7 @@ STATE.md.
       (−82%; overshoot is the retained 7.5KB newest entry, by design)
 - [x] Commit (scoped) · owl record
 
-## Stage 2 — gantt rules extracted from frame-notes  `[queued]`
+## Stage 2 — gantt rules extracted from frame-notes  `[DONE 2026-08-18]`
 
 `specs/001-sirius-v1/gantt-rules.md` becomes the ONE home for current planner
 rules (drag-source rule, `.grun` shape, standing rulings, deliberately-not-done
@@ -67,12 +67,23 @@ pointing at the rules file. HANDOFF's planner sections shrink to pointers.
 NOTE: `pipeline-frame-notes.md` is quarantined (in-flight) — untouched this
 stage; same treatment later if the pattern proves out.
 
-- [ ] Workflow build (rules extraction + HANDOFF pointer rewrite)
-- [ ] Verify A: completeness — every standing rule/ruling in HANDOFF §planner +
-      frame-notes appears in gantt-rules.md (traceable list, no invention)
-- [ ] Verify B: no-drift — no rule stated in two places; pointers only
-- [ ] Gate: quarantine hash · scoped status · HANDOFF reads coherently
-- [ ] Commit · owl record
+- [x] Workflow build — gantt-rules.md: 56 numbered rules, every one
+      source-tagged; HANDOFF's two planner sections → 5/6-line stubs
+      (25.2KB → 20.3KB); frame-notes gains the archive banner; 4 stale
+      "in STATE.md" pointers fixed (frame-notes ×2, tasks.md T159 ×2)
+- [x] Verify A (completeness): PASS — 39 normative statements from the old
+      HANDOFF sections all represented; all 56 rules traced to sources,
+      zero invented
+- [x] Verify B (no-drift): **FAILED first pass, correctly** — HANDOFF's
+      "Requests + Pipeline after 13k" section still restated sprints-modal
+      law (rules 31/34) normatively. Fixed at gate: paragraph → pointer.
+      Soft concerns accepted: evidence-anchored pairs (rules cite HANDOFF
+      §gotchas/§still-open as source), carve-outs for ruling-history
+      records, stub restating rule 1's headline (sanctioned ≤6-line stub)
+- [x] Gate: drift driver fixed · two completeness nits fixed source-verified
+      (rule 13 multi-select carve-out per 01-app.js:2509; rule 39 sprint-block
+      collapse made explicit) · tree exact · commit
+- [x] Commit · owl record
 
 ## Stage 3 — code map + contextual CLAUDE.md files + docs index  `[queued]`
 

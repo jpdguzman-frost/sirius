@@ -77,86 +77,20 @@ stranger's 404). Green on rerun = fine. Real fix = every server suite listening 
 
 ## The planner today (schedules tab)
 
-Gantt body (13g, replaced the legacy week-board): pinned left pane (999px,
-**collapsible to 417px**) + 12-week Monday-keyed timeline, phase-segment bars
-(Sketch amber / Review blue-200 / Render blue-600 / RenderOverdue red-600 — ONE
-`.gseg` map the legend reuses), derived sprint blocks (+Outside-any-sprint,
-+Unscheduled) with **collapse/expand**, capacity footer (BR-6c weights, red over /
-amber hard-mix >12.9% via `HARD_MIX` — never retyped), work-phase legend per node
-`262:33342`. **Drag model — SUPERSEDED by batches 7–9, see the next
-section: the handle is `.grun`, the coloured run's own 26px box, NOT the bar
-wrapper and NOT the row.** What survives from 13j: horizontal only, per-week
-snap, the row relocates on drop as a derived outcome (arrival pulse +
-scrollIntoView), unscheduled rows keep row-drag (no bar), grip only there, pinned
-rows frozen everywhere. Row actions cluster = Copy · Pin · CalendarRemove
-(13px sprites, aria + keyboard; CalendarRemove disabled on pinned/unslotted);
-status-note moved to the `manual` chip (ghost pencil when empty) — placement
-awaiting Miles's design pass. Suggest → proposal bar (`262:34499`): "N proposed ·
-N flagged · N hard-heavy" (client-derived from plan/notes/strain — /suggest wire
-pinned by test), violet ghost bars, Accept/Discard; off-Monday tripwire stays
-inert. **Sprints modal (13j, nodes 528:113433/322:30031/328:38162/328:38454)**:
-batch Save/Cancel on the audited PUT; duplicate names = red BLOCKING banner
-(server 422 too, trimmed/case-insensitive); overlaps = invariant 12, red blocking;
-gaps = amber non-blocking, between the rows they name, WORKING-day math from the
-wire's `holidays` field; deletion warns with displaced count; Mon/Fri snap;
-opened-empty Save dead vs emptied-by-user Save live.
+The schedules tab is the Gantt planner: the pinned left pane plus a 12-week
+Monday-keyed timeline where deliverables are slotted, dragged, pinned,
+sprinted and capacity-checked. **Current planner law lives in
+specs/001-sirius-v1/gantt-rules.md — read it before touching the planner.**
+Mechanism history: specs/001-sirius-v1/gantt-frame-notes.md.
 
 ## The Gantt drag, after batches 7–9 — READ THIS BEFORE TOUCHING THE PLANNER
 
-**The rule that cost three batches: a drag source must stay hit-testable in every
-state.** Chrome starts a drag from the draggable ancestor and hit-tests it; a
-source carrying `pointer-events: none` (or `visibility: hidden` / `display:
-none`) makes Chrome create and cancel the drag in the same tick — `dragstart`
-then `dragend`, `dropEffect "none"`, no `drag`/`dragover`/`drop` at all. The bar
-had been undraggable **since batch 4** and no test could see it.
-
-**Why nothing caught it**: there is no jsdom and no browser runner in this repo.
-Every planner test is `toHTML()` or a source regex, and a synthetic `DragEvent`
-calls the app's handlers DIRECTLY without entering Chrome's drag machinery. A
-drag interaction is **not shipped until it has been tried with a real pointer** —
-`chrome-devtools` MCP `drag` with uids from `take_snapshot` does real input.
-`test/drag-hittest.test.ts` (55) is the standing structural guard: it enumerates
-every `draggable` element from the shipped template and bans any rule — CSS,
-inline style, script write, at rest or under `.gdragging` — that could make it or
-an ancestor un-hit-testable. An ancestor may only be exempted by a **top-level,
-state-free** `pointer-events: auto` (a `:hover`/`@media` cure evaporates
-mid-drag), and the week cells are swept as drop targets in their own right.
-
-**The shape as it now stands** (JP ruled it, 2026-08-18):
-
-    .gtrack → .gbar (spans the track, pointer-events: none, the % basis)
-              └ .grun  ← THE DRAG SOURCE: the coloured run's own box,
-                         26px tall (--gbar-h), centred; carries draggable +
-                         dragstart/dragend + dragover/drop
-                └ .gseg × N  (fill the strip, re-based to it)
-              .gdl / .gghost (unchanged, positioned against the track)
-
-- `phaseRun(row)` replaces `phaseBars` — ONE helper returning the box plus its
-  segments restated against it; the template does no arithmetic. Segment
-  positions are percentages of the 60-workday window, so anything that re-wraps
-  them **re-bases every one**: `test/gantt-run-geometry.test.ts` proves both
-  axes against a frozen oracle (horizontal, and vertical by equality — no
-  tolerance) across four row heights.
-- **One box over the whole run**, not one per phase. **24px invisible minimum
-  grab width** for short runs; a run in the final column extends LEFT
-  (`left` clamped to `TOTAL_UNITS − width`) so the handle never leaves the track.
-- The bar owns its own drop: `weekAtX(clientX, rect, weeks)` maps the pointer to
-  a week column from the track's MEASURED width (equal columns by construction),
-  half-open, clamped; `dropOnBar` then runs the SAME `moveRows` as `dropOnWeek` —
-  one write, one audit row. It reads `ctx.node.closest('.gtrack')`, never
-  `event.target`, and takes the card id off the dataTransfer, which is why an
-  unscheduled row dropped over a scheduled row's bar still moves the right card.
-- **Affordance = target**: grab cursor over the colour, plain arrow elsewhere,
-  `not-allowed` over a pinned row's colour; the bar carries no `title` (the
-  standing hint above the Gantt is the better home). Vertical grab area is the
-  26px band, deliberately.
-- `ganttDragging` SURVIVES: its `.gdl` clause is load-bearing — the deadline tick
-  paints above the bar and would swallow the drop at its own column.
-- **The drag ghost is the source's box**: Blink paints what sits behind a
-  transparent source in the same stacking context, which is why a row-tall box
-  dragged the week grid lines along with it. Keep the source tight to what should
-  be pictured. Chrome owns the translucency and the shadow — only
-  `setDragImage()` could change those, and we have not.
+**The one law, and it cost three batches: a drag source must stay
+hit-testable in every state** — Chrome cancels, in the same tick, any drag
+whose source it cannot hit-test, and hit-testable at mousedown only is not
+enough. The full drag contract is specs/001-sirius-v1/gantt-rules.md §1 (the
+drag contract); the standing guard is test/drag-hittest.test.ts. Do not touch
+the planner's drag without both.
 
 ## The review sweep (2026-08-18, commit `141b6df`) — five defects worth remembering
 
@@ -238,12 +172,10 @@ a variable string in all three render sites. `corrections` stays on the wire —
 ~202px for one problem, 385px for three). **Focus-return lives in the shared
 close path** and did not exist on any overlay before.
 
-Sprints modal: Save gates on **unsaved changes** (baseline captured at open vs
-draft, three persisted fields) — `sprintOpenedEmpty` is deleted; opened-empty
-dead, emptied live, edit-then-revert dead again. Blank/whitespace-only names are
-their own blocking class on BOTH sides with byte-identical copy (`kind:
-'blank-name'`, 422). Note for future work: `name` has no Zod `.min(1)` on
-purpose — the friendly 422 owns that class.
+Sprints-modal law (Save gating on unsaved changes, blank-name and
+missing-date blocking, the deliberate absence of a Zod `.min(1)` on `name`)
+lives in `specs/001-sirius-v1/gantt-rules.md` §3 with the rest of the planner
+law — batch 5b's rulings moved there at the 2026-08-18 docs rewire.
 
 ## URL routing (13h)
 
