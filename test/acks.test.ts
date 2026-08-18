@@ -12,6 +12,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { appScripts } from './helpers/source.ts';
 import mongoose from 'mongoose';
 import request from 'supertest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
@@ -405,8 +406,8 @@ describe('drift guard — one key recipe, server-side only', () => {
     }
   });
 
-  it('the client holds NO key recipe — it echoes the opaque string back', async () => {
-    const js = await readFile(new URL('../frontend/scripts/01-app.js', import.meta.url), 'utf8');
+  it('the client holds NO key recipe — it echoes the opaque string back', () => {
+    const js = appScripts(); // the WHOLE shipped script set, not one file
     for (const rule of ['urgent-overlap|', 'over-capacity|', 'past-deadline|']) {
       expect(js).not.toContain(rule);
     }

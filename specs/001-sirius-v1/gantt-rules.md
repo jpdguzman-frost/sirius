@@ -51,7 +51,7 @@ _last-verified: 2026-08-18_
     pinned by test), half-open, clamped; the handler measures
     `ctx.node.closest('.gtrack')`, never `ctx.event.target`. [batch 7]
 11. **One write path**: `dropOnBar` runs the SAME `moveRows` as `dropOnWeek` —
-    exactly two `POST …/replot` call sites in `01-app.js`, one audit path. The
+    exactly two `POST …/replot` call sites in `90-events.js`, one audit path. The
     card id comes off `dataTransfer.getData('text/plain')`, never off the
     landing row. [batch 7 §one-write]
 12. **`moveRows` refuses a non-change**: it declines only when EVERY member is
@@ -64,7 +64,7 @@ _last-verified: 2026-08-18_
     inside a keyboard multi-select neither flashes nor blocks — the POST
     goes and `/replot` skips the pinned member server-side, so only the
     unpinned members move. [JP ruling B 2026-08-17; batch 7; `rowKey` in
-    01-app.js, FR-5.9]
+    90-events.js, FR-5.9]
 14. **Unscheduled rows keep row-drag** (no bar): the gutter grip renders only
     there; targets are their week cells, another row's bar, and the
     Unscheduled block header (unslot). [R-drag-a, R-drag-b]

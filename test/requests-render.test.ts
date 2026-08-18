@@ -9,7 +9,7 @@
  * element per row, because `.sbadge.clar` went away with the third status.
  *
  * Both the status test and the clarification test are the SHIPPED functions,
- * sliced out of `frontend/scripts/01-app.js` and evaluated: `STATUS_FILED` and
+ * sliced out of the shipped app scripts and evaluated: `STATUS_FILED` and
  * `clarified()`. The template asks `clarified(r)` and the segment filter asks
  * `clarified(r)`, so executing the real one is what proves the ONE recipe the
  * drift rule requires. Nothing here retypes 'For Filing' as a client literal —

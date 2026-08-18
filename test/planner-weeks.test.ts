@@ -16,15 +16,12 @@
  * with the missing name — which is correct, those names are contract §3.3–3.5.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { appScripts } from './helpers/source.ts';
 
-const dir = path.dirname(fileURLToPath(import.meta.url));
-const read = (p: string) => fs.readFileSync(path.join(dir, '..', 'frontend', 'scripts', p), 'utf8');
-const API = read('00-api.js');
-const APP = read('01-app.js');
+// One corpus for every slice: `mondayShift` lives in 00-api.js and the rest in
+// the app scripts, but the browser runs them in one scope — so does this harness.
+const APP = appScripts();
 
 /**
  * Slice one top-level declaration out of a source file. A `function` ends with
@@ -81,7 +78,7 @@ const source = [
   decl(APP, 'WORKDAYS_PER_WEEK'),
   decl(APP, 'MONTHS_LONG'),
   decl(APP, 'MONTHS_SHORT'),
-  decl(API, 'mondayShift'),
+  decl(APP, 'mondayShift'),
   decl(APP, 'isoOf'),
   decl(APP, 'isoAddDays'),
   decl(APP, 'mondayIso'),

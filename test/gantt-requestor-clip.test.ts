@@ -15,7 +15,7 @@
  * renders the SHIPPED template through Ractive's own `toHTML()`, which needs no
  * DOM. So **nothing here measures a layout**. The truncation decision is a real
  * browser measurement (`scrollWidth > clientWidth`, in `refreshClips()`), and
- * every assertion about it is made against the shipped `frontend/scripts/01-app.js`
+ * every assertion about it is made against the shipped app-script bundle
  * source, with that said out loud in the test name — the precedent
  * test/gantt-rowactions.test.ts sets for `on-dragstart`. The live pass (a real
  * ellipsis, a real tab stop, the tooltip against a real viewport) is owed and

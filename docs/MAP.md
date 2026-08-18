@@ -18,7 +18,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 ## Areas
 
 <!-- GEN:AREAS -->
-- `frontend` — 14 files → docs/map-frontend.md — no-bundler Ractive app: 01-app.js (2.9k lines) + one template + numbered styles
+- `frontend` — 23 files → docs/map-frontend.md — no-bundler Ractive app: numbered app scripts (one shared scope, filename order) + one template + numbered styles
 - `backend` — 62 files → docs/map-backend.md — Express 5 + worker; lib/ holds the verbatim-port trio; scripts/ are ops
 <!-- /GEN:AREAS -->
 
@@ -41,7 +41,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 - test/gantt-legend.test.ts — one phase→colour map only; deadline tick reuses .gdl.
 - test/suggest-counts.test.ts — the Suggest bar's three client-side counts.
 - test/planner-weeks.test.ts — week/month labels + bar geometry from shipped planner text.
-- test/sprints-modal.test.ts — modal validators executed out of 01-app.js + rendered states.
+- test/sprints-modal.test.ts — modal validators executed out of the shipped app scripts + rendered states.
 - test/pipeline-warning.test.ts — warning icon + hover card, keyed on server-emitted tokens.
 
 <!-- HAND:BEGIN -->

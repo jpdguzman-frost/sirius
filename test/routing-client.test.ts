@@ -17,6 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
+import { appScripts } from './helpers/source.ts';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const SRC = fs.readFileSync(path.join(dir, '..', 'frontend', 'scripts', '00-router.js'), 'utf8');
@@ -139,7 +140,7 @@ describe('normalization is idempotent — the URL settles after exactly one pass
  * This pins the shipped source shape so the ordering cannot silently regress.
  */
 describe('boot applies the route project before the select can bind (source shape)', () => {
-  const src = fs.readFileSync(path.join(dir, '..', 'frontend/scripts/01-app.js'), 'utf8');
+  const src = appScripts(); // the WHOLE shipped script set, not one file
   const shell = src.slice(src.indexOf('async function loadShell'), src.indexOf('async function loadAdmin'));
 
   it('projects and activeProjectId land in the same set, after the route choice', () => {

@@ -33,16 +33,8 @@
  * retyped copy of it.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { APP_JS, GANTT_CSS, TEMPLATE, cssRule } from './helpers/gantt-render.ts';
-
-const API_JS = fs.readFileSync(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'frontend', 'scripts', '00-api.js'),
-  'utf8',
-);
 
 /**
  * Slice one top-level declaration out of a source file. Copied from
@@ -131,7 +123,7 @@ const HARNESS_SRC = [
   decl(APP_JS, 'UNIT_PX'),
   decl(APP_JS, 'MIN_GRAB_UNITS'),
   decl(APP_JS, 'phaseRun'),
-  decl(API_JS, 'fmtDate'),
+  decl(APP_JS, 'fmtDate'),
 ].join('\n');
 
 /**

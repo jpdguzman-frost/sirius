@@ -25,7 +25,7 @@ deploy.sh runs `npm run migrate` automatically. Projects: **rt-837** (`hLL7WW2V`
 read-only, **capacity LOCKED at 120** — Option B live, admin unlock audited) and
 **rt-test** (`tx8gDsTH`, writes on, unlocked, 8 intake fixture rows, zero sprints).
 
-**865/865 tests (+22 `it.todo`), green under Asia/Manila + UTC (+ America/New_York for the calendar
+**897/897 tests (+22 `it.todo`; 60 files — includes the context-restructure guard and stage-5 source-order suites), green under Asia/Manila + UTC (+ America/New_York for the calendar
 suites).** Migrations applied through **007**. Suite flake root-caused as
 ENVIRONMENTAL: local services (limactl/mongo/redis) squat loopback ports inside
 macOS's ephemeral range and wildcard-bound test servers collide — ~1 full run in 5

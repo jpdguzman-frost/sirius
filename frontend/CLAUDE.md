@@ -36,8 +36,8 @@ browser.
 
 ## Comments can trip source-regex guards [docs/state-log/2026-08-18.md — two incidents, batches 8 and 9]
 
-Several tests read RAW source text, comments included. A bare decimal in a
-`01-app.js` block comment read as a second copy of a guarded constant (batch 8);
+Several tests read RAW source text, comments included. A bare decimal in an
+app-script block comment read as a second copy of a guarded constant (batch 8);
 a CSS comment naming the four phase colour classes broke "declares each phase
 colour exactly once in the whole stylesheet" (batch 9). In guarded files: spell
 numbers in words inside comments, and do not name guarded selectors or

@@ -216,7 +216,31 @@ architecture doc's "later lib/, src/" wording. `map-test-suites` DEFERRED
 (trigger in the Rigidity log). Historical stage records above deliberately
 keep their old-shape wording — they describe what was true when written.
 
-## Stage 5 (was 4) — split `frontend/scripts/01-app.js`  `[HELD by JP 2026-08-18]`
+## Stage 5 (was 4) — split `frontend/scripts/01-app.js`  `[DONE 2026-08-18, JP's go]`
+
+Executed as workflow wf_fe286b6b (7 agents: recon → helper+migration →
+script-driven split → sweep → 3 verifiers). **01-app.js (2,942 lines, sha
+`cd68ad27…`) → ten pieces** (`10-constants` `20-requests-table` `30-dates`
+`40-app-state` `50-gantt-geometry` `60-overlays` `70-measure` `80-loaders`
+`90-events` `95-routing`), partition proven byte-exact (pieces re-concatenate
+to the original sha; verified independently). **Guard migration first**:
+`test/helpers/source.ts` (`appScripts()` = the shipped bundle, mirroring
+build.js order — proven by `test/source-order.test.ts`, which executes
+build.js's own readDir); full suite green pre-split; zero assertions
+weakened. **Build proof**: banner-stripped builds identical; every other
+build input byte-identical to HEAD — shipped JS content-identical by
+construction. **NEW BUILT BASELINE: `4dd5186…` (358,149 bytes)** — the old
+`76fd1f17…` can never recur (ten banners where one stood); source-level
+parity is the standing proof. **Gates**: 897 tests + 22 todo green under
+BOTH TZs (one non-reproducing 2-file UTC flake, session-shaped not
+port-shaped — rerun green, recorded); tsc · eslint · `--check` · guard suite
+green. **Consequential edits**: eslint.config.js's documented FRONTEND_SHARED
+mechanism grew 81 cross-file names + 2 writable (no rule weakened);
+`schedule.ts` comment repoint. **Frozen residue** (byte-gate protected,
+next product-touching pass): 7 shipped-source comments still say 01-app.js
+(00-router:6, 20-pipeline.css:178, 35-gantt.css ×3, template ×2).
+Coherence verifier failed the first gate on stale test-comment prose + the
+helper's exception list — fixed at gate.
 
 Blocked until the in-flight pipeline-warning work lands (it edits 01-app.js and
 test files). Then: add `test/helpers/source.ts` returning the concatenation of

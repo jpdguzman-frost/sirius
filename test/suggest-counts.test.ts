@@ -9,20 +9,18 @@
  * the server suite, and the repo has no browser test runner.
  *
  * So, exactly as test/planner-weeks.test.ts does, this file EXECUTES THE
- * SHIPPED TEXT of the computeds straight out of `frontend/scripts/01-app.js`.
- * Nothing is retyped: if a computed regresses in the real file, this fails.
- * The server half of the contract — that `plan`, `notes` and `strain` stay on
- * the wire — lives in test/schedule.test.ts.
+ * SHIPPED TEXT of the computeds straight out of the shipped script set
+ * (test/helpers/source.ts — the same bytes, in the same order, build.js
+ * ships). Nothing is retyped: if a computed regresses in the real source,
+ * this fails. The server half of the contract — that `plan`, `notes` and
+ * `strain` stay on the wire — lives in test/schedule.test.ts.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { renderSuggestBar } from './helpers/gantt-render.ts';
+import { appScripts } from './helpers/source.ts';
 
-const dir = path.dirname(fileURLToPath(import.meta.url));
-const APP = fs.readFileSync(path.join(dir, '..', 'frontend', 'scripts', '01-app.js'), 'utf8');
+const APP = appScripts();
 
 /**
  * Slice one top-level declaration out of the source (same extractor shape as

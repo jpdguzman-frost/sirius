@@ -280,6 +280,9 @@ try {
   check('a null → null replot IS applied and audited by the route', noop.status === 200
     && (await AuditLog.countDocuments({ action: 'schedule.replot' })) === auditBeforeNoop + 1, noop.body);
   const rowActionsTpl = await readFile(new URL('../frontend/templates/00-app.html', import.meta.url), 'utf8');
+  // NOTE: historical batch instrument. 01-app.js was split into numbered pieces
+  // (context restructure stage 5, 2026-08-18); a re-run must concatenate
+  // frontend/scripts/*.js (minus the 00-* files) instead of reading one file.
   const rowActionsJs = await readFile(new URL('../frontend/scripts/01-app.js', import.meta.url), 'utf8');
   check('so Calendar Remove is disabled without a slotted week',
     rowActionsTpl.includes("disabled=\"{{ row.pinned || !row.slottedWeek }}\""));

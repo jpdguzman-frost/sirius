@@ -25,6 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import RactiveModule from 'ractive';
+import { appScripts, template } from './source.ts';
 
 /**
  * Ractive ships ESM typings inside a CommonJS package, so the default import
@@ -49,7 +50,7 @@ Ractive.DEBUG = false;
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const readFrontend = (...p: string[]) => fs.readFileSync(path.join(root, 'frontend', ...p), 'utf8');
 
-export const TEMPLATE = readFrontend('templates', '00-app.html');
+export const TEMPLATE = template();
 export const GANTT_CSS = readFrontend('styles', '35-gantt.css');
 /** The sprints modal's recipes live here, not in the Gantt sheet. */
 export const UI_CSS = readFrontend('styles', '10-ui.css');
@@ -57,7 +58,11 @@ export const UI_CSS = readFrontend('styles', '10-ui.css');
 export const PIPELINE_CSS = readFrontend('styles', '20-pipeline.css');
 /** The Requests table — status badges and the frost-note cell. */
 export const REQUESTS_CSS = readFrontend('styles', '25-requests.css');
-export const APP_JS = readFrontend('scripts', '01-app.js');
+/**
+ * The WHOLE shipped script set, in build.js's own order and join — see
+ * test/helpers/source.ts for why guards read the bundle, never one file.
+ */
+export const APP_JS = appScripts();
 export const ICONS_JS = readFrontend('scripts', '00-icons.js');
 
 /**
@@ -144,7 +149,7 @@ export interface GanttState {
  * Renders the block for one view state. The per-row helpers (`phaseRun`,
  * `deadlineTick`, `ghostBar`, `footText`, `footCls`) are stubbed: their maths
  * is covered by test/gantt-run-geometry.test.ts (the run box and its re-based
- * segments, executed out of the shipped 01-app.js), test/planner-weeks.test.ts
+ * segments, executed out of the shipped app scripts), test/planner-weeks.test.ts
  * and test/planner-payload.test.ts — what matters here is which nodes the
  * template emits, not what is inside a bar.
  */
@@ -316,7 +321,7 @@ export function renderSprintModal(state: SprintModalState = {}): string {
  *     renders nothing and the assertion passes on an empty string;
  *   - the recipe UNDER TEST is never stubbed. `rowWarning` and `clarified`
  *     are therefore required arguments, extracted from the shipped
- *     frontend/scripts/01-app.js by the suites that use them, so a render
+ *     the shipped app scripts by the suites that use them, so a render
  *     test proves the real function and the real markup together.
  * ------------------------------------------------------------------ */
 
@@ -357,7 +362,7 @@ export interface PipelineTableState {
    * detail: the unflipped card and the flipped one are two different renders.
    */
   warnPopPos?: { left: number; top: number; up?: boolean };
-  /** the SHIPPED recipe, executed out of 01-app.js — never a stub */
+  /** the SHIPPED recipe, executed out of the app scripts — never a stub */
   rowWarning: (row: PipeRow) => unknown;
 }
 
@@ -439,7 +444,7 @@ export interface RequestsTableState {
   reqRows: ReqRow[];
   /** STATUS_FILED out of the shipped source — the one status literal the client owns */
   statusFiled: string;
-  /** the SHIPPED clarification predicate, executed out of 01-app.js */
+  /** the SHIPPED clarification predicate, executed out of the app scripts */
   clarified: (r: ReqRow) => boolean;
   /** the shipped noteText() — resolves a legacy clarify_reason into one string */
   noteText: (n: ReqNote | null) => string;

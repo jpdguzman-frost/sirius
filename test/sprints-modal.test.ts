@@ -3,7 +3,7 @@
  *
  * Two halves, both against the SHIPPED files and neither retyped:
  *
- * 1. The validators are EXECUTED out of `frontend/scripts/01-app.js` (the
+ * 1. The validators are EXECUTED out of the shipped app scripts (the
  *    test/suggest-counts.test.ts precedent), because what a banner says and
  *    whether Save locks are arithmetic, not markup — and R-f-8's working-day
  *    gap rule is a NEW date-math site that `lib/**` cannot own (invariant 5),
@@ -192,7 +192,7 @@ describe('duplicate names — blocking, per project, one banner per NAME', () =>
  * once rather than trusted to stay in step.
  *
  * The executed-validator half of this class (`sprintBlankNames` out of the
- * shipped 01-app.js) sits with the other computeds; this describe owns only
+ * shipped the app scripts) sits with the other computeds; this describe owns only
  * the two-sided copy contract.
  */
 describe('blank names — the modal banner and the route’s 422 say the same words', () => {
@@ -963,7 +963,7 @@ describe('R7 superseded — Save gates on UNSAVED CHANGES', () => {
 
 /**
  * The two halves joined (owl #37, integrate). Every describe above proves one
- * side: the computeds sliced out of `01-app.js` are EXECUTED, the template is
+ * side: the computeds sliced out of the app scripts are EXECUTED, the template is
  * RENDERED off hand-written banner stubs. Neither on its own catches a
  * validator that emits `index` where the template reads `after`, or a Save
  * expression that forgets one of the three blocking classes.

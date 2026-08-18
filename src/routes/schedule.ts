@@ -91,7 +91,7 @@ function duplicateNameIssues(sprints: { id: string; name: string }[]): SprintSav
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /**
- * '2026-08-17' → '17 Aug 2026' — the client's `fmtLongIso` (01-app.js:154),
+ * '2026-08-17' → '17 Aug 2026' — the client's `fmtLongIso` (frontend/scripts/10-constants.js),
  * reproduced as pure string math so the two sides emit byte-identical copy:
  * no `Date` (no TZ shift, invariant 11) and no locale (en-GB says 'Sept').
  */

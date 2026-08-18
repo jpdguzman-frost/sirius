@@ -786,7 +786,7 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
 type WeekAtX = (clientX: number, rect: { left: number; width: number }, weeks?: { key: string }[]) => string | null;
 
 /**
- * The SHIPPED recipe, sliced out of 01-app.js and executed — never retyped.
+ * The SHIPPED recipe, sliced out of the app scripts and executed — never retyped.
  *
  * Sliced LAZILY on purpose: `decl()` throws when the function is absent, and a
  * throw at module scope takes the whole file down with it — including the

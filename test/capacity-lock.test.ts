@@ -15,8 +15,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import mongoose from 'mongoose';
-import { readFile } from 'node:fs/promises';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
+import { appScripts, template } from './helpers/source.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { AuditLog, Project, User, UserProject } from '../src/models/index.ts';
@@ -202,15 +202,15 @@ describe('the pin is visible, not tribal knowledge', () => {
   // so the shipped template text is asserted here — the same "inspect the
   // shipped frontend source" precedent as test/planner-weeks.test.ts, since the
   // repo has no browser test runner.
-  it('the cards/week slider renders disabled with the reason on it', async () => {
-    const html = await readFile(new URL('../frontend/templates/00-app.html', import.meta.url), 'utf8');
+  it('the cards/week slider renders disabled with the reason on it', () => {
+    const html = template();
     const slider = html.slice(html.indexOf('id="cards-per-week"'), html.indexOf('id="cards-per-week"') + 600);
     expect(slider).toContain('disabled="{{capacity.locked}}"');
     expect(html).toContain('Capacity locked — admin can unlock');
   });
 
-  it('the second lock lives in the write path too (a lock can flip in another tab)', async () => {
-    const js = await readFile(new URL('../frontend/scripts/01-app.js', import.meta.url), 'utf8');
+  it('the second lock lives in the write path too (a lock can flip in another tab)', () => {
+    const js = appScripts(); // the WHOLE shipped script set, not one file
     const at = js.indexOf('async function writeCapacity');
     expect(at).toBeGreaterThan(-1);
     const body = js.slice(at, js.indexOf("const prev = app.get('capacity').weekly", at));

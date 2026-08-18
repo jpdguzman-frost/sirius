@@ -50,6 +50,9 @@ type Note = { remark: string | null; clarify: boolean; clarify_reason: string | 
 type Row = { mc_number: string; status: string; note: Note };
 type Counts = { requests: number; inPipeline: number; toFile: number; forClarification: number };
 
+// NOTE: historical batch instrument. 01-app.js was split into numbered pieces
+// (context restructure stage 5, 2026-08-18); a re-run must concatenate
+// frontend/scripts/*.js (minus the 00-* files) instead of reading one file.
 const APP_JS_URL = new URL('../frontend/scripts/01-app.js', import.meta.url);
 
 /**

@@ -8,7 +8,7 @@
  * Two halves, both executed rather than grepped:
  *
  *   RECIPE — `WARN_LABEL`, `WARN_WHY` and `rowWarning` are sliced out of the
- *   SHIPPED `frontend/scripts/01-app.js` and evaluated (the
+ *   SHIPPED the shipped app scripts and evaluated (the
  *   test/suggest-counts.test.ts pattern). The label is a VARIABLE string in
  *   every place it appears, so the tests read it from the constant instead of
  *   re-typing 'Needs Info' — retyping it would be the drift the ruling exists
