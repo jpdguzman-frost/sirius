@@ -1,4 +1,4 @@
-# Sirius — session handoff (updated 2026-08-18, post phases 13g–13k + three constitution amendments)
+# Sirius — session handoff (updated 2026-08-18, post phases 13g-13k + the review sweep + three constitution amendments)
 
 **Read this + `STATE.md` first when resuming.** `CLAUDE.md` is the constitution
 (**v4.4.0**, mirrored in `.specify/memory/constitution.md`); `SPEC_KIT_PLAYBOOK.md`
@@ -13,6 +13,7 @@ requirement ID traced.
 | **13g Gantt planner** (owl #22) · **calendar amendment v4.2.0** · **13h URL routing** · **13i batch-3** (capacity lock B, suggest bar, legend, collapses) · **ack-key amendment v4.3.0** (T135) · **13j batch-4** (sprints modal ×4 states, drag reversal, icon cluster) | **ALL DONE + DEPLOYED + LIVE-VERIFIED 2026-08-15..17** (commits `9977f07`..`651b850`) |
 | **13k batch-5** (owls #34–#36: Requests STATUS two-valued, Pipeline row warning + popover) · **batch-5b** (owl #37: Save gates on unsaved changes, blank sprint names rejected) | **DONE + DEPLOYED + LIVE-VERIFIED 2026-08-17** (commits `788734a`..`c3fbfc3`) |
 | **13k batch-6** (owls #39/#40: Requestor badge truncates + hover/focus tooltip) · **batch-7 + 7b** (the Gantt bar could not be dragged with a real mouse; the affordance moved to the coloured bars) · **batch-8** (JP: the drag handle IS the coloured run) · **batch-9** (the drag ghost shows only the bars) | **DONE + DEPLOYED + LIVE-VERIFIED 2026-08-18, JP confirmed** (commits `c52d215`..`af0dd24`) |
+| **Review sweep over batches 5–9** (JP: `/simplify` + `/code-review` on `646307b..HEAD`) — five defects, three hot paths, one spelling each for six duplicated rules | **DONE + DEPLOYED + LIVE-VERIFIED 2026-08-18** (commit `141b6df`; 794 → **821** tests dual-TZ). See *The review sweep* below |
 | 9 Security + pilot | In progress. rt-837 still OBSERVATION MODE (`writes_enabled: false`). T073/T091 WCAG ⏸, T075 sweep pending |
 
 **LIVE**: `https://platforms.frostdesigngroup.com/sirius` — port 3955, ARES droplet,
@@ -23,7 +24,7 @@ deploy.sh runs `npm run migrate` automatically. Projects: **rt-837** (`hLL7WW2V`
 read-only, **capacity LOCKED at 120** — Option B live, admin unlock audited) and
 **rt-test** (`tx8gDsTH`, writes on, unlocked, 8 intake fixture rows, zero sprints).
 
-**794/794 tests, green under Asia/Manila + UTC (+ America/New_York for the calendar
+**821/821 tests, green under Asia/Manila + UTC (+ America/New_York for the calendar
 suites).** Migrations applied through **007**. Suite flake root-caused as
 ENVIRONMENTAL: local services (limactl/mongo/redis) squat loopback ports inside
 macOS's ephemeral range and wildcard-bound test servers collide — ~1 full run in 5
@@ -156,6 +157,66 @@ mid-drag), and the week cells are swept as drop targets in their own right.
   be pictured. Chrome owns the translucency and the shadow — only
   `setDragImage()` could change those, and we have not.
 
+## The review sweep (2026-08-18, commit `141b6df`) — five defects worth remembering
+
+JP ran `/simplify` and `/code-review` over `646307b..HEAD`. What it found is more
+useful than what it changed, because four of the five defects are **classes**, not
+incidents.
+
+1. **A handler on a container fires for every descendant.** `rowKey` lives on
+   `.growr`; keydown bubbles; so ← / → reslotted the card from the row's checkbox,
+   note button and three action buttons. **`pipeRowKey` had the guard
+   (`ctx.event.target !== ctx.node`) since the day it was written and `rowKey`
+   never did.** Batch 6 had patched ONE cell (`on-keydown="['noop']"` on the
+   requestor badge) — and that patch is exactly what hid the other six. *When you
+   find yourself immunising an element against its ancestor's handler, the bug is
+   in the ancestor.*
+2. **A non-change must not reach the audit log.** `unslotRow` and `saveSprints`
+   both enforce it; `moveRows` — which every drag, every keyboard reslot and both
+   unslot paths funnel through — did not. Batch 8 turned that from rare into
+   likely by making the coloured run the handle. The guard refuses only when
+   EVERY member is a no-op, so mixed multi-selects still go.
+3. **A field no validator can see is a field with no validation.** Clearing a
+   sprint date left `start: ''`; `sprintOrder` filters such a row out before
+   overlaps/gaps run, and blank-names reads only the name — so Save stayed live
+   and the user got the literal string `INVALID_BODY`. **This is the same failure
+   5b fixed for names, in a field nobody re-checked.** The route was left alone
+   on purpose: it already refuses the shape; what was missing was the modal not
+   asking it to.
+4. **Shape validation is not range validation.** `DATE_ONLY` is
+   `/^\d{4}-\d{2}-\d{2}$/`, so `2026-00-17` passes it and indexed
+   `MONTHS_SHORT[-1]` → the word `undefined` inside user-facing 422 copy.
+5. **A shared close path only helps the callers that use it.** R-warn-f's focus
+   return was real, and five handlers bypassed it by nulling their own state key
+   — so it worked on Escape and failed on *choosing an option*, which is the path
+   people actually use. All five now call `closeMenus({ restoreFocus: true })`,
+   and the restore is `focus({ preventScroll: true })` because that same path runs
+   from the capture-phase scroll dismisser.
+
+**Two guards were rewritten because they pinned the implementation, not the
+rule** — and one of them was actively harmful: `expect(...matchAll(/rAF lambda/))
+.toHaveLength(4)` **forbade** extracting the duplicated lambda into `remeasure()`,
+while a fifth seam calling only half the pair would have passed. Two more now
+DERIVE rather than copy: the `missing` tokens are read out of
+`src/services/pipeline.ts` (a reworded token shipped a blank rationale with a
+green suite), and `longDate`/`fmtLongIso` are executed against each other rather
+than compared as source strings.
+
+**Hot paths, for the pattern**: any helper called from a template expression runs
+per row per render — `rowWarning(row)` sat in SEVEN template positions and the
+Pipeline table re-renders on every search keystroke. Derived per-row data belongs
+in `loadAll`'s stamp loop beside `r.blob`. And never interleave a layout read
+(`scrollWidth`) with a style write that a live selector keys on
+(`data-clipped`) — `refreshClips` forced one full layout per changed badge until
+it was split into a read pass and a write pass.
+
+**Deliberately not done** (do not "fix" these): `.warnpop` still has no
+`max-height`/`overflow-y` — **R-warn-h ruled that**, so it stays out of the scroll
+dismisser's self-scroll exemption and the second measured placement is the
+mitigation; the four shared `.grun`/`.gghost` declarations stay duplicated
+because `gantt-run-geometry`/`drag-hittest` look those selectors up by name;
+`corrections` stays on the wire though only `kpi.open` reads it now.
+
 ## Requests + Pipeline after 13k (owls #34–#37)
 
 Requests STATUS is TWO-valued and nothing else: `In Pipeline` (MC# present in
@@ -200,11 +261,18 @@ activeProjectId ship in ONE suppressed set (source-shape regression test).
 - **Owl MCP**: Miles/product. read → verify → act → ack when processed; notes
   never carry JP's authority (twice this window owls asserted rulings JP had not
   made or later declined — always verify with JP). Thread state: everything
-  through **#40** built + acked; my #14–#25 sent. **Awaiting Miles**: the
+  through **#40** built + acked; my #14–**#26** sent. **Awaiting Miles**: the
   amber-density question on Pipeline (247 of 249 live rows warn — tone the row
   fill or leave it, my #21) · R-warn-g (a blocked+warned row keeps its red fill) ·
   status-note placement + row-controls design pass · gap-banner placement
-  blessing · Escape-dismissal + touch reveal for the requestor tooltip (T152).
+  blessing · Escape-dismissal + touch reveal for the requestor tooltip (T152) ·
+  **three from my #26**: (A) the PROVISIONAL sprint-dates banner copy I wrote,
+  (B) whether the deleted banner's *"Fix in Trello and it corrects on the next
+  sync"* sentence should return to the Needs Info popover — it currently says why
+  each field matters and never where to fix it, (C) whether `.c-type` (Asset
+  Type) should get the requestor's clip treatment; it is the identical
+  hugging-badge-in-a-fixed-width-cell pairing and still cuts mid-character, but
+  owls #39/#40 named Requestor only so I did not sweep it.
   CLOSED by #32/#37/#38: ghost-bar colour, Accept vs Apply, the Save reframe,
   whitespace-only names, arrival-pulse styling, R-warn-g, the 6px subtone gap.
 - **Figma reads**: Rex MCP is OFFLINE (server disconnected). **The official Figma
@@ -257,8 +325,15 @@ activeProjectId ship in ONE suppressed set (source-shape regression test).
   two pre-existing host-local `todayIso()` sites · loopback-listen test hardening
   (21 files) · manual pass: drag a bar in the collapsed-pane state ·
   **should agent browser-verification run against a local dev server instead of
-  live?** (asked 2026-08-18, unanswered) · whether to draw a custom drag image so
-  Chrome's translucency/shadow go away entirely (only `setDragImage` can).
+  live?** — asked 2026-08-18; **the practical answer today is no: there is no dev
+  auth path**, so a locally-run server cannot be logged into headlessly (the four
+  checks are real everywhere). Verification therefore runs against the deployed
+  site on `rt-test`/`tx8gDsTH`, which is synthetic fixtures only. **Discipline:
+  record every row's `slottedWeek` before touching anything and restore it after
+  — the 2026-08-18 sweep made 4 `schedule.replot` rows and left zero net change.**
+  Building a dev login is JP's call and not yet asked for · whether to draw a
+  custom drag image so Chrome's translucency/shadow go away entirely (only
+  `setDragImage` can).
 - **Product (Miles)**: the list under Comms above · month-encoding verify when the
   Sheets credential lands · remaining tabs' frames (T073/T091 un-park).
 - **ARES agent**: push subscription for `hLL7WW2V`.
@@ -269,5 +344,5 @@ activeProjectId ship in ONE suppressed set (source-shape regression test).
 ## Definition of done unchanged
 
 Typecheck · eslint · vitest dual-TZ · frontend build · probes green; STATE.md
-updated; constitution intact (v4.3.0); reply format HEADLINE / WHAT I NEED FROM
+updated; constitution intact (v4.4.0); reply format HEADLINE / WHAT I NEED FROM
 YOU / STATUS / --- detail.
