@@ -1,6 +1,6 @@
 # CLAUDE.md — Sirius Build Constitution
 
-You are building **Sirius**, Frost Design Group's internal delivery pipeline and forecasting platform. Source documents: `docs/Sirius__BRD.md` (v2.2 — the *what*) and `docs/Sirius__Implementation_Plan.md` (the *how*). When they conflict, the Implementation Plan wins on engineering detail; the BRD wins on scope and business rules. If a conflict matters, stop and ask.
+You are building **Sirius**, Frost Design Group's internal delivery pipeline and forecasting platform. Source documents: `docs/product/brd.md` (v2.2 — the *what*) and `docs/product/implementation-plan.md` (the *how*). When they conflict, the Implementation Plan wins on engineering detail; the BRD wins on scope and business rules. If a conflict matters, stop and ask.
 
 ## What Sirius is, in three lines
 
