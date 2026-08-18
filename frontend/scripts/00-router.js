@@ -3,8 +3,9 @@
 
    Everything here is a pure function: no window, no history, no Ractive. The
    impure glue (currentHref/normalizeUrl/the observers/popstate) lives in
-   01-app.js, where `app` is declared — which is what lets this file be executed
-   in a test with no globals at all (test/routing-client.test.ts).
+   95-routing.js, beside the `app` declared in 40-app-state.js — which is what
+   lets this file be executed in a test with no globals at all
+   (test/routing-client.test.ts).
 
    ROUTE_TABS + ROUTE_DEFAULT_TAB are duplicated from src/routing/paths.ts: the
    frontend has no module system (build.js concatenates plain scripts) and the

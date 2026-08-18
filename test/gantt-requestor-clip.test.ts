@@ -1,5 +1,7 @@
 /**
- * Requestor cell truncation (owl #39 as corrected by #40, batch 6, T150; FR-5.2).
+ * Requestor cell truncation (owl #39 as corrected by #40, batch 6, T150;
+ * FR-5.2) — EXTENDED to the Asset Type cell by Miles's ruling in owl #43
+ * item C ("identical defect, identical fix").
  *
  * The bug: `.gantt .gdetails .c-req` is a fixed 136px box and the badge inside
  * it hugs its text, so a long requestor was cut MID-CHARACTER — and, because
@@ -8,7 +10,9 @@
  * trailing ellipsis, show the whole value on hover AND on keyboard focus, do
  * not wrap (row heights are aligned to the timeline bars), do not widen the
  * column (real requestors are "Andy" / "Chev" — the frames sample `@handle`
- * fixtures that production never produces).
+ * fixtures that production never produces). `.c-type` is the same
+ * fixed-cell-plus-hugging-badge pairing, so it wears the same recipe — the
+ * recipe was written to name no column for exactly this reuse.
  *
  * WHAT THIS FILE CAN AND CANNOT PROVE. There is no vitest config and no jsdom
  * in this repo: vitest runs in the default `node` environment, and the harness
@@ -65,9 +69,20 @@ const SHORT: PlannerRow = { ...base, cardId: 'short', mcLabel: 'MC-100', display
 const LONGROW: PlannerRow = { ...base, cardId: 'long', mcLabel: 'MC-200', displayId: 'MC-200', requestor: LONG };
 /** no `requestor` key at all — the `{{else}}` branch */
 const NONE: PlannerRow = { ...base, cardId: 'none', mcLabel: 'MC-300', displayId: 'MC-300' };
+/** an asset type only a fixture would carry — owl #43 item C's half of LONG */
+const LONGTYPE = 'Interactive Web Experience Prototype (annotated)';
+const TYPEROW: PlannerRow = {
+  ...base, cardId: 'ltype', mcLabel: 'MC-400', displayId: 'MC-400',
+  requestor: 'Ana', assetType: LONGTYPE,
+};
+/** no `assetType` key — the type cell's `{{else}}` branch */
+const NOTYPE: PlannerRow = {
+  ...base, cardId: 'notype', mcLabel: 'MC-500', displayId: 'MC-500',
+  requestor: 'Ana', assetType: undefined,
+};
 
 const GROUP: PlannerGroup[] = [
-  { id: 's1', kind: 'sprint', name: 'Sprint A', meta: '2 wk', count: '3 items', rows: [SHORT, LONGROW, NONE] },
+  { id: 's1', kind: 'sprint', name: 'Sprint A', meta: '2 wk', count: '5 items', rows: [SHORT, LONGROW, NONE, TYPEROW, NOTYPE] },
 ];
 
 const HTML = renderGantt({ plannerGroups: GROUP });
@@ -152,21 +167,24 @@ describe('the requestor badge renders through the shared clip recipe', () => {
     expect(reqCell('none')).not.toContain('cliptext');
   });
 
-  it('applies the recipe to the requestor column and to nothing else', () => {
-    // two rows carry a requestor, so exactly two badges in the whole render
-    expect([...HTML.matchAll(/clipbadge/g)]).toHaveLength(2);
-    expect([...HTML.matchAll(/cliptext/g)]).toHaveLength(2);
-    for (const cardId of ['short', 'long', 'none']) {
-      for (const cls of ['c-mc', 'c-scope', 'c-type', 'c-status']) {
+  it('applies the recipe to the requestor and type columns, and to nothing else', () => {
+    // owl #43 item C grew the recipe's reach to `.c-type`. Four rows carry a
+    // requestor and four an asset type, so exactly eight badges render — a
+    // ninth means the recipe crept onto a column no ruling covers.
+    expect([...HTML.matchAll(/clipbadge/g)]).toHaveLength(8);
+    expect([...HTML.matchAll(/cliptext/g)]).toHaveLength(8);
+    for (const cardId of ['short', 'long', 'none', 'ltype', 'notype']) {
+      for (const cls of ['c-mc', 'c-scope', 'c-status']) {
         expect(cell(cardId, cls), `${cardId}/${cls}`).not.toContain('clipbadge');
         expect(cell(cardId, cls), `${cardId}/${cls}`).not.toContain('cliptext');
       }
     }
   });
 
-  it('leaves the column HEADER cell byte-unchanged', () => {
+  it('leaves both column HEADER cells byte-unchanged', () => {
     const head = HTML.slice(HTML.indexOf('<div class="gpin gdetails">'));
     expect(head).toContain('<span class="gcell c-req">Requestor</span>');
+    expect(head).toContain('<span class="gcell c-type">Type</span>');
   });
 
   it('cannot reslot the deliverable with an arrow key — the RULE, on the row', () => {
@@ -197,6 +215,47 @@ describe('the requestor badge renders through the shared clip recipe', () => {
     // explanation above the cell is therefore an HTML comment
     expect(leakedMustacheText()).toEqual([]);
     expect(HTML).not.toContain('<!--'); // and toHTML() strips it, so nothing ships
+  });
+});
+
+/* Owl #43 item C: "identical defect, identical fix" — so the type badge is
+   held to the same assertions as the requestor badge, not to a loosened
+   paraphrase of them. */
+describe('the asset-type badge wears the same recipe (owl #43 item C)', () => {
+  const typeCell = (cardId: string): string => cell(cardId, 'c-type');
+
+  it('wears `.pbadge .clipbadge` with the value in a `.cliptext` child', () => {
+    expect(typeCell('short')).toContain('class="pbadge clipbadge"');
+    expect(typeCell('short')).toContain('<span class="cliptext">Render</span>');
+    expect(typeCell('ltype')).toContain(`<span class="cliptext">${LONGTYPE}</span>`);
+  });
+
+  it('carries the full value as the accessible name, byte-identical to the visible text', () => {
+    const c = typeCell('ltype');
+    const label = /aria-label="([^"]*)"/.exec(c)?.[1];
+    const visible = /<span class="cliptext">([^<]*)<\/span>/.exec(c)?.[1];
+    expect(label, 'no aria-label on the clipped badge').toBeDefined();
+    expect(label).toBe(LONGTYPE);
+    expect(visible).toBe(label);
+  });
+
+  it('is a nameable note, never a control, with no tab stop and no title', () => {
+    expect(typeCell('ltype')).toContain('role="note"');
+    expect(typeCell('short')).toContain('role="note"');
+    for (const r of ['button', 'link', 'checkbox', 'menuitem', 'tooltip']) {
+      expect(typeCell('ltype'), r).not.toContain(`role="${r}"`);
+    }
+    expect(typeCell('ltype')).not.toContain('on-click');
+    // the browser-side MEASUREMENT alone grants focus (and only when truncated)
+    expect(typeCell('short')).not.toContain('tabindex');
+    expect(typeCell('ltype')).not.toContain('tabindex');
+    expect(typeCell('ltype')).not.toContain('title=');
+  });
+
+  it('leaves an empty asset type as the dimmed dash it already was', () => {
+    expect(typeCell('notype')).toContain('<span class="gdim">—</span>');
+    expect(typeCell('notype')).not.toContain('clipbadge');
+    expect(typeCell('notype')).not.toContain('cliptext');
   });
 });
 
@@ -289,23 +348,31 @@ describe('the tooltip answers hover AND keyboard focus', () => {
 /* C — the single application, frontend/styles/35-gantt.css                 */
 /* ---------------------------------------------------------------------- */
 
-describe('the cell releases its clip, and only that cell', () => {
+describe('the two ruled cells release their clip, and only those cells', () => {
   it('keeps `.c-req`s width and hands the overflow to the badge', () => {
     const req = cssRule('.gantt .gdetails .c-req');
     expect(req).toContain('width: 136px');
     expect(req).toContain('overflow: visible');
   });
 
-  it('wins over the `.gcell` clip by SOURCE ORDER, with no new selector', () => {
-    // both selectors are (0,3,0); the cascade breaks the tie on order, so the
-    // fix must stay BELOW the .gcell rule. A move fails here.
-    expect(cssRule('.gantt .gdetails .gcell')).toContain('overflow: hidden');
-    expect(GANTT_CSS.indexOf('.gantt .gdetails .c-req {'))
-      .toBeGreaterThan(GANTT_CSS.indexOf('.gantt .gdetails .gcell {'));
+  it('keeps `.c-type`s width and hands the overflow to the badge (owl #43 item C)', () => {
+    const type = cssRule('.gantt .gdetails .c-type');
+    expect(type).toContain('width: 146px');
+    expect(type).toContain('overflow: visible');
   });
 
-  it('leaves the other four columns clipped, as fixed boxes', () => {
-    for (const cls of ['.c-mc', '.c-scope', '.c-type', '.c-status']) {
+  it('wins over the `.gcell` clip by SOURCE ORDER, with no new selector', () => {
+    // all three selectors are (0,3,0); the cascade breaks the tie on order, so
+    // both fixes must stay BELOW the .gcell rule. A move fails here.
+    expect(cssRule('.gantt .gdetails .gcell')).toContain('overflow: hidden');
+    for (const cls of ['.c-req', '.c-type']) {
+      expect(GANTT_CSS.indexOf(`.gantt .gdetails ${cls} {`), cls)
+        .toBeGreaterThan(GANTT_CSS.indexOf('.gantt .gdetails .gcell {'));
+    }
+  });
+
+  it('leaves the other three columns clipped, as fixed boxes', () => {
+    for (const cls of ['.c-mc', '.c-scope', '.c-status']) {
       expect(cssRule(`.gantt .gdetails ${cls}`), cls).not.toContain('overflow');
     }
   });

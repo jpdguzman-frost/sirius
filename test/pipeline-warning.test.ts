@@ -448,6 +448,22 @@ describe('the hover card (open on one row)', () => {
     expect(tag(up, '<div class="warnpop')).toContain('class="warnpop flip"');
   });
 
+  it('carries the last-resort scroll state the same way — placeBox decides, the class spells it', () => {
+    /* Miles's ruling (owl #43 item D): no internal scrolling stays the rule,
+       and scrolling is allowed only when the viewport genuinely cannot fit the
+       card. `warnPopPos.over` is that verdict's one carrier, decided in
+       placeBox from the measured height — the template spells it and the
+       stylesheet caps and scrolls off it. On the default pos (over unset) the
+       class must be absent, or every card would scroll. */
+    const capped = popover(open({ warnPopPos: { left: 0, top: 0, up: false, over: true } }));
+    expect(tag(capped, '<div class="warnpop')).toContain('class="warnpop scroll"');
+
+    const both = popover(open({ warnPopPos: { left: 0, top: 0, up: true, over: true } }));
+    expect(tag(both, '<div class="warnpop')).toContain('class="warnpop flip scroll"');
+
+    expect(tag(popover(), '<div class="warnpop')).not.toContain('scroll');
+  });
+
   it('titles itself with the row label', () => {
     expect(/<span class="wptitle">([^<]*)<\/span>/.exec(popover())![1]).toBe(recipe.rowWarning(WARNED)!.label);
   });
@@ -488,6 +504,29 @@ describe('the hover card (open on one row)', () => {
     // the separator exists to divide the details from the link; with no link
     // it would be a bare 1px rule under the last detail
     expect(out).not.toContain('wpsep');
+    // …but the closing line is MESSAGE copy, not the link's caption, so a card
+    // with nowhere to link still says what to do (owl #43 item B)
+    expect(out).toContain('class="wpfix"');
+  });
+
+  /* The deleted banner's closing sentence, restored by Miles's ruling (owl #43
+     item B): the reading order becomes what's wrong → why it matters → where
+     to fix it → the link that takes you there — and the line is also what
+     tells a PM that Sirius will not fix the card itself. */
+  it('closes the field list with the restored banner copy, verbatim', () => {
+    // the copy is the deleted banner's own sentence (batch 5), carried back
+    // word for word — a paraphrase here is drift from a JP-visible ruling
+    expect(/<div class="wpfix">([^<]*)<\/div>/.exec(popover())?.[1])
+      .toBe('Fix in Trello and it corrects on the next sync.');
+  });
+
+  it('places the closing line AFTER the field list and ABOVE Open Card', () => {
+    const pop = popover();
+    const lastItem = pop.lastIndexOf('class="wpitem"');
+    expect(lastItem).toBeGreaterThan(-1);
+    expect(pop.indexOf('class="wpfix"')).toBeGreaterThan(lastItem);
+    expect(pop.indexOf('class="wpfix"')).toBeLessThan(pop.indexOf('class="wpsep"'));
+    expect([...pop.matchAll(/class="wpfix"/g)]).toHaveLength(1);
   });
 
   it('opens exactly one card even when several rows are warned', () => {
@@ -603,9 +642,10 @@ describe('every overlay closes through ONE path — commit as well as dismiss', 
     /* The brief is verbatim on this — "Height is data-derived … so measure the
        rendered box and re-place; never assume a fixed height" — and nothing
        asserted it: deleting both lines from `showWarnPop` left the whole suite
-       green. WARN_POP_H is 346 (three problems) against the ~202 a one-problem
-       card measures, so without the re-place `placeBox` flips up over roughly
-       the bottom half of any viewport and then parks the box ~144px above where
+       green. WARN_POP_H is the three-problem worst case against the far
+       shorter box a one-problem card measures, so without the re-place
+       `placeBox` flips up over roughly the bottom half of any viewport and
+       then parks the box well above where
        the card renders. The bridge is 4px tall at the card's own edge, so it
        lands nowhere near the icon and `Open Card` is unreachable by pointer —
        the one thing the annotation insists on.
@@ -845,16 +885,40 @@ describe('the document dismissers name the TRIGGER, not the wrapper', () => {
     expect(unconditional).not.toContain('.warnbtn');
   });
 
-  it('keeps the hover card OUT of the scroll dismisser’s self-scroll exemption (R-warn-h)', () => {
+  it('admits the hover card to the self-scroll exemption — Miles amended R-warn-h (owl #43 item D)', () => {
     /* That exemption names overlays that scroll INSIDE themselves. R-warn-h
-       ruled the card has no max-height/overflow-y — the second measured
-       placement is the mitigation — so adding it here would make a scroll fail
-       to dismiss a card that cannot scroll. */
+       originally kept the card out because it had no overflow at all; the
+       last-resort ruling gives it overflow in exactly one state (a viewport
+       its measured height cannot fit), and a scroll the card answers itself
+       must not dismiss it there. On every other viewport the card still has
+       no overflow, so a scroll's target is never inside it and the dismissal
+       behaviour is unchanged — which is why the exemption is safe to hold
+       unconditionally. */
     const at = jsCode.indexOf("addEventListener('scroll'");
     expect(at).toBeGreaterThan(-1);
     const listener = jsCode.slice(at, jsCode.indexOf('}, true)', at));
-    expect(listener).toContain("closest('.duepop, .selectmenu')");
-    expect(listener).not.toContain('.warnpop');
+    expect(listener).toContain("closest('.duepop, .selectmenu, .warnpop')");
+  });
+
+  it('caps and scrolls the card ONLY in the last-resort state — the base recipe stays uncapped', () => {
+    /* The rule Miles kept: no internal scrolling in every normal case. So the
+       cap must live on `.warnpop.scroll` alone; a max-height or overflow on
+       the base `.warnpop` would put a scrollbar on every viewport and quietly
+       repeal the ruling it implements. */
+    const scroll = cssRule('.warnpop.scroll', PIPELINE_CSS);
+    expect(scroll).toContain('max-height: calc(100vh - var(--space-8))');
+    expect(scroll).toContain('overflow-y: auto');
+    // a wheel at the card's own end must not chain to the page and trip the
+    // scroll dismisser while the user is scrolling the card itself
+    expect(scroll).toContain('overscroll-behavior: contain');
+    for (const prop of ['max-height', 'overflow']) {
+      expect(cssRule('.warnpop', PIPELINE_CSS), `base .warnpop carries ${prop}`).not.toContain(prop);
+    }
+    // placeBox is the one decider, from the measured height against the
+    // viewport — `>=`, because the scroll state caps the box at exactly
+    // viewport-minus-margins and a strict compare would oscillate
+    expect(fnBody('placeBox')).toMatch(/over = [^;]*>= window\.innerHeight/);
+    expect(fnBody('placeBox')).toMatch(/return \{[^}]*over[^}]*\}/);
   });
 
   it('leaves Escape alone — it is on `document`, so it already reaches the card', () => {
@@ -870,14 +934,17 @@ describe('the document dismissers name the TRIGGER, not the wrapper', () => {
     expect(listener).toContain('closeMenus({ restoreFocus: true })');
   });
 
-  it('leaves the wheel swallow duePopover-only — the card has no scroll to protect', () => {
+  it('leaves the wheel swallow duePopover-only — the card protects itself, or not at all', () => {
     /* The swallow exists so a trackpad nudge inside the DUE popover does not
        chain to the page and trip the scroll dismisser, discarding a staged
-       date. R-warn-h ruled the hover card has no max-height/overflow-y, so it
-       has nothing to swallow for and a nudge over it SHOULD dismiss it — the
-       companion to keeping `.warnpop` out of the scroll exemption above. This
-       test previously asserted only Escape and would have passed with the whole
-       listener deleted. */
+       date. The hover card needs no seat here even after the last-resort
+       ruling: on a normal viewport it has no overflow, a nudge over it chains
+       to the page and SHOULD dismiss it (it holds no staged edit); in the
+       scroll state the wheel scrolls the card natively — the scroll target is
+       the card, the exemption above holds it open, and `overscroll-behavior:
+       contain` stops the chain at the card's own end. This test previously
+       asserted only Escape and would have passed with the whole listener
+       deleted. */
     const at = jsCode.indexOf("addEventListener('wheel'");
     expect(at, 'the wheel swallow was deleted').toBeGreaterThan(-1);
     const listener = jsCode.slice(at, jsCode.indexOf('\n}, { passive: false })', at));
@@ -1025,8 +1092,15 @@ describe('one recipe per visual (CSS)', () => {
     expect(rule).toContain('cursor: pointer');
     expect(rule).toContain('color: var(--amber-600)');
     // the annotation asks for a hit area larger than the 14px glyph, and the
-    // padding is the whole of that — a token, never a bare px
+    // padding is part of that — a token, never a bare px
     expect(rule).toMatch(/padding: var\(--space-\d+\)/);
+    /* Miles's ruling (owl #46): the box grows to the documented target-size
+       threshold — the spacing token whose name IS that threshold, so the
+       number lives in the token sheet and nowhere here. Minimum sizes, not
+       fixed ones: the box may grow with its content but never shrink under
+       the threshold. */
+    expect(rule).toContain('min-width: var(--space-24)');
+    expect(rule).toContain('min-height: var(--space-24)');
     // it is an icon now: the underline went with the message line
     expect(rule).not.toContain('text-decoration');
     expect(cssRule('.i14', PIPELINE_CSS)).toContain('width: 14px');
@@ -1120,7 +1194,7 @@ describe('one recipe per visual (CSS)', () => {
   it('spends no raw hex and no raw px on the new rules — tokens only', () => {
     // the ONE exception the constitution allows is an icon glyph box, which is
     // exactly the shape .i13/.i15/.i16/.i18 already have
-    for (const sel of ['.warnbtn', '.warnhost', '.ptable .mcid', '.warnpop.flip', '.warnpop::before', '.warnpop.flip::before']) {
+    for (const sel of ['.warnbtn', '.warnhost', '.ptable .mcid', '.warnpop.flip', '.warnpop.scroll', '.wpfix', '.warnpop::before', '.warnpop.flip::before']) {
       const rule = cssRule(sel, PIPELINE_CSS).replace(/\/\*[\s\S]*?\*\//g, ' ');
       expect(rule, `${sel} carries a raw hex`).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
       expect(rule, `${sel} carries a raw px`).not.toMatch(/\d+px/);
@@ -1176,7 +1250,10 @@ describe('what only the live pass can prove (browser, after deploy)', () => {
   it.todo('Tabbing PAST Open Card closes the card and does not yank focus back to the icon');
   it.todo('Escape with focus inside the card closes it and returns focus to the icon');
   it.todo('near the viewport bottom the card flips up, and the squared corner AND the bridge flip with it');
-  it.todo('a horizontal scroll of the table dismisses the card (it has no scroll of its own)');
+  it.todo('a horizontal scroll of the table dismisses the card (on a normal viewport it has no scroll of its own)');
+  it.todo('owl #43 B: the closing line renders between the field list and Open Card, and wraps inside the card');
+  it.todo('owl #43 D: on a viewport shorter than the card (~350px), the card caps, scrolls itself, and scrolling it does not dismiss it');
+  it.todo('owl #46: the icon\'s hit target measures at least 24×24 in the browser, and the row height is unchanged');
   it.todo('hovering an icon while a due-date edit is staged leaves that edit intact — entering AND leaving it');
   it.todo('moving off the 14px glyph onto the button’s own padding does not close the card');
   it.todo('moving between two lines inside the card, across its padding, does not close it');
@@ -1200,7 +1277,9 @@ describe('what only the live pass can prove (browser, after deploy)', () => {
   it.todo('R-warn-w: with a difficulty menu open, clicking a warning icon dismisses that menu');
   it.todo('R-warn-w: on touch, a tap on the icon still opens the card and does not close it again');
   /* Design questions the live pass should LOOK at rather than prove, raised by
-     the verify pass and owed to Miles rather than to the code. */
-  it.todo('the open card covers the icons of the rows beneath it — sweeping the warned column skips 2–4 rows at a time');
+     the verify pass and owed to Miles rather than to the code. The occlusion
+     question (the open card covering the icons of the rows beneath it) was
+     RULED acceptable by Miles in owl #46 item 4 — intentional, not a bug, so
+     it left this list. */
   it.todo('the MC# label still fits beside the icon in a 150px column, highlight included, without wrapping after the hyphen');
 });

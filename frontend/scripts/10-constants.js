@@ -115,12 +115,13 @@ const WARN_WHY = {
 };
 /* warning popover box (node 537:69135) — the pre-measure placeBox needs to
    decide flip-up and the horizontal clamp before the element exists. The
-   HEIGHT hugs its content (one wrapping list-item per missing field: ~202px
-   for one problem, ~346px for all three), so this is the WORST case, the same
-   way REQ_MENU_H is the select's cap — showWarnPop measures the box that
-   actually rendered and places it a second time. Nothing in CSS pins it. */
+   HEIGHT hugs its content (one wrapping list-item per missing field, plus the
+   restored closing sentence — owl #43 item B: ~245px for one problem, ~390px
+   for all three), so this is the WORST case, the same way REQ_MENU_H is the
+   select's cap — showWarnPop measures the box that actually rendered and
+   places it a second time. Nothing in CSS pins it. */
 const WARN_POP_W = 235;
-const WARN_POP_H = 346;
+const WARN_POP_H = 390;
 /* The hover card's close DELAY. Not specified by the annotation — 150ms is
    long enough to cross the 4px gap and short enough not to feel sticky
    (R-warn-j, flagged to Miles as a number he may want to tune). */

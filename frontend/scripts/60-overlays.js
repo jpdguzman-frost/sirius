@@ -121,12 +121,17 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('scroll', (e) => {
   // the popover scrolls INSIDE itself on a viewport shorter than it is —
   // that must not dismiss the multi-step edit it exists to hold; a long
-  // Requests select scrolls itself for the same reason
+  // Requests select scrolls itself for the same reason. The warning card
+  // joined this list with Miles's last-resort ruling (owl #43 item D,
+  // amending R-warn-h): it can now scroll itself in exactly one state — a
+  // viewport its measured height cannot fit — and a scroll it answers
+  // itself must not dismiss it. On every other viewport it has no overflow,
+  // so a scroll's target is never inside it and dismissal is unchanged.
   // the cheap state read comes FIRST: this fires on every scroll in the
   // document, including the horizontal .pscroll drag, and the DOM walk is
   // pointless when nothing is open
   if (!anyMenuOpen()) return;
-  if (e.target.closest && e.target.closest('.duepop, .selectmenu')) return;
+  if (e.target.closest && e.target.closest('.duepop, .selectmenu, .warnpop')) return;
   closeMenus();
 }, true);
 /* A trackpad nudge with the pointer inside the popover would otherwise chain
@@ -145,19 +150,26 @@ document.addEventListener('wheel', (e) => {
    the trigger. */
 function placeBox(rect, opts) {
   const up = rect.bottom + opts.h + opts.gap > window.innerHeight;
+  /* `over`: the box is taller than the viewport can hold even at the clamp's
+     own margins (the two 4s below) — Miles's last-resort ruling (owl #43 item
+     D). `>=` and not `>`, deliberately: the scroll state CAPS the box at
+     exactly viewport-minus-margins, so a strict compare would read the capped
+     measurement as "fits now", drop the class, and oscillate. */
+  const over = opts.h + 8 >= window.innerHeight;
   let left = rect.left;
   let top = up ? rect.top - opts.h - opts.gap : rect.bottom + opts.gap;
   if (opts.clampW) {
     left = Math.max(4, Math.min(left, window.innerWidth - opts.clampW - 4));
     top = Math.max(4, Math.min(top, window.innerHeight - opts.h - 4));
   }
-  /* `up` rides out with the coordinates because the flip is a fact the MARKUP
-     needs, not just the placer: the hover card's squared corner and its hover
-     bridge both have to sit on the gap side. Recomputing it anywhere else
-     would be a second copy of this comparison that could disagree with the
-     one that actually moved the box. The other four overlays gain an unread
-     key; nothing reads it. */
-  return { left: Math.round(left), top: Math.round(top), up };
+  /* `up` and `over` ride out with the coordinates because both are facts the
+     MARKUP needs, not just the placer: the hover card's squared corner and its
+     hover bridge sit on the gap side, and its last-resort scroll state is a
+     class only the template can spell. Recomputing either anywhere else would
+     be a second copy of a comparison that could disagree with the one that
+     actually moved the box. The other four overlays gain unread keys; nothing
+     reads them. */
+  return { left: Math.round(left), top: Math.round(top), up, over };
 }
 
 /* One opener for all five overlays. They differ only in state keys, box

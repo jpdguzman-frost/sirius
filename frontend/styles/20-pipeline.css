@@ -175,7 +175,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    below its content, so the box would still overflow and the ellipsis would
    silently never render. */
 .clipbadge .cliptext { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* [data-clipped] is written by the post-render MEASUREMENT in 01-app.js
+/* [data-clipped] is written by the post-render MEASUREMENT in 70-measure.js
    (refreshClips, scrollWidth vs clientWidth) and by nothing else — never by the
    template, never from a character count. Both the tooltip and the tab stop
    hang off it, so a value that FITS shows nothing on hover and is not
@@ -190,11 +190,15 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    to the timeline bars — a taller row desyncs the pane from the Gantt).
    `top: 100%` leaves no dead zone between badge and tooltip, so the pointer can
    travel onto it and it stays open (WCAG 1.4.13 hoverable + persistent).
-   KNOWN GAP: a pure-CSS tooltip cannot be dismissed with Escape, the third
-   limb of 1.4.13, and touch has no reveal path at all. Not answered here by
-   putting JS state behind an informational cell — both are written up in
-   gantt-frame-notes.md and carried as an explicit question for Miles/JP in
-   T152, so the call gets made rather than left in this comment. */
+   KNOWN GAPS, RULED ACCEPTED (Miles, owl #42, closing T152): a pure-CSS
+   tooltip cannot be dismissed with Escape, the third limb of 1.4.13, touch
+   has no reveal path, and the last row's tooltip opens downward. Accepted
+   because the gaps only manifest on values that truncate and real data
+   ("Andy"/"Chev") does not — and closing them would put interactive state
+   behind an informational cell, the door the arrow-key hazard came through.
+   Do NOT build the interactive version; revisit only if touch becomes a real
+   planner surface. Owl #43 item C applies this same recipe to the Asset Type
+   cell — identical defect, identical fix. */
 .clipbadge[data-clipped]:hover::after,
 .clipbadge[data-clipped]:focus-visible::after {
   content: attr(aria-label);
@@ -378,12 +382,16 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    card to the cell it was made fixed to escape. */
 .warnhost { display: flex; align-items: center; flex: none; }
 /* THE trigger — the row itself stays presentation only. The annotation asks
-   for a hit area larger than the glyph, so a 14px icon sits in a 22px box; the
-   pad is what the pointer and the focus ring actually aim at. The ring is the
+   for a hit area larger than the glyph; Miles ruled the box up to the
+   documented target-size threshold (owl #46), so the icon sits in a box the
+   size of the spacing token below — the pad plus the minimum sizes are what
+   the pointer and the focus ring actually aim at. The row spacing already
+   accommodates it (his ruling says so in as many words). The ring is the
    table's one shared rule above, not a second one restated here. */
 .warnbtn {
   display: inline-flex; align-items: center; justify-content: center;
   border: none; background: none; padding: var(--space-4); cursor: pointer;
+  min-width: var(--space-24); min-height: var(--space-24);
   border-radius: var(--radius-xs); color: var(--amber-600);
 }
 .warnbtn:hover { color: var(--amber-700); }
@@ -405,6 +413,18 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    specifies the anchored-below case only; this default is mine, recorded as
    R-warn-i and flagged to Miles. */
 .warnpop.flip { border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 0; }
+/* LAST-RESORT internal scroll (Miles, owl #43 item D, amending R-warn-h): the
+   rule is still no internal scrolling — this class exists only for a viewport
+   that genuinely cannot fit the card, where the alternative is content that
+   can never be reached. placeBox decides `over` from the measured height
+   against the viewport (the same second placement R-warn-h added), and the
+   template spells it here, so on every normal viewport this rule is inert and
+   the card stays uncapped. overscroll-behavior keeps a wheel at the card's
+   own end from chaining to the page and tripping the scroll dismisser while
+   the user is scrolling the card itself. In this one state the hover bridge
+   is clipped by the overflow — accepted: the card fills the viewport, so
+   there is no gap left for the bridge to span. */
+.warnpop.scroll { max-height: calc(100vh - var(--space-8)); overflow-y: auto; overscroll-behavior: contain; }
 /* THE HOVER BRIDGE. The card sits one --space-4 clear of the icon, so without
    this the pointer crosses dead space, mouseleave fires, and the close timer
    can run out before the pointer reaches `Open Card` — which is the whole
@@ -441,6 +461,9 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .wpitems .wpitem:first-child { gap: 6px; }
 .wplabel { font-size: var(--text-label); font-weight: 600; color: var(--slate-900); }
 .wpwhy { font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
+/* the closing line (owl #43 item B) — message copy, so it wears the
+   rationale's own recipe, not the link's */
+.wpfix { font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
 .wpsep { height: 1px; background: var(--slate-300); }
 /* underlined per the annotation, which overrules the frame's own render */
 .wpopen { font-size: var(--text-label); font-weight: 600; color: var(--blue-700); text-decoration: underline; }

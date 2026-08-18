@@ -360,8 +360,10 @@ export interface PipelineTableState {
    * `flip` is what moves the hover bridge to the other side. It is therefore a
    * view state a render test has to be able to set, not an implementation
    * detail: the unflipped card and the flipped one are two different renders.
+   * `over` is the same contract for the last-resort scroll state (owl #43
+   * item D): placeBox decides it, `scroll` on the card spells it.
    */
-  warnPopPos?: { left: number; top: number; up?: boolean };
+  warnPopPos?: { left: number; top: number; up?: boolean; over?: boolean };
   /** the SHIPPED recipe, executed out of the app scripts — never a stub */
   rowWarning: (row: PipeRow) => unknown;
 }

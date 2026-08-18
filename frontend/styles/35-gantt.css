@@ -12,11 +12,11 @@
 
    Widths are INTRINSIC: a week column is --gw wide, every row lays 12 of them
    end to end, so the sheet sizes itself and no rule repeats the week count.
-   --gw is the CSS half of WEEK_PX (01-app.js §3.1); the month cells multiply
+   --gw is the CSS half of WEEK_PX (10-constants.js); the month cells multiply
    it with calc() rather than shipping a second pixel number. */
 
 .gantt {
-  --gw: 92px; /* one week column — mirrors WEEK_PX in 01-app.js */
+  --gw: 92px; /* one week column — mirrors WEEK_PX in 10-constants.js */
   --gleft: 999px; /* 58 gutter + 97 + 262 + 136 + 146 + 300 — mirrors LEFT_PANE_PX */
   --gbar-h: 26px;
   font-family: var(--font-sans);
@@ -192,7 +192,7 @@
    four columns keep the clip untouched — `flex: none` + the width below is what
    holds the pinned block to --gleft, not the overflow. */
 .gantt .gdetails .c-req { width: 136px; overflow: visible; }
-.gantt .gdetails .c-type { width: 146px; }
+.gantt .gdetails .c-type { width: 146px; overflow: visible; }
 .gantt .gdetails .c-status { width: 300px; display: flex; align-items: flex-start; gap: var(--space-8); }
 
 /* owl #24 — the collapsed pane: MC# + name only (155 + 262 = 417). ONE
@@ -329,7 +329,7 @@
    the track OUTSIDE the coloured run, and the `.gweek` columns beneath never
    see them. Transparent, it hands those columns their drops back while `.grun`
    keeps its own. Both paths end in the same `moveRows` — the box maps the
-   pointer's X to a week column itself (`weekAtX`, 01-app.js §3.1), the cells
+   pointer's X to a week column itself (`weekAtX`, 50-gantt-geometry.js), the cells
    are simply hit. `inset: 0` keeps the wrapper's box identical to the track's.
    `.grun` IS THE BAR STRIP (JP, 2026-08-18, batch 9). It was `top: 0; bottom:
    0` — the whole 99px row — and the browser's drag image is a snapshot of the

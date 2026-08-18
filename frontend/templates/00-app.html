@@ -278,7 +278,7 @@
                       <svg class="i14" aria-hidden="true"><use href="#i-warning" /></svg>
                     </button>
                     {{#if warnPop === row.cardId}}
-                      <div class="warnpop{{#if warnPopPos.up}} flip{{/if}}" role="dialog"
+                      <div class="warnpop{{#if warnPopPos.up}} flip{{/if}}{{#if warnPopPos.over}} scroll{{/if}}" role="dialog"
                            aria-label="{{row.warning.label}} — {{row.mcLabel}} {{row.name}}"
                            style="left:{{warnPopPos.left}}px;top:{{warnPopPos.top}}px;"
                            on-mouseenter="['warnPopIn', row.cardId]" on-mouseleave="['warnPopOut']">
@@ -288,6 +288,13 @@
                             <div class="wpitem"><span class="wplabel">{{it.label}}</span><span class="wpwhy">{{it.why}}</span></div>
                           {{/each}}
                         </div>
+                        <!-- the deleted banner's own closing sentence, restored by
+                             Miles (owl #43 item B): the field list says what is
+                             broken and why it matters; this line says what to DO,
+                             and that Sirius will not fix it itself. Part of the
+                             MESSAGE, so it renders for a row with no Trello URL
+                             too — it is not the link's caption. -->
+                        <div class="wpfix">Fix in Trello and it corrects on the next sync.</div>
                         <!-- the separator exists only to divide the details from
                              Open Card, so a card Trello has no URL for draws
                              neither: one conditional, not two -->
@@ -605,11 +612,13 @@
                       </div>
                       <span class="gname">{{row.name}}</span>
                     </div>
-                    <!-- owl #39 as corrected by #40 — the requestor badge hugs its text
-                         inside a fixed 136px cell, so a long value used to be cut
-                         mid-character with no sign it was cut. It now clips itself with a
-                         trailing ellipsis and shows the whole value on hover AND on
-                         keyboard focus (20-pipeline.css, the shared clip recipe).
+                    <!-- owl #39 as corrected by #40; extended to Asset Type by Miles's
+                         ruling in owl #43 item C — a hugging badge inside a fixed-width
+                         cell used to cut a long value mid-character with no sign it was
+                         cut. Both badges now clip themselves with a trailing ellipsis and
+                         show the whole value on hover AND on keyboard focus
+                         (20-pipeline.css, the shared clip recipe: identical defect,
+                         identical fix, no wrap, no column widening).
                          `aria-label` is the accessible name AND the tooltip's text, so the
                          two can never drift — and it needs `role="note"` to be legal:
                          ARIA 1.2 PROHIBITS an author-supplied name on `role=generic`, which
@@ -617,7 +626,7 @@
                          label could simply be dropped. `note` (ancillary content) is the
                          weakest role that permits naming and it costs nothing on the
                          non-focusable case. There is deliberately NO `tabindex` and no
-                         `title` here: the post-render MEASUREMENT in 01-app.js grants the
+                         `title` here: the post-render MEASUREMENT in 70-measure.js grants the
                          tab stop only to a badge that is actually truncated, because a
                          badge whose value fits is not interactive.
                          Arrow keys are NOT stopped here any more: `rowKey` itself now
@@ -627,7 +636,7 @@
                          not a Ractive one: this is element-content position, where
                          `{{! }}` leaks. -->
                     <div class="gcell c-req">{{#if row.requestor}}<span class="pbadge clipbadge" role="note" aria-label="{{row.requestor}}"><span class="cliptext">{{row.requestor}}</span></span>{{else}}<span class="gdim">—</span>{{/if}}</div>
-                    <div class="gcell c-type">{{#if row.assetType}}<span class="pbadge">{{row.assetType}}</span>{{else}}<span class="gdim">—</span>{{/if}}</div>
+                    <div class="gcell c-type">{{#if row.assetType}}<span class="pbadge clipbadge" role="note" aria-label="{{row.assetType}}"><span class="cliptext">{{row.assetType}}</span></span>{{else}}<span class="gdim">—</span>{{/if}}</div>
                     <div class="gcell c-status">
                       {{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{row.currentList}}</span>{{else}}<span class="gdim">—</span>{{/if}}
                       {{! owl #27, node I262:33396;251:27040 — the library's
@@ -696,7 +705,7 @@
                         18px target — the extra width is invisible, paints
                         nothing, and is arithmetic rather than CSS.
                         All the geometry comes ready-made out of `phaseRun` in
-                        01-app.js: the box as a percentage of the TRACK, and
+                        50-gantt-geometry.js: the box as a percentage of the TRACK, and
                         each segment as a percentage of the BOX, already
                         formatted. Nothing here multiplies, adds or branches on
                         geometry, and the segments land where they have always
