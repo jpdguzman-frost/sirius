@@ -340,6 +340,13 @@ function monthShiftYm(ym, delta) {
   return monthOf(isoOf(new Date(y, m - 1 + delta, 1)));
 }
 
+/* The ONLY three sprint fields a save persists, projected in one place. The
+   open-baseline, the PUT body and `sprintDirty`'s comparison are three views of
+   one contract; when each spelled it out separately, adding a fourth persisted
+   field silently stopped `sprintDirty` from seeing edits to it and left Save
+   dead on a real change. */
+const sprintPayload = (s) => ({ name: s.name, start: s.start, end: s.end });
+
 function mondayIso(base) {
   const d = new Date(base + 'T00:00:00');
   const day = d.getDay() === 0 ? 7 : d.getDay();
@@ -551,9 +558,6 @@ const app = new Ractive({
     fmtLong: fmtLongIso,
     fmtInstant,
     monthShort,
-    // the Pipeline row's incomplete-card state — one recipe, read three times
-    // per row (the .warn class, the message, the popover)
-    rowWarning,
     /* the derived-status names the template compares against — the constants
        above, never re-typed as literals in the markup (owls #13–#15). The
        clarification test is the SHARED predicate, not a second status name:
@@ -965,6 +969,36 @@ const app = new Ractive({
       });
       return out;
     },
+    /* BLOCKING. Clearing a date input leaves `''` (snapSprintStart), and NO
+       other validator could see it: `sprintOrder` filters a row with no start
+       or end straight out, so overlaps and gaps never met it, and blank names
+       only read the name. Save stayed live, the PUT failed the route's
+       DATE_ONLY shape check, and the modal printed the raw envelope code at
+       the user — the same unreadable failure blank names were fixed to avoid
+       (owl #37 item 2). The route needs no change: it already refuses the
+       shape, and now the modal never asks it to.
+
+       Copy follows the blank-name sentence's shape; PROVISIONAL, flagged to
+       Miles. One banner per ROW, naming the row by whichever identity it has
+       left. */
+    sprintMissingDates() {
+      const draft = this.get('sprintDraft');
+      const out = [];
+      draft.forEach((s, i) => {
+        const start = (s && s.start) || '';
+        const end = (s && s.end) || '';
+        if (start && end) return;
+        const named = String((s && s.name) || '').trim();
+        const which = !start && !end ? 'start and end dates' : !start ? 'start date' : 'end date';
+        out.push({
+          after: i,
+          variant: 'err',
+          title: 'Sprint dates required',
+          text: `${named ? `"${named}"` : 'This sprint'} has no ${which}. Every sprint needs a start and an end to save.`,
+        });
+      });
+      return out;
+    },
     /* BLOCKING, and symmetric with duplicates by ruling (R-f-3): constitution
        invariant 12 already rejects overlapping sprints on save, so the modal
        says so in the error treatment rather than letting the PUT be the first
@@ -1016,13 +1050,36 @@ const app = new Ractive({
 
        No trimming — a name the user changed to 'Sprint 1 ' is an edit they
        made. Whether the route trims on store is a separate question. */
+    /* The row banners in READING ORDER, assembled ONCE. The template used to
+       concatenate the lists inside the per-row loop, so the arrays were rebuilt
+       for every draft row, and each new error class meant editing the markup.
+       Outward from the row: this row's own problems first (no name, no dates),
+       then the pair it overlaps, then the advisory gap. */
+    sprintRowBanners() {
+      return this.get('sprintBlankNames')
+        .concat(this.get('sprintMissingDates'), this.get('sprintOverlaps'), this.get('sprintGaps'));
+    },
+    /* "Save would be refused" — ONE name for the whole class. It was spelled
+       out three times (the disabled binding, the tooltip condition and the
+       handler's own lock), so every new error class was three edits that had to
+       agree and any one missed silently unlocked Save. Gaps are absent on
+       purpose: they are legal (BR-5) and advisory. */
+    sprintBlocked() {
+      return this.get('sprintDupNames').length > 0
+        || this.get('sprintBlankNames').length > 0
+        || this.get('sprintMissingDates').length > 0
+        || this.get('sprintOverlaps').length > 0;
+    },
     sprintDirty() {
       const draft = this.get('sprintDraft') || [];
       const base = this.get('sprintBaseline') || [];
       if (draft.length !== base.length) return true;
       return draft.some((s, i) => {
+        // the SAME projection the baseline and the PUT use, so a fourth
+        // persisted field is compared without a second edit here
+        const a = sprintPayload(s || {});
         const b = base[i] || {};
-        return (s && s.name) !== b.name || (s && s.start) !== b.start || (s && s.end) !== b.end;
+        return Object.keys(a).some((k) => a[k] !== b[k]);
       });
     },
   },
@@ -1209,8 +1266,14 @@ app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ'), noteText
    on any trigger is inside the ignore list below, so each opener nulls the
    other two itself. Dismissing DISCARDS the staged date: only Apply writes
    (W2), so the popover defends its own scrolling below. */
+/* The overlays, named ONCE. `anyMenuOpen`, `closeMenus` and `openOverlay`'s
+   mutual exclusion all derive from this list — adding `warnPop` used to mean
+   three hand-edits that had to agree, and a fourth list (the focus-held
+   selectors below) that nothing tied to them. A sixth overlay is one entry. */
+const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop'];
+const NO_OVERLAYS = Object.fromEntries(OVERLAY_KEYS.map((k) => [k, null]));
 function anyMenuOpen() {
-  return app.get('urgencyMenu') || app.get('diffMenu') || app.get('duePopover') || app.get('reqMenu') || app.get('warnPop');
+  return OVERLAY_KEYS.some((k) => app.get(k));
 }
 /* The element that opened whatever overlay is up — captured in openOverlay,
    which is the ONE door in, so it can never be stale while an overlay is open.
@@ -1227,8 +1290,12 @@ function closeMenus({ restoreFocus = false } = {}) {
   const ae = document.activeElement;
   const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .warnpop'));
   overlayTrigger = null;
-  app.set({ urgencyMenu: null, diffMenu: null, duePopover: null, reqMenu: null, warnPop: null });
-  if ((restoreFocus || heldFocus) && t && t.isConnected) t.focus();
+  app.set({ ...NO_OVERLAYS });
+  /* preventScroll because this same path runs from the capture-phase scroll
+     dismisser: without it, dismissing by scrolling yanks the viewport back to
+     the trigger the user just scrolled away from — the focus return would undo
+     the gesture that triggered it. */
+  if ((restoreFocus || heldFocus) && t && t.isConnected) t.focus({ preventScroll: true });
 }
 document.addEventListener('click', (e) => {
   // the ignore list names the TRIGGERS, not their wrappers: `.warnwrap` is a
@@ -1243,8 +1310,12 @@ document.addEventListener('scroll', (e) => {
   // the popover scrolls INSIDE itself on a viewport shorter than it is —
   // that must not dismiss the multi-step edit it exists to hold; a long
   // Requests select scrolls itself for the same reason
+  // the cheap state read comes FIRST: this fires on every scroll in the
+  // document, including the horizontal .pscroll drag, and the DOM walk is
+  // pointless when nothing is open
+  if (!anyMenuOpen()) return;
   if (e.target.closest && e.target.closest('.duepop, .selectmenu')) return;
-  if (anyMenuOpen()) closeMenus();
+  closeMenus();
 }, true);
 /* A trackpad nudge with the pointer inside the popover would otherwise chain
    to the page and trip the dismisser above, discarding the staged date and
@@ -1290,11 +1361,7 @@ function openOverlay(ctx, cardId, opts) {
   }
   overlayTrigger = ctx.node;
   app.set({
-    urgencyMenu: null,
-    diffMenu: null,
-    duePopover: null,
-    reqMenu: null,
-    warnPop: null,
+    ...NO_OVERLAYS,
     ...opts.extra,
     [opts.key]: cardId,
     [opts.posKey]: placeBox(ctx.node.getBoundingClientRect(), opts),
@@ -1393,11 +1460,25 @@ window.addEventListener('resize', refreshThumbs);
    tab stop — which is what a hidden cell should have. Expanding re-runs it.
 
    NOT hooked to `resize`: every width in the pinned pane is a literal px with
-   no responsive rule, so the viewport cannot change this verdict. */
+   no responsive rule, so the viewport cannot change this verdict.
+
+   MEASURE FIRST, THEN WRITE — never interleaved. `data-clipped` is a live
+   selector (it turns the badge `position: relative` for the tooltip), so a
+   write dirties layout and the NEXT badge's `scrollWidth` read has to flush a
+   full style+layout pass over the whole Gantt to answer. Read-then-write costs
+   one layout for the sweep instead of one per changed badge; the left-pane
+   collapse, where every badge flips verdict at once, was the worst case. */
 function refreshClips() {
-  document.querySelectorAll('.clipbadge').forEach((el) => {
-    const text = el.querySelector('.cliptext');
-    if (text && text.scrollWidth > text.clientWidth) { // any overflow at all — the ellipsis is already drawn
+  const badges = document.querySelectorAll('.clipbadge');
+  const clipped = [];
+  // pass 1 — reads only
+  badges.forEach((el) => {
+    const text = el.firstElementChild; // .cliptext is the badge's only child
+    clipped.push(!!text && text.scrollWidth > text.clientWidth); // any overflow at all — the ellipsis is already drawn
+  });
+  // pass 2 — writes only
+  badges.forEach((el, i) => {
+    if (clipped[i]) {
       el.setAttribute('data-clipped', '');
       el.setAttribute('tabindex', '0'); // only a TRUNCATED badge is reachable
     } else {
@@ -1406,6 +1487,10 @@ function refreshClips() {
     }
   });
 }
+/* Every seam that remounts row nodes re-measures BOTH the scroll thumbs and
+   the clip verdicts, on the frame after the render. One name, so a fifth seam
+   cannot pick up half of it. */
+const remeasure = () => requestAnimationFrame(() => { refreshThumbs(); refreshClips(); });
 /* The webfont lands AFTER first paint (index.html loads Google Sans Flex with
    `display=swap`), so the first sweep can measure fallback metrics and be wrong
    in either direction. One re-measure when the real font is in. */
@@ -1653,8 +1738,15 @@ async function loadAll() {
     // The MC# cell shows the bare mcLabel (JP ruling 2026-08-13), but typing
     // 'MC-655.3' must still find its row — displayId and mcNumber both stay
     // searchable, and mcLabel is by construction one of the two.
+    /* `warning` rides along for the same reason: the template asked
+       `rowWarning(row)` in SEVEN places, so the recipe ran seven times per row
+       on every re-render — and the table re-renders on every search keystroke,
+       every urgency/difficulty/due write and every load. Stamped once here it
+       is a plain keypath, which also gives `{{#each row.warning.items}}` a
+       stable array identity instead of a fresh one to diff each pass. */
     pipeline.rows.forEach((r) => {
       r.blob = `${r.displayId} ${r.mcNumber || ''} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
+      r.warning = rowWarning(r);
     });
     capServer = pipeline.capacity.weekly; // server truth — the capacity rollback target
     app.set({
@@ -1688,7 +1780,7 @@ async function loadAll() {
     // one frame, both post-render measurements. loadAll is also the project
     // switch (resetForProjectSwitch and popstate both end here), so the clip
     // sweep needs no separate hook for it.
-    requestAnimationFrame(() => { refreshThumbs(); refreshClips(); });
+    remeasure();
   } catch (err) {
     app.set('banner', `Load failed: ${err.message} — the app stays usable with what it has.`);
   }
@@ -1837,7 +1929,7 @@ function selectTab(id) {
     // returning to the tab remounts .pscroll at scrollLeft 0 — recompute the
     // slider so the affordance is never stale (review finding 5). The tab
     // remounts the whole sheet, so the requestor badges are new nodes too.
-    requestAnimationFrame(() => { refreshThumbs(); refreshClips(); });
+    remeasure();
   }
 }
 
@@ -1911,7 +2003,8 @@ app.on({
     if (!placeMeasured(ctx.node, key, m)) requestAnimationFrame(() => placeMeasured(ctx.node, key, m));
   },
   pickReqFilter(_ctx, key, value) {
-    app.set({ reqMenu: null, [key]: value }); // '' = All, which clears that filter
+    closeMenus({ restoreFocus: true });
+    app.set(key, value); // '' = All, which clears that filter
   },
   /* owl #18: asc → desc → clear on the same column; a different column starts
      that cycle over at asc. Clearing is not "no sort" — it is the newest-filed
@@ -2008,7 +2101,12 @@ app.on({
   // annotations 169:26364/26074: optimistic write with 'saving…' chrome and
   // rollback — Sirius never shows a state Trello does not hold (FR-4.7).
   async chooseUrgency(_ctx, cardId, next, current) {
-    app.set('urgencyMenu', null);
+    /* through the SHARED close path, not `app.set(key, null)`: committing a
+       choice unmounts the menu exactly as Escape does, so a keyboard user who
+       presses Enter on an option must land back on the trigger rather than at
+       <body>. Nulling the key directly also left `overlayTrigger` pinning a
+       detached node until the next open. Same for the four handlers below. */
+    closeMenus({ restoreFocus: true });
     if (next === current || app.get(`savingUrgency.${cardId}`)) return;
     patchRow(cardId, { urgency: next });
     app.set(`savingUrgency.${cardId}`, true);
@@ -2027,7 +2125,7 @@ app.on({
     openOverlay(ctx, cardId, { key: 'diffMenu', posKey: 'diffMenuPos', saving: 'savingDifficulty', h: 116, gap: 3 });
   },
   async chooseDifficulty(_ctx, cardId, next, current) {
-    app.set('diffMenu', null);
+    closeMenus({ restoreFocus: true });
     if (next === current || app.get(`savingDifficulty.${cardId}`)) return;
     patchRow(cardId, { difficulty: next });
     app.set(`savingDifficulty.${cardId}`, true);
@@ -2151,12 +2249,12 @@ app.on({
   async dueApply(_ctx, cardId) {
     const staged = app.get('dueStaged') || null;
     const baseline = app.get('dueBaseline') || null;
-    app.set('duePopover', null);
+    closeMenus({ restoreFocus: true });
     if (staged === baseline) return; // nothing staged — no call, no audit
     await writeDeadline(cardId, staged);
   },
   async dueClear(_ctx, cardId) {
-    app.set('duePopover', null);
+    closeMenus({ restoreFocus: true });
     await writeDeadline(cardId, null); // confirm-free; the sheet deadline (if any) takes over
   },
 
@@ -2209,7 +2307,13 @@ app.on({
      UNSCHEDULED row dragged across a scheduled row lands here. */
   async dropOnBar(ctx) {
     ctx.event.preventDefault();
-    const track = ctx.node.closest('.gtrack') || ctx.node;
+    /* the WHOLE track is the geometry, never the run box: the run is as narrow
+       as 24px, so measuring it would map the pointer to the wrong week and
+       move the card somewhere the user did not point. No fallback for that
+       reason — a run outside a track is a broken render, and refusing the drop
+       is the only safe answer. */
+    const track = ctx.node.closest('.gtrack');
+    if (!track) return;
     const week = weekAtX(ctx.event.clientX, track.getBoundingClientRect(), app.get('plannerWeeks'));
     if (!week) return;
     await moveRows(ctx.event.dataTransfer.getData('text/plain'), week);
@@ -2226,6 +2330,14 @@ app.on({
     await moveRows(ctx.event.dataTransfer.getData('text/plain'), null);
   },
   async rowKey(ctx, cardId) {
+    /* THE ROW ITSELF, never a descendant. `.growr` is the keydown listener but
+       it holds seven other focusable controls — the select checkbox, the note
+       button, and the three row-action buttons — and an arrow key on any of
+       them bubbled here and RESLOTTED the deliverable a week, an audited data
+       change from a keystroke that should have done nothing. The requestor
+       badge was immunised individually in batch 6, which hid how wide this
+       was; the guard belongs here, the way `pipeRowKey` has always had it. */
+    if (ctx.event.target !== ctx.node) return;
     const key = ctx.event.key;
     if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
     ctx.event.preventDefault();
@@ -2310,7 +2422,7 @@ app.on({
     app.set(`collapsedBlocks.${id}`, !app.get(`collapsedBlocks.${id}`));
     // the sheet just changed height, and an expanded block's rows did not exist
     // a frame ago — so their badges have never been measured
-    requestAnimationFrame(() => { refreshThumbs(); refreshClips(); });
+    remeasure();
   },
   /* owl #24 — collapsing the pane narrows --gleft, so the sheet's scrollWidth
      moves with it; without the refresh the timeline thumb keeps the old ratio
@@ -2319,7 +2431,7 @@ app.on({
     app.set('leftCollapsed', !app.get('leftCollapsed'));
     // collapsing hides .c-req entirely, so its badges measure 0 and lose the tab
     // stop; expanding has to re-measure to give it back
-    requestAnimationFrame(() => { refreshThumbs(); refreshClips(); });
+    remeasure();
   },
 
   /* ---- sprints modal (owls #28–#30) ----
@@ -2334,7 +2446,7 @@ app.on({
        mapped off `stored` so it can never be a reference the draft edits reach.
        Same shape saveSprints sends, so `sprintDirty` compares exactly what
        would be persisted and nothing else. */
-    app.set('sprintBaseline', stored.map((s) => ({ name: s.name, start: s.start, end: s.end })));
+    app.set('sprintBaseline', stored.map(sprintPayload));
     app.set({ sprintModal: true, sprintError: '', sprintDeleteConfirm: null });
   },
   closeSprints() { app.set({ sprintModal: false, sprintDeleteConfirm: null }); },
@@ -2387,15 +2499,15 @@ app.on({
   },
   async saveSprints() {
     // the button is already disabled in these states; this is the second lock,
-    // because the server rejects all three and would write nothing either way
-    if (app.get('sprintDupNames').length || app.get('sprintOverlaps').length || app.get('sprintBlankNames').length) return;
+    // because the server rejects every one of them and would write nothing
+    if (app.get('sprintBlocked')) return;
     // and nothing to commit is not a save: a no-op PUT would write a
     // `sprints.replace` audit row for a non-change, which invariant 10 does not
     // ask for — it logs changes, not attempts (the batch-4 Calendar Remove fix)
     if (!app.get('sprintDirty')) return;
     try {
       await api.send('PUT', `/api/projects/${app.get('activeProjectId')}/sprints`, {
-        sprints: app.get('sprintDraft').map((s) => ({ name: s.name, start: s.start, end: s.end })),
+        sprints: app.get('sprintDraft').map(sprintPayload),
       });
       app.set({ sprintModal: false, sprintDeleteConfirm: null });
       await loadAll();
@@ -2568,6 +2680,17 @@ async function moveRows(grabbedId, targetWeek) {
     if (targetWeek === null) return { cardId, week: null };
     return { cardId, week: row.slottedWeek ? mondayShift(row.slottedWeek, deltaWeeks) : targetWeek };
   });
+  /* A NON-CHANGE MUST NOT REACH THE AUDIT LOG — the rule `unslotRow` and
+     `saveSprints` already keep. Releasing the bar inside the column it is
+     already in is now an easy gesture (batch 8 made the coloured run itself
+     the handle, so the pointer barely has to travel), and it used to POST
+     /replot and write a `schedule.replot` row that recorded nothing. Only when
+     EVERY member is a no-op: a mixed multi-select still goes, and /replot
+     skips the members that have not moved. */
+  if (moves.every((mv) => {
+    const row = rows.find((r) => r.cardId === mv.cardId);
+    return !!row && (row.slottedWeek || null) === mv.week;
+  })) return;
   /* the footer moves with the rows, before the round trip. Pinned rows are
      skipped server-side (FR-5.9), so counting them here would show a total the
      server will never agree with. */

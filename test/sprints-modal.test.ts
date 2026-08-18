@@ -83,16 +83,21 @@ interface Validators {
   baseline(rows: Baseline[]): void;
   dups(): Banner[];
   blanks(): Banner[];
+  noDates(): Banner[];
   overlaps(): Banner[];
   gaps(): Banner[];
+  banners(): Banner[];
+  blocked(): boolean;
   dirty(): boolean;
+  longIso(iso: string): string;
   workingDays(a: string, b: string, h?: string[]): number;
   monday(iso: string): string;
   friday(iso: string): string;
 }
 
 const COMPUTEDS = [
-  'sprintOrder', 'sprintDupNames', 'sprintBlankNames', 'sprintOverlaps', 'sprintGaps', 'sprintDirty',
+  'sprintOrder', 'sprintDupNames', 'sprintBlankNames', 'sprintMissingDates',
+  'sprintOverlaps', 'sprintGaps', 'sprintRowBanners', 'sprintBlocked', 'sprintDirty',
 ];
 
 // `this.get(key)` resolves a computed transparently in Ractive, so the harness
@@ -101,6 +106,7 @@ const COMPUTEDS = [
 const v = new Function(`
   ${constDecl('isoOf')}
   ${constDecl('MONTHS_SHORT')}
+  ${constDecl('sprintPayload')}
   ${fn('fmtLongIso')}
   ${fn('mondayIso')}
   ${fn('fridayIso')}
@@ -113,9 +119,13 @@ const v = new Function(`
     baseline: (rows) => { DATA.sprintBaseline = rows; },
     dups: () => computed.sprintDupNames.call(ctx),
     blanks: () => computed.sprintBlankNames.call(ctx),
+    noDates: () => computed.sprintMissingDates.call(ctx),
     overlaps: () => computed.sprintOverlaps.call(ctx),
     gaps: () => computed.sprintGaps.call(ctx),
+    banners: () => computed.sprintRowBanners.call(ctx),
+    blocked: () => computed.sprintBlocked.call(ctx),
     dirty: () => computed.sprintDirty.call(ctx),
+    longIso: (iso) => fmtLongIso(iso),
     workingDays: (a, b, h) => workingDaysBetween(a, b, h || []),
     monday: (iso) => mondayIso(iso),
     friday: (iso) => fridayIso(iso),
@@ -219,6 +229,48 @@ describe('blank names — the modal banner and the route’s 422 say the same wo
     expect(ROUTE).toContain('. Give each sprint a unique name to save.');
     expect(ROUTE).toContain('. Name every sprint to save.');
   });
+
+  /**
+   * The sentence is only byte-identical if the DATE inside it is. There is no
+   * bundler, so the two sides cannot share a module and each carries its own
+   * pure-string-math formatter — and the parity assertions above compare the
+   * interpolation SOURCE, which a server table that spelled 'Sept' would
+   * satisfy while rendering different words. So run both.
+   */
+  describe('the two date formatters agree, run against each other', () => {
+    const server = new Function(`
+      ${ROUTE.slice(ROUTE.indexOf('const MONTHS_SHORT'), ROUTE.indexOf('\n', ROUTE.indexOf('const MONTHS_SHORT')))}
+      ${ROUTE.slice(ROUTE.indexOf('function longDate('), ROUTE.indexOf('\n}', ROUTE.indexOf('function longDate(')) + 2)
+        .replace('(iso: string): string', '(iso)')}
+      return longDate;
+    `)() as (iso: string) => string;
+
+    it('renders every month of the year identically on both sides', () => {
+      for (let m = 1; m <= 12; m++) {
+        const iso = `2026-${String(m).padStart(2, '0')}-17`;
+        expect(server(iso), iso).toBe(v.longIso(iso));
+      }
+    });
+
+    it('agrees on the edges — first and last day, and a leap day', () => {
+      for (const iso of ['2026-01-01', '2026-12-31', '2024-02-29', '2026-08-09']) {
+        expect(server(iso), iso).toBe(v.longIso(iso));
+      }
+    });
+
+    it('says "Sep", never the en-GB locale’s "Sept", on both sides', () => {
+      expect(server('2026-09-01')).toBe('1 Sep 2026');
+      expect(v.longIso('2026-09-01')).toBe('1 Sep 2026');
+    });
+
+    it('never renders the word `undefined` for a month the shape check let through', () => {
+      // DATE_ONLY is /^\d{4}-\d{2}-\d{2}$/ — `00` and `13` both match it, and
+      // this string goes straight into user-facing 422 copy
+      for (const iso of ['2026-00-17', '2026-13-17', '2026-99-17']) {
+        expect(server(iso), iso).not.toContain('undefined');
+      }
+    });
+  });
 });
 
 describe('blank names — blocking, one banner per unnamed ROW (owl #37 item 2)', () => {
@@ -278,6 +330,129 @@ describe('blank names — blocking, one banner per unnamed ROW (owl #37 item 2)'
     ]);
     expect(v.blanks()).toHaveLength(2);
     expect(v.dups()).toEqual([]);
+  });
+});
+
+/**
+ * A cleared date used to be INVISIBLE to every validator — `sprintOrder` drops
+ * a row with no start or end before overlaps and gaps ever see it, and blank
+ * names only read the name. So Save stayed live, the PUT failed the route's
+ * shape check, and the modal printed the raw envelope code at the user: exactly
+ * the unreadable failure blank names were fixed to stop (owl #37 item 2).
+ *
+ * The route needs no change — it already refuses the shape. What was missing is
+ * the modal never asking it to. Copy is PROVISIONAL, flagged to Miles.
+ */
+describe('missing dates — blocking, the class no other validator could see', () => {
+  it('says nothing while every row carries both dates', () => {
+    v.set([{ name: 'Sprint 46', start: '2026-08-17', end: '2026-08-28' }]);
+    expect(v.noDates()).toEqual([]);
+  });
+
+  it('fires on a cleared START, and names the row by the name it still has', () => {
+    v.set([{ name: 'Sprint 46', start: '', end: '2026-08-28' }]);
+    const [b] = v.noDates();
+    expect(v.noDates()).toHaveLength(1);
+    expect(b!.variant).toBe('err');
+    expect(b!.title).toBe('Sprint dates required');
+    expect(b!.after).toBe(0); // the DRAFT index, so placement stays data (R-f-4)
+    expect(b!.text).toBe('"Sprint 46" has no start date. Every sprint needs a start and an end to save.');
+  });
+
+  it('fires on a cleared END, and says which one is missing', () => {
+    v.set([{ name: 'Sprint 46', start: '2026-08-17', end: '' }]);
+    expect(v.noDates()[0]!.text).toContain('has no end date');
+  });
+
+  it('says it once when BOTH are gone, not twice', () => {
+    v.set([{ name: 'Sprint 46', start: '', end: '' }]);
+    expect(v.noDates()).toHaveLength(1);
+    expect(v.noDates()[0]!.text).toContain('has no start and end dates');
+  });
+
+  it('falls back to a nameless subject when the row has no name either', () => {
+    v.set([{ name: '  ', start: '', end: '2026-08-28' }]);
+    expect(v.noDates()[0]!.text).toBe('This sprint has no start date. Every sprint needs a start and an end to save.');
+    expect(v.blanks()).toHaveLength(1); // and it is still a blank name — two real problems, two banners
+  });
+
+  it('is the ONLY validator that sees it — the regression that let it through', () => {
+    v.set([
+      { name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' },
+      { name: 'Sprint 47', start: '', end: '' },
+    ]);
+    expect(v.overlaps()).toEqual([]); // sprintOrder filtered the row out
+    expect(v.gaps()).toEqual([]);
+    expect(v.blanks()).toEqual([]);
+    expect(v.dups()).toEqual([]);
+    expect(v.noDates()).toHaveLength(1);
+    expect(v.blocked()).toBe(true); // …and THAT is what keeps Save from firing
+  });
+});
+
+describe('sprintBlocked — one name for "the server would refuse this"', () => {
+  const CLEAN = [{ name: 'Sprint 46', start: '2026-08-17', end: '2026-08-28' }];
+
+  it('is false for a clean list', () => {
+    v.set(CLEAN.map((s) => ({ ...s })));
+    expect(v.blocked()).toBe(false);
+  });
+
+  it('is true for every blocking class, one at a time', () => {
+    const cases: Record<string, { name: string; start: string; end: string }[]> = {
+      'duplicate name': [
+        { name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' },
+        { name: 'sprint 46 ', start: '2026-08-17', end: '2026-08-28' },
+      ],
+      'blank name': [{ name: '', start: '2026-08-17', end: '2026-08-28' }],
+      'missing date': [{ name: 'Sprint 46', start: '2026-08-17', end: '' }],
+      overlap: [
+        { name: 'Sprint 46', start: '2026-08-03', end: '2026-08-21' },
+        { name: 'Sprint 47', start: '2026-08-17', end: '2026-08-28' },
+      ],
+    };
+    for (const [why, draft] of Object.entries(cases)) {
+      v.set(draft);
+      expect(v.blocked(), why).toBe(true);
+    }
+  });
+
+  it('is FALSE for a gap — advisory, never blocking (BR-5, invariant 12)', () => {
+    v.set([
+      { name: 'Sprint 46', start: '2026-08-03', end: '2026-08-07' },
+      { name: 'Sprint 47', start: '2026-08-17', end: '2026-08-28' },
+    ], []);
+    expect(v.gaps().length).toBeGreaterThan(0);
+    expect(v.blocked()).toBe(false);
+  });
+
+  it('is the ONLY spelling of the rule — the markup and the handler both read it', () => {
+    // it was written out three times (the disabled binding, the tooltip
+    // condition, the handler's own second lock), so a new error class was three
+    // edits that had to agree and any one missed silently unlocked Save
+    expect(TEMPLATE).toContain('disabled="{{ sprintBlocked || !sprintDirty }}"');
+    expect(TEMPLATE).toContain('{{#if sprintBlocked}}title="Fix the errors above to save"');
+    expect(APP_JS).toContain("if (app.get('sprintBlocked')) return;");
+    for (const stale of ['sprintDupNames.length ||', "app.get('sprintDupNames').length ||"]) {
+      expect(TEMPLATE + APP_JS, stale).not.toContain(stale);
+    }
+  });
+});
+
+describe('sprintRowBanners — the row banners assembled once, in reading order', () => {
+  it('reads outward from the row: its own problems, then the pair, then the advisory', () => {
+    v.set([
+      { name: '', start: '', end: '' },
+      { name: 'Sprint 47', start: '2026-08-17', end: '2026-08-28' },
+    ]);
+    expect(v.banners()).toEqual(v.blanks().concat(v.noDates(), v.overlaps(), v.gaps()));
+  });
+
+  it('is what the markup iterates — the template does no assembly of its own', () => {
+    // it used to concatenate three lists INSIDE the per-draft-row loop, so the
+    // arrays were rebuilt once per row and each new class meant editing markup
+    expect(TEMPLATE).toContain('{{#each sprintRowBanners as b}}');
+    expect(TEMPLATE).not.toContain('.concat(sprintOverlaps');
   });
 });
 

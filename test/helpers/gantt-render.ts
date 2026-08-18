@@ -239,6 +239,8 @@ export interface SprintModalState {
   sprintGaps?: SprintBanner[];
   /** blocking: one banner per UNNAMED row (owl #37 item 2) */
   sprintBlankNames?: SprintBanner[];
+  /** blocking: one banner per row missing a start or an end date */
+  sprintMissingDates?: SprintBanner[];
   sprintError?: string;
   sprintDeleteConfirm?: { idx: number; name: string; count: number } | null;
   /**
@@ -269,15 +271,30 @@ export interface SprintModalState {
  * the same polarity the retired `sprintOpenedEmpty ?? true` had.
  */
 export function renderSprintModal(state: SprintModalState = {}): string {
+  const blank = state.sprintBlankNames ?? [];
+  const noDates = state.sprintMissingDates ?? [];
+  const overlaps = state.sprintOverlaps ?? [];
+  const gaps = state.sprintGaps ?? [];
+  const dups = state.sprintDupNames ?? [];
   const instance = new Ractive({
     template: divFragment('<div class="modal-back"'),
     data: {
       sprintModal: true,
       sprintDraft: state.sprintDraft ?? [],
-      sprintDupNames: state.sprintDupNames ?? [],
-      sprintOverlaps: state.sprintOverlaps ?? [],
-      sprintGaps: state.sprintGaps ?? [],
-      sprintBlankNames: state.sprintBlankNames ?? [],
+      sprintDupNames: dups,
+      sprintOverlaps: overlaps,
+      sprintGaps: gaps,
+      sprintBlankNames: blank,
+      sprintMissingDates: noDates,
+      /* The template reads two DERIVED values rather than re-deriving them in
+         the markup — the banner list in reading order, and "Save would be
+         refused". Both are computeds in the shipped app; the harness derives
+         them from the same stubs so a caller still states only the validator
+         outputs, and a new blocking class cannot be stubbed into existence
+         without also blocking Save. Gaps are excluded from blocking on
+         purpose: they are legal and advisory (BR-5). */
+      sprintRowBanners: blank.concat(noDates, overlaps, gaps),
+      sprintBlocked: dups.length > 0 || blank.length > 0 || noDates.length > 0 || overlaps.length > 0,
       sprintError: state.sprintError ?? '',
       sprintDeleteConfirm: state.sprintDeleteConfirm ?? null,
       sprintDirty: state.sprintDirty ?? false,
@@ -337,6 +354,16 @@ export interface PipelineTableState {
 }
 
 /**
+ * The template reads `row.warning`, a field `loadAll` STAMPS once per load —
+ * it is deliberately not an expression, so the recipe cannot run seven times
+ * per row per render. The harness therefore stamps it the same way rather than
+ * handing Ractive the function: the recipe under test is still the shipped one,
+ * and the render proves the same wiring the browser runs.
+ */
+const stampWarnings = (rows: PipeRow[], recipe: (row: PipeRow) => unknown) =>
+  rows.map((r) => ({ ...r, warning: recipe(r) }));
+
+/**
  * Renders the Pipeline table (`<div class="pscrollwrap">`, which occurs
  * exactly once — the Requests and Gantt wrappers carry a second class).
  *
@@ -349,8 +376,7 @@ export function renderPipelineTable(state: PipelineTableState): string {
   const instance = new Ractive({
     template: divFragment('<div class="pscrollwrap">'),
     data: {
-      pipelineRows: state.pipelineRows,
-      rowWarning: state.rowWarning,
+      pipelineRows: stampWarnings(state.pipelineRows, state.rowWarning),
       warnPop: state.warnPop ?? null,
       warnPopPos: { left: 0, top: 0 },
       expanded: {},

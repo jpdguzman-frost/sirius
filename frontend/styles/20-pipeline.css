@@ -364,14 +364,14 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    slate-100 stroke is the ONE value that forks from it */
 .warnpop {
   width: 235px; z-index: 40; box-sizing: border-box; border-radius: var(--radius-md);
-  padding: var(--space-16); gap: 12px; font-family: var(--font-sans);
+  padding: var(--space-16); gap: var(--space-12); font-family: var(--font-sans);
   border-color: var(--slate-100);
 }
 .wphead { display: flex; align-items: center; gap: var(--space-8); }
 .wphead svg { color: var(--amber-700); }
 .wptitle { font-size: var(--text-body); font-weight: 600; color: var(--amber-700); }
-.wpitems { display: flex; flex-direction: column; gap: 12px; }
-.wpitem { display: flex; flex-direction: column; gap: 4px; }
+.wpitems { display: flex; flex-direction: column; gap: var(--space-12); }
+.wpitem { display: flex; flex-direction: column; gap: var(--space-4); }
 /* the frame gaps the card-identity item wider than the problem items */
 .wpitems .wpitem:first-child { gap: 6px; }
 .wplabel { font-size: var(--text-label); font-weight: 600; color: var(--slate-900); }

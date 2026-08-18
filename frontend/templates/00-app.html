@@ -247,27 +247,31 @@
                keyboard behaviour (Enter expands the group) and not one of its
                controls is disabled by an incomplete card. The MESSAGE in
                col-name is the only new click target. -->
-          <tr class="prow {{#if row.blocker}}blocked{{/if}} {{#if rowWarning(row)}}warn{{/if}}" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
+          <tr class="prow {{#if row.blocker}}blocked{{/if}} {{#if row.warning}}warn{{/if}}" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
             <td class="col-mc"><div class="mccell">
               <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{row.displayId}} work cards" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
               <span class="mcnum">{{{hl(row.mcLabel)}}}</span>
             </div></td>
             <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}
-              <!-- the label is a VARIABLE string (rowWarning().label) in all
+              <!-- the label is a VARIABLE string (`warning.label`) in all
                    three places it appears — the message, its accessible name
-                   and the popover title — so renaming it renames it once. -->
-              {{#if rowWarning(row)}}
+                   and the popover title — so renaming it renames it once.
+                   `row.warning` is the recipe's output STAMPED ONCE PER LOAD in
+                   loadAll, not a call: as an expression it re-ran seven times
+                   per row on every keystroke and handed each-blocks a new array
+                   identity every pass. -->
+              {{#if row.warning}}
                 <div class="warnwrap">
                   <button class="warnmsg" on-click="['openWarnPop', row.cardId]" aria-haspopup="dialog"
                           aria-expanded="{{warnPop === row.cardId ? 'true' : 'false'}}"
-                          aria-label="{{rowWarning(row).label}} — {{row.mcLabel}} {{row.name}}">
-                    <svg class="i10" aria-hidden="true"><use href="#i-warning" /></svg><span class="warnlabel">{{rowWarning(row).label}}</span>
+                          aria-label="{{row.warning.label}} — {{row.mcLabel}} {{row.name}}">
+                    <svg class="i10" aria-hidden="true"><use href="#i-warning" /></svg><span class="warnlabel">{{row.warning.label}}</span>
                   </button>
                   {{#if warnPop === row.cardId}}
-                    <div class="warnpop" role="dialog" aria-label="{{rowWarning(row).label}} — {{row.mcLabel}} {{row.name}}" style="left:{{warnPopPos.left}}px;top:{{warnPopPos.top}}px;">
-                      <div class="wphead"><svg class="i16" aria-hidden="true"><use href="#i-warning" /></svg><span class="wptitle">{{rowWarning(row).label}}</span></div>
+                    <div class="warnpop" role="dialog" aria-label="{{row.warning.label}} — {{row.mcLabel}} {{row.name}}" style="left:{{warnPopPos.left}}px;top:{{warnPopPos.top}}px;">
+                      <div class="wphead"><svg class="i16" aria-hidden="true"><use href="#i-warning" /></svg><span class="wptitle">{{row.warning.label}}</span></div>
                       <div class="wpitems">
-                        {{#each rowWarning(row).items as it}}
+                        {{#each row.warning.items as it}}
                           <div class="wpitem"><span class="wplabel">{{it.label}}</span><span class="wpwhy">{{it.why}}</span></div>
                         {{/each}}
                       </div>
@@ -601,11 +605,13 @@
                          `title` here: the post-render MEASUREMENT in 01-app.js grants the
                          tab stop only to a badge that is actually truncated, because a
                          badge whose value fits is not interactive.
-                         `noop` stops the arrow keys reaching the row's `rowKey`, which
-                         would reslot the deliverable a week — an informational cell must
-                         not move data. An HTML comment, not a Ractive one: this is
-                         element-content position, where `{{! }}` leaks. -->
-                    <div class="gcell c-req">{{#if row.requestor}}<span class="pbadge clipbadge" role="note" aria-label="{{row.requestor}}" on-keydown="['noop']"><span class="cliptext">{{row.requestor}}</span></span>{{else}}<span class="gdim">—</span>{{/if}}</div>
+                         Arrow keys are NOT stopped here any more: `rowKey` itself now
+                         ignores any keydown that did not start on `.growr`, so the six
+                         other focusable controls in the row are covered by the same one
+                         rule rather than each needing its own patch. An HTML comment,
+                         not a Ractive one: this is element-content position, where
+                         `{{! }}` leaks. -->
+                    <div class="gcell c-req">{{#if row.requestor}}<span class="pbadge clipbadge" role="note" aria-label="{{row.requestor}}"><span class="cliptext">{{row.requestor}}</span></span>{{else}}<span class="gdim">—</span>{{/if}}</div>
                     <div class="gcell c-type">{{#if row.assetType}}<span class="pbadge">{{row.assetType}}</span>{{else}}<span class="gdim">—</span>{{/if}}</div>
                     <div class="gcell c-status">
                       {{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{row.currentList}}</span>{{else}}<span class="gdim">—</span>{{/if}}
@@ -853,7 +859,7 @@
                     row it follows, so placement is data. Read outward from the
                     row: blank name (blocking, about THIS row), then overlaps
                     (blocking, about the pair), then gaps (advisory). }}
-                {{#each sprintBlankNames.concat(sprintOverlaps, sprintGaps) as b}}
+                {{#each sprintRowBanners as b}}
                   {{#if b.after === i}}
                     <div class="sbanner {{b.variant}}" role="{{ b.variant === 'err' ? 'alert' : 'status' }}">
                       <div class="sbhead">
@@ -898,8 +904,8 @@
               list and audits the replace like any other), and an edit put back
               is not one again. }}
           <button class="smbtn primary" type="button" on-click="['saveSprints']"
-                  disabled="{{ sprintDupNames.length || sprintOverlaps.length || sprintBlankNames.length || !sprintDirty }}"
-                  {{#if sprintDupNames.length || sprintOverlaps.length || sprintBlankNames.length}}title="Fix the errors above to save"{{/if}}>Save sprints</button>
+                  disabled="{{ sprintBlocked || !sprintDirty }}"
+                  {{#if sprintBlocked}}title="Fix the errors above to save"{{/if}}>Save sprints</button>
         </div>
       </div>
     </div>

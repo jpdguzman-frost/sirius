@@ -59,17 +59,18 @@ interface SprintSaveIssue {
  * One issue per duplicated name, never one per extra row, so a triple reports
  * once. The copy matches the modal's error banner verbatim so the client's
  * `issues[0].text` fallback reads identically to the live banner.
+ *
+ * BLANKS ARE NOT ITS PROBLEM — `blankNameIssues` owns that class, and the
+ * caller hands this only the named rows. Two unnamed rows would otherwise
+ * collide on the key `''` and report as `Multiple sprints are named ""`, which
+ * is both wrong and unreadable (owl #37 item 2). Filtering at the boundary
+ * rather than inside keeps the rule stated once.
  */
-function duplicateNameIssues(sprints: { id?: string; name: string }[]): SprintSaveIssue[] {
+function duplicateNameIssues(sprints: { id: string; name: string }[]): SprintSaveIssue[] {
   const firstSeen = new Map<string, string>();
   const reported = new Set<string>();
   const issues: SprintSaveIssue[] = [];
-  sprints.forEach((s, i) => {
-    // blankNameIssues owns this class — mirrors the client guard at
-    // 01-app.js:921/926. Without it two unnamed rows collide on the key `''`
-    // and get reported as "Multiple sprints are named """, which is both wrong
-    // and unreadable (owl #37 item 2).
-    if (s.name.trim() === '') return;
+  sprints.forEach((s) => {
     const key = s.name.trim().toLocaleLowerCase();
     const first = firstSeen.get(key);
     if (first === undefined) {
@@ -79,7 +80,7 @@ function duplicateNameIssues(sprints: { id?: string; name: string }[]): SprintSa
     if (reported.has(key)) return;
     reported.add(key);
     issues.push({
-      id: s.id ?? `new-${i}`,
+      id: s.id,
       kind: 'duplicate-name',
       text: `Multiple sprints are named "${first}". Give each sprint a unique name to save.`,
     });
@@ -96,7 +97,12 @@ const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
  */
 function longDate(iso: string): string {
   const [y, m, d] = iso.slice(0, 10).split('-');
-  return `${Number(d)} ${MONTHS_SHORT[Number(m) - 1]} ${y}`;
+  /* DATE_ONLY only proves the SHAPE — `2026-00-17` and `2026-13-17` both match
+     its two-digit month — so an out-of-range month would index past the table
+     and render the word `undefined` into copy the modal shows verbatim. Fall
+     back to the raw month rather than to a lie. */
+  const month = MONTHS_SHORT[Number(m) - 1] ?? m;
+  return `${Number(d)} ${month} ${y}`;
 }
 
 /**
@@ -112,12 +118,12 @@ function longDate(iso: string): string {
  *
  * Route-layer validation, never lib/** (invariant 5).
  */
-function blankNameIssues(sprints: { id?: string; name: string; start: string }[]): SprintSaveIssue[] {
+function blankNameIssues(sprints: { id: string; name: string; start: string }[]): SprintSaveIssue[] {
   const issues: SprintSaveIssue[] = [];
-  sprints.forEach((s, i) => {
+  sprints.forEach((s) => {
     if (s.name.trim() !== '') return;
     issues.push({
-      id: s.id ?? `new-${i}`,
+      id: s.id,
       kind: 'blank-name',
       text: `A sprint starting ${longDate(s.start)} has no name. Name every sprint to save.`,
     });
@@ -281,12 +287,17 @@ export function scheduleRouter(): Router {
       // duplicate names are the batch-4 addition; blank names the batch-5b one.
       // Same envelope, so the client reads one issues[] whichever class fired.
       // Blanks append LAST so issues[0] is unchanged for every pre-existing case.
+      /* Identity is settled ONCE, here: a row the client has not persisted yet
+         has no id, and `new-<index>` was previously re-derived inside each
+         validator, which is why they all carried an index parameter. Settling
+         it up front also keeps ids stable under the blank-name filter below. */
+      const rows = body.data.sprints.map((s, i) => ({
+        id: s.id ?? `new-${i}`, name: s.name, start: s.start, end: s.end,
+      }));
       const issues: SprintSaveIssue[] = [
-        ...sprintIssues(
-          body.data.sprints.map((s, i) => ({ id: s.id ?? `new-${i}`, name: s.name, start: s.start, end: s.end })),
-        ).filter((i) => i.kind !== 'gap'), // gaps are legal and surfaced, not rejected (BR-5)
-        ...duplicateNameIssues(body.data.sprints),
-        ...blankNameIssues(body.data.sprints),
+        ...sprintIssues(rows).filter((i) => i.kind !== 'gap'), // gaps are legal and surfaced, not rejected (BR-5)
+        ...duplicateNameIssues(rows.filter((s) => s.name.trim() !== '')),
+        ...blankNameIssues(rows),
       ];
       if (issues.length > 0) {
         res.status(422).json({ ok: false, error: { code: 'SPRINT_CONFLICT', issues } });
@@ -296,11 +307,14 @@ export function scheduleRouter(): Router {
       const before = await Sprint.find({ project_id: projectId }).sort({ position: 1 }).lean();
       await Sprint.deleteMany({ project_id: projectId });
       const sorted = [...body.data.sprints].sort((a, b) => (a.start < b.start ? -1 : 1));
-      for (let i = 0; i < sorted.length; i++) {
-        await Sprint.create({
-          project_id: projectId, name: sorted[i]!.name, starts_on: sorted[i]!.start, ends_on: sorted[i]!.end, position: i + 1,
-        });
-      }
+      /* ONE round trip, not one per sprint. insertMany and not Promise.all:
+         the writes are ordered (`position` is their index) and they land in a
+         collection this request has just emptied, so concurrent unordered
+         inserts would be the wrong shape. `project_id` is on every doc
+         (invariant 1). */
+      await Sprint.insertMany(sorted.map((s, i) => ({
+        project_id: projectId, name: s.name, starts_on: s.start, ends_on: s.end, position: i + 1,
+      })));
       await audit({
         project_id: projectId, actor: (req.user as SessionUser).email, action: 'sprints.replace', entity: 'sprint',
         before: { sprints: before.map((s) => ({ name: s.name, start: s.starts_on, end: s.ends_on })) },

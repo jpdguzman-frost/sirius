@@ -22,6 +22,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   APP_JS,
   PIPELINE_CSS,
@@ -50,8 +53,27 @@ const recipe = new Function(`
   return { WARN_LABEL, WARN_WHY, rowWarning };
 `)() as Recipe;
 
-/** The server's own tokens, in the order src/services/pipeline.ts pushes them. */
-const SERVER_TOKENS = ['difficulty label', 'due date', 'Figma attachment'];
+/**
+ * The server's own tokens, READ OUT OF the server, in the order
+ * `src/services/pipeline.ts toRow()` pushes them.
+ *
+ * Deliberately not a hand-copied list. `WARN_WHY` is keyed on these strings and
+ * `rowWarning` renders `WARN_WHY[f] || ''` — so a reworded token on the server
+ * ships a popover with the field name and a BLANK rationale, and a snapshot
+ * here would have agreed with the client copy and stayed green while the app
+ * explained nothing.
+ */
+const SERVER_TOKENS: string[] = (() => {
+  const src = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'services', 'pipeline.ts'),
+    'utf8',
+  );
+  const fn = src.slice(src.indexOf('function toRow('));
+  const found = [...fn.slice(0, fn.indexOf('const startDate')).matchAll(/missing\.push\('([^']+)'\)/g)]
+    .map((m) => m[1] as string);
+  if (found.length === 0) throw new Error('pipeline-warning: no missing.push() tokens found in toRow()');
+  return found;
+})();
 
 const row = (over: Partial<PipeRow> = {}): PipeRow => ({
   cardId: 'card-1',
@@ -79,6 +101,23 @@ function rowHtml(html: string, mcLabel: string): string {
   const next = html.indexOf('<tr', anchor);
   return html.slice(start, next < 0 ? html.length : next);
 }
+
+describe('the copy map and the server speak the same vocabulary', () => {
+  it('keys WARN_WHY on EXACTLY the tokens the server pushes — no more, no fewer', () => {
+    /* The failure this catches is silent by construction: `rowWarning` renders
+       `WARN_WHY[f] || ''`, so a token the map has not met produces a popover
+       that names the field and explains nothing, with every other test still
+       green. Asserted as set equality in both directions — an orphaned key is
+       dead copy nobody will ever see, and a missing one is a blank rationale. */
+    expect(Object.keys(recipe.WARN_WHY).sort()).toEqual([...SERVER_TOKENS].sort());
+  });
+
+  it('reads the server’s tokens from the server, not from a copy in this file', () => {
+    // the guard is only worth having if it cannot drift with what it guards
+    expect(SERVER_TOKENS.length).toBeGreaterThan(0);
+    expect(SERVER_TOKENS).toContain('difficulty label');
+  });
+});
 
 describe('the warning recipe, executed out of the shipped source', () => {
   it('returns null for a complete card — the template has exactly one test', () => {
@@ -247,6 +286,52 @@ describe('the popover (open on one row)', () => {
     });
     expect([...out.matchAll(/class="warnpop"/g)]).toHaveLength(1);
     expect([...out.matchAll(/<button class="warnmsg"/g)]).toHaveLength(2);
+  });
+});
+
+/**
+ * R-warn-f generalised. Focus return was added once, in the shared close path —
+ * but only the DISMISS routes went through it. Five handlers that close an
+ * overlay by COMMITTING a choice still nulled their own state key, so a
+ * keyboard user who pressed Enter on a menu option was dropped at `<body>` and
+ * restarted the next Tab from the top of the document: the exact regression the
+ * Escape path was written to fix, surviving on the path people actually use.
+ * The direct writes also left `overlayTrigger` pinning a node the re-render had
+ * already detached.
+ */
+describe('every overlay closes through ONE path — commit as well as dismiss', () => {
+  const OVERLAYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop'];
+
+  it('names the overlays once and derives the three lists from that name', () => {
+    expect(APP_JS).toContain('const OVERLAY_KEYS = ');
+    for (const key of OVERLAYS) expect(APP_JS, key).toContain(`'${key}'`);
+    // the object literal that used to be written out in both closeMenus and
+    // openOverlay, and had to be edited in step
+    expect(APP_JS).toContain('const NO_OVERLAYS = ');
+    expect(APP_JS).not.toContain('urgencyMenu: null, diffMenu: null');
+  });
+
+  it('leaves NO handler nulling an overlay key on its own', () => {
+    for (const key of OVERLAYS) {
+      expect(APP_JS, `${key} is closed outside closeMenus()`).not.toContain(`app.set('${key}', null)`);
+    }
+  });
+
+  it('returns focus to the trigger when a choice is committed, not only on Escape', () => {
+    for (const handler of [
+      'async chooseUrgency(', 'async chooseDifficulty(', 'async dueApply(', 'async dueClear(', 'pickReqFilter(',
+    ]) {
+      const at = APP_JS.indexOf(handler);
+      expect(at, handler).toBeGreaterThan(-1);
+      const body = APP_JS.slice(at, at + 600);
+      expect(body, handler).toContain('closeMenus({ restoreFocus: true })');
+    }
+  });
+
+  it('restores focus WITHOUT scrolling — the dismisser itself runs on scroll', () => {
+    // a trackpad nudge dismisses the overlay; focusing the trigger the normal
+    // way would scroll it back into view and undo the gesture that closed it
+    expect(APP_JS).toContain('t.focus({ preventScroll: true })');
   });
 });
 

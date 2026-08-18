@@ -169,16 +169,26 @@ describe('the requestor badge renders through the shared clip recipe', () => {
     expect(head).toContain('<span class="gcell c-req">Requestor</span>');
   });
 
-  it('stops arrow keys reaching the row (source, not render — a directive)', () => {
-    // `.growr` carries on-keydown="['rowKey', …]" and rowKey RESLOTS the
-    // deliverable on ArrowLeft/ArrowRight through POST /replot. Keydown
-    // bubbles, so a focusable badge inside the row would inherit that: tab to
-    // it, press an arrow, and an INFORMATIONAL cell moves data a week.
+  it('cannot reslot the deliverable with an arrow key — the RULE, on the row', () => {
+    /* `.growr` carries on-keydown="['rowKey', …]" and rowKey RESLOTS the
+       deliverable on ArrowLeft/ArrowRight through POST /replot. Keydown
+       bubbles, so EVERY focusable descendant inherited that: tab to it, press
+       an arrow, and an audited move happened from a keystroke that should have
+       done nothing.
+
+       This badge was patched individually first (`on-keydown="['noop']"`),
+       which fixed one of seven controls and hid how wide the hole was. The
+       guard is now the one `pipeRowKey` has always had — the handler ignores
+       any event that did not START on the row — so it is asserted here as a
+       rule about `rowKey`, not as a directive on this cell. */
+    const body = block('  async rowKey(ctx, cardId) {');
+    expect(body).toContain('ctx.event.target !== ctx.node');
+    expect(body.indexOf('ctx.event.target !== ctx.node')).toBeLessThan(body.indexOf('moveRows'));
+    expect(TEMPLATE).toContain('on-keydown="[\'rowKey\', row.cardId]"'); // still the row's own listener
+    // every focusable control in the row is covered by that one guard, so the
+    // per-element stop is gone and must not come back for the next cell
     const src = TEMPLATE.slice(TEMPLATE.indexOf('<div class="gcell c-req">'));
-    expect(src.slice(0, src.indexOf('</div>'))).toContain('on-keydown="[\'noop\']"');
-    // the existing handler, reused — no second one was written for this
-    expect(block('  noop(ctx) {')).toContain('stopPropagation');
-    expect(TEMPLATE).toContain('on-keydown="[\'rowKey\', row.cardId]"'); // still there to be stopped
+    expect(src.slice(0, src.indexOf('</div>'))).not.toContain('noop');
   });
 
   it('leaks no Ractive comment text into the rendered DOM', () => {
@@ -342,6 +352,25 @@ describe('the truncation test is a measurement, asserted against the shipped sou
     expect(sweep).not.toMatch(/\.length\s*[><]/);
   });
 
+  it('MEASURES the whole set before it writes anything — one layout, not N', () => {
+    /* `data-clipped` is a live selector (`.clipbadge[data-clipped]` turns the
+       badge `position: relative` for the tooltip), so writing it dirties
+       layout. Read-write-read-write therefore forced a full style+layout pass
+       over the whole Gantt for EVERY badge whose verdict changed — worst on
+       the left-pane collapse, where `.c-req` goes `display: none` and every
+       badge flips at once, i.e. on a button click.
+
+       Asserted as an ORDER, not as a shape: the last read must come before the
+       first write, however the passes are spelled. */
+    const lastRead = Math.max(sweep.lastIndexOf('scrollWidth'), sweep.lastIndexOf('clientWidth'));
+    const firstWrite = Math.min(
+      ...['setAttribute', 'removeAttribute'].map((w) => sweep.indexOf(w)).filter((i) => i >= 0),
+    );
+    expect(lastRead).toBeGreaterThan(-1);
+    expect(firstWrite).toBeGreaterThan(-1);
+    expect(lastRead, 'a layout read happens after a style write — that is the thrash').toBeLessThan(firstWrite);
+  });
+
   it('GRANTS and REVOKES both attributes on every sweep', () => {
     expect(sweep).toContain("setAttribute('data-clipped'");
     expect(sweep).toContain("removeAttribute('data-clipped'");
@@ -363,20 +392,20 @@ describe('the truncation test is a measurement, asserted against the shipped sou
   it('re-runs on every load — which is also the project switch', () => {
     // resetForProjectSwitch() and popstate both end in loadAll(), so the
     // project-switch case needs no separate hook
-    expect(block('async function loadAll() {')).toContain('refreshClips');
+    expect(block('async function loadAll() {')).toContain('remeasure()');
     expect(block('async function resetForProjectSwitch() {')).toContain('loadAll');
   });
 
   it('re-runs when a tab remounts the sheet', () => {
-    expect(block('function selectTab(id) {')).toContain('refreshClips');
+    expect(block('function selectTab(id) {')).toContain('remeasure()');
   });
 
   it('re-runs when a sprint block expands — its rows did not exist a frame ago', () => {
-    expect(block('  toggleBlock(_ctx, id) {')).toContain('refreshClips');
+    expect(block('  toggleBlock(_ctx, id) {')).toContain('remeasure()');
   });
 
   it('re-runs when the left pane expands — collapse strips the tab stop, expand restores it', () => {
-    expect(block('  toggleLeftPane() {')).toContain('refreshClips');
+    expect(block('  toggleLeftPane() {')).toContain('remeasure()');
   });
 
   it('re-measures after the webfont swaps, not only before', () => {
@@ -391,8 +420,18 @@ describe('the truncation test is a measurement, asserted against the shipped sou
     for (const api of ['ResizeObserver', 'MutationObserver', 'IntersectionObserver']) {
       expect(APP_JS, api).not.toContain(api);
     }
-    expect([...APP_JS.matchAll(/requestAnimationFrame\(\(\) => \{ refreshThumbs\(\); refreshClips\(\); \}\)/g)])
-      .toHaveLength(4);
+    /* The rule is "no post-render measurement pass picks up half the work",
+       not "the same lambda is copied four times" — the literal-count assertion
+       this replaces actively BLOCKED naming the pair, and a fifth seam that
+       called only one of them still passed it. So: exactly one place composes
+       the pair, and no rAF anywhere calls either half on its own. */
+    expect([...APP_JS.matchAll(/refreshThumbs\(\); refreshClips\(\);/g)]).toHaveLength(1);
+    expect(APP_JS).toContain('const remeasure = () => requestAnimationFrame(');
+    for (const m of APP_JS.matchAll(/requestAnimationFrame\((?:\(\) =>\s*)?([^\n]*)/g)) {
+      const tail = m[1] ?? '';
+      const one = tail.includes('refreshThumbs') !== tail.includes('refreshClips');
+      expect(one, `a rAF measures only half the row chrome: ${tail.trim()}`).toBe(false);
+    }
   });
 });
 

@@ -139,6 +139,58 @@ describe('Calendar Remove refuses where it would change nothing', () => {
   });
 });
 
+/**
+ * The same rule, one level down. `unslotRow` and `saveSprints` each refuse a
+ * non-change before the round trip; `moveRows` — which every drag, every
+ * keyboard reslot and both unslot paths funnel through — did not. Releasing a
+ * bar inside the column it already occupies POSTed /replot and wrote a
+ * `schedule.replot` audit row that recorded nothing, and batch 8 made that
+ * gesture easy: the coloured run itself is the handle now, so the pointer
+ * barely has to travel to land back where it started.
+ *
+ * Source assertions, not behaviour: `moveRows` needs a live app instance and a
+ * server. What is provable here is that the guard exists, sits BEFORE the POST,
+ * and refuses only when EVERY member is a no-op — a mixed multi-select must
+ * still go, because /replot skips the members that have not moved.
+ */
+describe('moveRows refuses a non-change before it reaches the audit log', () => {
+  /** brace-matched so the slice is the function and nothing after it */
+  const body = (() => {
+    const at = APP_JS.indexOf('async function moveRows(');
+    expect(at, 'no moveRows in the shipped frontend source').toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = APP_JS.indexOf('{', at); i < APP_JS.length; i++) {
+      if (APP_JS[i] === '{') depth++;
+      else if (APP_JS[i] === '}' && --depth === 0) return APP_JS.slice(at, i + 1);
+    }
+    throw new Error('gantt-rowactions: unterminated moveRows');
+  })();
+  /** the POST itself, not the word `/replot` — which also appears in prose above it */
+  const POST = "api.send('POST'";
+
+  it('compares each move against the row’s CURRENT week', () => {
+    expect(body).toContain("(row.slottedWeek || null) === mv.week");
+  });
+
+  it('refuses only when EVERY member is a no-op — a mixed selection still goes', () => {
+    expect(body).toMatch(/moves\.every\(/);
+    expect(body).not.toMatch(/moves\.some\([^)]*=== mv\.week/);
+  });
+
+  it('returns BEFORE the optimistic footer write and before the POST', () => {
+    const guard = body.indexOf('moves.every(');
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(body.indexOf("app.set('perWeekLocal', local)"));
+    expect(body.indexOf(POST)).toBeGreaterThan(guard);
+  });
+
+  it('leaves the unslot path intact — null is a change when the row had a week', () => {
+    // `mv.week` is null for an unslot; a row already off the schedule compares
+    // null === null and is refused, which is what unslotRow's own guard says
+    expect(body).toContain('row.slottedWeek || null');
+  });
+});
+
 describe('the status-note affordance kept its home, outside the cluster (#27)', () => {
   const html = renderGantt({ plannerGroups: groups([NOTED, SCHEDULED]) });
 

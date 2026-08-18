@@ -115,7 +115,7 @@ describe('collapse never reaches the data', () => {
     expect(APP_JS).toMatch(/collapsedBlocks: \{\}/);
     const handler = block('  toggleBlock(_ctx, id) {');
     expect(handler).toContain('collapsedBlocks.${id}');
-    expect(handler).toContain('refreshThumbs'); // the sheet just changed height
+    expect(handler).toContain('remeasure()'); // the sheet just changed height — thumbs AND clip verdicts
   });
 
   it('clears the proposal AND the collapsed set on a project switch (R-d)', () => {
@@ -152,7 +152,7 @@ describe('the collapsible left pane rides one variable', () => {
   it('does no JS width maths — the sheet recomputes from max-content', () => {
     expect(cssRule('.gantt .gsheet')).toContain('width: max-content');
     expect(APP_JS).not.toMatch(/\b(999|417)\b/); // no pane width constant in JS
-    expect(block('  toggleLeftPane() {')).toContain('refreshThumbs');
+    expect(block('  toggleLeftPane() {')).toContain('remeasure()');
   });
 
   it('flags the class on .gantt and flips the chevron, in both states', () => {
