@@ -23,7 +23,7 @@ validation against real sheet rows in `test/golden/workbook-rows.json`).
 The oracle is `test/golden/original.mjs` — extracted verbatim from the
 bundle, minified identifiers kept, DO NOT EDIT.
 
-## What is NOT the trio [docs/MAP.md; the file headers]
+## What is NOT the trio [docs/map-backend.md; the file headers]
 
 - `dayplan.ts` — NEW code (phase 12), not the port: day capacities for
   Deadlines daily plotting.

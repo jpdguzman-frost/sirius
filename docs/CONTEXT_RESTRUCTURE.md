@@ -196,6 +196,26 @@ consequence path — write it with a traced pass, not a dash-off) ·
 decisions/0012's "84/84 workbook cross-validation" is the HISTORICAL phase-3
 count while the shipped fixture is 40 sanitized rows — both true, no edit.
 
+### Stage 4d — map decomposition per area  `[DONE 2026-08-18]`
+
+JP ruled (2026-08-18, recorded as decision 0022): decompose the skim's
+per-file map NOW, while cheap — the modules block was the one Layer-0
+section that grew with the codebase, against the architecture's own growth
+principle. `docs/MAP.md` → 53-line main index (standing rules · GEN:STATUS ·
+GEN:AREAS with hand-owned tails · GEN:DOCMAP · test guards · HAND block);
+per-file lines live in `docs/map-frontend.md` (14) + `docs/map-backend.md`
+(62), Layer 2. All 76 purposes conserved byte-verbatim into the correct
+area (verified independently). Generator maintains the whole set (partition
+exported as `AREAS/areaOf/areaMapPath`; `--check` names the stale
+file+block); guard suite 25 → 30, all set-checks derived from the
+generator's exports (map set == partition; union bijection; no strays;
+glob-driven caps/stamps/TODO bans). Coherence verifier failed the first
+gate on two dangling "docs/MAP.md §MODULES" pointers in lib/ and src/
+CLAUDE.md — fixed at gate, plus the stale generator purpose line and the
+architecture doc's "later lib/, src/" wording. `map-test-suites` DEFERRED
+(trigger in the Rigidity log). Historical stage records above deliberately
+keep their old-shape wording — they describe what was true when written.
+
 ## Stage 5 (was 4) — split `frontend/scripts/01-app.js`  `[HELD by JP 2026-08-18]`
 
 Blocked until the in-flight pipeline-warning work lands (it edits 01-app.js and

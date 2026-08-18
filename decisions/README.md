@@ -41,3 +41,4 @@ _last-verified: 2026-08-18_
 | 0019 | Conflict-acknowledgement keys include the capacity slice | accepted | 2026-08-17 |
 | 0020 | Pins freeze the row completely (Option B) | accepted | 2026-08-17 |
 | 0021 | The layered context architecture (entry / state / task set / archive) | accepted | 2026-08-18 |
+| 0022 | Maps decomposed per area; the Layer-0 skim stays fixed-size | accepted | 2026-08-18 |

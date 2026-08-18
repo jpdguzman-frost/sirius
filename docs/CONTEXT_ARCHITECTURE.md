@@ -14,9 +14,9 @@ _last-verified: 2026-08-18_
 domain. Kicks in the moment an agent starts.**
 Root `CLAUDE.md` (the constitution — auto-loads) and `docs/MAP.md` (the skim —
 first read; ≤150 lines, script-refreshed so it is always current).
-Directory-scoped `CLAUDE.md` files (`frontend/`, `test/`, later `lib/`,
-`src/`) are contextual extensions of this layer: they auto-load only when an
-agent works under their directory, ≤4KB each.
+Directory-scoped `CLAUDE.md` files (`frontend/`, `test/`, `lib/`, `src/`)
+are contextual extensions of this layer: they auto-load only when an agent
+works under their directory, ≤4KB each.
 
 **Layer 1 — CURRENT STATE. Always the current state of the system; protected
 against rot.**
@@ -70,7 +70,8 @@ item.
 
 | Item | Bound |
 |---|---|
-| `docs/MAP.md` (skim) | ≤150 lines; both standing rules at top; every MODULES path exists on disk and every source file is listed (bijection); no `TODO: describe` persists |
+| `docs/MAP.md` (main index) | ≤150 lines; both standing rules at top; AREAS/STATUS/DOCMAP generated; does NOT grow with codebase size — per-file lines live in the area maps |
+| Area maps (`docs/map-*.md`, Layer 2) | ≤150 lines each; GEN:MODULES bijection — the union of the maps lists every source file exactly once, each in the map its area names; no `TODO: describe` persists |
 | `STATE.md` | ≤25KB; session index ≤12 lines (10-session window + slack) |
 | `docs/HANDOFF.md` | ≤24KB target; the guard hard-stops at 26KB |
 | Domain rulebooks (`specs/**/*-rules.md`) | ≤20KB each — over the cap = split by sub-area |
@@ -85,4 +86,7 @@ JP holds the one-file-per-area granularity provisional. After each build
 batch, record here any friction: a rulebook over cap, a rule needed by two
 areas, a contract that fought the grouping. Empty log = the structure holds.
 
-- (none yet)
+- 2026-08-18 — maps decomposed per area (JP, restructure stage 4d, decision
+  0022): the modules block was the one Layer-0 section growing with the
+  codebase; split while cheap. map-test-suites deliberately deferred
+  (trigger: Test-guards section outgrows ~20 lines).

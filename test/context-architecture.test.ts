@@ -9,6 +9,10 @@
  * `npx tsx scripts/generate-index.ts`), never widen a bound here without a
  * ruling recorded in the architecture file.
  *
+ * The map set (decomposed 2026-08-18, decision 0022): docs/MAP.md is the
+ * fixed-size Layer-0 index (status, areas, doc map); the per-file lines live
+ * in per-area Layer-2 maps (docs/map-*.md), one GEN:MODULES block each.
+ *
  * TZ-independent (no dates are computed — the stamps are matched on format
  * only) and offline (the only spawn is the local generator in --check mode).
  */
@@ -18,10 +22,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-// The bijection check below MUST use the exact scope rule the generator uses.
-// Importing the generator's own enumerator — not replicating its glob — makes
-// drift between the two impossible: one definition of "source file in scope".
-import { sourceFiles } from '../scripts/generate-index.ts';
+// The bijection checks below MUST use the exact scope rule AND area
+// partition the generator uses. Importing its own exports — not replicating
+// the glob or the prefix rule — makes drift between the generator and this
+// guard impossible: one definition of "source file in scope", one definition
+// of "which map a file belongs to".
+import { AREAS, areaMapPath, areaOf, sourceFiles } from '../scripts/generate-index.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string): string => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -30,18 +36,36 @@ const KB = 1024;
 
 const MAP = read('docs/MAP.md');
 
-/** Interior of a `<!-- GEN:NAME --> … <!-- /GEN:NAME -->` block in the skim. */
-function genBlock(name: string): string {
+/** Interior of a `<!-- GEN:NAME --> … <!-- /GEN:NAME -->` block in `text`. */
+function genBlockIn(text: string, name: string, rel: string): string {
   const open = `<!-- GEN:${name} -->`;
   const close = `<!-- /GEN:${name} -->`;
-  const from = MAP.indexOf(open);
-  const to = MAP.indexOf(close);
-  expect(from, `docs/MAP.md lacks ${open}`).toBeGreaterThan(-1);
-  expect(to, `docs/MAP.md lacks ${close} after ${open}`).toBeGreaterThan(from);
-  return MAP.slice(from + open.length, to);
+  const from = text.indexOf(open);
+  const to = text.indexOf(close);
+  expect(from, `${rel} lacks ${open}`).toBeGreaterThan(-1);
+  expect(to, `${rel} lacks ${close} after ${open}`).toBeGreaterThan(from);
+  return text.slice(from + open.length, to);
 }
 
-describe('docs/MAP.md — the Layer-0 skim', () => {
+const genBlock = (name: string): string => genBlockIn(MAP, name, 'docs/MAP.md');
+
+/**
+ * The area maps as found ON DISK (glob, not the partition): the set test
+ * below proves this equals what the partition names, so a stray
+ * docs/map-*.md — or a partition change that forgot its file — goes red.
+ */
+const areaMapsOnDisk = (): string[] =>
+  fs
+    .readdirSync(path.join(ROOT, 'docs'))
+    .filter((name) => /^map-.+\.md$/.test(name))
+    .map((name) => `docs/${name}`)
+    .sort();
+
+/** Paths listed in one area map's GEN:MODULES block. */
+const listedIn = (rel: string): string[] =>
+  [...genBlockIn(read(rel), 'MODULES', rel).matchAll(/^- `([^`]+)` — /gm)].map((m) => m[1]!);
+
+describe('docs/MAP.md — the Layer-0 index', () => {
   it('stays at or under the 150-line cap', () => {
     // counted the way the generator counts (lines = newline count)
     expect(MAP.split('\n').length - 1).toBeLessThanOrEqual(150);
@@ -57,8 +81,8 @@ describe('docs/MAP.md — the Layer-0 skim', () => {
     expect(top, 'decisions-first rule (re-decide half) missing').toMatch(/re-decide settled choices/);
   });
 
-  it('has intact GEN:STATUS / GEN:MODULES / GEN:DOCMAP pairs and the HAND block', () => {
-    for (const name of ['STATUS', 'MODULES', 'DOCMAP']) {
+  it('has intact GEN:STATUS / GEN:AREAS / GEN:DOCMAP pairs and the HAND block', () => {
+    for (const name of ['STATUS', 'AREAS', 'DOCMAP']) {
       expect(genBlock(name).trim(), `GEN:${name} is empty`).not.toBe('');
     }
     const begin = MAP.indexOf('<!-- HAND:BEGIN -->');
@@ -66,31 +90,64 @@ describe('docs/MAP.md — the Layer-0 skim', () => {
     expect(begin, 'HAND:BEGIN missing').toBeGreaterThan(-1);
     expect(end, 'HAND:END missing after HAND:BEGIN').toBeGreaterThan(begin);
   });
-});
 
-describe('docs/MAP.md — MODULES bijection with the repo', () => {
-  const listedModules = (): string[] =>
-    [...genBlock('MODULES').matchAll(/^- `([^`]+)` — /gm)].map((m) => m[1]!);
-
-  it('lists only files that exist on disk', () => {
-    for (const rel of listedModules()) {
-      expect(fs.existsSync(path.join(ROOT, rel)), `\`${rel}\` is listed but missing on disk`).toBe(true);
+  it('AREAS block: one line per area, naming its map and the true file count', () => {
+    const lines = genBlock('AREAS')
+      .split('\n')
+      .filter((line) => line.startsWith('- '));
+    expect(lines.length, 'AREAS block must hold exactly one line per area').toBe(AREAS.length);
+    const files = sourceFiles();
+    for (const area of AREAS) {
+      const line = lines.find((l) => l.startsWith(`- \`${area}\``));
+      expect(line, `AREAS block lacks a line for \`${area}\``).toBeDefined();
+      const m = /^- `[^`]+` — (\d+) files → (\S+) — .+$/.exec(line!);
+      expect(m, `AREAS line for \`${area}\` is malformed: ${line}`).not.toBeNull();
+      const [, count, target] = m!;
+      expect(target, `\`${area}\` must point at its own area map`).toBe(areaMapPath(area));
+      expect(fs.existsSync(path.join(ROOT, target!)), `AREAS points at missing ${target}`).toBe(true);
+      expect(
+        Number(count),
+        `\`${area}\` file count is stale — run: npx tsx scripts/generate-index.ts`,
+      ).toBe(files.filter((file) => areaOf(file) === area).length);
     }
   });
+});
 
-  it('carries no unfilled TODO purpose (describe a file when you add it)', () => {
-    // the generator stubs a new file's line as "TODO: describe"; the stub may
-    // exist only inside the change that adds the file, never at rest
-    expect(genBlock('MODULES')).not.toMatch(/TODO: describe/);
+describe('docs/map-*.md — the Layer-2 area maps', () => {
+  it('the on-disk map set is exactly what the area partition names', () => {
+    expect(areaMapsOnDisk()).toEqual(AREAS.map(areaMapPath).sort());
   });
 
-  it('lists every in-scope source file exactly once (generator scope rule)', () => {
-    const listed = listedModules();
-    expect(new Set(listed).size, 'a path is listed twice').toBe(listed.length);
-    // sourceFiles() is path-sorted and duplicate-free, so sorted-array
-    // equality proves both halves of the bijection; on mismatch, run:
+  it.each(areaMapsOnDisk())('%s: intact GEN:MODULES, ≤150 lines, no unfilled TODO', (rel) => {
+    const text = read(rel);
+    expect(genBlockIn(text, 'MODULES', rel).trim(), `${rel} GEN:MODULES is empty`).not.toBe('');
+    expect(text.split('\n').length - 1, `${rel} is over the 150-line cap`).toBeLessThanOrEqual(150);
+    // the generator stubs a new file's line as "TODO: describe"; the stub may
+    // exist only inside the change that adds the file, never at rest
+    expect(text, `${rel} carries an unfilled TODO purpose`).not.toMatch(/TODO: describe/);
+  });
+});
+
+describe('area maps — MODULES bijection with the repo', () => {
+  it('the union of the sub-map paths equals the generator scope, no path twice', () => {
+    const union = AREAS.flatMap((area) => listedIn(areaMapPath(area)));
+    expect(new Set(union).size, 'a path is listed twice across the map set').toBe(union.length);
+    // sourceFiles() is path-sorted, duplicate-free, and enumerated from disk,
+    // so sorted-array equality proves both halves of the bijection AND that
+    // every listed path exists; on mismatch, run:
     // npx tsx scripts/generate-index.ts
-    expect([...listed].sort()).toEqual(sourceFiles());
+    expect([...union].sort()).toEqual(sourceFiles());
+  });
+
+  it('every file sits in the sub-map its area names (no strays)', () => {
+    for (const area of AREAS) {
+      for (const rel of listedIn(areaMapPath(area))) {
+        expect(
+          areaOf(rel),
+          `\`${rel}\` is listed in ${areaMapPath(area)} but belongs to \`${areaOf(rel)}\``,
+        ).toBe(area);
+      }
+    }
   });
 });
 
@@ -154,7 +211,7 @@ describe('size caps (docs/CONTEXT_ARCHITECTURE.md §Caps and guards)', () => {
 });
 
 describe('generator cleanliness — the rot alarm', () => {
-  it('generate-index --check exits 0 (skim agrees with the repo)', () => {
+  it('generate-index --check exits 0 (the map set agrees with the repo)', () => {
     // generous timeout: a cold tsx start on a busy machine is slow, and a
     // false red here would teach people to ignore the alarm
     try {
@@ -162,7 +219,7 @@ describe('generator cleanliness — the rot alarm', () => {
     } catch (err) {
       const stderr = (err as { stderr?: Buffer }).stderr?.toString() ?? String(err);
       expect.fail(
-        `docs/MAP.md's GEN blocks disagree with the repo — run: npx tsx scripts/generate-index.ts\n${stderr}`,
+        `the map set's GEN blocks disagree with the repo — run: npx tsx scripts/generate-index.ts\n${stderr}`,
       );
     }
   });
@@ -172,13 +229,14 @@ describe('staleness stamps', () => {
   // Deliberately NOT stamped: root CLAUDE.md (the constitution — JP versions
   // it himself) and STATE.md/docs/HANDOFF.md (Layer 1 current-state files —
   // their freshness IS their content, updated every session by convention).
-  // The set is DERIVED, not listed: a new rulebook or directory CLAUDE.md is
-  // covered by this assertion the day it appears.
+  // The set is DERIVED, not listed: a new rulebook, area map, or directory
+  // CLAUDE.md is covered by this assertion the day it appears.
   const stamped = [
     'docs/MAP.md',
     'docs/README.md',
     'docs/CONTEXT_ARCHITECTURE.md',
     'decisions/README.md',
+    ...areaMapsOnDisk(),
     ...fs
       .readdirSync(path.join(ROOT, 'specs', '001-sirius-v1'))
       .filter((name) => name.endsWith('-rules.md'))

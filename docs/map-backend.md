@@ -1,0 +1,69 @@
+# MAP — backend area (Layer 2)
+
+_One line per backend source file (server.js, src/, lib/, worker/, scripts/) — Layer 2, loaded when working the backend; the Layer-0 index is docs/MAP.md. Regenerate: `npx tsx scripts/generate-index.ts` (`--check` exits 1 on drift)._
+_last-verified: 2026-08-18_
+
+<!-- GEN:MODULES -->
+- `lib/calendar.ts` — VERBATIM: workday math, weeks, toFriday quirk; injectable holidays (ARES canonical); workday/toFriday/setHolidays.
+- `lib/dayplan.ts` — NEW (not the port): day capacities for Deadlines daily plotting; dayCapacities/weekDays.
+- `lib/forecast.legacy.ts` — RETIRED workbook formula, migration tests only, never UI; legacyForecast.
+- `lib/forecast.ts` — VERBATIM: the empirical forecast users see; SLA overrides cascade; forecast.
+- `lib/model.ts` — verbatim grid lookup + shipped EMPIRICAL snapshot; designCell/laneOf.
+- `lib/planner.constants.ts` — verbatim WEIGHTS/HARD_MIX/weightOf (split to avoid a cycle).
+- `lib/planner.ts` — VERBATIM: suggestPlan/weekLoad/sprintFor/sprintIssues/reflowSprints.
+- `lib/sheets.ts` — read-only service-account Sheets source; makeSheetSource.
+- `lib/trello.ts` — THE write path, exactly W1/W2/W3; TrelloClient/makeTrelloWriter.
+- `scripts/ackcap-probe.ts` — seeded e2e proof on in-memory mongod.
+- `scripts/allowlist.ts` — ONLY path creating allow-list rows/memberships/admin flags (CLI).
+- `scripts/ares-probe.mjs` — openapi contract-drift (CI).
+- `scripts/batch3-probe.ts` — seeded e2e proof on in-memory mongod.
+- `scripts/batch4-probe.ts` — seeded e2e proof on in-memory mongod.
+- `scripts/batch5-probe.ts` — seeded e2e proof on in-memory mongod.
+- `scripts/create-test-board.ts` — one-off: builds the non-production mirror board.
+- `scripts/due-roundtrip.ts` — live W2 smoke vs TEST board.
+- `scripts/gate-t045.ts` — T045 gate report.
+- `scripts/generate-index.ts` — maintains the map set (MAP.md STATUS/AREAS/DOCMAP + each area map's MODULES from disk); `--check` = CI drift gate.
+- `scripts/migrate-open-cards.ts` — project onboarding: full sync + model refresh + summary.
+- `scripts/migrate/migrations.ts` — versioned migrations ledger.
+- `scripts/migrate/run.ts` — migration runner; npm run migrate.
+- `scripts/reconcile-probe.ts` — live Trello→ARES latency.
+- `scripts/seed-intake-test.ts` — fixture-only intake seed (scripts/fixtures/).
+- `scripts/seed.ts` — fixture-only seed (scripts/fixtures/).
+- `scripts/urgency-roundtrip.ts` — live W1 smoke vs TEST board.
+- `server.js` — entry: env → Mongo/Redis → createApp → listen; boots ARES calendar; worker owns sync.
+- `src/app.ts` — ALL Express wiring (supertest-able); Redis sessions; webhook router before json/session; createApp.
+- `src/auth/admin.ts` — ensureAdmin; re-reads users doc every request.
+- `src/auth/membership.ts` — ensureProjectMember; sets res.locals.project; 403 cross-project.
+- `src/auth/passport.ts` — Google OAuth, the 4 sign-in checks (invariant 9); evaluateSignIn.
+- `src/auth/routes.ts` — /auth/* Google SSO; denied → /auth/failed.
+- `src/auth/session.ts` — ensureAuthenticated, SessionUser.
+- `src/config/env.ts` — Zod env validation, fail-fast in prod; validateEnv.
+- `src/db/mongo.ts` — own `sirius` db on shared server; connectMongo.
+- `src/db/redis.ts` — node-redis (connect-redis v9 needs it, not ioredis); connectRedis.
+- `src/models/index.ts` — all 18 models (15 planned + push_events/frost_notes/milestone_day_plan; date-only = 'YYYY-MM-DD'); ALL_MODELS.
+- `src/routes/admin.ts` — allow-list on a screen; no hard deletes.
+- `src/routes/deliverables.ts` — read-only pipeline/model/deadline payloads.
+- `src/routes/projects.ts` — project list/switcher; the scoping pattern.
+- `src/routes/requests.ts` — intake mirror + frost notes; status derived from Trello join, never stored.
+- `src/routes/schedule.ts` — ONLY write surface for Sirius-owned planning (week/pin/confidence/SLA/note/capacity) + sprints + suggest.
+- `src/routes/webhooks.ts` — ARES push receiver, HMAC-signed, stores pending events; verifySignature.
+- `src/routes/writes.ts` — registry writes W1 urgency/W2 due/W3 difficulty; Trello-first, rollback structural.
+- `src/routing/paths.ts` — shell whitelist + returnTo validator + base-path stamp; ROUTE_TABS mirrored in 00-router.js; isShellPath/safeReturnTo.
+- `src/services/ares.ts` — ARES read-API client (v1 envelopes, 60/min); AresClient.
+- `src/services/audit.ts` — insert-only audit writer; audit.
+- `src/services/calendar-sync.ts` — ARES-canonical work calendar persist/load (global; invariant-1 exception); loadCalendar/syncCalendarFromAres.
+- `src/services/conflicts.ts` — BR-6 detection + invariant-13 situation key; detectConflicts/conflictKey.
+- `src/services/guard.ts` — refuse prod board ids outside production; assertNotProductionBoards.
+- `src/services/intake-parser.ts` — sheet parser (ragged rows, serial dates, dup Type cols); parseIntake.
+- `src/services/mapper.ts` — Trello taxonomy → deliverables + MC-group work cards; mapTrello.
+- `src/services/model-grid.ts` — per-project EmpiricalModel with fallback provenance; loadProjectModel.
+- `src/services/model-refresh.ts` — pure BR-2 derivation: card_events → samples → grids + delta; deriveSamples/computeModelGrid.
+- `src/services/pipeline.ts` — db rows → tab payload (deliverables_v + forecast + BR-10); loadPipeline/toMilestones.
+- `src/services/status-rules.ts` — BR-10 list name → pending/ongoing/done; classifyList.
+- `src/types/express-session.d.ts` — session returnTo typing.
+- `worker/drainPush.ts` — drains push_events → per-card reconciles; poll fallback; drainPushEvents/pushHealth.
+- `worker/index.ts` — cadence: ares 15 min (hourly while push healthy), intake 15 min, model nightly, calendar.
+- `worker/refreshModel.ts` — nightly per-project rebuild + delta; runModelRefresh.
+- `worker/syncAres.ts` — ARES → idempotent mapped upserts, sync_runs every run; runAresSync/syncProject.
+- `worker/syncIntake.ts` — sheet mirror + deadline join; vanished rows go inactive; runIntakeSync.
+<!-- /GEN:MODULES -->

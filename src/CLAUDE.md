@@ -10,7 +10,7 @@ this file names it in one line and points — it never restates.
    [src/auth/membership.ts]. The ONE recorded exception: the `calendar_days`
    system-reference store — the PH work calendar is global, same class as the
    `migrations` ledger; deliberately unscoped, do not "fix" it
-   [src/services/calendar-sync.ts header; docs/MAP.md §MODULES].
+   [src/services/calendar-sync.ts header; docs/map-backend.md §MODULES].
 
 2. **Zod at every API boundary** [root CLAUDE.md §Stack]. Every route that
    accepts input parses it with Zod before touching it (`safeParse` → 400).

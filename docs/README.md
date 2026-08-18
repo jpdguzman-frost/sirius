@@ -12,7 +12,8 @@ _last-verified: 2026-08-18_
 - **state-log/** — ARCHIVE: STATE.md session entries rotated out verbatim, one dated file per day, newest-first.
 - **CONTEXT_RESTRUCTURE.md** — PLAN+RECORD of the 2026-08-18 docs restructure (this index is one of its stages).
 - **CONTEXT_ARCHITECTURE.md** — GOVERNS documentation shape: the four context layers, caps, growth rule, rigidity log (JP-ruled 2026-08-18).
-- **MAP.md** — THE SKIM (Layer 0): live status + one line per source file + the doc layers; factual sections script-generated (`npx tsx scripts/generate-index.ts`); read it before exploring the codebase.
+- **MAP.md** — THE SKIM (Layer 0): live status + the areas + the doc layers; factual sections script-generated (`npx tsx scripts/generate-index.ts`); read it before exploring the codebase.
+- **map-*.md** — per-area file maps (Layer 2), generated; loaded when working that side.
 - **README.md** — this index.
 
 ## Governing
