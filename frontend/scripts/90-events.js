@@ -302,11 +302,15 @@ app.on({
      value the CELL shows (BR-9 precedence — Trello due first, else the sheet)
      and remembers it as dueBaseline, so Apply on an untouched popover writes
      nothing — including the case where the shown date came from the sheet. */
-  openDuePopover(ctx, cardId) {
-    // a cardId `rows` does not know is an expanded MC's task card (owl #45);
-    // a task's shown date IS its Trello due — no sheet, no precedence
-    const row = app.get('rows').find((r) => r.cardId === cardId) || findWorkCard(cardId)?.card;
-    const current = (row && (row.deadline ?? row.due)) || null;
+  openDuePopover(ctx, cardId, kind) {
+    // `kind` arrives from the template, which knows it BY CONSTRUCTION
+    // (parent row vs the task each-block) — the client never re-derives the
+    // card kind from set-membership, so `rows` being the complete deliverable
+    // store is not load-bearing. A task's shown date IS its Trello due — no
+    // sheet, no precedence (owl #45).
+    const current = kind === 'task'
+      ? findWorkCard(cardId)?.card.due || null
+      : app.get('rows').find((r) => r.cardId === cardId)?.deadline || null;
     openOverlay(ctx, cardId, {
       key: 'duePopover', posKey: 'duePopPos', saving: 'savingDeadline',
       h: DUE_POP_H, gap: 4, clampW: DUE_POP_W, // clamped both ways — the box stays fully on screen
@@ -393,16 +397,16 @@ app.on({
     const iso = which === 'week' ? isoAddDays(today, 7) : which === 'monday' ? isoNextMonday(today) : today;
     app.set({ dueStaged: iso, dueMonth: monthOf(iso) });
   },
-  async dueApply(_ctx, cardId) {
+  async dueApply(_ctx, cardId, kind) {
     const staged = app.get('dueStaged') || null;
     const baseline = app.get('dueBaseline') || null;
     closeMenus({ restoreFocus: true });
     if (staged === baseline) return; // nothing staged — no call, no audit
-    await writeDeadline(cardId, staged);
+    await writeDeadline(cardId, staged, kind);
   },
-  async dueClear(_ctx, cardId) {
+  async dueClear(_ctx, cardId, kind) {
     closeMenus({ restoreFocus: true });
-    await writeDeadline(cardId, null); // confirm-free; the sheet deadline (if any) takes over
+    await writeDeadline(cardId, null, kind); // confirm-free; the sheet deadline (if any) takes over
   },
 
   weekShiftView(_ctx, dir) { app.set('weekStart', mondayShift(app.get('weekStart'), dir)); },

@@ -113,6 +113,13 @@ const WARN_WHY = {
   'due date': 'Without a due date the card cannot raise a deadline conflict.',
   'Figma attachment': 'Without the Figma attachment the deliverable cannot be opened from the plan.',
 };
+/* The one viewport margin every fixed overlay honours: placeBox's on-screen
+   clamp holds this much clear on each side, and the last-resort scroll
+   verdict asks whether a box fits inside BOTH margins — the same number, so
+   the anti-oscillation `>=` in placeBox can never disagree with the clamp.
+   Its CSS twin is the `--space-8` (= both margins) in `.warnpop.scroll`'s
+   max-height; change one and change the other. */
+const OVERLAY_EDGE = 4;
 /* warning popover box (node 537:69135) — the pre-measure placeBox needs to
    decide flip-up and the horizontal clamp before the element exists. The
    HEIGHT hugs its content (one wrapping list-item per missing field, plus the

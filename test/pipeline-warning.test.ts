@@ -59,11 +59,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   APP_JS,
+  APP_JS_CODE,
   PIPELINE_CSS,
   TEMPLATE,
   type PipeRow,
   cssRule,
   decl,
+  fnBody,
   leakedMustacheText,
   renderPipelineTable,
 } from './helpers/gantt-render.ts';
@@ -169,31 +171,9 @@ const attr = (tagText: string, name: string): string | null => {
    they read a comment-free copy. */
 const cssCode = PIPELINE_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
 const tplCode = TEMPLATE.replace(/<!--[\s\S]*?-->/g, ' ');
-/* `(^|[^:])` so a `https://…` inside a template literal is not mistaken for a
-   line comment — stripping it would swallow the rest of that line. */
-const jsCode = APP_JS.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/gm, '$1');
-
-/**
- * The body of a top-level `function NAME(…) { … }`, braces balanced, read from
- * the comment-free copy. Used only for assertions about STRUCTURE — which door
- * calls which, and in what order — never to snapshot a body's text.
- */
-function fnBody(name: string): string {
-  const at = jsCode.indexOf(`function ${name}(`);
-  expect(at, `no \`function ${name}\` in the shipped client`).toBeGreaterThan(-1);
-  let i = jsCode.indexOf('(', at);
-  for (let depth = 0; i < jsCode.length; i++) {
-    if (jsCode[i] === '(') depth++;
-    else if (jsCode[i] === ')' && --depth === 0) break;
-  }
-  const open = jsCode.indexOf('{', i);
-  let depth = 0;
-  for (let j = open; j < jsCode.length; j++) {
-    if (jsCode[j] === '{') depth++;
-    else if (jsCode[j] === '}' && --depth === 0) return jsCode.slice(open, j + 1);
-  }
-  throw new Error(`pipeline-warning: \`${name}\` never closes`);
-}
+/* the comment-free corpus and the top-level-function slicer are the helper's
+   (APP_JS_CODE / fnBody) — one copy, shared with pipeline-expanded */
+const jsCode = APP_JS_CODE;
 
 /** The body of an `on:` object member `NAME(…) { … }`, same contract. */
 function handlerBody(name: string): string {
@@ -527,6 +507,13 @@ describe('the hover card (open on one row)', () => {
     expect(pop.indexOf('class="wpfix"')).toBeGreaterThan(lastItem);
     expect(pop.indexOf('class="wpfix"')).toBeLessThan(pop.indexOf('class="wpsep"'));
     expect([...pop.matchAll(/class="wpfix"/g)]).toHaveLength(1);
+  });
+
+  it('wears the rationale’s own recipe — one shared rule, never a copy', () => {
+    // the closing line is message copy, so it shares .wpwhy's declaration
+    // list in ONE rule; a standalone .wpfix rule is the duplicate creeping back
+    expect(PIPELINE_CSS).toMatch(/\n\.wpwhy, \.wpfix \{/);
+    expect(PIPELINE_CSS).not.toMatch(/\n\.wpfix \{/);
   });
 
   it('opens exactly one card even when several rows are warned', () => {
@@ -1194,7 +1181,7 @@ describe('one recipe per visual (CSS)', () => {
   it('spends no raw hex and no raw px on the new rules — tokens only', () => {
     // the ONE exception the constitution allows is an icon glyph box, which is
     // exactly the shape .i13/.i15/.i16/.i18 already have
-    for (const sel of ['.warnbtn', '.warnhost', '.ptable .mcid', '.warnpop.flip', '.warnpop.scroll', '.wpfix', '.warnpop::before', '.warnpop.flip::before']) {
+    for (const sel of ['.warnbtn', '.warnhost', '.ptable .mcid', '.warnpop.flip', '.warnpop.scroll', '.wpwhy, .wpfix', '.warnpop::before', '.warnpop.flip::before']) {
       const rule = cssRule(sel, PIPELINE_CSS).replace(/\/\*[\s\S]*?\*\//g, ' ');
       expect(rule, `${sel} carries a raw hex`).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
       expect(rule, `${sel} carries a raw px`).not.toMatch(/\d+px/);

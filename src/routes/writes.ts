@@ -19,12 +19,12 @@ import { Deliverable, SyncRun, WorkCard } from '../models/index.ts';
 import { composeDueIso, type TrelloWriter } from '../../lib/trello.ts';
 import type { Env } from '../config/env.ts';
 
-interface WriteContext {
+interface WriteContext<TDoc> {
   projectId: Types.ObjectId;
   boardId: string;
   cardId: string;
   actor: string;
-  doc: InstanceType<typeof Deliverable> | InstanceType<typeof WorkCard>;
+  doc: TDoc;
   trello: TrelloWriter;
 }
 
@@ -33,15 +33,23 @@ interface WriteContext {
  * `kind` widens the lookup to task cards for W2's task-card scope (JP
  * 2026-08-18, contracts/trello-write.md §W2 scope clarification) — every
  * refusal guard is identical for both kinds, which is the point of the ONE
- * door (src/CLAUDE.md rule 3).
+ * door (src/CLAUDE.md rule 3). The overloads keep `ctx.doc` COMPILER-typed by
+ * the kind asked for, so no caller narrows with a cast the type system cannot
+ * check — the enumerated union is exactly the two collections that exist.
  */
+async function writeGuards(
+  env: Env, trello: TrelloWriter | null, req: Request, res: Response,
+): Promise<WriteContext<InstanceType<typeof Deliverable>> | null>;
+async function writeGuards(
+  env: Env, trello: TrelloWriter | null, req: Request, res: Response, kind: 'work_card',
+): Promise<WriteContext<InstanceType<typeof WorkCard>> | null>;
 async function writeGuards(
   env: Env,
   trello: TrelloWriter | null,
   req: Request,
   res: Response,
   kind: 'deliverable' | 'work_card' = 'deliverable',
-): Promise<WriteContext | null> {
+): Promise<WriteContext<InstanceType<typeof Deliverable> | InstanceType<typeof WorkCard>> | null> {
   const projectId = res.locals.project._id as Types.ObjectId;
   const boardId = res.locals.project.trello_board_id as string;
   const cardId = String(req.params.cardId);
@@ -104,8 +112,7 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       const ctx = await writeGuards(env, trello, req, res);
       if (!ctx) return;
 
-      // default-kind guards always return a deliverable; urgency exists nowhere else
-      const doc = ctx.doc as InstanceType<typeof Deliverable>;
+      const doc = ctx.doc; // typed deliverable by the overload — urgency exists nowhere else
       const before = doc.urgency;
       const after = body.data.urgent ? 'Urgent' : 'Non-Urgent';
       try {
@@ -142,11 +149,15 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
       }
-      const ctx = await writeGuards(env, trello, req, res, kind);
+      // the ternary (not a variable kind argument) is what lets each overload
+      // resolve, so ctx.doc is compiler-typed on both branches — and both
+      // schemas carry the same W2 field pair, so the shared tail just reads it
+      const ctx = kind === 'work_card'
+        ? await writeGuards(env, trello, req, res, 'work_card')
+        : await writeGuards(env, trello, req, res);
       if (!ctx) return;
 
-      // both schemas carry the same W2 field pair — the only fields this touches
-      const doc = ctx.doc as { trello_due?: string | null; trello_due_at?: Date | null; save(): Promise<unknown> };
+      const doc = ctx.doc;
       const before = doc.trello_due ?? null;
       const after = body.data.date;
       if (before === after) {
@@ -200,8 +211,7 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       const ctx = await writeGuards(env, trello, req, res);
       if (!ctx) return;
 
-      // default-kind guards always return a deliverable (W3's surface today)
-      const doc = ctx.doc as InstanceType<typeof Deliverable>;
+      const doc = ctx.doc; // typed deliverable by the overload (W3's surface today)
       const before = doc.difficulty ?? null;
       const after = body.data.difficulty;
       if (before === after) {

@@ -19,34 +19,17 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  APP_JS,
+  APP_JS_CODE,
   PIPELINE_CSS,
   TEMPLATE,
   type PipeRow,
   type WorkCardRow,
   cssRule,
+  fnBody,
   renderPipelineTable,
 } from './helpers/gantt-render.ts';
 
-const jsCode = APP_JS.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/gm, '$1');
-
-/** The body of a top-level `function NAME(…) { … }` (the pipeline-warning slicer). */
-function fnBody(name: string): string {
-  const at = jsCode.indexOf(`function ${name}(`);
-  expect(at, `no \`function ${name}\` in the shipped client`).toBeGreaterThan(-1);
-  let i = jsCode.indexOf('(', at);
-  for (let depth = 0; i < jsCode.length; i++) {
-    if (jsCode[i] === '(') depth++;
-    else if (jsCode[i] === ')' && --depth === 0) break;
-  }
-  const open = jsCode.indexOf('{', i);
-  let depth = 0;
-  for (let j = open; j < jsCode.length; j++) {
-    if (jsCode[j] === '{') depth++;
-    else if (jsCode[j] === '}' && --depth === 0) return jsCode.slice(open, j + 1);
-  }
-  throw new Error(`pipeline-expanded: \`${name}\` never closes`);
-}
+const jsCode = APP_JS_CODE;
 
 const row = (over: Partial<PipeRow> = {}): PipeRow => ({
   cardId: 'main-1',
@@ -84,6 +67,10 @@ const collapsed = () =>
   renderPipelineTable({ pipelineRows: [PARENT, CHILDLESS], rowWarning, workCardsByMc: TASKS });
 const open = (over: Record<string, unknown> = {}) =>
   renderPipelineTable({ pipelineRows: [PARENT, CHILDLESS], rowWarning, workCardsByMc: TASKS, expanded: { 'MC-837': true }, ...over });
+/* the two option-free renders, hoisted once — the gantt-requestor-clip
+   precedent; fresh calls remain only where options differ */
+const COLLAPSED = collapsed();
+const OPEN = open();
 
 /** All `<tr class="ptask">…</tr>` blocks of a render. */
 const taskRows = (html: string): string[] =>
@@ -102,21 +89,21 @@ function cell(rowMarkup: string, cls: string): string {
 
 describe('the task rows live in the parent’s own column grid', () => {
   it('renders task rows only for an EXPANDED group', () => {
-    expect(taskRows(collapsed())).toHaveLength(0);
-    expect(taskRows(open())).toHaveLength(2);
+    expect(taskRows(COLLAPSED)).toHaveLength(0);
+    expect(taskRows(OPEN)).toHaveLength(2);
   });
 
   it('emits the same cell classes as the parent row, in the same order — no colspan', () => {
-    const cells = [...taskRows(open())[0]!.matchAll(/<td class="([a-z-]+)"/g)].map((m) => m[1]);
+    const cells = [...taskRows(OPEN)[0]!.matchAll(/<td class="([a-z-]+)"/g)].map((m) => m[1]);
     expect(cells).toEqual([
       'col-mc', 'col-name', 'col-type', 'col-diff', 'col-urgency',
       'col-status', 'col-client', 'col-due', 'col-started', 'col-done', 'col-links',
     ]);
-    expect(taskRows(open())[0]).not.toContain('colspan');
+    expect(taskRows(OPEN)[0]).not.toContain('colspan');
   });
 
   it('leaves the first cell EMPTY — the indent is the absent MC#, not a repeat of it', () => {
-    for (const r of taskRows(open())) {
+    for (const r of taskRows(OPEN)) {
       expect(cell(r, 'col-mc')).toBe('<td class="col-mc"></td>');
       expect(r).not.toContain('MC-837</'); // the number never renders in a task row cell of its own
     }
@@ -124,19 +111,19 @@ describe('the task rows live in the parent’s own column grid', () => {
 
   it('leaves type, difficulty, urgency and requestor cells EMPTY — MC-level attributes', () => {
     for (const cls of ['col-type', 'col-diff', 'col-urgency', 'col-client']) {
-      expect(cell(taskRows(open())[0]!, cls)).toBe(`<td class="${cls}"></td>`);
+      expect(cell(taskRows(OPEN)[0]!, cls)).toBe(`<td class="${cls}"></td>`);
     }
   });
 
   it('names the task with the parent’s own name recipe and shows its status badge', () => {
-    const r = taskRows(open())[0]!;
+    const r = taskRows(OPEN)[0]!;
     expect(cell(r, 'col-name')).toContain('<span class="cardname">MC-837 Render Icon: APIs — Filled</span>');
     expect(cell(r, 'col-status')).toContain('class="pbadge s-pending"');
     expect(cell(r, 'col-status')).toContain('Backlogs: Icon');
   });
 
   it('shows Started/Done with the parent’s plaincell recipe, dash when absent', () => {
-    const [withDates, without] = taskRows(open());
+    const [withDates, without] = taskRows(OPEN);
     expect(cell(withDates!, 'col-started')).toContain('class="plaincell nowrap"');
     expect(cell(withDates!, 'col-started')).toContain('2026-08-02');
     expect(cell(withDates!, 'col-done')).toContain('<span class="dimcell">—</span>');
@@ -144,7 +131,7 @@ describe('the task rows live in the parent’s own column grid', () => {
   });
 
   it('renders BOTH link icons, the absent one as the parent’s dimmed non-link', () => {
-    const links = cell(taskRows(open())[0]!, 'col-links');
+    const links = cell(taskRows(OPEN)[0]!, 'col-links');
     expect(links).toContain('href="https://trello.com/c/task-1"');
     expect(links).toContain('#i-figma');
     expect(links).toContain('class="srclink off"'); // figmaUrl null → same off recipe as the parent row
@@ -157,7 +144,7 @@ describe('the task rows live in the parent’s own column grid', () => {
 
 describe('a childless MC renders no chevron (jp→miles #40 proposal)', () => {
   it('keeps the chevron on an MC with task cards and swaps a spacer in for one without', () => {
-    const html = collapsed();
+    const html = COLLAPSED;
     const mcCell = (label: string) => {
       const at = html.indexOf(`<span class="mcnum">${label}</span>`);
       expect(at, `no ${label} row`).toBeGreaterThan(-1);
@@ -170,9 +157,13 @@ describe('a childless MC renders no chevron (jp→miles #40 proposal)', () => {
   });
 
   it('sizes the spacer to the chevron glyph box, so the MC# column cannot shift', () => {
-    // the chevron is an .i16 glyph (16px box, no horizontal pad) — the spacer
-    // is that same box; a drifted pair fails here
-    expect(cssRule('.ptable .mccell .chevgap', PIPELINE_CSS)).toContain('width: 16px');
+    /* DERIVED, not copied (test/CLAUDE.md rule 2): the chevron is an `.i16`
+       glyph with no horizontal pad, so the spacer's width is read out of
+       `.i16`'s own rule — if the glyph box ever changes, this fails instead
+       of staying green while the MC# column misaligns. */
+    const glyphWidth = /width: (\d+px)/.exec(cssRule('.i16', PIPELINE_CSS))?.[1];
+    expect(glyphWidth, 'no width in the .i16 rule').toBeDefined();
+    expect(cssRule('.ptable .mccell .chevgap', PIPELINE_CSS)).toContain(`width: ${glyphWidth}`);
     expect(cssRule('.ptable .mccell .chevgap', PIPELINE_CSS)).toContain('flex: none');
   });
 });
@@ -209,10 +200,10 @@ describe('the tint is the nesting cue (annotation: inverted — parent white, ch
 
 describe('the parent’s SubTone appears with the expansion, and only then', () => {
   it('renders `Main Card` under the name only while the group is expanded', () => {
-    expect(open()).toContain('<span class="subtone">Main Card</span>');
-    expect(collapsed()).not.toContain('class="subtone"');
+    expect(OPEN).toContain('<span class="subtone">Main Card</span>');
+    expect(COLLAPSED).not.toContain('class="subtone"');
     // …and on the expanded PARENT, never inside a task row
-    for (const r of taskRows(open())) expect(r).not.toContain('subtone');
+    for (const r of taskRows(OPEN)) expect(r).not.toContain('subtone');
   });
 
   it('wears label-size muted type on its own line, tokens only', () => {
@@ -259,24 +250,51 @@ describe('the task due cell is the SAME W2 recipe, bound to the task card', () =
     expect(due).not.toContain('<button');
   });
 
-  it('routes a non-deliverable cardId to the task endpoint — one write function, two halves', () => {
-    // writeDeadline stays the one door dueApply/dueClear call; a cardId
-    // `rows` does not know falls through to the task half
-    expect(fnBody('writeDeadline')).toContain('writeTaskDue(cardId, value)');
-    const taskHalf = fnBody('writeTaskDue');
-    expect(taskHalf).toContain('/workcards/');
-    expect(taskHalf).toContain('findWorkCard(cardId)');
-    // same optimistic contract: a no-op returns before any call, a failure reverts
-    expect(taskHalf).toContain("if ((value || null) === (found.card.due || null)) return;");
-    expect(taskHalf).toContain('flashBanner');
-    // …and the deliverable half still posts to its own endpoint
-    expect(fnBody('writeDeadline')).toContain('/deliverables/');
+  it('the template SAYS the kind — every task-cell due handler passes it explicitly', () => {
+    /* The dispatch rule: which half of W2 a write takes is decided where the
+       kind is KNOWN — the template's task each-block — never re-derived from
+       set-membership, so `rows` being the complete deliverable store is not
+       load-bearing. Asserted on both sides of the boundary: the task cell
+       passes 'task' on all three handlers, and the parent cell passes none. */
+    for (const h of ['openDuePopover', 'dueApply', 'dueClear']) {
+      expect(TEMPLATE).toContain(`['${h}', w.cardId, 'task']`);
+      expect(TEMPLATE).toContain(`['${h}', row.cardId]`);
+      expect(TEMPLATE).not.toContain(`['${h}', row.cardId, `);
+    }
   });
 
-  it('lets the popover opener find a task’s current date the same way', () => {
+  it('each half posts to its OWN endpoint, and only that one', () => {
+    // the rule, not the mechanism's text: the task half owns /workcards/,
+    // the deliverable half owns /deliverables/, and neither names the other's
+    const taskHalf = fnBody('writeTaskDue');
+    expect(taskHalf).toContain('/workcards/');
+    expect(taskHalf).not.toContain('/deliverables/');
+    const oneDoor = fnBody('writeDeadline');
+    expect(oneDoor).toContain('/deliverables/');
+    expect(oneDoor).not.toContain('/workcards/');
+    // same optimistic contract on the task half: a no-op returns before any
+    // call, a failure reverts and says so
+    expect(taskHalf).toContain("if ((value || null) === (found.card.due || null)) return;");
+    expect(taskHalf).toContain('flashBanner');
+  });
+
+  it('the popover opener reads the task’s current date from the task store, by kind', () => {
     const at = jsCode.indexOf('openDuePopover(');
     const body = jsCode.slice(at, jsCode.indexOf('\n  },', at));
     expect(body).toContain('findWorkCard(cardId)');
+    expect(body).toMatch(/kind === 'task'/);
+  });
+
+  it('the shared calendar is ONE partial, used by both popovers', () => {
+    // owl #45 hardening: the month nav / day grid / shortcuts exist once as
+    // the top-level dueCalendar partial — a calendar change lands in both
+    // popovers or in neither. Only the action footers are per-kind.
+    expect([...TEMPLATE.matchAll(/\{\{#partial dueCalendar\}\}/g)]).toHaveLength(1);
+    expect([...TEMPLATE.matchAll(/\{\{>dueCalendar\}\}/g)]).toHaveLength(2);
+    expect([...TEMPLATE.matchAll(/class="duegrid"/g)]).toHaveLength(1);
+    expect([...TEMPLATE.matchAll(/class="dueshort"/g)]).toHaveLength(1);
+    // the footers stay inline and per-kind: two dueact blocks
+    expect([...TEMPLATE.matchAll(/class="dueact"/g)]).toHaveLength(2);
   });
 });
 

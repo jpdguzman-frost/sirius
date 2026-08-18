@@ -96,16 +96,15 @@ app.set('dueMonthLabel', (month) => {
   return `${MONTHS_LONG[m - 1]} ${y}`;
 });
 
-/* An expanded MC's task card, found by its Trello card id — the id space is
-   shared with deliverables (both are Trello cards), so a miss in `rows` plus
-   a hit here is what routes a due write to the task-card half of W2 (owl #45;
+/* An expanded MC's task card, found by its Trello card id (owl #45;
    contracts/trello-write.md §W2 scope). Returns the Ractive keypath alongside
-   the card so callers can write optimistically to the one entry. */
+   the card so callers can write optimistically to the one entry. Which HALF
+   of W2 a write takes is not this function's question — the template passes
+   the kind explicitly; this only locates the entry. */
 function findWorkCard(cardId) {
-  const byMc = app.get('workCardsByMc') || {};
-  for (const mc of Object.keys(byMc)) {
-    const i = byMc[mc].findIndex((w) => w.cardId === cardId);
-    if (i >= 0) return { card: byMc[mc][i], keypath: `workCardsByMc.${mc}.${i}` };
+  for (const [mc, cards] of Object.entries(app.get('workCardsByMc') || {})) {
+    const i = cards.findIndex((w) => w.cardId === cardId);
+    if (i >= 0) return { card: cards[i], keypath: `workCardsByMc.${mc}.${i}` };
   }
   return null;
 }
@@ -116,12 +115,14 @@ function findWorkCard(cardId) {
    TRELLO due date — a sheet-sourced deadline is not Sirius's to clear, which
    is why the popover disables Clear on those rows. The cell shows 'saving…'
    meanwhile, so no unconfirmed date is ever on screen (invariant 8).
-   A cardId that is not a deliverable is an expanded MC's task card (owl #45):
-   same optimistic shape against the task's own endpoint — a task due has no
-   sheet fallback and no precedence, so its display field IS its Trello field. */
-async function writeDeadline(cardId, value) {
+   `kind` is the template's word for which half of W2 this is — 'task' for an
+   expanded MC's task card (owl #45): same optimistic shape against the task's
+   own endpoint. A task due has no sheet fallback and no precedence, so its
+   display field IS its Trello field. */
+async function writeDeadline(cardId, value, kind) {
+  if (kind === 'task') return writeTaskDue(cardId, value);
   const row = app.get('rows').find((r) => r.cardId === cardId);
-  if (!row) return writeTaskDue(cardId, value);
+  if (!row) return;
   if ((value || null) === (row.trelloDue || null)) return; // no-op guard — no call, no audit
   const prev = { deadline: row.deadline, deadlineSource: row.deadlineSource, trelloDue: row.trelloDue };
   patchRow(cardId, { deadline: value, deadlineSource: value ? 'trello' : null, trelloDue: value });
@@ -146,7 +147,11 @@ async function writeTaskDue(cardId, value) {
   app.set(`savingDeadline.${cardId}`, true);
   try {
     await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/workcards/${cardId}/deadline`, { date: value });
-    await loadAll(); // the echo path reconciles dueAt and anything a sync moved meanwhile
+    /* NO reload — the urgency write's precedent, not the deliverable due's:
+       a task due has no precedence fallback and no forecast key, so the
+       optimistic value already equals the server's confirmed one, and the
+       standing poll/push reconcile owns everything else. The deliverable
+       half reloads because BR-9 precedence can change what the cell shows. */
   } catch (err) {
     app.set(`${found.keypath}.due`, prev);
     flashBanner(`Deadline write failed — reverted. ${errText(err)}`);
@@ -259,6 +264,13 @@ async function loadAll() {
     pipeline.rows.forEach((r) => {
       r.blob = `${r.displayId} ${r.mcNumber || ''} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
       r.warning = rowWarning(r);
+      /* the childless-chevron test (owl #45 / R-exp-c) is derived per-row data
+         too, so it is stamped, not asked in the template (performance law).
+         Truthiness suffices: the server only creates a key by pushing into it,
+         so a present key always holds at least one task. rows and
+         workCardsByMc land in the same app.set below, so the stamp cannot
+         desync from the map it derives from. */
+      r.hasTasks = !!pipeline.workCardsByMc[r.mcNumber];
     });
     capServer = pipeline.capacity.weekly; // server truth — the capacity rollback target
     app.set({

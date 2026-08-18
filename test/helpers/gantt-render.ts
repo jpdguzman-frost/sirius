@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import RactiveModule from 'ractive';
 import { appScripts, template } from './source.ts';
+import type { WorkCardWire } from '../../src/services/pipeline.ts';
 
 /**
  * Ractive ships ESM typings inside a CommonJS package, so the default import
@@ -63,6 +64,37 @@ export const REQUESTS_CSS = readFrontend('styles', '25-requests.css');
  * test/helpers/source.ts for why guards read the bundle, never one file.
  */
 export const APP_JS = appScripts();
+
+/**
+ * APP_JS with block and line comments stripped — the corpus for guards that
+ * must not be tripped by prose. `(^|[^:])` so a `https://…` inside a template
+ * literal is not mistaken for a line comment. ONE copy, shared by every suite
+ * that slices the shipped client (pipeline-warning, pipeline-expanded, …).
+ */
+export const APP_JS_CODE = APP_JS.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/gm, '$1');
+
+/**
+ * The body of a top-level `function NAME(…) { … }`, braces balanced, read
+ * from the comment-free corpus. For assertions about STRUCTURE — which door
+ * calls which, and in what order — never for snapshotting a body's text.
+ * Throws (fails the calling test) when the function is missing or unclosed.
+ */
+export function fnBody(name: string, src: string = APP_JS_CODE): string {
+  const at = src.indexOf(`function ${name}(`);
+  if (at < 0) throw new Error(`gantt-render: no \`function ${name}\` in the shipped client`);
+  let i = src.indexOf('(', at);
+  for (let depth = 0; i < src.length; i++) {
+    if (src[i] === '(') depth++;
+    else if (src[i] === ')' && --depth === 0) break;
+  }
+  const open = src.indexOf('{', i);
+  let depth = 0;
+  for (let j = open; j < src.length; j++) {
+    if (src[j] === '{') depth++;
+    else if (src[j] === '}' && --depth === 0) return src.slice(open, j + 1);
+  }
+  throw new Error(`gantt-render: \`${name}\` never closes`);
+}
 export const ICONS_JS = readFrontend('scripts', '00-icons.js');
 
 /**
@@ -376,32 +408,23 @@ export interface PipelineTableState {
   duePopover?: string | null;
 }
 
-/** A task card as `src/services/pipeline.ts` puts it on the wire (owl #45). */
-export interface WorkCardRow {
-  cardId: string;
-  name: string;
-  taskPrefix?: string | null;
-  currentList?: string | null;
-  status?: string;
-  trelloUrl?: string | null;
-  figmaUrl?: string | null;
-  due?: string | null;
-  dueAt?: string | null;
-  started?: string | null;
-  startedTs?: string | null;
-  done?: string | null;
-  doneTs?: string | null;
-}
+/**
+ * A task card as the wire carries it — DERIVED from the server's own
+ * `WorkCardWire` (src/services/pipeline.ts) rather than hand-copied, so the
+ * fixture shape cannot drift from the contract; only `cardId`/`name` stay
+ * required, the fixture-friendly optionality this helper's row types share.
+ */
+export type WorkCardRow = Pick<WorkCardWire, 'cardId' | 'name'> & Partial<WorkCardWire>;
 
 /**
- * The template reads `row.warning`, a field `loadAll` STAMPS once per load —
- * it is deliberately not an expression, so the recipe cannot run seven times
- * per row per render. The harness therefore stamps it the same way rather than
- * handing Ractive the function: the recipe under test is still the shipped one,
- * and the render proves the same wiring the browser runs.
+ * The template reads `row.warning` and `row.hasTasks`, fields `loadAll`
+ * STAMPS once per load — deliberately not expressions, so neither runs per
+ * row per render (the performance law). The harness stamps them the same way
+ * rather than handing Ractive functions: the recipes under test are still the
+ * shipped ones, and the render proves the same wiring the browser runs.
  */
-const stampWarnings = (rows: PipeRow[], recipe: (row: PipeRow) => unknown) =>
-  rows.map((r) => ({ ...r, warning: recipe(r) }));
+const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, byMc: Record<string, WorkCardRow[]>) =>
+  rows.map((r) => ({ ...r, warning: recipe(r), hasTasks: !!byMc[r.mcNumber] }));
 
 /**
  * Renders the Pipeline table (`<div class="pscrollwrap">`, which occurs
@@ -416,7 +439,7 @@ export function renderPipelineTable(state: PipelineTableState): string {
   const instance = new Ractive({
     template: divFragment('<div class="pscrollwrap">'),
     data: {
-      pipelineRows: stampWarnings(state.pipelineRows, state.rowWarning),
+      pipelineRows: stampRows(state.pipelineRows, state.rowWarning, state.workCardsByMc ?? {}),
       warnPop: state.warnPop ?? null,
       warnPopPos: state.warnPopPos ?? { left: 0, top: 0, up: false },
       expanded: state.expanded ?? {},

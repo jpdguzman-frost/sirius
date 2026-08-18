@@ -151,16 +151,18 @@ document.addEventListener('wheel', (e) => {
 function placeBox(rect, opts) {
   const up = rect.bottom + opts.h + opts.gap > window.innerHeight;
   /* `over`: the box is taller than the viewport can hold even at the clamp's
-     own margins (the two 4s below) — Miles's last-resort ruling (owl #43 item
-     D). `>=` and not `>`, deliberately: the scroll state CAPS the box at
-     exactly viewport-minus-margins, so a strict compare would read the capped
-     measurement as "fits now", drop the class, and oscillate. */
-  const over = opts.h + 8 >= window.innerHeight;
+     own margins — Miles's last-resort ruling (owl #43 item D). `>=` and not
+     `>`, deliberately: the scroll state CAPS the box at exactly
+     viewport-minus-both-margins, so a strict compare would read the capped
+     measurement as "fits now", drop the class, and oscillate. That arithmetic
+     only holds while this margin IS the clamp's margin, which is why both
+     read the one OVERLAY_EDGE. */
+  const over = opts.h + 2 * OVERLAY_EDGE >= window.innerHeight;
   let left = rect.left;
   let top = up ? rect.top - opts.h - opts.gap : rect.bottom + opts.gap;
   if (opts.clampW) {
-    left = Math.max(4, Math.min(left, window.innerWidth - opts.clampW - 4));
-    top = Math.max(4, Math.min(top, window.innerHeight - opts.h - 4));
+    left = Math.max(OVERLAY_EDGE, Math.min(left, window.innerWidth - opts.clampW - OVERLAY_EDGE));
+    top = Math.max(OVERLAY_EDGE, Math.min(top, window.innerHeight - opts.h - OVERLAY_EDGE));
   }
   /* `up` and `over` ride out with the coordinates because both are facts the
      MARKUP needs, not just the placer: the hover card's squared corner and its
@@ -204,8 +206,8 @@ function openOverlay(ctx, cardId, opts) {
 /* Two overlays have a DATA-derived height that no constant can state: the
    Requests select (1..N options, capped by CSS) and the warning popover (one
    list-item per missing field, each wrapping to as many lines as its rationale
-   needs — a three-problem card is ~346px against the 220 a one-problem card
-   measures). Their constants are therefore a pre-measure for the FIRST flip
+   needs — WARN_POP_H is the worst case, and a one-problem card measures far
+   under it). Their constants are therefore a pre-measure for the FIRST flip
    decision only; this places the box a SECOND time against what actually
    rendered. Without it a short select flips up to a spot 150px above its
    trigger, and a tall popover runs off the bottom of the viewport with its

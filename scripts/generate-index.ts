@@ -108,19 +108,33 @@ function withBlock(text: string, name: string, rel: string, lines: string[]): st
 
 // ---------- GEN:STATUS — facts parsed from STATE.md's own tables ----------
 
-function sectionOf(state: string, heading: string): string {
-  const at = state.indexOf(`## ${heading}`);
-  if (at === -1) {
-    console.error(`[generate-index] STATE.md lacks the "## ${heading}" section`);
-    process.exit(1);
-  }
-  const rest = state.slice(at + heading.length + 3);
+/**
+ * A `## `-delimited section's body, by exact heading — null when absent.
+ * EXPORTED because test/context-architecture.test.ts reads STATE.md with the
+ * same grammar: one parser, so the guard and the generator can never disagree
+ * about what a section is (test/CLAUDE.md rule 2 — derive, don't copy).
+ */
+export function sectionOf(state: string, heading: string): string | null {
+  const marker = `## ${heading}`;
+  const at = state.indexOf(marker);
+  if (at === -1) return null;
+  const rest = state.slice(at + marker.length);
   const next = rest.search(/\n## /);
   return next === -1 ? rest : rest.slice(0, next);
 }
 
-/** Markdown table → trimmed cell rows (header + separator dropped). */
-function tableRows(sectionText: string): string[][] {
+/** The generator's own callers treat a missing section as fatal. */
+function requireSection(state: string, heading: string): string {
+  const body = sectionOf(state, heading);
+  if (body === null) {
+    console.error(`[generate-index] STATE.md lacks the "## ${heading}" section`);
+    process.exit(1);
+  }
+  return body;
+}
+
+/** Markdown table → trimmed cell rows (header + separator dropped). Shared, as above. */
+export function tableRows(sectionText: string): string[][] {
   return sectionText
     .split('\n')
     .filter((line) => line.startsWith('|'))
@@ -130,13 +144,13 @@ function tableRows(sectionText: string): string[][] {
 
 function statusLines(state: string): string[] {
   const lines: string[] = [];
-  for (const row of tableRows(sectionOf(state, 'Phase status'))) {
+  for (const row of tableRows(requireSection(state, 'Phase status'))) {
     const [, num, phase, status] = row;
     if (num && phase && status && /in progress/i.test(status)) {
       lines.push(`- In progress: phase ${num} — ${phase} → STATE.md §Phase status · history: docs/history/state-log/`);
     }
   }
-  for (const row of tableRows(sectionOf(state, 'Decisions needed from JP (blocking)'))) {
+  for (const row of tableRows(requireSection(state, 'Decisions needed from JP (blocking)'))) {
     const [, id, decision, , status] = row;
     if (id && decision && status && !status.includes('✅')) {
       const head = decision.split(' — ')[0] ?? decision;
@@ -144,7 +158,7 @@ function statusLines(state: string): string[] {
       lines.push(`- Open blocking decision ${id}: ${short} → STATE.md §Decisions needed from JP (blocking)`);
     }
   }
-  const scoreboard = sectionOf(state, 'Acceptance criteria scoreboard');
+  const scoreboard = requireSection(state, 'Acceptance criteria scoreboard');
   const done = (scoreboard.match(/✅/g) ?? []).length;
   const open = (scoreboard.match(/⬜/g) ?? []).length;
   lines.push(`- ACs: ${done} ✅ · ${open} ⬜ (of ${done + open}) → STATE.md §Acceptance criteria scoreboard`);

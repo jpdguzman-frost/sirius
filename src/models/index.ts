@@ -195,9 +195,10 @@ const workCardSchema = new Schema(
     stage: String,
     figma_url: String,
     // W2 on task cards (JP 2026-08-18, contracts/trello-write.md §W2 scope
-    // clarification): same field pair as the deliverable, synced from ARES
-    // and written back through the same setDue().
-    trello_due: String,
+    // clarification): the same field pair as the deliverable, down to the
+    // DATE_ONLY recipe — the task half must reject the malformed date the
+    // deliverable half would.
+    trello_due: DATE_ONLY,
     trello_due_at: Date,
     work_started_at: Date,
     work_done_at: Date,

@@ -11,6 +11,29 @@
     <span class="ssmeta">{{syncStripLabel}}</span>
   </div>
 {{/partial}}
+{{! The due popover's CALENDAR — month nav, day-of-week strip, day grid,
+    shortcuts. One copy, used by BOTH due popovers (the deliverable row's and
+    the task row's, owl #45): everything here reads root state (dueMonth,
+    dueStaged, dowNames) and never row context, which is what makes the share
+    legal. Only the action footers differ per kind and they stay inline. }}
+{{#partial dueCalendar}}
+  <div class="duehead">
+    <button class="duenav prev" on-click="['dueNav', -1]" aria-label="Previous month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+    <span class="duemonth">{{dueMonthLabel(dueMonth)}}</span>
+    <button class="duenav" on-click="['dueNav', 1]" aria-label="Next month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+  </div>
+  <div class="duedow" aria-hidden="true">{{#each dowNames as d}}<span>{{d}}</span>{{/each}}</div>
+  <div class="duegrid">
+    {{#each dueGrid(dueMonth, dueStaged) as c}}
+      <button class="dueday {{#if c.out}}out{{/if}} {{#if c.today}}today{{/if}} {{#if c.on}}on{{/if}}" on-click="['duePick', c.iso]" aria-pressed="{{c.on ? 'true' : 'false'}}" aria-label="{{fmtLong(c.iso)}}">{{c.day}}</button>
+    {{/each}}
+  </div>
+  <div class="dueshort">
+    <button on-click="['dueShortcut', 'today']">Today</button>
+    <button on-click="['dueShortcut', 'week']">In 1 Week</button>
+    <button on-click="['dueShortcut', 'monday']">Next Monday</button>
+  </div>
+{{/partial}}
 <header class="shellnav">
   <div class="shellrow">
     <nav class="crumbs" aria-label="Breadcrumb">
@@ -252,9 +275,10 @@
               <!-- owl #45 (answered in jp→miles #40): a childless MC gets NO
                    expand affordance — expanding it showed nothing at all, an
                    affordance that lies. The spacer keeps the MC# column
-                   aligned; the count comes from the map the client already
-                   holds, so no wire change. -->
-              {{#if (workCardsByMc[row.mcNumber] || []).length}}
+                   aligned. `hasTasks` is stamped in loadAll beside blob and
+                   warning (performance law: derived per-row data is never
+                   asked in the template), so no wire change either. -->
+              {{#if row.hasTasks}}
                 <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{row.displayId}} work cards" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
               {{else}}
                 <span class="chevgap" aria-hidden="true"></span>
@@ -365,22 +389,7 @@
                 </button>
                 {{#if duePopover === row.cardId}}
                   <div class="duepop" role="dialog" aria-label="Due date" style="left:{{duePopPos.left}}px;top:{{duePopPos.top}}px;">
-                    <div class="duehead">
-                      <button class="duenav prev" on-click="['dueNav', -1]" aria-label="Previous month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
-                      <span class="duemonth">{{dueMonthLabel(dueMonth)}}</span>
-                      <button class="duenav" on-click="['dueNav', 1]" aria-label="Next month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
-                    </div>
-                    <div class="duedow" aria-hidden="true">{{#each dowNames as d}}<span>{{d}}</span>{{/each}}</div>
-                    <div class="duegrid">
-                      {{#each dueGrid(dueMonth, dueStaged) as c}}
-                        <button class="dueday {{#if c.out}}out{{/if}} {{#if c.today}}today{{/if}} {{#if c.on}}on{{/if}}" on-click="['duePick', c.iso]" aria-pressed="{{c.on ? 'true' : 'false'}}" aria-label="{{fmtLong(c.iso)}}">{{c.day}}</button>
-                      {{/each}}
-                    </div>
-                    <div class="dueshort">
-                      <button on-click="['dueShortcut', 'today']">Today</button>
-                      <button on-click="['dueShortcut', 'week']">In 1 Week</button>
-                      <button on-click="['dueShortcut', 'monday']">Next Monday</button>
-                    </div>
+                    {{>dueCalendar}}
                     <div class="dueact">
                       <button class="dueclear" disabled="{{!row.trelloDue}}" on-click="['dueClear', row.cardId]" title="{{row.trelloDue ? 'Clear the Trello due date — the sheet deadline (if any) takes over' : (row.deadline ? 'This date comes from the intake sheet — Sirius cannot clear it' : 'No due date to clear')}}">Clear Due Date</button>
                       <button class="dueapply" on-click="['dueApply', row.cardId]">Apply</button>
@@ -428,36 +437,24 @@
                          contracts/trello-write.md §W2). A task has no sheet
                          fallback, so `w.due` plays both the display and the
                          Clear-eligibility role the parent splits across
-                         deadline/trelloDue. Duplicated markup, one CSS recipe
-                         and one handler set — the popover state keys are
-                         global, so only one calendar is ever rendered. -->
+                         deadline/trelloDue. The calendar is the shared
+                         dueCalendar partial; only this footer and the trigger
+                         are kind-specific — and the 'task' argument on all
+                         three handlers is the template SAYING the kind it
+                         knows by construction, so the client never re-derives
+                         it from set-membership. -->
                     <button class="datefield {{#if !w.due}}missing{{/if}} {{#if savingDeadline[w.cardId]}}saving{{/if}}"
                       disabled="{{savingDeadline[w.cardId]}}"
-                      on-click="['openDuePopover', w.cardId]" aria-haspopup="dialog" aria-expanded="{{duePopover === w.cardId ? 'true' : 'false'}}"
+                      on-click="['openDuePopover', w.cardId, 'task']" aria-haspopup="dialog" aria-expanded="{{duePopover === w.cardId ? 'true' : 'false'}}"
                       title="{{w.due ? 'Task due date' : 'No due date'}} — Apply writes the Trello due date (write registry W2, task-card scope)">
                       <span class="dpdate">{{#if savingDeadline[w.cardId]}}saving…{{elseif w.due}}{{fmtLong(w.due)}}{{else}}Select Date{{/if}}</span><svg class="i16"><use href="#i-calendar" /></svg>
                     </button>
                     {{#if duePopover === w.cardId}}
                       <div class="duepop" role="dialog" aria-label="Due date" style="left:{{duePopPos.left}}px;top:{{duePopPos.top}}px;">
-                        <div class="duehead">
-                          <button class="duenav prev" on-click="['dueNav', -1]" aria-label="Previous month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
-                          <span class="duemonth">{{dueMonthLabel(dueMonth)}}</span>
-                          <button class="duenav" on-click="['dueNav', 1]" aria-label="Next month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
-                        </div>
-                        <div class="duedow" aria-hidden="true">{{#each dowNames as d}}<span>{{d}}</span>{{/each}}</div>
-                        <div class="duegrid">
-                          {{#each dueGrid(dueMonth, dueStaged) as c}}
-                            <button class="dueday {{#if c.out}}out{{/if}} {{#if c.today}}today{{/if}} {{#if c.on}}on{{/if}}" on-click="['duePick', c.iso]" aria-pressed="{{c.on ? 'true' : 'false'}}" aria-label="{{fmtLong(c.iso)}}">{{c.day}}</button>
-                          {{/each}}
-                        </div>
-                        <div class="dueshort">
-                          <button on-click="['dueShortcut', 'today']">Today</button>
-                          <button on-click="['dueShortcut', 'week']">In 1 Week</button>
-                          <button on-click="['dueShortcut', 'monday']">Next Monday</button>
-                        </div>
+                        {{>dueCalendar}}
                         <div class="dueact">
-                          <button class="dueclear" disabled="{{!w.due}}" on-click="['dueClear', w.cardId]" title="{{w.due ? 'Clear the Trello due date' : 'No due date to clear'}}">Clear Due Date</button>
-                          <button class="dueapply" on-click="['dueApply', w.cardId]">Apply</button>
+                          <button class="dueclear" disabled="{{!w.due}}" on-click="['dueClear', w.cardId, 'task']" title="{{w.due ? 'Clear the Trello due date' : 'No due date to clear'}}">Clear Due Date</button>
+                          <button class="dueapply" on-click="['dueApply', w.cardId, 'task']">Apply</button>
                         </div>
                       </div>
                     {{/if}}

@@ -28,7 +28,7 @@ import { describe, expect, it } from 'vitest';
 // the glob or the prefix rule — makes drift between the generator and this
 // guard impossible: one definition of "source file in scope", one definition
 // of "which map a file belongs to".
-import { AREAS, areaMapPath, areaOf, sourceFiles } from '../scripts/generate-index.ts';
+import { AREAS, areaMapPath, areaOf, sectionOf as parseSection, sourceFiles, tableRows as parseTableRows } from '../scripts/generate-index.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string): string => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -180,22 +180,19 @@ describe('docs/MAP.md — Test guards section', () => {
 describe('STATE.md — Layer-1 rot protection', () => {
   const state = (): string => read('STATE.md');
 
-  /** A `## `-delimited section's body, by exact heading. */
+  /* The section/table grammar is IMPORTED from the generator, not restated:
+     the whole point of this describe is agreeing with what the map generator
+     reads out of STATE.md, and one parser cannot disagree with itself
+     (test/CLAUDE.md rule 2 — derive, don't copy). */
   const sectionOf = (heading: string): string => {
-    const text = state();
-    const at = text.indexOf(`## ${heading}`);
-    expect(at, `STATE.md lacks the "## ${heading}" section`).toBeGreaterThan(-1);
-    const rest = text.slice(at + heading.length + 3);
-    const next = rest.search(/\n## /);
-    return next === -1 ? rest : rest.slice(0, next);
+    const body = parseSection(state(), heading);
+    expect(body, `STATE.md lacks the "## ${heading}" section`).not.toBeNull();
+    return body!;
   };
 
-  /** Body rows of the section's markdown table (header + separator dropped). */
+  /** Body rows of the section's markdown table, re-joined per row for text asserts. */
   const tableRows = (heading: string): string[] =>
-    sectionOf(heading)
-      .split('\n')
-      .filter((line) => line.startsWith('|'))
-      .slice(2);
+    parseTableRows(sectionOf(heading)).map((cells) => cells.join('|'));
 
   it('stays at or under 10KB', () => {
     // Was 25KB and 89% full on 2026-08-18. The cap is the backstop; the
