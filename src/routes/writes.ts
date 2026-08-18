@@ -15,7 +15,7 @@ import type { Types } from 'mongoose';
 import { ensureAuthenticated, type SessionUser } from '../auth/session.ts';
 import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
-import { Deliverable, SyncRun } from '../models/index.ts';
+import { Deliverable, SyncRun, WorkCard } from '../models/index.ts';
 import { composeDueIso, type TrelloWriter } from '../../lib/trello.ts';
 import type { Env } from '../config/env.ts';
 
@@ -24,16 +24,23 @@ interface WriteContext {
   boardId: string;
   cardId: string;
   actor: string;
-  doc: InstanceType<typeof Deliverable>;
+  doc: InstanceType<typeof Deliverable> | InstanceType<typeof WorkCard>;
   trello: TrelloWriter;
 }
 
-/** Guards shared by every registry write; responds and returns null on refusal. */
+/**
+ * Guards shared by every registry write; responds and returns null on refusal.
+ * `kind` widens the lookup to task cards for W2's task-card scope (JP
+ * 2026-08-18, contracts/trello-write.md §W2 scope clarification) — every
+ * refusal guard is identical for both kinds, which is the point of the ONE
+ * door (src/CLAUDE.md rule 3).
+ */
 async function writeGuards(
   env: Env,
   trello: TrelloWriter | null,
   req: Request,
   res: Response,
+  kind: 'deliverable' | 'work_card' = 'deliverable',
 ): Promise<WriteContext | null> {
   const projectId = res.locals.project._id as Types.ObjectId;
   const boardId = res.locals.project.trello_board_id as string;
@@ -61,7 +68,10 @@ async function writeGuards(
     return null;
   }
 
-  const doc = await Deliverable.findOne({ project_id: projectId, trello_card_id: cardId });
+  const doc =
+    kind === 'work_card'
+      ? await WorkCard.findOne({ project_id: projectId, trello_card_id: cardId })
+      : await Deliverable.findOne({ project_id: projectId, trello_card_id: cardId });
   if (!doc) {
     res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
     return null;
@@ -94,12 +104,14 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       const ctx = await writeGuards(env, trello, req, res);
       if (!ctx) return;
 
-      const before = ctx.doc.urgency;
+      // default-kind guards always return a deliverable; urgency exists nowhere else
+      const doc = ctx.doc as InstanceType<typeof Deliverable>;
+      const before = doc.urgency;
       const after = body.data.urgent ? 'Urgent' : 'Non-Urgent';
       try {
         await ctx.trello.setUrgency(ctx.cardId, ctx.boardId, body.data.urgent);
-        ctx.doc.urgency = after;
-        await ctx.doc.save();
+        doc.urgency = after;
+        await doc.save();
         await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'urgency.set', entity: 'deliverable', entity_id: ctx.cardId, before: { urgency: before }, after: { urgency: after } });
         await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, urgent: body.data.urgent } });
         res.json({ ok: true, urgency: after });
@@ -115,11 +127,13 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
 
   // W2 — due date (FR-9.1): date set or cleared; 17:00 Manila default,
   // existing time-of-day preserved (contracts/trello-write.md W2 semantics).
-  router.patch(
-    '/api/projects/:projectId/deliverables/:cardId/deadline',
-    ensureAuthenticated,
-    ensureProjectMember,
-    async (req, res) => {
+  // ONE handler for both card kinds — the deliverable row and, since JP's
+  // 2026-08-18 scope clarification, the task cards its expanded MC group
+  // reveals (owl #45). Same field, same setDue(), same guards; only the
+  // looked-up collection and the audit entity differ. Task-card dues play no
+  // part in deadline precedence or forecasting.
+  const dueHandler = (kind: 'deliverable' | 'work_card') =>
+    async (req: Request, res: Response) => {
       const body = z
         .object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() })
         .strict()
@@ -128,10 +142,12 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
       }
-      const ctx = await writeGuards(env, trello, req, res);
+      const ctx = await writeGuards(env, trello, req, res, kind);
       if (!ctx) return;
 
-      const before = ctx.doc.trello_due ?? null;
+      // both schemas carry the same W2 field pair — the only fields this touches
+      const doc = ctx.doc as { trello_due?: string | null; trello_due_at?: Date | null; save(): Promise<unknown> };
+      const before = doc.trello_due ?? null;
       const after = body.data.date;
       if (before === after) {
         // no-op guard: no Trello call, no audit row
@@ -139,22 +155,34 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         return;
       }
 
-      const dueIso = after === null ? null : composeDueIso(after, ctx.doc.trello_due_at ?? null);
+      const dueIso = after === null ? null : composeDueIso(after, doc.trello_due_at ?? null);
       try {
         await ctx.trello.setDue(ctx.cardId, dueIso);
-        ctx.doc.trello_due = after;
-        ctx.doc.trello_due_at = dueIso ? new Date(dueIso) : null;
-        await ctx.doc.save();
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'due.set', entity: 'deliverable', entity_id: ctx.cardId, before: { trello_due: before }, after: { trello_due: after } });
+        doc.trello_due = after;
+        doc.trello_due_at = dueIso ? new Date(dueIso) : null;
+        await doc.save();
+        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'due.set', entity: kind, entity_id: ctx.cardId, before: { trello_due: before }, after: { trello_due: after } });
         await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, due: after } });
         res.json({ ok: true, trello_due: after });
       } catch (err) {
         const message = (err as Error).message;
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'due.set_failed', entity: 'deliverable', entity_id: ctx.cardId, before: { trello_due: before }, after: { attempted: after, error: message } });
+        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'due.set_failed', entity: kind, entity_id: ctx.cardId, before: { trello_due: before }, after: { attempted: after, error: message } });
         await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, due: after } });
         res.status(502).json({ ok: false, error: { code: 'TRELLO_WRITE_FAILED', message } });
       }
-    },
+    };
+
+  router.patch(
+    '/api/projects/:projectId/deliverables/:cardId/deadline',
+    ensureAuthenticated,
+    ensureProjectMember,
+    dueHandler('deliverable'),
+  );
+  router.patch(
+    '/api/projects/:projectId/workcards/:cardId/deadline',
+    ensureAuthenticated,
+    ensureProjectMember,
+    dueHandler('work_card'),
   );
 
   // W3 — difficulty label swap (BRD-§9-A1, approved 2026-08-12): the
@@ -172,7 +200,9 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       const ctx = await writeGuards(env, trello, req, res);
       if (!ctx) return;
 
-      const before = ctx.doc.difficulty ?? null;
+      // default-kind guards always return a deliverable (W3's surface today)
+      const doc = ctx.doc as InstanceType<typeof Deliverable>;
+      const before = doc.difficulty ?? null;
       const after = body.data.difficulty;
       if (before === after) {
         // no-op guard: no Trello call, no audit row
@@ -182,8 +212,8 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
 
       try {
         await ctx.trello.setDifficulty(ctx.cardId, ctx.boardId, after);
-        ctx.doc.difficulty = after;
-        await ctx.doc.save();
+        doc.difficulty = after;
+        await doc.save();
         await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'difficulty.set', entity: 'deliverable', entity_id: ctx.cardId, before: { difficulty: before }, after: { difficulty: after } });
         await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, difficulty: after } });
         res.json({ ok: true, difficulty: after });

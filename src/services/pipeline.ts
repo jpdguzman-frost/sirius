@@ -117,7 +117,7 @@ export interface PipelineRow {
 
 export interface PipelineResult {
   rows: PipelineRow[];
-  workCardsByMc: Record<string, Array<{ cardId: string; name: string; taskPrefix: string | null; currentList: string | null; status: string; trelloUrl: string | null; figmaUrl: string | null }>>;
+  workCardsByMc: Record<string, Array<{ cardId: string; name: string; taskPrefix: string | null; currentList: string | null; status: string; trelloUrl: string | null; figmaUrl: string | null; due: string | null; dueAt: string | null; started: string | null; startedTs: string | null; done: string | null; doneTs: string | null }>>;
   corrections: Array<{ cardId: string; displayId: string; name: string; missing: string[]; trelloUrl: string | null }>;
   model: { provenance: unknown };
   /**
@@ -156,6 +156,16 @@ export async function loadPipeline(
       status: classifyList(w.current_list),
       trelloUrl: w.trello_url ?? null,
       figmaUrl: w.figma_url ?? null,
+      // expanded MC row (owl #45): the child row shows Due (W2-writable,
+      // task-card scope — contracts/trello-write.md), Started and Done. Task
+      // dues play NO part in deadline precedence or forecasting — those stay
+      // deliverable-only, which is why this is a plain field, not a resolver.
+      due: (w.trello_due as string | null) ?? null,
+      dueAt: w.trello_due_at ? (w.trello_due_at as Date).toISOString() : null,
+      started: w.work_started_at ? manilaDate(w.work_started_at as Date) : null,
+      startedTs: w.work_started_at ? (w.work_started_at as Date).toISOString() : null,
+      done: w.work_done_at ? manilaDate(w.work_done_at as Date) : null,
+      doneTs: w.work_done_at ? (w.work_done_at as Date).toISOString() : null,
     });
   }
 

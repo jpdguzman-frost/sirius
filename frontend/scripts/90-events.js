@@ -46,6 +46,11 @@ async function resetForProjectSwitch() {
     noteError: '',
     suggest: null,
     collapsedBlocks: {},
+    // owl #45 recon finding: `expanded` is keyed on mc_number, which repeats
+    // ACROSS projects (invariant 3) — carried over, project A's expanded
+    // MC-655 arrived pre-expanded in project B. Per-project view state, so it
+    // resets with the rest.
+    expanded: {},
   });
   await loadAll();
 }
@@ -298,8 +303,10 @@ app.on({
      and remembers it as dueBaseline, so Apply on an untouched popover writes
      nothing — including the case where the shown date came from the sheet. */
   openDuePopover(ctx, cardId) {
-    const row = app.get('rows').find((r) => r.cardId === cardId);
-    const current = (row && row.deadline) || null;
+    // a cardId `rows` does not know is an expanded MC's task card (owl #45);
+    // a task's shown date IS its Trello due — no sheet, no precedence
+    const row = app.get('rows').find((r) => r.cardId === cardId) || findWorkCard(cardId)?.card;
+    const current = (row && (row.deadline ?? row.due)) || null;
     openOverlay(ctx, cardId, {
       key: 'duePopover', posKey: 'duePopPos', saving: 'savingDeadline',
       h: DUE_POP_H, gap: 4, clampW: DUE_POP_W, // clamped both ways — the box stays fully on screen

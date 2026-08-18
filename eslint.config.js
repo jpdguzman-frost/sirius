@@ -16,7 +16,7 @@ const FRONTEND_SHARED = [
   // 2026-08-18): everything below is defined in one of those pieces and read
   // in a later one. Same shared-<script> scope as above.
   'app', 'blobRequests', 'CAP_MAX_FALLBACK', 'CAP_MIN_FALLBACK', 'capacityBand', 'clarified',
-  'closeMenus', 'computeDeadlines', 'DUE_POP_H', 'DUE_POP_W', 'errText', 'flashBanner',
+  'closeMenus', 'computeDeadlines', 'DUE_POP_H', 'DUE_POP_W', 'errText', 'findWorkCard', 'flashBanner',
   'fmtInstant', 'fmtLongIso', 'fmtMonthDay', 'fmtRange', 'fridayIso', 'HARD_CEILING',
   'HARD_IDEAL', 'initialRoute', 'isoAddDays', 'isoNextMonday', 'isoOf', 'itemCount',
   'loadAdmin', 'loadAll', 'loadShell', 'MANILA_TIME', 'manilaToday', 'mcRank',

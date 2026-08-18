@@ -366,6 +366,31 @@ export interface PipelineTableState {
   warnPopPos?: { left: number; top: number; up?: boolean; over?: boolean };
   /** the SHIPPED recipe, executed out of the app scripts — never a stub */
   rowWarning: (row: PipeRow) => unknown;
+  /** expanded MC groups (owl #45): mcNumber → true renders that group's task rows */
+  expanded?: Record<string, boolean>;
+  /** the wire's task-card map, as src/services/pipeline.ts shapes it */
+  workCardsByMc?: Record<string, WorkCardRow[]>;
+  /** false takes the read-only due branch on task rows too */
+  writesEnabled?: boolean;
+  /** cardId whose due popover is open (parent or task — one global key) */
+  duePopover?: string | null;
+}
+
+/** A task card as `src/services/pipeline.ts` puts it on the wire (owl #45). */
+export interface WorkCardRow {
+  cardId: string;
+  name: string;
+  taskPrefix?: string | null;
+  currentList?: string | null;
+  status?: string;
+  trelloUrl?: string | null;
+  figmaUrl?: string | null;
+  due?: string | null;
+  dueAt?: string | null;
+  started?: string | null;
+  startedTs?: string | null;
+  done?: string | null;
+  doneTs?: string | null;
 }
 
 /**
@@ -394,15 +419,15 @@ export function renderPipelineTable(state: PipelineTableState): string {
       pipelineRows: stampWarnings(state.pipelineRows, state.rowWarning),
       warnPop: state.warnPop ?? null,
       warnPopPos: state.warnPopPos ?? { left: 0, top: 0, up: false },
-      expanded: {},
-      workCardsByMc: {},
-      writesEnabled: false,
+      expanded: state.expanded ?? {},
+      workCardsByMc: state.workCardsByMc ?? {},
+      writesEnabled: state.writesEnabled ?? false,
       savingUrgency: {},
       savingDifficulty: {},
       savingDeadline: {},
       urgencyMenu: null,
       diffMenu: null,
-      duePopover: null,
+      duePopover: state.duePopover ?? null,
       urgencyMenuPos: { left: 0, top: 0 },
       diffMenuPos: { left: 0, top: 0 },
       pipeThumb: { needed: false },
@@ -412,6 +437,15 @@ export function renderPipelineTable(state: PipelineTableState): string {
       hl: (s: unknown) => String(s ?? ''),
       fmtLong: (s: unknown) => String(s ?? ''),
       fmtInstant: () => '',
+      // the due popover's calendar internals are another suite's business —
+      // an empty grid renders the popover SHELL (head, shortcuts, Clear,
+      // Apply), which is all the structural assertions here read
+      dueGrid: () => [],
+      dueMonthLabel: () => '',
+      dueMonth: '',
+      dueStaged: null,
+      dowNames: [],
+      duePopPos: { left: 0, top: 0 },
     },
   });
   return instance.toHTML();

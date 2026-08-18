@@ -249,7 +249,16 @@
                ICON in col-mc is the trigger — col-name carries nothing. -->
           <tr class="prow {{#if row.blocker}}blocked{{/if}} {{#if row.warning}}warn{{/if}}" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
             <td class="col-mc"><div class="mccell">
-              <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{row.displayId}} work cards" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+              <!-- owl #45 (answered in jp→miles #40): a childless MC gets NO
+                   expand affordance — expanding it showed nothing at all, an
+                   affordance that lies. The spacer keeps the MC# column
+                   aligned; the count comes from the map the client already
+                   holds, so no wire change. -->
+              {{#if (workCardsByMc[row.mcNumber] || []).length}}
+                <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{row.displayId}} work cards" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+              {{else}}
+                <span class="chevgap" aria-hidden="true"></span>
+              {{/if}}
               <div class="mcid">
                 <span class="mcnum">{{{hl(row.mcLabel)}}}</span>
                 <!-- owl #41: the warning is a 14px ICON here, not a message
@@ -305,7 +314,13 @@
                 {{/if}}
               </div>
             </div></td>
-            <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}</td>
+            <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}
+              <!-- owl #45: the SubTone reads 'Main Card' UNDER the name — the
+                   frame specs the EXPANDED state, so it renders only there,
+                   where parent-vs-children is the distinction it teaches; the
+                   collapsed table is not this spec's to change. Flagged to
+                   Miles as a default taken, not a ruling. -->
+              {{#if expanded[row.mcNumber]}}<span class="subtone">Main Card</span>{{/if}}</td>
             <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{{hl(row.assetType)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-diff"><div class="ubadge-wrap">
               <button class="pbadge ubadge {{#if row.difficulty}}d-{{row.difficulty}}{{else}}unset{{/if}} {{#if savingDifficulty[row.cardId]}}saving{{/if}}"
@@ -387,12 +402,77 @@
           </tr>
           {{#if expanded[row.mcNumber]}}
             {{#each workCardsByMc[row.mcNumber] as w}}
+              <!-- owl #45, node 520:54192 — the expanded MC's task cards.
+                   One <tr> in the SAME table: parent and child share one
+                   column model by construction (promised in jp→miles #40),
+                   so nothing can drift when the table scrolls. The nesting
+                   cues are the tint (children slate-50, parent white — the
+                   inversion the annotation warns about), the EMPTY first
+                   cell (the MC# is not repeated: that is the indent), and
+                   the child cells' stronger bottom border. Type, difficulty,
+                   urgency and requestor cells render EMPTY on purpose — they
+                   are MC-level attributes, and repeating them per task would
+                   imply a task can diverge from its MC (Miles, owl #45). -->
               <tr class="ptask">
-                <td class="dimcell">task</td>
-                <td colspan="4">{{w.name}}</td>
-                <td><span class="pbadge s-{{w.status}}">{{w.currentList || w.status}}</span></td>
-                <td colspan="4" class="dimcell"></td>
-                <td>{{#if w.trelloUrl}}<a class="srclink" href="{{w.trelloUrl}}" target="_blank" aria-label="Open task in Trello"><svg class="i18"><use href="#i-trello" /></svg></a>{{/if}}</td>
+                <td class="col-mc"></td>
+                <td class="col-name"><span class="cardname">{{w.name}}</span></td>
+                <td class="col-type"></td>
+                <td class="col-diff"></td>
+                <td class="col-urgency"></td>
+                <td class="col-status">{{#if w.currentList}}<span class="pbadge s-{{w.status}}">{{w.currentList}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+                <td class="col-client"></td>
+                <td class="col-due"><div class="duewrap">
+                  {{#if writesEnabled}}
+                    <!-- the SAME W2 popover recipe as the parent row, bound to
+                         the task card (scope ruled by JP 2026-08-18 —
+                         contracts/trello-write.md §W2). A task has no sheet
+                         fallback, so `w.due` plays both the display and the
+                         Clear-eligibility role the parent splits across
+                         deadline/trelloDue. Duplicated markup, one CSS recipe
+                         and one handler set — the popover state keys are
+                         global, so only one calendar is ever rendered. -->
+                    <button class="datefield {{#if !w.due}}missing{{/if}} {{#if savingDeadline[w.cardId]}}saving{{/if}}"
+                      disabled="{{savingDeadline[w.cardId]}}"
+                      on-click="['openDuePopover', w.cardId]" aria-haspopup="dialog" aria-expanded="{{duePopover === w.cardId ? 'true' : 'false'}}"
+                      title="{{w.due ? 'Task due date' : 'No due date'}} — Apply writes the Trello due date (write registry W2, task-card scope)">
+                      <span class="dpdate">{{#if savingDeadline[w.cardId]}}saving…{{elseif w.due}}{{fmtLong(w.due)}}{{else}}Select Date{{/if}}</span><svg class="i16"><use href="#i-calendar" /></svg>
+                    </button>
+                    {{#if duePopover === w.cardId}}
+                      <div class="duepop" role="dialog" aria-label="Due date" style="left:{{duePopPos.left}}px;top:{{duePopPos.top}}px;">
+                        <div class="duehead">
+                          <button class="duenav prev" on-click="['dueNav', -1]" aria-label="Previous month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+                          <span class="duemonth">{{dueMonthLabel(dueMonth)}}</span>
+                          <button class="duenav" on-click="['dueNav', 1]" aria-label="Next month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+                        </div>
+                        <div class="duedow" aria-hidden="true">{{#each dowNames as d}}<span>{{d}}</span>{{/each}}</div>
+                        <div class="duegrid">
+                          {{#each dueGrid(dueMonth, dueStaged) as c}}
+                            <button class="dueday {{#if c.out}}out{{/if}} {{#if c.today}}today{{/if}} {{#if c.on}}on{{/if}}" on-click="['duePick', c.iso]" aria-pressed="{{c.on ? 'true' : 'false'}}" aria-label="{{fmtLong(c.iso)}}">{{c.day}}</button>
+                          {{/each}}
+                        </div>
+                        <div class="dueshort">
+                          <button on-click="['dueShortcut', 'today']">Today</button>
+                          <button on-click="['dueShortcut', 'week']">In 1 Week</button>
+                          <button on-click="['dueShortcut', 'monday']">Next Monday</button>
+                        </div>
+                        <div class="dueact">
+                          <button class="dueclear" disabled="{{!w.due}}" on-click="['dueClear', w.cardId]" title="{{w.due ? 'Clear the Trello due date' : 'No due date to clear'}}">Clear Due Date</button>
+                          <button class="dueapply" on-click="['dueApply', w.cardId]">Apply</button>
+                        </div>
+                      </div>
+                    {{/if}}
+                  {{else}}
+                    <span class="datefield readonly {{#if !w.due}}missing{{/if}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{w.due ? fmtLong(w.due) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
+                  {{/if}}
+                </div></td>
+                <td class="col-started">{{#if w.started}}<span class="plaincell nowrap" title="{{fmtInstant(w.started, w.startedTs)}}">{{fmtLong(w.started)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+                <td class="col-done">{{#if w.done}}<span class="plaincell nowrap" title="{{fmtInstant(w.done, w.doneTs)}}">{{fmtLong(w.done)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+                <td class="col-links">
+                  {{#if w.trelloUrl}}<a class="srclink" href="{{w.trelloUrl}}" target="_blank" aria-label="Open this task in Trello"><svg class="i18"><use href="#i-trello" /></svg></a>
+                  {{else}}<span class="srclink off" aria-disabled="true"><svg class="i18"><use href="#i-trello" /></svg></span>{{/if}}
+                  {{#if w.figmaUrl}}<a class="srclink" href="{{w.figmaUrl}}" target="_blank" aria-label="Open this task in Figma"><svg class="i18"><use href="#i-figma" /></svg></a>
+                  {{else}}<span class="srclink off" aria-disabled="true"><svg class="i18"><use href="#i-figma" /></svg></span>{{/if}}
+                </td>
               </tr>
             {{/each}}
           {{/if}}

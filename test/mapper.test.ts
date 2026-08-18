@@ -73,6 +73,20 @@ describe('taxonomy (BRD §5)', () => {
     expect(d.trello_due).toBe('2026-08-21');
   });
 
+  it('carries a WORK card due as the same date-only + instant pair (owl #45, W2 task-card scope)', () => {
+    const r = mapTrello(
+      [card('Render Asset: MC-2 exports', [], { due: '2026-08-21T09:00:00.000Z' })],
+      null,
+    );
+    const w = r.workCards[0]!;
+    expect(w.trello_due).toBe('2026-08-21');
+    expect(w.trello_due_at).toBe('2026-08-21T09:00:00.000Z');
+    // and absent stays absent, not an invented default
+    const none = mapTrello([card('Render Asset: MC-3 exports', [])], null);
+    expect(none.workCards[0]?.trello_due).toBeNull();
+    expect(none.workCards[0]?.trello_due_at).toBeNull();
+  });
+
   it('mcNumberOf tolerates MC-57, MC 57 and mc-57 forms', () => {
     expect(mcNumberOf('MC-57 / thing')).toBe('MC-57');
     expect(mcNumberOf('MC 57 thing')).toBe('MC-57');

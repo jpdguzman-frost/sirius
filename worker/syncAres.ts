@@ -87,6 +87,10 @@ export async function upsertWorkCard(projectId: Types.ObjectId, w: MappedWorkCar
         current_list: w.current_list,
         figma_url: w.figma_url ?? null,
         trello_url: w.trello_url ?? null,
+        // W2 task-card scope (2026-08-18): Trello-owned, so a manual change in
+        // Trello — and every Sirius write's echo — reconciles here (invariant 8)
+        trello_due: w.trello_due,
+        trello_due_at: w.trello_due_at ? new Date(w.trello_due_at) : null,
         active: w.active,
       },
       $setOnInsert: { project_id: projectId },

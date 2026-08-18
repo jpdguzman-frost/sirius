@@ -47,6 +47,9 @@ export interface MappedWorkCard {
   difficulty?: string;
   current_list: string | null;
   figma_url?: string;
+  /** W2 on task cards (2026-08-18): same date-only + instant pair as the deliverable */
+  trello_due: string | null;
+  trello_due_at: string | null;
   active: boolean;
 }
 
@@ -139,6 +142,8 @@ export function mapTrello(cards: AresCard[], projectLabel: string | null): MapRe
         difficulty: difficultyOf(labels),
         current_list: card.currentList,
         figma_url: figmaOf(card),
+        trello_due: dateOnly(card.due),
+        trello_due_at: card.due ?? null,
         active,
       });
     }

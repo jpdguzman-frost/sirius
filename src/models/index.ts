@@ -194,6 +194,11 @@ const workCardSchema = new Schema(
     current_list: String,
     stage: String,
     figma_url: String,
+    // W2 on task cards (JP 2026-08-18, contracts/trello-write.md §W2 scope
+    // clarification): same field pair as the deliverable, synced from ARES
+    // and written back through the same setDue().
+    trello_due: String,
+    trello_due_at: Date,
     work_started_at: Date,
     work_done_at: Date,
     active: { type: Boolean, required: true, default: true },

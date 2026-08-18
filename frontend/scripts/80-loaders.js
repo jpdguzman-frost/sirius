@@ -96,15 +96,32 @@ app.set('dueMonthLabel', (month) => {
   return `${MONTHS_LONG[m - 1]} ${y}`;
 });
 
+/* An expanded MC's task card, found by its Trello card id — the id space is
+   shared with deliverables (both are Trello cards), so a miss in `rows` plus
+   a hit here is what routes a due write to the task-card half of W2 (owl #45;
+   contracts/trello-write.md §W2 scope). Returns the Ractive keypath alongside
+   the card so callers can write optimistically to the one entry. */
+function findWorkCard(cardId) {
+  const byMc = app.get('workCardsByMc') || {};
+  for (const mc of Object.keys(byMc)) {
+    const i = byMc[mc].findIndex((w) => w.cardId === cardId);
+    if (i >= 0) return { card: byMc[mc][i], keypath: `workCardsByMc.${mc}.${i}` };
+  }
+  return null;
+}
+
 /* W2 deadline write (FR-9.1): optimistic with revert, same pattern as urgency
    and difficulty; Trello is written first server-side, so a failure reverts
    here. The no-op guard compares against trelloDue because W2 owns only the
    TRELLO due date — a sheet-sourced deadline is not Sirius's to clear, which
    is why the popover disables Clear on those rows. The cell shows 'saving…'
-   meanwhile, so no unconfirmed date is ever on screen (invariant 8). */
+   meanwhile, so no unconfirmed date is ever on screen (invariant 8).
+   A cardId that is not a deliverable is an expanded MC's task card (owl #45):
+   same optimistic shape against the task's own endpoint — a task due has no
+   sheet fallback and no precedence, so its display field IS its Trello field. */
 async function writeDeadline(cardId, value) {
   const row = app.get('rows').find((r) => r.cardId === cardId);
-  if (!row) return;
+  if (!row) return writeTaskDue(cardId, value);
   if ((value || null) === (row.trelloDue || null)) return; // no-op guard — no call, no audit
   const prev = { deadline: row.deadline, deadlineSource: row.deadlineSource, trelloDue: row.trelloDue };
   patchRow(cardId, { deadline: value, deadlineSource: value ? 'trello' : null, trelloDue: value });
@@ -114,6 +131,24 @@ async function writeDeadline(cardId, value) {
     await loadAll(); // precedence may fall back to the sheet deadline (BR-9)
   } catch (err) {
     patchRow(cardId, prev);
+    flashBanner(`Deadline write failed — reverted. ${errText(err)}`);
+  } finally {
+    app.set(`savingDeadline.${cardId}`, false);
+  }
+}
+
+async function writeTaskDue(cardId, value) {
+  const found = findWorkCard(cardId);
+  if (!found) return;
+  if ((value || null) === (found.card.due || null)) return; // no-op guard — no call, no audit
+  const prev = found.card.due || null;
+  app.set(`${found.keypath}.due`, value);
+  app.set(`savingDeadline.${cardId}`, true);
+  try {
+    await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/workcards/${cardId}/deadline`, { date: value });
+    await loadAll(); // the echo path reconciles dueAt and anything a sync moved meanwhile
+  } catch (err) {
+    app.set(`${found.keypath}.due`, prev);
     flashBanner(`Deadline write failed — reverted. ${errText(err)}`);
   } finally {
     app.set(`savingDeadline.${cardId}`, false);

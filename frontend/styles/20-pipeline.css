@@ -122,7 +122,18 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .ptable td { padding: 16px; border-bottom: 1px solid var(--slate-100); vertical-align: top; }
 .ptable tr.prow:focus { outline: 2px solid var(--blue-500); outline-offset: -2px; }
 .ptable tr.blocked td { background: var(--red-50); } /* visible at every scroll position (review finding 10) */
-.ptable tr.ptask td { background: var(--slate-50); font-size: var(--text-label); color: var(--slate-700); }
+/* Expanded MC's task rows (owl #45, node 520:54192). THE TINT IS THE NESTING
+   CUE and it is inverted from the earlier version: parent white, children
+   slate-50. The children's cells draw the STRONGER bottom border (the frame's
+   bordered inner container, translated to table-land), while the indent cell —
+   the empty first column, where the MC# is not repeated — draws none, so the
+   gutter under the parent's number reads as one continuous strip. Cell content
+   wears the table's own recipes (.cardname, .plaincell, .dimcell): same
+   columns, same type scale — one column model, one type model. Row height is
+   content-derived here too (R-warn-a's rule): the frame's 75px is an outcome
+   of the single-line child, never a target. */
+.ptable tr.ptask td { background: var(--slate-50); border-bottom-color: var(--slate-200); }
+.ptable tr.ptask td.col-mc { border-bottom-color: transparent; }
 .ptable .col-mc { width: 150px; min-width: 150px; } /* 132px in frame; 150px team fine-tune 2026-08-12 */
 .ptable .col-name { width: auto; min-width: 158px; }
 .ptable .col-type { width: 140px; min-width: 140px; }
@@ -139,8 +150,14 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 }
 .ptable .mccell .chevbtn svg { transition: transform 0.12s ease; }
 .ptable .mccell .chevbtn.open svg { transform: rotate(90deg); }
+/* a childless MC renders no chevron (owl #45 / jp→miles #40) — the spacer is
+   the glyph box's own width, so the MC# column stays aligned either way */
+.ptable .mccell .chevgap { width: 16px; flex: none; }
 .ptable .mcnum { font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
 .ptable .cardname { font-size: var(--text-body); line-height: 1.5; color: var(--blue-700); }
+/* the expanded parent's 'Main Card' SubTone (owl #45): label-size, muted,
+   on its own line under the name */
+.ptable .subtone { display: block; font-size: var(--text-label); line-height: 1.4; color: var(--slate-500); }
 .ptable .plaincell { font-size: var(--text-body); line-height: 1.5; color: var(--slate-700); }
 .ptable .dimcell { font-size: var(--text-body); line-height: 1.5; color: var(--surface-muted-foreground); }
 
