@@ -16,9 +16,8 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 |---|---|---|---|
 | 0–8a | Setup · schema · auth+audit · `lib/` port · ARES read · intake · model refresh · five tabs · urgency write · conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 gate ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 backup/restore ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸ (team UI update), T075 sweep pending, non-member 403 parked | G7 passed; write-enable on rt-837 = next JP gate |
-| 10–13k b11, ctx | Two-way sync · admin panel · Pipeline redesign · Gantt planner · batches 1–11 · context restructure (script split shipped with b11's deploy) | **DEPLOYED + LIVE-VERIFIED through 2026-08-18** (T077–T171) | per-batch detail: `docs/history/phase-log.md` |
-| 13k b12 | The expanded MC row to spec (owl #45) + the same-evening review pass: one-table column model · task due = W2's task-card half · first-sibling render (invariant 3) · Manila-true due slice both halves · sync hardening · kind-flip deactivation | **DEPLOYED + LIVE 2026-08-18** (`8765083`..`8b7bfcd`; both defaults later confirmed by product, owl #47 — nothing to flip) | `due-roundtrip.ts` on tx8gDsTH ✓; owed: task-due UI round-trip · sub-350px scroll check |
-| 13k b13 | Owls #47–#51: the stale-reconcile guard (decisions/0025 — a reconcile can no longer revert a registry write) · status-note chip carries the note, neutral, measured truncation · clarification note = 4px left accent | **BUILT, pending deploy** (976 + 24 todo dual-TZ) | product answered in jp→miles #42; owed: live pass over the note chip + the accent |
+| 10–13k b12, ctx | Two-way sync · admin panel · Pipeline redesign · Gantt planner · batches 1–12 · context restructure · the expanded MC row (owl #45) + its review pass | **DEPLOYED + LIVE-VERIFIED through 2026-08-18** (T077–T178, ..`8b7bfcd`; both b12 defaults confirmed by product, owl #47) | per-batch detail: `docs/history/phase-log.md` |
+| 13k b13 | Owls #47–#51: the stale-reconcile guard (decisions/0025 — a reconcile can no longer revert a registry write) · status-note chip carries the note, neutral, measured truncation · clarification note = 4px left accent | **DEPLOYED + LIVE 2026-08-18** (`4499484`; 976 + 24 todo dual-TZ) | healthz 200 + 6 bundle markers ✓; the 652-card board re-synced clean under the new two-op upsert ✓ |
 
 **Build health (2026-08-18, post-batch-13):** 976/976 tests + 24 `it.todo`,
 61 files — green under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
@@ -86,9 +85,11 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   param) · OD-4's non-capacity remainder — the capacity slice was ruled
   2026-08-17, the broader expiry question stays OPEN (`decisions/0019`) ·
   two pre-existing host-local `todayIso()` sites · loopback-listen test
-  hardening (~21 files) · manual pass: drag a bar in the collapsed-pane
-  state · whether to draw a custom drag image so
-  Chrome's translucency/shadow go away entirely (only `setDragImage` can).
+  hardening (~21 files) · whether to draw a custom drag image so Chrome's
+  translucency/shadow go away entirely (only `setDragImage` can).
+- **Live browser passes owed** (JP's browser is shared — use an isolated
+  profile): the task-due picker by hand · the sub-350px last-resort scroll ·
+  the b13 note chip + clarification accent · drag a bar in the collapsed pane.
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
