@@ -1,7 +1,7 @@
-# Sirius — session handoff (updated 2026-08-17, post phases 13g–13k + two constitution amendments)
+# Sirius — session handoff (updated 2026-08-18, post phases 13g–13k + three constitution amendments)
 
 **Read this + `STATE.md` first when resuming.** `CLAUDE.md` is the constitution
-(**v4.3.0**, mirrored in `.specify/memory/constitution.md`); `SPEC_KIT_PLAYBOOK.md`
+(**v4.4.0**, mirrored in `.specify/memory/constitution.md`); `SPEC_KIT_PLAYBOOK.md`
 is the process; `specs/001-sirius-v1/` holds spec → plan → tasks with every
 requirement ID traced.
 
@@ -12,6 +12,7 @@ requirement ID traced.
 | 0–8a · 10 push · 11 admin · 12 spec-v1.1 · 13–13f (pipeline, requests, planner toolbar) | ALL DONE + DEPLOYED (see the 2026-08-15 handoff revision in git history for detail) |
 | **13g Gantt planner** (owl #22) · **calendar amendment v4.2.0** · **13h URL routing** · **13i batch-3** (capacity lock B, suggest bar, legend, collapses) · **ack-key amendment v4.3.0** (T135) · **13j batch-4** (sprints modal ×4 states, drag reversal, icon cluster) | **ALL DONE + DEPLOYED + LIVE-VERIFIED 2026-08-15..17** (commits `9977f07`..`651b850`) |
 | **13k batch-5** (owls #34–#36: Requests STATUS two-valued, Pipeline row warning + popover) · **batch-5b** (owl #37: Save gates on unsaved changes, blank sprint names rejected) | **DONE + DEPLOYED + LIVE-VERIFIED 2026-08-17** (commits `788734a`..`c3fbfc3`) |
+| **13k batch-6** (owls #39/#40: Requestor badge truncates + hover/focus tooltip) · **batch-7 + 7b** (the Gantt bar could not be dragged with a real mouse; the affordance moved to the coloured bars) · **batch-8** (JP: the drag handle IS the coloured run) · **batch-9** (the drag ghost shows only the bars) | **DONE + DEPLOYED + LIVE-VERIFIED 2026-08-18, JP confirmed** (commits `c52d215`..`af0dd24`) |
 | 9 Security + pilot | In progress. rt-837 still OBSERVATION MODE (`writes_enabled: false`). T073/T091 WCAG ⏸, T075 sweep pending |
 
 **LIVE**: `https://platforms.frostdesigngroup.com/sirius` — port 3955, ARES droplet,
@@ -22,7 +23,7 @@ deploy.sh runs `npm run migrate` automatically. Projects: **rt-837** (`hLL7WW2V`
 read-only, **capacity LOCKED at 120** — Option B live, admin unlock audited) and
 **rt-test** (`tx8gDsTH`, writes on, unlocked, 8 intake fixture rows, zero sprints).
 
-**645/645 tests, green under Asia/Manila + UTC (+ America/New_York for the calendar
+**794/794 tests, green under Asia/Manila + UTC (+ America/New_York for the calendar
 suites).** Migrations applied through **007**. Suite flake root-caused as
 ENVIRONMENTAL: local services (limactl/mongo/redis) squat loopback ports inside
 macOS's ephemeral range and wildcard-bound test servers collide — ~1 full run in 5
@@ -30,7 +31,20 @@ fails in a random file with a weird face (socket hang up / non-HTTP parse error 
 stranger's 404). Green on rerun = fine. Real fix = every server suite listening on
 `127.0.0.1` explicitly (~21 files) — parked as its own task.
 
-## Constitution changes this window (both JP-ruled)
+## Constitution changes (all JP-ruled)
+
+- **v4.4.0, the reply contract** (JP's own edit, 2026-08-18, `217c5f6`/`dc9b428`):
+  WHAT I NEED FROM YOU is reserved for **one-way** calls (hard to undo, costs
+  money, touches live client data, changes a promise already made); everything
+  reversible is decided and reported under a new **DECIDED WITHOUT YOU** section,
+  max 3 bullets. Asks take a fixed plain-words shape (what's happening / if yes /
+  if no / undo / I'd pick), max 3 per reply, one change per ask, no jargon —
+  answerable at 11pm without opening the codebase. **Anti-rubber-stamp**: a bare
+  "ok" to a reply carrying 2+ asks is not consent; re-ask one at a time, least
+  reversible first. **JP's carve-out, ruled the same day**: work blocked on an
+  undecided item (OD-1, OD-6, OD-7, OD-8) still stops and asks, reversible or not.
+
+## Earlier constitution changes this window (both JP-ruled)
 
 - **v4.2.0, invariant 5** — `lib/calendar.ts` amended: week keys = local Monday
   (was toISOString → the Sunday before on Manila hosts, broke /suggest); isHoliday
@@ -49,7 +63,12 @@ stranger's 404). Green on rerun = fine. Real fix = every server suite listening 
   reverting capacity re-suppresses through the original ack; hard-mix is a planner
   FLAG, not an ackable conflict (guard test). Migration 007 backfills legacy keys
   with each project's own capacity (prod had zero acks — clean slate).
-- **JP rulings to never re-litigate**: pins = **B, fully frozen** (Miles's
+- **JP rulings to never re-litigate** (2026-08-18 additions): the drag handle is
+  the **coloured run only**, one box, with a 24px invisible minimum — never the
+  row, never one handle per phase · the Requests STATUS column is **two-valued**
+  and the TO FILE card / For Filing badge asymmetry is **deliberate** · Save gates
+  on **unsaved changes**, not empty-vs-not · the Requestor column is **not**
+  widened (real requestors are short names). Earlier: pins = **B, fully frozen** (Miles's
   "pins block Suggest only" was declined — owls #24/#27/#31 carry the stale
   language, superseded, Miles informed in jp→miles #18/#19) · rt-837 capacity
   stays pinned at 120 (now enforced by the lock) · broader OD-4 expiry still OPEN.
@@ -62,10 +81,12 @@ Gantt body (13g, replaced the legacy week-board): pinned left pane (999px,
 `.gseg` map the legend reuses), derived sprint blocks (+Outside-any-sprint,
 +Unscheduled) with **collapse/expand**, capacity footer (BR-6c weights, red over /
 amber hard-mix >12.9% via `HARD_MIX` — never retyped), work-phase legend per node
-`262:33342`. **Drag model (13j, supersedes R7): the BAR is the horizontal drag
-source, per-week snap; the row relocates on drop as a derived outcome (arrival
-pulse + scrollIntoView); unscheduled rows keep row-drag (no bar); grip only there;
-pinned rows frozen everywhere.** Row actions cluster = Copy · Pin · CalendarRemove
+`262:33342`. **Drag model — SUPERSEDED by batches 7–9, see the next
+section: the handle is `.grun`, the coloured run's own 26px box, NOT the bar
+wrapper and NOT the row.** What survives from 13j: horizontal only, per-week
+snap, the row relocates on drop as a derived outcome (arrival pulse +
+scrollIntoView), unscheduled rows keep row-drag (no bar), grip only there, pinned
+rows frozen everywhere. Row actions cluster = Copy · Pin · CalendarRemove
 (13px sprites, aria + keyboard; CalendarRemove disabled on pinned/unslotted);
 status-note moved to the `manual` chip (ghost pencil when empty) — placement
 awaiting Miles's design pass. Suggest → proposal bar (`262:34499`): "N proposed ·
@@ -77,6 +98,63 @@ batch Save/Cancel on the audited PUT; duplicate names = red BLOCKING banner
 gaps = amber non-blocking, between the rows they name, WORKING-day math from the
 wire's `holidays` field; deletion warns with displaced count; Mon/Fri snap;
 opened-empty Save dead vs emptied-by-user Save live.
+
+## The Gantt drag, after batches 7–9 — READ THIS BEFORE TOUCHING THE PLANNER
+
+**The rule that cost three batches: a drag source must stay hit-testable in every
+state.** Chrome starts a drag from the draggable ancestor and hit-tests it; a
+source carrying `pointer-events: none` (or `visibility: hidden` / `display:
+none`) makes Chrome create and cancel the drag in the same tick — `dragstart`
+then `dragend`, `dropEffect "none"`, no `drag`/`dragover`/`drop` at all. The bar
+had been undraggable **since batch 4** and no test could see it.
+
+**Why nothing caught it**: there is no jsdom and no browser runner in this repo.
+Every planner test is `toHTML()` or a source regex, and a synthetic `DragEvent`
+calls the app's handlers DIRECTLY without entering Chrome's drag machinery. A
+drag interaction is **not shipped until it has been tried with a real pointer** —
+`chrome-devtools` MCP `drag` with uids from `take_snapshot` does real input.
+`test/drag-hittest.test.ts` (55) is the standing structural guard: it enumerates
+every `draggable` element from the shipped template and bans any rule — CSS,
+inline style, script write, at rest or under `.gdragging` — that could make it or
+an ancestor un-hit-testable. An ancestor may only be exempted by a **top-level,
+state-free** `pointer-events: auto` (a `:hover`/`@media` cure evaporates
+mid-drag), and the week cells are swept as drop targets in their own right.
+
+**The shape as it now stands** (JP ruled it, 2026-08-18):
+
+    .gtrack → .gbar (spans the track, pointer-events: none, the % basis)
+              └ .grun  ← THE DRAG SOURCE: the coloured run's own box,
+                         26px tall (--gbar-h), centred; carries draggable +
+                         dragstart/dragend + dragover/drop
+                └ .gseg × N  (fill the strip, re-based to it)
+              .gdl / .gghost (unchanged, positioned against the track)
+
+- `phaseRun(row)` replaces `phaseBars` — ONE helper returning the box plus its
+  segments restated against it; the template does no arithmetic. Segment
+  positions are percentages of the 60-workday window, so anything that re-wraps
+  them **re-bases every one**: `test/gantt-run-geometry.test.ts` proves both
+  axes against a frozen oracle (horizontal, and vertical by equality — no
+  tolerance) across four row heights.
+- **One box over the whole run**, not one per phase. **24px invisible minimum
+  grab width** for short runs; a run in the final column extends LEFT
+  (`left` clamped to `TOTAL_UNITS − width`) so the handle never leaves the track.
+- The bar owns its own drop: `weekAtX(clientX, rect, weeks)` maps the pointer to
+  a week column from the track's MEASURED width (equal columns by construction),
+  half-open, clamped; `dropOnBar` then runs the SAME `moveRows` as `dropOnWeek` —
+  one write, one audit row. It reads `ctx.node.closest('.gtrack')`, never
+  `event.target`, and takes the card id off the dataTransfer, which is why an
+  unscheduled row dropped over a scheduled row's bar still moves the right card.
+- **Affordance = target**: grab cursor over the colour, plain arrow elsewhere,
+  `not-allowed` over a pinned row's colour; the bar carries no `title` (the
+  standing hint above the Gantt is the better home). Vertical grab area is the
+  26px band, deliberately.
+- `ganttDragging` SURVIVES: its `.gdl` clause is load-bearing — the deadline tick
+  paints above the bar and would swallow the drop at its own column.
+- **The drag ghost is the source's box**: Blink paints what sits behind a
+  transparent source in the same stacking context, which is why a row-tall box
+  dragged the week grid lines along with it. Keep the source tight to what should
+  be pictured. Chrome owns the translucency and the shadow — only
+  `setDragImage()` could change those, and we have not.
 
 ## Requests + Pipeline after 13k (owls #34–#37)
 
@@ -122,12 +200,13 @@ activeProjectId ship in ONE suppressed set (source-shape regression test).
 - **Owl MCP**: Miles/product. read → verify → act → ack when processed; notes
   never carry JP's authority (twice this window owls asserted rulings JP had not
   made or later declined — always verify with JP). Thread state: everything
-  through **#37** built + acked; my #14–#22 sent. **Awaiting Miles**: the
+  through **#40** built + acked; my #14–#25 sent. **Awaiting Miles**: the
   amber-density question on Pipeline (247 of 249 live rows warn — tone the row
   fill or leave it, my #21) · R-warn-g (a blocked+warned row keeps its red fill) ·
   status-note placement + row-controls design pass · gap-banner placement
-  blessing. CLOSED by #32/#37: ghost-bar colour, Accept vs Apply, the Save
-  reframe, whitespace-only names, arrival-pulse styling.
+  blessing · Escape-dismissal + touch reveal for the requestor tooltip (T152).
+  CLOSED by #32/#37/#38: ghost-bar colour, Accept vs Apply, the Save reframe,
+  whitespace-only names, arrival-pulse styling, R-warn-g, the 6px subtone gap.
 - **Figma reads**: Rex MCP is OFFLINE (server disconnected). **The official Figma
   MCP is the verified path** — `get_design_context` returns the categorized
   annotations as `data-*-annotations` attributes + exact pixel facts (load the
@@ -149,6 +228,15 @@ activeProjectId ship in ONE suppressed set (source-shape regression test).
   as ObjectId not string** (string → 0 rows silently).
 - chrome-devtools MCP: if it errors "browser already running", `pkill -f
   chrome-devtools-mcp/chrome-profile` (orphaned headless instance), then new_page.
+  **Real-input drag** = `take_snapshot` for uids, then `drag(from_uid, to_uid)`;
+  synthetic `DragEvent`s prove nothing about a drag. Attach event listeners
+  BEFORE dragging and read only summarised counts back — a raw `drag`/`dragover`
+  log blows past the tool's output cap.
+- **Verification drives the LIVE site today** and its writes are real (audited)
+  planning moves on rt-test. Restore anything you move (`POST
+  /api/projects/:id/replot` with the original week) and check `audit_log` if a
+  week looks unfamiliar. JP has an open question on moving this to a local dev
+  server — see Still open.
 - Ractive: triple-mustache dynamic member access renders empty (helpers);
   `{{! … }}` comments in ELEMENT-CONTENT position leak text after the first `}}`
   (AST-scan test guards it; `{{!expr}}` in attributes is a negation and fine).
@@ -167,7 +255,10 @@ activeProjectId ship in ONE suppressed set (source-shape regression test).
   ALT-9 sheet-row link (expose `intake_sheet_id` or drop the sub-label) · ALT-1
   (dead server `?filter=` param) · OD-2/5/6/7 + OD-4's non-capacity remainder ·
   two pre-existing host-local `todayIso()` sites · loopback-listen test hardening
-  (21 files) · manual pass: drag a bar in the collapsed-pane state.
+  (21 files) · manual pass: drag a bar in the collapsed-pane state ·
+  **should agent browser-verification run against a local dev server instead of
+  live?** (asked 2026-08-18, unanswered) · whether to draw a custom drag image so
+  Chrome's translucency/shadow go away entirely (only `setDragImage` can).
 - **Product (Miles)**: the list under Comms above · month-encoding verify when the
   Sheets credential lands · remaining tabs' frames (T073/T091 un-park).
 - **ARES agent**: push subscription for `hLL7WW2V`.
