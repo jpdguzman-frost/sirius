@@ -165,11 +165,36 @@ along the way: every date, number, and ruling attribution. Deliberate gaps:
 v4.4.0 reply contract (communication protocol, not architecture); records
 run 38–52 lines where sourced content demanded (60 is the hard stop).
 
-### Stage 4c — module notes + end-to-end gate pass  `[queued]`
+### Stage 4c — module notes + end-to-end gate pass  `[DONE 2026-08-18]`
 
-`lib/CLAUDE.md` + `src/CLAUDE.md` (≤4KB, self-contained, coupling flagged not
-papered over); staleness stamps across scope; the T-shape spec's full gate
-list + our conservation/drift gates run once end-to-end.
+`lib/CLAUDE.md` (3.1KB — the verbatim trio, what is NOT the trio, the
+invariant-6 isolation guard cited by line) and `src/CLAUDE.md` (3.8KB —
+project_id law + the named `calendar_days` exception, the write path, sync
+ownership, auth chain). Traceability verifier caught ONE real error —
+`.strict()` attributed to the webhook envelope, which is deliberately
+tolerant — fixed with the distinction stated (mutating routes strict;
+webhook envelope strips unknown fields for ARES payload growth).
+
+**End-to-end gates ALL GREEN**: full suite 888 passed + 22 todo under BOTH
+TZ=UTC and TZ=Asia/Manila, first try, no flake · tsc · eslint · `--check` ·
+**build byte-proof: `public/index.html` sha `76fd1f17…` — identical to the
+pre-restructure baseline; four stages of restructure provably never touched
+the product** · T-shape spec's own gate list green (127/150-line skim,
+single-decision records, random doc-vs-code spot-checks clean).
+
+Completeness-critic items closed at the gate: DOCMAP no longer misfiles the
+pipeline/requests frame-notes as archive (they are Layer-2 law until their
+rulebooks extract) · the staleness-stamp set is now DERIVED (new rulebooks /
+directory law auto-covered) · decision records require a `# Title` line and
+the README index must match the directory exactly (guard 21 → 25 tests) ·
+docs/README.md's MAP description updated to the skim shape. Accepted with
+eyes open: GEN:DOCMAP stays a hand-edited constant (4 lines; deriving it is
+over-engineering — noted as the one index `--check` cannot police) · the
+CLAUDE.md sweep is top-level-only BY CONVENTION (now stated in the caps
+table). Residuals for backlog: `worker/` has no CLAUDE.md yet (highest-
+consequence path — write it with a traced pass, not a dash-off) ·
+decisions/0012's "84/84 workbook cross-validation" is the HISTORICAL phase-3
+count while the shipped fixture is 40 sanitized rows — both true, no edit.
 
 ## Stage 5 (was 4) — split `frontend/scripts/01-app.js`  `[HELD by JP 2026-08-18]`
 

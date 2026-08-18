@@ -145,10 +145,10 @@ function moduleLines(purposes: Map<string, string>): string[] {
 // ---------- GEN:DOCMAP — the four layers ----------
 
 const DOCMAP_LINES: string[] = [
-  '- Layer 0 · entry — CLAUDE.md (constitution) · docs/MAP.md (this skim) · directory CLAUDE.md files (frontend/, test/)',
+  '- Layer 0 · entry — CLAUDE.md (constitution) · docs/MAP.md (this skim) · directory CLAUDE.md files (frontend/, test/, lib/, src/)',
   '- Layer 1 · current state — STATE.md · docs/HANDOFF.md',
-  '- Layer 2 · task set — area rulebooks (planner: specs/001-sirius-v1/gantt-rules.md) · decisions/ · specs/001-sirius-v1/ (contracts + spec-kit)',
-  '- Layer 3 · archive — docs/state-log/ · frame-notes archives (specs/001-sirius-v1/*-frame-notes.md) · git history · owl threads',
+  '- Layer 2 · task set — area rulebooks (planner: specs/001-sirius-v1/gantt-rules.md; pipeline/requests law still lives in their frame-notes until extracted — docs/README.md §Where law lives) · decisions/ · specs/001-sirius-v1/ (contracts + spec-kit)',
+  '- Layer 3 · archive — docs/state-log/ · archived frame-notes (gantt today; banner marks each) · git history · owl threads',
 ];
 
 // ---------- main ----------

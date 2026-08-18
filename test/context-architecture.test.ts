@@ -172,14 +172,24 @@ describe('staleness stamps', () => {
   // Deliberately NOT stamped: root CLAUDE.md (the constitution — JP versions
   // it himself) and STATE.md/docs/HANDOFF.md (Layer 1 current-state files —
   // their freshness IS their content, updated every session by convention).
-  it.each([
+  // The set is DERIVED, not listed: a new rulebook or directory CLAUDE.md is
+  // covered by this assertion the day it appears.
+  const stamped = [
     'docs/MAP.md',
     'docs/README.md',
     'docs/CONTEXT_ARCHITECTURE.md',
-    'specs/001-sirius-v1/gantt-rules.md',
-    'frontend/CLAUDE.md',
-    'test/CLAUDE.md',
-  ])('%s carries a last-verified date', (rel) => {
+    'decisions/README.md',
+    ...fs
+      .readdirSync(path.join(ROOT, 'specs', '001-sirius-v1'))
+      .filter((name) => name.endsWith('-rules.md'))
+      .map((name) => `specs/001-sirius-v1/${name}`),
+    ...fs
+      .readdirSync(ROOT, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'public')
+      .map((e) => `${e.name}/CLAUDE.md`)
+      .filter((rel) => fs.existsSync(path.join(ROOT, rel))),
+  ];
+  it.each(stamped)('%s carries a last-verified date', (rel) => {
     expect(read(rel)).toMatch(/last-verified: \d{4}-\d{2}-\d{2}/);
   });
 });
@@ -193,6 +203,7 @@ describe('decisions/ records (tolerant while absent — Stage 4b creates it)', (
     // long record does not go red (same soft/hard pattern as HANDOFF)
     for (const name of records) {
       const text = read(`decisions/${name}`);
+      expect(text.startsWith('# '), `decisions/${name} lacks a # Title first line`).toBe(true);
       const lines = text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
       expect(lines, `decisions/${name} is ${lines} lines (want 20–60)`).toBeGreaterThanOrEqual(20);
       expect(lines, `decisions/${name} is ${lines} lines (want 20–60)`).toBeLessThanOrEqual(60);
@@ -202,6 +213,15 @@ describe('decisions/ records (tolerant while absent — Stage 4b creates it)', (
         );
       }
     }
+  });
+
+  it('decisions/README.md indexes every record exactly once', () => {
+    if (records.length === 0) return;
+    const rows = [...read('decisions/README.md').matchAll(/^\| (\d{4}) \|/gm)].map((m) => m[1]!);
+    expect(new Set(rows).size, 'a record number is indexed twice').toBe(rows.length);
+    expect([...rows].sort(), 'index rows must match the NNNN files on disk — rebuild the table').toEqual(
+      records.map((name) => name.slice(0, 4)).sort(),
+    );
   });
 
   it('the directory holds at least 15 NNNN records (never quietly vacuous)', () => {

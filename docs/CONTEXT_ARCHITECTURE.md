@@ -74,8 +74,8 @@ item.
 | `STATE.md` | ≤25KB; session index ≤12 lines (10-session window + slack) |
 | `docs/HANDOFF.md` | ≤24KB target; the guard hard-stops at 26KB |
 | Domain rulebooks (`specs/**/*-rules.md`) | ≤20KB each — over the cap = split by sub-area |
-| Directory `CLAUDE.md` files | ≤4KB each (guard sweeps every top-level dir) |
-| `decisions/*.md` | 20–40 lines target (guard hard-stops at 60), one decision, required headings |
+| Directory `CLAUDE.md` files | ≤4KB each (guard sweeps every top-level dir; the convention is top-level only — don't nest) |
+| `decisions/*.md` | 20–40 lines target (guard hard-stops at 60), one decision, `# Title` first line + Status/Context/Decision/Consequences/Alternatives rejected/Sources; README index must match the directory |
 | Hand-written Layer 0/2 docs + rulebooks | carry `last-verified: YYYY-MM-DD` (not the constitution — JP versions it; not STATE/HANDOFF — Layer 1 freshness is their content) |
 | `scripts/generate-index.ts` | idempotent — second run byte-identical |
 
