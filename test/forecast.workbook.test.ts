@@ -2,7 +2,8 @@
  * T017/T020 — workbook cross-validation (AC-10 evidence).
  *
  * Source: JP's export of the real Delivery Forecast sheet
- * (docs/forecasting-block.csv — gitignored: client roadmap data, BRD §9).
+ * (forecasting-block.csv — client roadmap data, BRD §9; kept off-repo and
+ * never committed; this suite reads only the sanitized rows below).
  * test/golden/workbook-rows.json holds 40 sanitized formula-driven rows
  * (MC number, dates, SLAs — no titles, no briefs), selected where the span
  * crosses no 2025 PH holiday so the arithmetic is pure WORKDAY.

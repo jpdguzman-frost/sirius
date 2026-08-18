@@ -4,7 +4,8 @@
  *   1. pad ragged rows BEFORE positional parsing
  *   2. serial dates convert from the 1899-12-30 epoch
  *   3. two columns named `Type` — disambiguated by position (LAST = asset
- *      type, per AGENTS.md §5: col B is the card type, col L the asset type)
+ *      type, per docs/architecture/agents-guide.md §5: col B is the card
+ *      type, col L the asset type)
  *
  * Row classification (FR-3.4, FR-3.5):
  *   - blank id+name                  → skipped silently
@@ -104,8 +105,9 @@ interface HeaderMap {
 }
 
 /**
- * Gotcha 3: two `Type` columns, disambiguated by position — per AGENTS.md §5
- * (product, 2026-08-12): col B is the CARD type, col L is the ASSET type.
+ * Gotcha 3: two `Type` columns, disambiguated by position — per
+ * docs/architecture/agents-guide.md §5 (product, 2026-08-12): col B is the
+ * CARD type, col L is the ASSET type.
  * The LAST `Type` occurrence is therefore the asset type. (Corrects the
  * phase-5 first-wins guess — the plan never said which; live sheet still
  * deferred, so nothing real depended on it.)

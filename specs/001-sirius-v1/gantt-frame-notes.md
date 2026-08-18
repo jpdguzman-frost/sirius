@@ -1393,7 +1393,7 @@ and not a hole:
   The fix pass hit the same signature once more, in a different file again
   (`test/routing-returnto.test.ts`, 3 tests, `location` header undefined);
   green alone and green on the very next full run, both TZs. This is the
-  environmental flake documented in `docs/HANDOFF.md` (loopback-port collision,
+  environmental flake documented in `test/CLAUDE.md` rule 5 (loopback-port collision,
   ~1 full run in 5, random file), not batch 8.
 
 ### Fix pass (post-integrate review) — two guard hardenings, one doc correction
@@ -1427,7 +1427,7 @@ and not a hole:
   BAN still counts `:active` and `@media`, because a rule that bites sometimes
   is a bug sometimes.
 - **`node frontend/build.js` byte count corrected** to 333,049 across
-  `docs/state-log/2026-08-18.md`, `tasks.md` and this file: the 332,828
+  `docs/history/state-log/2026-08-18.md`, `tasks.md` and this file: the 332,828
   recorded at integrate predated the comment corrections made at integrate
   itself. The build is
   deterministic — two consecutive runs give the same bytes and the same sha1.
@@ -1466,7 +1466,7 @@ live constraint on this file that no comment declares — a prose number in
 `01-app.js` can collide with a drift guard reading it as code — and because it
 is the one thing in this batch that a green suite would have hidden had the
 comment not been corrected at all. The percentage figure is quoted precisely in
-this document and in `docs/state-log/2026-08-18.md`, which the guard does not
+this document and in `docs/history/state-log/2026-08-18.md`, which the guard does not
 read.
 
 ## Owed: a live-browser pass (folds into T155)

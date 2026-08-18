@@ -1,5 +1,5 @@
 /**
- * G1 (SERVER_SETUP_SPEC §4) — BASE_PATH: the whole app mounts under a path
+ * G1 (docs/operations/server-setup.md §4) — BASE_PATH: the whole app mounts under a path
  * prefix for the platforms-host pattern (platforms.frostdesigngroup.com/sirius).
  * Unset = domain root, byte-for-byte today's behavior — the rest of the suite
  * is the regression proof for that; these tests prove the prefixed mount.

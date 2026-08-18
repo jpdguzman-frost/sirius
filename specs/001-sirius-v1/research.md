@@ -1,6 +1,6 @@
 # Research — Sirius v1 (Phase 0)
 
-Decisions D1–D12 were made in `docs/Sirius__Implementation_Plan.md`; **on 2026-08-03 JP amended the stack** (constitution v2.0.0) to align Sirius with the ARES stack and resolved OD-1 and OD-8. Superseded decisions keep their original rationale on record, with the amendment and its trade-off stated plainly. None are open for re-litigation.
+Decisions D1–D12 were made in `docs/product/implementation-plan.md`; **on 2026-08-03 JP amended the stack** (constitution v2.0.0) to align Sirius with the ARES stack and resolved OD-1 and OD-8. Superseded decisions keep their original rationale on record, with the amendment and its trade-off stated plainly. None are open for re-litigation.
 
 ## D1 — Datastore: MongoDB + Redis *(amended 2026-08-03)*
 
@@ -69,7 +69,7 @@ Decisions D1–D12 were made in `docs/Sirius__Implementation_Plan.md`; **on 2026
 ## D12 — Port source for `lib/`
 
 - **Decision**: `lib/forecast.ts`, `lib/planner.ts`, `lib/calendar.ts` port verbatim from the pre-validated prototype; golden tests (AC-10) prove the port before anything else uses them; `lib/forecast.legacy.ts` survives for migration tests only and is never imported by UI code. **Unaffected by the stack amendment** — pure functions, no framework dependency.
-- **Deviation on file, approved by JP 2026-08-03** (STATE.md): the original `frost-sirius-v1.jsx` is unavailable; the compiled bundle `docs/frost-sirius-v1.html` stands in as port source, making the golden tests the sole proof of fidelity. If the `.jsx` surfaces, it supersedes the bundle.
+- **Deviation on file, approved by JP 2026-08-03** (STATE.md): the original `frost-sirius-v1.jsx` is unavailable; the compiled bundle `docs/source-material/frost-sirius-v1.html` stands in as port source, making the golden tests the sole proof of fidelity. If the `.jsx` surfaces, it supersedes the bundle.
 
 ## Remaining open items (tracked, none blocking design)
 

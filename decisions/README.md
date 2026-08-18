@@ -12,7 +12,7 @@ ruling it feeds. Area rulebooks hold operational rules; records here hold the
 architectural WHY. Format and caps guarded by
 `test/context-architecture.test.ts`.
 
-_Populated in restructure stage 4b (`docs/CONTEXT_RESTRUCTURE.md`)._
+_Populated in restructure stage 4b (`docs/history/context-restructure.md`)._
 
 _last-verified: 2026-08-18_
 
@@ -42,3 +42,4 @@ _last-verified: 2026-08-18_
 | 0020 | Pins freeze the row completely (Option B) | accepted | 2026-08-17 |
 | 0021 | The layered context architecture (entry / state / task set / archive) | accepted | 2026-08-18 |
 | 0022 | Maps decomposed per area; the Layer-0 skim stays fixed-size | accepted | 2026-08-18 |
+| 0023 | docs/ reorganized into role folders; old paths redirect from here | accepted | 2026-08-18 |

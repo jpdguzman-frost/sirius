@@ -1,6 +1,6 @@
 # Context restructure — staged plan & checklist
 
-_All stages complete 2026-08-18; this file is now the RECORD of the restructure. Live law: docs/CONTEXT_ARCHITECTURE.md._
+_All stages complete 2026-08-18; this file is now the RECORD of the restructure. Live law: docs/architecture/context-architecture.md._
 
 _Started 2026-08-18 · JP-approved. Goal: cut agent session-start token burn
 (~34k → ~10k) and make the repo navigable for agents. No product change of any

@@ -1,6 +1,6 @@
 # Prototype extraction notes — phase 3 port record
 
-Port source: `docs/frost-sirius-v1.html` (compiled bundle; approved deviation in STATE.md).
+Port source: `docs/source-material/frost-sirius-v1.html` (compiled bundle; approved deviation in STATE.md).
 Method: bundle script extracted and prettier-formatted; domain functions located by constants
 (1.28/2.96, hard-mix 0.083/0.129, throughput grids); the exact minified code copied VERBATIM
 into `test/golden/original.mjs` (the oracle); `lib/` reimplements it typed; parity tests prove

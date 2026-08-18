@@ -1,4 +1,4 @@
-# AGENTS.md — Frost: Sirius
+# Agents guide — Frost: Sirius
 
 _last-verified: 2026-08-18_
 
@@ -209,7 +209,7 @@ Do not guess these. They change scope.
 
 ## 9. Prototype vs production
 
-`frost-sirius-v1.html` is a working prototype, not a reference implementation.
+`docs/source-material/frost-sirius-v1.html` is a working prototype, not a reference implementation.
 
 | Prototype | Production |
 |---|---|
@@ -232,8 +232,8 @@ They are pure, tested against real data, and took several rounds to get right.
 
 | File | Covers |
 |---|---|
-| `docs/Sirius__BRD.md` | Scope, requirements, business rules, acceptance criteria |
-| `docs/Sirius__Implementation_Plan.md` | Schema, stack, infrastructure, sync workers |
+| `docs/product/brd.md` | Scope, requirements, business rules, acceptance criteria |
+| `docs/product/implementation-plan.md` | Schema, stack, infrastructure, sync workers |
 | `frost-sirius-roadmap.md` | Phases, gates, sequencing |
 | `ares-sirius-review.md` | What ARES already provides and what to inherit |
 | `sirius-live-sheet-runbook.md` | Sheet connection, step by step |

@@ -3,8 +3,8 @@
 _last-verified: 2026-08-18_
 
 **Status**: EXECUTED — G3–G6 executed 2026-08-05 (see the §7 log), site live at `platforms.frostdesigngroup.com/sirius`; G7 passed 2026-08-12 **as OBSERVATION MODE** (rt-837 onboarded with `writes_enabled: false`, rt-test RETAINED alongside — this differs from the §5 G7 row as originally written).
-**Written**: 2026-08-05. Supersedes the generic runbook in `DEPLOY.md` where they differ;
-`DEPLOY.md` remains the reference for the `.env` key list and the smoke checklist.
+**Written**: 2026-08-05. Supersedes the generic runbook in `docs/operations/deploy.md` where they
+differ; `docs/operations/deploy.md` remains the reference for the `.env` key list and the smoke checklist.
 **Rule of engagement (JP)**: every phase below has an explicit approval gate. No command
 touches the server before the gate for its phase is given. Discovery is read-only.
 
@@ -16,7 +16,7 @@ path `/sirius`**, with its files at `/mnt/volume_sgp1_01/platforms/sirius`. The 
 deliberate: future tools join as `/toolname` + `/mnt/volume_sgp1_01/platforms/<toolname>`
 without new DNS or certificates each time.
 
-The host is the **existing ARES droplet** (reachable per `docs/deploy.sh`, gitignored — host,
+The host is the **existing ARES droplet** (reachable per the ARES deploy script (reference copy kept outside the repo), gitignored — host,
 port, user, key live there and nowhere else in this repo). Sirius deploys beside ARES exactly
 as OD-8 resolved: same Mongo server (own database), same Redis, same pm2, same rsync-based
 deploy pattern. The web tier is **Apache** with **Let's Encrypt** (certbot) — the team's
@@ -33,14 +33,14 @@ regardless (inert in production, an extra belt anywhere else).
 
 ## 2. Facts and constraints
 
-- ARES's deploy pattern (from `docs/deploy.sh`): rsync over SSH → `npm install --production`
+- ARES's deploy pattern (from the ARES deploy script (reference copy kept outside the repo)): rsync over SSH → `npm install --production`
   → env validation → pm2 restart; node runs under **nvm** for the deploy user, so every
   remote command sources `~/.nvm/nvm.sh` first. Sirius's `deploy.sh` already mirrors this
   (tests + build refuse-on-red locally, `.env` never synced) and boots pm2 via npm scripts
   (`sirius` = `npm run start`, `sirius-worker` = `npm run worker` — tsx runtime, a runtime
   dependency, survives `--omit=dev`).
 - Secrets live in the host's `.env` only (invariant 15). The `.env` key list is in
-  `DEPLOY.md`; nothing is committed, nothing is echoed into logs or this spec.
+  `docs/operations/deploy.md`; nothing is committed, nothing is echoed into logs or this spec.
 - The app currently assumes it is served at the **domain root**. Serving under `/sirius`
   requires a small, testable code change (§4) — the only code change in this spec.
 - Auth (staging and production) requires the Google OAuth client to exist first:
@@ -101,13 +101,13 @@ depends on it.
 | **G0** | Spec approval | JP approves this document, §6 decisions answered | no |
 | **G1** | Base-path code | §4 change + tests, committed, suite green | no |
 | **G2** | Discovery (READ-ONLY) | SSH in; record: Apache version + enabled modules (proxy, ssl) + existing vhosts; certbot presence + existing certs; node/nvm + pm2 versions; mongod + redis reachable on localhost; port 3100 free; disk on `/mnt/volume_sgp1_01`; ufw/firewall state. Output: a findings block posted to JP; NO writes | read-only |
-| **G3** | Provision | `mkdir -p /mnt/volume_sgp1_01/platforms/sirius`; write host `.env` from `DEPLOY.md` list (`NODE_ENV=production`, db `sirius`, `BASE_PATH=/sirius`; secrets generated on-host, never pasted into chat); fill local `deploy.sh` `DEST_*` (dir `platforms/sirius`, host/port/key per `docs/deploy.sh`) | yes — additive only |
+| **G3** | Provision | `mkdir -p /mnt/volume_sgp1_01/platforms/sirius`; write host `.env` from the `docs/operations/deploy.md` list (`NODE_ENV=production`, db `sirius`, `BASE_PATH=/sirius`; secrets generated on-host, never pasted into chat); fill local `deploy.sh` `DEST_*` (dir `platforms/sirius`, host/port/key per the ARES deploy script (reference copy kept outside the repo)) | yes — additive only |
 | **G4** | Vhost + TLS | DNS A record confirmed live (JP, §6) → write the `platforms.frostdesigngroup.com` vhost (proxy config §3, site root placeholder); `apachectl configtest`; enable site; reload; `certbot --apache -d platforms.frostdesigngroup.com`; verify auto-renewal timer. ARES's existing vhosts untouched — configtest before every reload | yes |
 | **G5** | First deploy + boot | `./deploy.sh` (tests → build → rsync → `npm ci` → migrate → pm2 start both apps); onboard staging project against the TEST board (`migrate-open-cards.ts`, `CODE=rt-test BOARD=tx8gDsTH` — rt-837 stays reserved for the real board at G7); allow-list JP; verify `https://…/sirius/healthz`, sign-in, tabs on synthetic data | yes |
-| **G6** | Smoke → phase 9 | The `DEPLOY.md` smoke checklist + urgency & due round-trips on `tx8gDsTH`; then the phase-9 drill sequence (T069–T076) on the live instance (TEST-board project only), each reported to JP | yes |
+| **G6** | Smoke → phase 9 | The `docs/operations/deploy.md` smoke checklist + urgency & due round-trips on `tx8gDsTH`; then the phase-9 drill sequence (T069–T076) on the live instance (TEST-board project only), each reported to JP | yes |
 | **G7** | Real-board onboarding | Separate approval, after drills: onboard the production-board project (`migrate-open-cards.ts`, `BOARD=hLL7WW2V`), deactivate/remove the TEST project, pilot go/no-go per *Pilot Security Readiness* | yes |
 
-*G7 as passed (2026-08-12) differs from the row above: OBSERVATION MODE — rt-837 onboarded with `writes_enabled: false` and the TEST project (rt-test) retained alongside; see the record in `STATE.md` / `docs/HANDOFF.md`.*
+*G7 as passed (2026-08-12) differs from the row above: OBSERVATION MODE — rt-837 onboarded with `writes_enabled: false` and the TEST project (rt-test) retained alongside; see the record in `STATE.md`.*
 
 ## 6. Decisions — answered by JP 2026-08-05
 
@@ -159,7 +159,7 @@ depends on it.
 - **Backup/restore drill PASSED 2026-08-05 (T072, NFR-8)**: dumped `sirius` (124 KB),
   restored into a scratch db, all 17 collection counts identical, `deliverables_v` view
   definition survives dump/restore, scratch dropped; dump retained at
-  `platforms/sirius/backups/20260804-1113` as backup #1. Runbook added to `DEPLOY.md`.
+  `platforms/sirius/backups/20260804-1113` as backup #1. Runbook added to `docs/operations/deploy.md`.
   **Finding for JP**: the host had NO Mongo backup schedule for ANY database (ares
   included) — nightly cron + 30-day retention proposed.
 
@@ -202,7 +202,7 @@ depends on it.
   HTTP→HTTPS 301; placeholder page at `/`; `/sirius` proxies to 127.0.0.1:3955 (503 until
   G5 boots the app — correct); `X-Forwarded-Proto https` set in the ssl vhost.
 
-_Log ends 2026-08-05; later operations are recorded in STATE.md / docs/state-log/._
+_Log ends 2026-08-05; later operations are recorded in STATE.md / docs/history/state-log/._
 
 ## 7a. G2 discovery findings (read-only, 2026-08-05)
 

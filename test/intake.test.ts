@@ -35,7 +35,7 @@ describe('the three gotchas (§5.2)', () => {
     expect(parseDeadline('soon™')).toBeNull();
   });
 
-  it('disambiguates the two Type columns by position — the LATER one is the asset type (AGENTS.md §5: col B card type, col L asset type)', () => {
+  it('disambiguates the two Type columns by position — the LATER one is the asset type (docs/architecture/agents-guide.md §5: col B card type, col L asset type)', () => {
     const map = mapHeader(HEADER);
     expect(map.asset_type).toBe(4); // NOT 2 — corrected 2026-08-12, phase 13
     expect(map.mc).toBe(0);

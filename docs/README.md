@@ -1,48 +1,80 @@
-# docs/ — authority index
+# docs/ — what Sirius is, one folder at a time
 
-Verdict first, one line per file: which documents **govern**, which merely
-**record**. Precedence between the governing documents is set by the root
-`CLAUDE.md` (the constitution) — never re-derive it from this index.
+The written record of Sirius: what it must do, how it is shaped, how it runs,
+and how it got here. Verdict first on every line — a file either **GOVERNS**
+(binding; code contradicting it is a defect to flag) or **RECORDS** (history;
+never build from it). Precedence between governing files is set by the root
+`CLAUDE.md` — never re-derive it here.
 
 _last-verified: 2026-08-18_
 
-## Anchors — read on resume
+## Start here
 
-- **HANDOFF.md** — READ FIRST on resume, together with root `STATE.md` (current phase table, decisions, AC scoreboard).
-- **state-log/** — ARCHIVE: STATE.md session entries rotated out verbatim, one dated file per day, newest-first.
-- **CONTEXT_RESTRUCTURE.md** — RECORD of the 2026-08-18 docs restructure (complete 2026-08-18; this index was created as one of its stages).
-- **CONTEXT_ARCHITECTURE.md** — GOVERNS documentation shape: the four context layers, caps, growth rule, rigidity log (JP-ruled 2026-08-18).
-- **MAP.md** — THE SKIM (Layer 0): live status + the areas + the doc layers; factual sections script-generated (`npx tsx scripts/generate-index.ts`); read it before exploring the codebase.
-- **map-*.md** — per-area file maps (Layer 2), generated; loaded when working that side.
-- **README.md** — this index.
+- **`MAP.md`** — the codebase in one skim: live status, the two areas, the doc
+  layers, the load-bearing test guards. Read it instead of exploring; its factual
+  blocks are generated (`npx tsx scripts/generate-index.ts`; `--check` exits 1 on drift).
+- **root `STATE.md`** — the current state: phase table, blocking decisions, AC
+  scoreboard, comms, newest session entry. The only Layer-1 file — `HANDOFF.md`
+  was retired 2026-08-18 (JP).
+- **`decisions/`** (repo root) — the why: one settled architectural decision per
+  numbered record, never edited once accepted; `decisions/README.md` indexes all.
+- **`README.md`** — this guide.
 
-## Governing
+Entry sequence on resume: root `CLAUDE.md` (auto-loads) → `MAP.md` → `STATE.md`.
 
-- **Sirius__BRD.md** — GOVERNS scope and business rules (v2.2, 3 Aug 2026).
-- **Sirius__Implementation_Plan.md** — GOVERNS engineering detail *where not superseded*; its stack and layout sections are superseded (root `CLAUDE.md` Stack section; `specs/001-sirius-v1/plan.md`).
-- **sirius-build-spec_v1.2.md** — GOVERNS the UI build (product's spec, 12 Aug 2026; supersedes v1.1, folds in the errata).
+## product/ — the *what*: scope, business rules, the UI to build
 
-Constitution amendments in root `CLAUDE.md` supersede all three; conflict
-rules (BRD vs Implementation Plan) are stated there, not here.
+- **brd.md** — GOVERNS scope and BR-1…BR-10 (v2.2, 3 Aug 2026). An interim
+  banner lists four points later rulings moved past; the rest governs as written.
+- **implementation-plan.md** — GOVERNS engineering detail *except* §1–§3 (stack,
+  infrastructure, repo layout), superseded by root `CLAUDE.md` §Stack and
+  `specs/001-sirius-v1/plan.md`.
+- **build-spec-v1.2.md** — GOVERNS the UI wherever the area rulebooks are silent
+  (12 Aug 2026, supersedes v1.1). Its banner lists five sections reversed by
+  later JP rulings — do not build those as written.
+- **errata-reply-v1.2.md** — RECORD: product's reply accepting all six v1.1
+  corrections (count basis = the §5.4 weight, 4). Path and its filename typo are
+  cited by `specs/001-sirius-v1/tasks.md` — do not rename either.
 
-## Operational
+## architecture/ — how the system and its documentation are shaped
 
-- **DEPLOY.md** — current runbook: deploy procedure, `.env` key list, smoke checklist, backup/restore, user administration.
-- **SERVER_SETUP_SPEC.md** — go-live spec for the `platforms.frostdesigngroup.com` host, Sirius under `/sirius`; gated phases, Apache/certbot, no staging tier.
-- **ARES_PUSH_BUILD_SPEC.md** — spec for the ARES-side outbound-push feature (audience: the agent in the ARES codebase; Sirius consumes it per `specs/001-sirius-v1/contracts/ares-push.md`).
+- **context-architecture.md** — GOVERNS documentation shape: the four context
+  layers, caps, growth rule, standing working rules, rigidity log (JP-ruled
+  2026-08-18). Every cap is asserted by `test/context-architecture.test.ts`.
+- **agents-guide.md** — MIXED: §§2–6 GOVERN the traps and boundaries no source
+  file states; §7–§9 are historical, annotated in place. Never renumber its
+  sections — code and tests cite them by number.
+- **map-frontend.md** · **map-backend.md** — RECORD (generated): one line per
+  source file, Layer 2, loaded only when working that side.
 
-## Historical / superseded — records, not law
+## operations/ — how Sirius is deployed and run
 
-- **archive/** — retired records, moved on JP's ruling; nothing live points here.
-- **archive/sirius-build-spec_v1.1.md** — SUPERSEDED by v1.2 (archived 2026-08-18).
-- **archive/sirius-build-spec_v1.1_errata.md** — ANSWERED record: build team's line-by-line corrections to v1.1 (archived 2026-08-18).
-- **sirus_errata-reply-v1.2.md** — ANSWERED record: product's reply (all six corrections accepted; count-basis ruling).
-- **AGENTS.md** — MIXED: §§2–6 are current (§2 corrected 2026-08-18 to the three-entry registry, whose sole authority is `specs/001-sirius-v1/contracts/trello-write.md`); §7/§8/§9 are historical, annotated in place. Never rename it or renumber its sections — code and tests cite "AGENTS.md §5" by name.
-- **frost-sirius-v1.html** — the compiled prototype `lib/` was ported from. NEVER DELETE: it is the golden tests' provenance (constitution invariant 5).
-- **forecasting-block.csv** — raw export of the legacy spreadsheet's forecasting block (data record).
-- **gate-t045-model-validation.md** — evidence record for the model-validation gate (2026-08-03).
-- **deploy.sh** — reference copy of ARES's deploy script (the pattern Sirius mirrors); live deploys use root `./deploy.sh` + gitignored `deploy.local.sh`.
-- **screenshots/** — live and prototype captures (record; gitignored, local-only — may be absent on a given checkout).
+- **deploy.md** — GOVERNS the deploy procedure, `.env` key list, smoke checklist,
+  backup/restore, user administration. Live since 2026-08-05; no staging tier.
+- **server-setup.md** — GOVERNS host architecture (Apache/certbot vhost, base path
+  `/sirius`, provisioning gates G2–G7); wins over deploy.md on the server itself.
+- **ares-push-spec.md** — RECORD: the spec written FOR the ARES codebase. The
+  Sirius-side authority is `specs/001-sirius-v1/contracts/ares-push.md`.
+
+## history/ — records only; nothing live points here
+
+- **state-log/** — ARCHIVE: STATE.md session entries rotated out verbatim, one
+  dated file per day. The filenames are the index.
+- **context-restructure.md** — RECORD of the 2026-08-18 restructure that
+  produced this layout (all stages complete).
+- **build-spec-v1.1.md** — SUPERSEDED by `product/build-spec-v1.2.md`.
+- **build-spec-v1.1-errata.md** — RECORD: the build team's line-by-line corrections
+  to v1.1, all six answered in `product/errata-reply-v1.2.md`.
+
+## source-material/ — the inputs Sirius was built from
+
+- **frost-sirius-v1.html** — the compiled prototype `lib/` was ported from.
+  NEVER DELETE: it is the golden tests' provenance (constitution invariant 5).
+
+The local-only records left the project on 2026-08-18 (JP's ruling): screenshots,
+the legacy spreadsheet export, the model-validation gate evidence, and the borrowed
+ARES deploy script now live outside the repo. `scripts/gate-t045.ts` regenerates its
+report on demand — still gitignored; it carries the real board id.
 
 ## Where law lives
 
@@ -52,4 +84,6 @@ rules (BRD vs Implementation Plan) are stated there, not here.
 | Pipeline rules incl. R-warn-* rulings | `specs/001-sirius-v1/pipeline-frame-notes.md` |
 | Requests-tab rules | `specs/001-sirius-v1/requests-frame-notes.md` |
 | Trello write registry | `specs/001-sirius-v1/contracts/trello-write.md` |
-| Constitution, invariants, precedence | root `CLAUDE.md` |
+| Build process (spec → plan → tasks → implement) | root `SPEC_KIT_PLAYBOOK.md`; artefacts in `specs/001-sirius-v1/` |
+| Documentation shape, caps, layers | `docs/architecture/context-architecture.md` |
+| Constitution, invariants, precedence | root `CLAUDE.md` — authoritative and auto-loading; mirrored (with the version number, **v4.4.0**) at `.specify/memory/constitution.md`. Amendments enter the root file first, then the mirror |

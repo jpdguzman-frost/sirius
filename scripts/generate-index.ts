@@ -1,7 +1,8 @@
 /**
  * Map generator — rebuilds the GEN blocks of the Layer-0 skim (docs/MAP.md)
- * and the per-area Layer-2 maps (docs/map-frontend.md, docs/map-backend.md)
- * in place. Architecture + caps: docs/CONTEXT_ARCHITECTURE.md (asserted by
+ * and the per-area Layer-2 maps (docs/architecture/map-frontend.md,
+ * docs/architecture/map-backend.md) in place. Architecture + caps:
+ * docs/architecture/context-architecture.md (asserted by
  * test/context-architecture.test.ts).
  *
  * docs/MAP.md (Layer 0):
@@ -12,7 +13,7 @@
  *                area key (new area → "TODO: describe"; vanished → dropped).
  *   GEN:DOCMAP — the four context layers as pointers.
  *
- * docs/map-<area>.md (Layer 2, one per area):
+ * docs/architecture/map-<area>.md (Layer 2, one per area):
  *   GEN:MODULES — the generator owns the FILE LIST (that area's source
  *                 files, path-sorted); the human owns the PURPOSE text,
  *                 merged from that same map's existing block. New file →
@@ -76,7 +77,7 @@ export function areaOf(file: string): Area {
 
 /** Repo-relative path of an area's Layer-2 map. */
 export function areaMapPath(area: Area): string {
-  return `docs/map-${area}.md`;
+  return `docs/architecture/map-${area}.md`;
 }
 
 // ---------- GEN block plumbing ----------
@@ -132,7 +133,7 @@ function statusLines(state: string): string[] {
   for (const row of tableRows(sectionOf(state, 'Phase status'))) {
     const [, num, phase, status] = row;
     if (num && phase && status && /in progress/i.test(status)) {
-      lines.push(`- In progress: phase ${num} — ${phase} → STATE.md §Phase status · history: docs/state-log/`);
+      lines.push(`- In progress: phase ${num} — ${phase} → STATE.md §Phase status · history: docs/history/state-log/`);
     }
   }
   for (const row of tableRows(sectionOf(state, 'Decisions needed from JP (blocking)'))) {
@@ -192,9 +193,9 @@ function moduleLines(area: Area, purposes: Map<string, string>): string[] {
 
 const DOCMAP_LINES: string[] = [
   '- Layer 0 · entry — CLAUDE.md (constitution) · docs/MAP.md (this skim) · directory CLAUDE.md files (frontend/, test/, lib/, src/)',
-  '- Layer 1 · current state — STATE.md · docs/HANDOFF.md',
-  '- Layer 2 · task set — area maps (docs/map-frontend.md, docs/map-backend.md — the per-file lines) · area rulebooks (planner: specs/001-sirius-v1/gantt-rules.md; pipeline/requests law still lives in their frame-notes until extracted — docs/README.md §Where law lives) · decisions/ · specs/001-sirius-v1/ (contracts + spec-kit)',
-  '- Layer 3 · archive — docs/state-log/ · archived frame-notes (gantt today; banner marks each) · git history · owl threads',
+  '- Layer 1 · current state — STATE.md (the only Layer-1 file; docs/HANDOFF.md retired 2026-08-18)',
+  '- Layer 2 · task set — area maps (docs/architecture/map-frontend.md, docs/architecture/map-backend.md — the per-file lines) · area rulebooks (planner: specs/001-sirius-v1/gantt-rules.md; pipeline/requests law still lives in their frame-notes until extracted — docs/README.md §Where law lives) · decisions/ · specs/001-sirius-v1/ (contracts + spec-kit)',
+  '- Layer 3 · archive — docs/history/state-log/ · archived frame-notes (gantt today; banner marks each) · git history · owl threads',
 ];
 
 // ---------- main ----------

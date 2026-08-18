@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from `/specs/001-sirius-v1/spec.md`
 
-**Sources of truth**: `docs/Sirius__Implementation_Plan.md` (aligned to BRD v2.2) for sequence, gates, estimates, integration rules and schema *content*; **CLAUDE.md stack section as amended by JP 2026-08-03** (constitution v2.0.0) for the stack, which supersedes the source plan's §1.1, §2.1–2.4 and §3. Where they conflict, the amended constitution wins. OD-1 and OD-8 are resolved (spec Clarifications).
+**Sources of truth**: `docs/product/implementation-plan.md` (aligned to BRD v2.2) for sequence, gates, estimates, integration rules and schema *content*; **CLAUDE.md stack section as amended by JP 2026-08-03** (constitution v2.0.0) for the stack, which supersedes the source plan's §1.1, §2.1–2.4 and §3. Where they conflict, the amended constitution wins. OD-1 and OD-8 are resolved (spec Clarifications).
 
 ## Summary
 

@@ -1,6 +1,6 @@
 /**
  * ORACLE — functions extracted VERBATIM from the validated prototype bundle
- * (docs/frost-sirius-v1.html, prettier-formatted, identifiers as minified).
+ * (docs/source-material/frost-sirius-v1.html, prettier-formatted, identifiers as minified).
  * DO NOT EDIT. The lib/ port is proven by parity against this module
  * (AC-10 discipline under the approved STATE.md deviation).
  *

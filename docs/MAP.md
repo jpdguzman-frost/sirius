@@ -1,6 +1,6 @@
 # MAP — the Sirius skim (Layer 0)
 
-_Read first, instead of exploring: live status · the areas (per-file lines live in the area maps, docs/map-*.md) · the doc layers (ruled in docs/CONTEXT_ARCHITECTURE.md). last-verified: 2026-08-18 · regenerate: `npx tsx scripts/generate-index.ts` (`--check` exits 1 on drift)._
+_Read first, instead of exploring: live status · the areas (per-file lines live in the area maps, docs/architecture/map-*.md) · the doc layers (ruled in docs/architecture/context-architecture.md). last-verified: 2026-08-18 · regenerate: `npx tsx scripts/generate-index.ts` (`--check` exits 1 on drift)._
 
 ## Standing rules
 
@@ -10,7 +10,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 ## Status
 
 <!-- GEN:STATUS -->
-- In progress: phase 9 — Security testing + pilot → STATE.md §Phase status · history: docs/state-log/
+- In progress: phase 9 — Security testing + pilot → STATE.md §Phase status · history: docs/history/state-log/
 - Open blocking decision BRD §9: Amend "write impossible by permission" → STATE.md §Decisions needed from JP (blocking)
 - ACs: 19 ✅ · 5 ⬜ (of 24) → STATE.md §Acceptance criteria scoreboard
 <!-- /GEN:STATUS -->
@@ -18,17 +18,17 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 ## Areas
 
 <!-- GEN:AREAS -->
-- `frontend` — 23 files → docs/map-frontend.md — no-bundler Ractive app: numbered app scripts (one shared scope, filename order) + one template + numbered styles
-- `backend` — 62 files → docs/map-backend.md — Express 5 + worker; lib/ holds the verbatim-port trio; scripts/ are ops
+- `frontend` — 23 files → docs/architecture/map-frontend.md — no-bundler Ractive app: numbered app scripts (one shared scope, filename order) + one template + numbered styles
+- `backend` — 62 files → docs/architecture/map-backend.md — Express 5 + worker; lib/ holds the verbatim-port trio; scripts/ are ops
 <!-- /GEN:AREAS -->
 
 ## Doc map
 
 <!-- GEN:DOCMAP -->
 - Layer 0 · entry — CLAUDE.md (constitution) · docs/MAP.md (this skim) · directory CLAUDE.md files (frontend/, test/, lib/, src/)
-- Layer 1 · current state — STATE.md · docs/HANDOFF.md
-- Layer 2 · task set — area maps (docs/map-frontend.md, docs/map-backend.md — the per-file lines) · area rulebooks (planner: specs/001-sirius-v1/gantt-rules.md; pipeline/requests law still lives in their frame-notes until extracted — docs/README.md §Where law lives) · decisions/ · specs/001-sirius-v1/ (contracts + spec-kit)
-- Layer 3 · archive — docs/state-log/ · archived frame-notes (gantt today; banner marks each) · git history · owl threads
+- Layer 1 · current state — STATE.md (the only Layer-1 file; docs/HANDOFF.md retired 2026-08-18)
+- Layer 2 · task set — area maps (docs/architecture/map-frontend.md, docs/architecture/map-backend.md — the per-file lines) · area rulebooks (planner: specs/001-sirius-v1/gantt-rules.md; pipeline/requests law still lives in their frame-notes until extracted — docs/README.md §Where law lives) · decisions/ · specs/001-sirius-v1/ (contracts + spec-kit)
+- Layer 3 · archive — docs/history/state-log/ · archived frame-notes (gantt today; banner marks each) · git history · owl threads
 <!-- /GEN:DOCMAP -->
 
 ## Test guards (load-bearing only, of 60 suites + helpers and the golden oracle)

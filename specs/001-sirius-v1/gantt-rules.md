@@ -21,7 +21,7 @@ _last-verified: 2026-08-18_
    children of `.gtrack`). `.grun` carries all five directives (`draggable` +
    dragstart/dragend/dragover/drop) plus its inline `left`/`width`; `.gbar`
    carries none. Never the row, never the bar wrapper. [JP 2026-08-18,
-   batch 8; HANDOFF §drag]
+   batch 8; state-log 2026-08-18]
 3. **`.gantt .gbar` is `pointer-events: none`; `.gantt .grun` is
    `pointer-events: auto`, written out explicitly — the two rules ship
    together or not at all.** The transparent wrapper hands outside-the-run
@@ -187,14 +187,13 @@ _last-verified: 2026-08-18_
     action cluster and status-note affordance are unavailable while collapsed
     — expand to use them. Sprint blocks (including *Outside any sprint* and
     *Unscheduled*) collapse/expand per block via `collapsedBlocks`, which
-    clears on project switch (rule 36). [owl #24, batch 3; HANDOFF
-    §planner-today, 13g/13i]
+    clears on project switch (rule 36). [owl #24, batch 3; 13g/13i]
 
 ## 4. Standing decisions — deliberately not done
 
 40. **The four shared `.grun`/`.gghost` CSS declarations stay duplicated**:
     `gantt-run-geometry` and `drag-hittest` look those selectors up by name.
-    [HANDOFF §review-sweep]
+    [review sweep 2026-08-18, T162]
 41. **The 26px vertical grab band is deliberate** — affordance and target
     agree on both axes; nothing widens it back. [JP 2026-08-18, batch 9]
 42. **No `title` on the bar or the run box** — the standing hint is the home
@@ -214,18 +213,19 @@ _last-verified: 2026-08-18_
 46. **A drag interaction ships only after a real-pointer pass.** There is no
     jsdom and no browser runner in this repo; every planner test is Ractive
     `toHTML()` or a read/execution of shipped source — none of it proves a
-    drag can start. [batch 7 §why-no-test; HANDOFF §drag]
+    drag can start. [batch 7 §why-no-test; state-log 2026-08-18]
 47. **No synthetic `DragEvent`s, ever.** A synthetic event calls the app's
     handlers directly and never enters Chrome's drag machinery — it proves
     wiring, not draggability. Say so in test names and file headers.
-    [batch 7–9; HANDOFF §drag]
+    [batch 7–9; state-log 2026-08-18]
 48. **Real-pointer procedure**: chrome-devtools MCP — `take_snapshot` for
     uids, then `drag(from_uid, to_uid)`. Attach event listeners BEFORE
-    dragging; read back only summarised counts. [HANDOFF §gotchas]
+    dragging; read back only summarised counts. [batch 7 root-cause pass;
+    test/CLAUDE.md rule 4]
 49. **Live verification writes are real**: passes run against the deployed
     site on rt-test (`tx8gDsTH`, synthetic fixtures only). Record every row's
     `slottedWeek` before touching anything and restore it after — zero net
-    change. [HANDOFF §still-open, JP 2026-08-18]
+    change. [JP 2026-08-18; STATE.md §Still open]
 50. **Comments can trip source-regex guards**: a drift guard counting
     occurrences in raw source counts comments too. When a guard fires on
     prose, reword the prose — the guard is right. [batch 8 §defect; batch 9
@@ -241,21 +241,21 @@ _last-verified: 2026-08-18_
 
 ## 6. Carried over at the 2026-08-18 rewire
 
-Rules that lived only in `docs/HANDOFF.md` §planner-today when this file
-became authoritative; moved here so the HANDOFF stub could point instead of
-restate.
+Rules that lived only in the session handoff (`docs/HANDOFF.md`, retired
+2026-08-18) when this file became authoritative; moved here so the planner has
+one home instead of two.
 
 53. **Capacity footer totals are computed with the BR-6c weights** — rule
     29's red/amber thresholds apply to that weighted load, never to a raw
-    card count. [HANDOFF §planner-today, 13g]
+    card count. [13g]
 54. **A drag is horizontal only; the vertical outcome is derived.** A drop
     changes the slotted week and nothing else — the row's relocation to
     another block follows from rule 30 and is announced with the arrival
-    pulse + `scrollIntoView`. [HANDOFF §planner-today, 13j]
+    pulse + `scrollIntoView`. [13j]
 55. **The row action cluster is Copy · Pin · Calendar Remove** — 13px
     sprites, aria-labelled and keyboard-operable; Calendar Remove is
     disabled on pinned and on unslotted rows (rules 13, 38).
-    [HANDOFF §planner-today, 13j]
+    [13j]
 56. **The status-note affordance is the `manual` chip** (ghost pencil when
     empty); placement is provisional pending Miles's design pass.
-    [HANDOFF §planner-today]
+    [carried over 2026-08-18]

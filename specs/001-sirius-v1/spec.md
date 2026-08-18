@@ -6,9 +6,9 @@
 
 **Status**: Draft
 
-**Input**: User description: "Convert the signed-off BRD v2.2 (docs/Sirius__BRD.md) into Spec Kit format. Preserve every FR, BR, NFR, AC with its ID. Preserve every measured constant exactly. Mark Open Decisions [NEEDS CLARIFICATION]. Scope is v1 only. Add nothing the BRD does not contain."
+**Input**: User description: "Convert the signed-off BRD v2.2 (docs/product/brd.md) into Spec Kit format. Preserve every FR, BR, NFR, AC with its ID. Preserve every measured constant exactly. Mark Open Decisions [NEEDS CLARIFICATION]. Scope is v1 only. Add nothing the BRD does not contain."
 
-**Source of truth**: `docs/Sirius__BRD.md` (v2.2, 3 August 2026). This document is a format conversion, not a rewrite. Where this spec and the BRD diverge, the BRD wins and this spec is in error. Requirement IDs (FR-x.y, BR-n, NFR-n, AC-n) are the BRD's own and are how work is traced.
+**Source of truth**: `docs/product/brd.md` (v2.2, 3 August 2026). This document is a format conversion, not a rewrite. Where this spec and the BRD diverge, the BRD wins and this spec is in error. Requirement IDs (FR-x.y, BR-n, NFR-n, AC-n) are the BRD's own and are how work is traced.
 
 ## Overview
 
@@ -344,7 +344,7 @@ Preserved verbatim from BRD §7.
 
 **BR-6b — Hard mix ceiling.** Card count alone cannot distinguish a week of 120 easy cards from 120 hard ones, so a second axis applies. Difficulty weights (Easy 1, Medium 2, Hard 4) are used *only* for this test. Measured across 27 weeks on board `hLL7WW2V`: hard share median **8.3%** (ideal), p85 **12.9%** (ceiling), observed max 20.4%. Weeks above the median ran a median cycle of **24.1 h against 19.4 h** — roughly 24% slower per card. A week over the ideal is flagged amber, over the ceiling red.
 
-**BR-6c — Row weight converts rows to card-equivalents.** *(Added 2026-08-12 from build spec v1.1 §5.4; resolves the BR-6a caveat.)* A schedule row is a deliverable, but capacity (BR-6a) counts every card. Each row therefore weighs `1 + (its MC group's work cards ÷ the group's deliverables)`: MC-805, with 13 deliverables and 40 work cards, weighs 4.08 per row and 53 as a group; the verified board sums to **478 = 269 deliverables + 209 work cards** (the 20 unkeyed cards weigh into no group). The weight feeds the weekly footer, the over-capacity tint and the BR-6 *over capacity* conflict. It does **not** feed the hard-mix test (BR-6b keeps its own difficulty weights) and does **not** alter Suggest plan's validated placement arithmetic (`lib/planner.ts` counts rows, golden-locked — invariant 5). *Count basis confirmed by the product team 2026-08-12 (`docs/sirus_errata-reply-v1.2.md`): this weight applies everywhere, Deadlines included — their §6.1 "counts 3" was a documentation error, fixed in build spec v1.2. Their rationale, kept for the record: a deliverable is real work, not a container — 244 of 269 deliverables carry no task cards, so a work-cards-only basis would hide 90% of the board from capacity.*
+**BR-6c — Row weight converts rows to card-equivalents.** *(Added 2026-08-12 from build spec v1.1 §5.4; resolves the BR-6a caveat.)* A schedule row is a deliverable, but capacity (BR-6a) counts every card. Each row therefore weighs `1 + (its MC group's work cards ÷ the group's deliverables)`: MC-805, with 13 deliverables and 40 work cards, weighs 4.08 per row and 53 as a group; the verified board sums to **478 = 269 deliverables + 209 work cards** (the 20 unkeyed cards weigh into no group). The weight feeds the weekly footer, the over-capacity tint and the BR-6 *over capacity* conflict. It does **not** feed the hard-mix test (BR-6b keeps its own difficulty weights) and does **not** alter Suggest plan's validated placement arithmetic (`lib/planner.ts` counts rows, golden-locked — invariant 5). *Count basis confirmed by the product team 2026-08-12 (`docs/product/errata-reply-v1.2.md`): this weight applies everywhere, Deadlines included — their §6.1 "counts 3" was a documentation error, fixed in build spec v1.2. Their rationale, kept for the record: a deliverable is real work, not a container — 244 of 269 deliverables carry no task cards, so a work-cards-only basis would hide 90% of the board from capacity.*
 
 **BR-7 — Smart plan.** Order by urgency, then deadline, then difficulty descending. A week fills at the empirical throughput ceiling for its difficulty mix. Blocked cards are not scheduled into the current week. Pinned rows are immovable. Nothing applies without explicit acceptance.
 
@@ -507,18 +507,18 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 ### Session 2026-08-04 (JP) — two-way sync
 
 - **Write registry opened (constitution v4.0.0, MAJOR)**: the Trello write surface grows from urgency-only to an enumerated registry — today exactly `Urgent` label (W1) and card due date (W2). Deadline edits happen in Sirius and write through to Trello. Further growth requires a constitution amendment. Sheets stay read-only forever.
-- **ARES push chosen over polling (NFR-3 → < 1 min target)**: ARES gains an outbound webhook feature (built by a separate agent from `docs/ARES_PUSH_BUILD_SPEC.md`); Sirius consumes it per `contracts/ares-push.md` on the notification-then-read pattern. The 15-min poll remains as reconcile fallback.
+- **ARES push chosen over polling (NFR-3 → < 1 min target)**: ARES gains an outbound webhook feature (built by a separate agent from `docs/operations/ares-push-spec.md`); Sirius consumes it per `contracts/ares-push.md` on the notification-then-read pattern. The 15-min poll remains as reconcile fallback.
 - **Sequencing**: build now — the pilot ships with deadline writes and push, widening the pre-pilot security review accordingly (phase 10, T077–T086).
 - **Truth for Trello-owned fields**: Trello, always — manual Trello changes flow back via push and reconcile into Sirius, including the two written fields (FR-9.5).
 
 ### Session 2026-08-12 (JP) — build spec v1.1 alignment
 
-- The product team's build spec v1.1 (`docs/sirius-build-spec_v1.1.md`) was reviewed against the live system; corrections returned as `docs/sirius-build-spec_v1.1_errata.md`. *(Both archived 2026-08-18 per JP → `docs/archive/`.)*
+- The product team's build spec v1.1 (`docs/history/build-spec-v1.1.md`) was reviewed against the live system; corrections returned as `docs/history/build-spec-v1.1-errata.md`. *(Both archived 2026-08-18 per JP → `docs/history/`.)*
 - **W2 confirmed standing**: the doc's §4.2 "open decision" on writing the Trello due date predates the 2026-08-04 amendment. The decision holds — a Sirius deadline edit writes the Trello due date; no Sirius-local override layer exists or will be built.
 - **Frost notes adopted** → FR-11, AC-21 (build spec §3.7–3.8).
 - **Daily plotting adopted** → FR-12, AC-22/AC-23 (build spec §6.2).
 - **Weighted row load adopted** → BR-6c, AC-24 (build spec §5.4) — resolves the BR-6a caveat by converting deliverable rows to card-equivalents.
-- One question back to the product team (in the errata): the Deadlines count basis — §6.1's example disagrees with §5.4's formula. Default until answered: BR-6c weight everywhere. **Answered 2026-08-12** (`docs/sirus_errata-reply-v1.2.md`): §5.4 weight everywhere — the default stands, no code change; §6.1 was a doc error, fixed in their v1.2.
+- One question back to the product team (in the errata): the Deadlines count basis — §6.1's example disagrees with §5.4's formula. Default until answered: BR-6c weight everywhere. **Answered 2026-08-12** (`docs/product/errata-reply-v1.2.md`): §5.4 weight everywhere — the default stands, no code change; §6.1 was a doc error, fixed in their v1.2.
 
 ### Session 2026-08-12 (JP) — W3 difficulty writeback
 

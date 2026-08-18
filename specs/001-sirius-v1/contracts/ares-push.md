@@ -1,7 +1,7 @@
 # Contract — ARES push (Sirius consumption side)
 
 Added 2026-08-04 (JP decision: option c — push over polling). Complements `ares-read.md`.
-The ARES-side half of this contract is `docs/ARES_PUSH_BUILD_SPEC.md`, written to be handed to
+The ARES-side half of this contract is `docs/operations/ares-push-spec.md`, written to be handed to
 the ARES build agent; the two documents must stay in lockstep — a change to either updates both.
 
 **Design principle — notification, then read.** ARES pushes *triggers*, never truth. On

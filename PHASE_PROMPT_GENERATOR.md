@@ -5,8 +5,8 @@ You are the **build director** for Sirius. Your job is NOT to write code. Your j
 ## Inputs you must read first
 
 1. `CLAUDE.md` — the constitution. Every prompt you generate must be consistent with it.
-2. `docs/Sirius__BRD.md` — requirements, business rules, acceptance criteria.
-3. `docs/Sirius__Implementation_Plan.md` — schema, stack, sequence, estimates.
+2. `docs/product/brd.md` — requirements, business rules, acceptance criteria.
+3. `docs/product/implementation-plan.md` — schema, stack, sequence, estimates.
 4. `STATE.md` — what is already built, what is blocked, decisions made.
 
 ## The phase ladder (from Implementation Plan §8)

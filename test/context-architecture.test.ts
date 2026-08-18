@@ -1,6 +1,6 @@
 /**
  * Context-architecture guard — asserts the caps table of
- * docs/CONTEXT_ARCHITECTURE.md §Caps and guards.
+ * docs/architecture/context-architecture.md §Caps and guards.
  *
  * The architecture's bet is "enforcement over discipline": the always-loaded
  * docs (Layer 0/1) must survive neglect, so every cap, rotation window,
@@ -11,7 +11,8 @@
  *
  * The map set (decomposed 2026-08-18, decision 0022): docs/MAP.md is the
  * fixed-size Layer-0 index (status, areas, doc map); the per-file lines live
- * in per-area Layer-2 maps (docs/map-*.md), one GEN:MODULES block each.
+ * in per-area Layer-2 maps (docs/architecture/map-*.md), one GEN:MODULES
+ * block each.
  *
  * TZ-independent (no dates are computed — the stamps are matched on format
  * only) and offline (the only spawn is the local generator in --check mode).
@@ -52,13 +53,14 @@ const genBlock = (name: string): string => genBlockIn(MAP, name, 'docs/MAP.md');
 /**
  * The area maps as found ON DISK (glob, not the partition): the set test
  * below proves this equals what the partition names, so a stray
- * docs/map-*.md — or a partition change that forgot its file — goes red.
+ * docs/architecture/map-*.md — or a partition change that forgot its file —
+ * goes red.
  */
 const areaMapsOnDisk = (): string[] =>
   fs
-    .readdirSync(path.join(ROOT, 'docs'))
+    .readdirSync(path.join(ROOT, 'docs', 'architecture'))
     .filter((name) => /^map-.+\.md$/.test(name))
-    .map((name) => `docs/${name}`)
+    .map((name) => `docs/architecture/${name}`)
     .sort();
 
 /** Paths listed in one area map's GEN:MODULES block. */
@@ -113,7 +115,7 @@ describe('docs/MAP.md — the Layer-0 index', () => {
   });
 });
 
-describe('docs/map-*.md — the Layer-2 area maps', () => {
+describe('docs/architecture/map-*.md — the Layer-2 area maps', () => {
   it('the on-disk map set is exactly what the area partition names', () => {
     expect(areaMapsOnDisk()).toEqual(AREAS.map(areaMapPath).sort());
   });
@@ -177,15 +179,22 @@ describe('STATE.md — Layer-1 rot protection', () => {
     const at = state.indexOf('### Older sessions — index');
     expect(at, 'the "Older sessions — index" section is missing').toBeGreaterThan(-1);
     const indexLines = state.slice(at).split('\n').filter((line) => line.startsWith('- 20'));
-    expect(indexLines.length, 'rotate: keep the newest 10, delete the rest (targets live in docs/state-log/)').toBeLessThanOrEqual(12);
+    expect(indexLines.length, 'rotate: keep the newest 10, delete the rest (targets live in docs/history/state-log/)').toBeLessThanOrEqual(12);
   });
 });
 
-describe('size caps (docs/CONTEXT_ARCHITECTURE.md §Caps and guards)', () => {
-  it('docs/HANDOFF.md ≤ 26KB', () => {
-    // the architecture's 24KB is a SOFT bound (warn — sanctioned overshoot
-    // exists); the hard stop sits at 26KB so only real decay goes red
-    expect(bytesOf('docs/HANDOFF.md')).toBeLessThanOrEqual(26 * KB);
+describe('size caps (docs/architecture/context-architecture.md §Caps and guards)', () => {
+  it('Layer 1 is STATE.md alone — docs/HANDOFF.md stays retired', () => {
+    // Retired by JP on 2026-08-18 ("an extra step that can be removed"); every
+    // unique fact moved to the file an agent meets it in (rigidity log,
+    // docs/architecture/context-architecture.md). A file reappearing here is a
+    // second always-loaded current-state doc with no single audience — the
+    // exact drift the retirement removed. Re-adding one is a ruling, not a
+    // commit: record it in the architecture file first, then change this test.
+    expect(
+      fs.existsSync(path.join(ROOT, 'docs/HANDOFF.md')),
+      'docs/HANDOFF.md is back — see the 2026-08-18 rigidity-log entry before reviving it',
+    ).toBe(false);
   });
 
   it('domain rulebooks ≤ 20KB (every *-rules.md, present and future)', () => {
@@ -227,8 +236,8 @@ describe('generator cleanliness — the rot alarm', () => {
 
 describe('staleness stamps', () => {
   // Deliberately NOT stamped: root CLAUDE.md (the constitution — JP versions
-  // it himself) and STATE.md/docs/HANDOFF.md (Layer 1 current-state files —
-  // their freshness IS their content, updated every session by convention).
+  // it himself) and STATE.md (the Layer-1 current-state file — its freshness
+  // IS its content, updated every session by convention).
   // The set is DERIVED, not listed: a new rulebook, area map, or directory
   // CLAUDE.md is covered by this assertion the day it appears. The
   // hand-written Layer-2 operational docs are the exception — no glob names
@@ -236,14 +245,14 @@ describe('staleness stamps', () => {
   const stamped = [
     'docs/MAP.md',
     'docs/README.md',
-    'docs/CONTEXT_ARCHITECTURE.md',
+    'docs/architecture/context-architecture.md',
     'decisions/README.md',
     // hand-written Layer-2 operational docs (listed explicitly)
-    'docs/DEPLOY.md',
-    'docs/SERVER_SETUP_SPEC.md',
-    'docs/AGENTS.md',
-    'docs/ARES_PUSH_BUILD_SPEC.md',
-    'docs/sirus_errata-reply-v1.2.md',
+    'docs/operations/deploy.md',
+    'docs/operations/server-setup.md',
+    'docs/architecture/agents-guide.md',
+    'docs/operations/ares-push-spec.md',
+    'docs/product/errata-reply-v1.2.md',
     ...areaMapsOnDisk(),
     ...fs
       .readdirSync(path.join(ROOT, 'specs', '001-sirius-v1'))
@@ -266,7 +275,7 @@ describe('decisions/ records (tolerant while absent — Stage 4b creates it)', (
 
   it('every NNNN-*.md is 20–60 lines with the six required headings', () => {
     // the architecture writes 20–40; the guard allows to 60 so a sanctioned
-    // long record does not go red (same soft/hard pattern as HANDOFF)
+    // long record does not go red
     for (const name of records) {
       const text = read(`decisions/${name}`);
       expect(text.startsWith('# '), `decisions/${name} lacks a # Title first line`).toBe(true);

@@ -14,7 +14,8 @@ cd ~/dev
 specify init sirius --integration claude    # Claude Code = skills-based install
 cd sirius
 mkdir -p docs
-# copy in: Sirius__BRD.md, Sirius__Implementation_Plan.md,
+# copy in: the BRD and Implementation Plan (today docs/product/brd.md and
+#          docs/product/implementation-plan.md),
 #          frost-sirius-v1.jsx (the prototype), CLAUDE.md
 git add . && git commit -m "Spec Kit scaffold + source documents"
 ```
@@ -41,7 +42,7 @@ Run the constitution step and paste the whole of `CLAUDE.md` as its input. Prefa
 Do NOT describe the app in your own words. Instead:
 
 > The specification for this system already exists as a signed-off BRD (v2.2) at
-> docs/Sirius__BRD.md. Convert it into the Spec Kit spec format. Rules:
+> docs/product/brd.md. Convert it into the Spec Kit spec format. Rules:
 > 1. Preserve every FR, BR, NFR, and AC with its ID. IDs are how we trace work.
 > 2. Preserve every measured constant exactly (review-wait percentiles, throughput
 >    grids, hard-mix thresholds, capacity reference weeks). Do not round or "example-ify."
@@ -56,7 +57,7 @@ Do NOT describe the app in your own words. Instead:
 
 ## Step 3 — Plan (seed with the Implementation Plan)
 
-> The technical plan also already exists: docs/Sirius__Implementation_Plan.md.
+> The technical plan also already exists: docs/product/implementation-plan.md.
 > Convert it to the Spec Kit plan format. Rules:
 > 1. The stack is decided (Next.js App Router, TypeScript strict, Prisma, Auth.js,
 >    separate worker, Cloud Run + Cloud SQL). Do not re-open stack decisions.
@@ -145,8 +146,8 @@ sirius/
 │   ├── plan.md                   ← from Implementation Plan
 │   └── tasks.md                  ← generated, phase-grouped, ID-traced
 ├── docs/                         ← the originals stay; they remain authoritative
-│   ├── Sirius__BRD.md
-│   ├── Sirius__Implementation_Plan.md
+│   ├── product/brd.md
+│   ├── product/implementation-plan.md
 │   └── frost-sirius-v1.jsx
 └── CLAUDE.md                     ← Claude Code reads this every session
 ```

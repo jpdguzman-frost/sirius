@@ -8,13 +8,13 @@ _last-verified: 2026-08-18_
 ## The verbatim trio [root CLAUDE.md invariant 5; decisions/0012]
 
 `calendar.ts`, `forecast.ts`, `planner.ts` are a validated port from the
-compiled prototype bundle (`docs/frost-sirius-v1.html`; the original .jsx was
+compiled prototype bundle (`docs/source-material/frost-sirius-v1.html`; the original .jsx was
 never available). Never refactor, rename, or "clean up" their logic; the
 quirks (`toFriday` Fri/Sat/Sun→next Monday, and friends) are deliberate —
 fidelity outranks tidiness. Changes happen only by constitution amendment
 with the golden suites rebuilt against a stated reference (0017 is the worked
 example). Before touching any module here, read its `decisions/` entries
-[docs/CONTEXT_ARCHITECTURE.md principle 5].
+[docs/architecture/context-architecture.md principle 5].
 
 **The golden suites are the sole proof of fidelity** [decisions/0012]:
 `test/calendar.test.ts`, `test/forecast.test.ts`, `test/planner.test.ts`
@@ -23,7 +23,7 @@ validation against real sheet rows in `test/golden/workbook-rows.json`).
 The oracle is `test/golden/original.mjs` — extracted verbatim from the
 bundle, minified identifiers kept, DO NOT EDIT.
 
-## What is NOT the trio [docs/map-backend.md; the file headers]
+## What is NOT the trio [docs/architecture/map-backend.md; the file headers]
 
 - `dayplan.ts` — NEW code (phase 12), not the port: day capacities for
   Deadlines daily plotting.

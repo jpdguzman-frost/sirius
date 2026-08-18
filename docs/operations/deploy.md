@@ -11,7 +11,8 @@ same Mongo server (its own `sirius` database), and follows the ARES deploy
 pattern. Invariant 15: all secrets live in the host's `.env`, never the repo.
 
 Host architecture — the Apache + certbot vhost, proxy config, port choice, and the
-full provisioning history (gates G2–G7) — is specified in `SERVER_SETUP_SPEC.md`;
+full provisioning history (gates G2–G7) — is specified in
+`docs/operations/server-setup.md`;
 **where that spec and this runbook differ on server architecture, the spec wins.**
 This runbook is the reference for the `.env` key list, the deploy procedure, the
 smoke checklist, backup/restore, and user administration.
@@ -22,11 +23,11 @@ smoke checklist, backup/restore, and user administration.
 |---|---|
 | URL | `https://platforms.frostdesigngroup.com/sirius` · health: `…/sirius/healthz` |
 | Host | the ARES droplet; files at `/mnt/volume_sgp1_01/platforms/sirius` |
-| Proxy | Apache :443 + Let's Encrypt (certbot-renewed) → `127.0.0.1:3955`, `/sirius` prefix NOT stripped, `X-Forwarded-Proto https` (`SERVER_SETUP_SPEC.md` §3) |
+| Proxy | Apache :443 + Let's Encrypt (certbot-renewed) → `127.0.0.1:3955`, `/sirius` prefix NOT stripped, `X-Forwarded-Proto https` (`docs/operations/server-setup.md` §3) |
 | Port | **3955** (JP, 2026-08-05) |
 | Processes | pm2 under nvm node: `sirius` (web, `npm run start`) + `sirius-worker` (`npm run worker`) |
 | Env | `NODE_ENV=production` · database `sirius` · `BASE_PATH=/sirius` |
-| Projects | **rt-837** (`hLL7WW2V`) — the LIVE production project, observation mode (`writes_enabled: false`), capacity locked at 120 · **rt-test** (`tx8gDsTH`) — the TEST board, writes on |
+| Projects | **rt-837** (`hLL7WW2V`) — the LIVE production project, observation mode (`writes_enabled: false`), capacity **LOCKED at 120** (Option B structural lock; an admin unlock is audited — `decisions/0016` + `0018`) · **rt-test** (`tx8gDsTH`) — the TEST board, writes on, unlocked, 8 intake fixture rows, zero sprints |
 
 **rt-837 is live production data.** Every example, drill, and round-trip in this
 runbook uses `rt-test` / `tx8gDsTH` only.
@@ -46,7 +47,7 @@ The source of truth for this list is the Zod schema in `src/config/env.ts`;
   code only; no staging tier is deployed)
 - `PORT=3955`
 - `BASE_PATH=/sirius` (serve under the base path on the platforms host; default
-  `''` — nothing changes for local dev/tests. See `SERVER_SETUP_SPEC.md` §4)
+  `''` — nothing changes for local dev/tests. See `docs/operations/server-setup.md` §4)
 - `APP_BASE_URL=` (the OAuth callback is built as
   `<APP_BASE_URL>/auth/google/callback` — `src/auth/passport.ts`; on the host
   that must resolve to
@@ -60,7 +61,7 @@ The source of truth for this list is the Zod schema in `src/config/env.ts`;
   schema default, so it may be omitted)
 - `ARES_URL=https://ares.frostdesigngroup.com` · `ARES_API_KEY=` (read-only key)
 - `ARES_WEBHOOK_SECRET=` (generate: `openssl rand -hex 32`; the SAME value goes
-  into ARES's push subscriber config — see `docs/ARES_PUSH_BUILD_SPEC.md`.
+  into ARES's push subscriber config — see `docs/operations/ares-push-spec.md`.
   Unset = push disabled; the 15-min poll carries everything)
 - `TRELLO_API_KEY=` · `TRELLO_TOKEN=` (dedicated integration account;
   `TRELLO_WRITE_TOKEN` is accepted as a fallback name for older env files)
@@ -88,6 +89,19 @@ The source of truth for this list is the Zod schema in `src/config/env.ts`;
 Remote node runs under nvm at `/root/.nvm/versions/node/v24.4.1/bin` — prefix
 `PATH` with it when running `npx` by hand over ssh (host probes, scripts).
 
+## Local development (from the laptop)
+
+```bash
+SESSION_SECRET=dev-visual-check-only \
+  DEV_AUTOLOGIN=jpdguzman@frostdesigngroup.com npm run dev
+```
+
+Serves on **3955** against the host `mongod` on **27017**. Any non-production
+environment must carry `PROD_TRELLO_BOARD_IDS=hLL7WW2V` so the invariant-17
+guard can refuse the production board. Probes and seeds point at ISOLATED
+databases only — `scripts/seed.ts` does `deleteMany({})` on every collection
+(`test/CLAUDE.md` rule 7).
+
 ## Onboarding a project (first boot on a fresh instance)
 
 ```bash
@@ -106,7 +120,7 @@ live at G7): the write registry refuses writes for it until JP flips
 ## Smoke checklist
 
 Run after any deploy that touches auth, writes, or sync (G6 execution record in
-`SERVER_SETUP_SPEC.md` §7): sign in with a Frost account · non-Frost account
+`docs/operations/server-setup.md` §7): sign in with a Frost account · non-Frost account
 denied · authz matrix script · urgency round-trip on the TEST board
 (`BOARD=tx8gDsTH npx tsx scripts/urgency-roundtrip.ts`) · due-date round-trip
 (`BOARD=tx8gDsTH npx tsx scripts/due-roundtrip.ts`) · backup/restore drill on

@@ -12,18 +12,20 @@ No bundler. `node frontend/build.js` assembles `public/index.html` from
 concatenated `styles/*.css` (wrapped in `<style>`), `<!-- inject:templates -->` →
 concatenated `templates/*.html`, `<!-- inject:js -->` → concatenated
 `scripts/*.js` (wrapped in `<script>`). Files concatenate in sorted filename
-order — the numeric prefixes ARE the load order. Every Ractive template is
+order — the numeric prefixes ARE the load order. The app scripts are ten
+numbered pieces (`10-constants` … `95-routing`, split 2026-08-18); tests that
+read shipped source go through `test/helpers/source.ts`, never a filename. Every Ractive template is
 parse-checked at build: a template that will not parse fails the build, not the
 browser.
 
-## Ractive hazards [authoritative here since the 2026-08-18 rewire (formerly HANDOFF §Key facts & gotchas); `{{! }}` incident: docs/state-log/2026-08-18.md, batch 7]
+## Ractive hazards [authoritative here since the 2026-08-18 rewire; `{{! }}` incident: docs/history/state-log/2026-08-18.md, batch 7]
 
 - Triple-mustache dynamic member access renders empty — use helpers.
 - `{{! … }}` comments in ELEMENT-CONTENT position leak text after the first
   `}}` (an AST-scan test guards it). `{{!expr}}` in attributes is a negation
   and fine.
 
-## Performance law [docs/state-log/2026-08-18.md, review sweep; docs/HANDOFF.md §The review sweep]
+## Performance law [docs/history/state-log/2026-08-18.md, review sweep]
 
 - Any helper called from a template expression runs per row per render —
   `rowWarning(row)` sat in seven template positions while the Pipeline table
@@ -34,7 +36,7 @@ browser.
   element. Split into a read pass, then a write pass (`refreshClips` is the
   precedent).
 
-## Comments can trip source-regex guards [docs/state-log/2026-08-18.md — two incidents, batches 8 and 9]
+## Comments can trip source-regex guards [docs/history/state-log/2026-08-18.md — two incidents, batches 8 and 9]
 
 Several tests read RAW source text, comments included. A bare decimal in an
 app-script block comment read as a second copy of a guarded constant (batch 8);
@@ -49,7 +51,7 @@ comment, never the guard.
 - Before touching the Gantt/planner, read `specs/001-sirius-v1/gantt-rules.md`
   — especially §1, the drag contract (a drag source must stay hit-testable in
   every state; standing guard `test/drag-hittest.test.ts`)
-  [docs/HANDOFF.md §The Gantt drag].
+  [gantt-rules.md §1; docs/history/state-log/2026-08-18.md, batches 7–9].
 - Pipeline mechanism notes: `specs/001-sirius-v1/pipeline-frame-notes.md`.
   Requests: `specs/001-sirius-v1/requests-frame-notes.md`.
 
