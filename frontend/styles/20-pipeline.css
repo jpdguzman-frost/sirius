@@ -6,11 +6,12 @@
 .shellnav { background: var(--surface-background); padding: 40px var(--page-inset) 0; }
 
 /* per-row sprite icons — one size class per glyph box the frames measure
-   (10 = the Pipeline row's warning message, node 537:69131; 13 = the Gantt row
-   action cluster, owl #27; 15 = the warning triangle in the sprints modal's
-   alert banner, node 328:38162) */
-.i10 { width: 10px; height: 10px; display: block; }
+   (13 = the Gantt row action cluster, owl #27; 14 = the Pipeline row's warning
+   icon in the MC# cell, node I578:56516;484:27906; 15 = the warning triangle in
+   the sprints modal's alert banner, node 328:38162). The 10px box went out with
+   the warning MESSAGE line owl #41 deleted — that glyph was its only user. */
 .i13 { width: 13px; height: 13px; display: block; }
+.i14 { width: 14px; height: 14px; display: block; }
 .i15 { width: 15px; height: 15px; display: block; }
 .i16 { width: 16px; height: 16px; display: block; }
 .i18 { width: 18px; height: 18px; display: block; }
@@ -86,7 +87,7 @@
 .pipestack { display: flex; flex-direction: column; gap: var(--space-16); }
 
 /* the incomplete-card PANEL (annotations 70:1358/970/914) was deleted in owl
-   #36 — the state moved onto the row it describes (.prow.warn / .warnmsg /
+   #36 — the state moved onto the row it describes (.prow.warn / .warnbtn /
    .warnpop, below). Nothing replaces it above the table. */
 
 /* ---- search + callout (annotations 17:2057, 70:1211) ---- */
@@ -266,7 +267,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .datefield:hover:not(.readonly) { border-color: var(--surface-foreground); color: var(--surface-foreground); }
 /* one focus ring for the table's interactive chrome */
 .datefield:focus-visible, .duepop button:focus-visible, a.srclink:focus-visible,
-.warnmsg:focus-visible, .warnpop a:focus-visible {
+.warnbtn:focus-visible, .warnpop a:focus-visible {
   outline: 2px solid var(--blue-500); outline-offset: 1px;
 }
 .datefield.missing { border-color: var(--amber-400); color: var(--amber-600); }
@@ -334,39 +335,103 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 }
 .duepop .dueapply:hover { background: var(--slate-700); border-color: var(--slate-700); }
 
-/* ---- incomplete-card row state + popover (owl #36, nodes 537:69131 /
-   537:69135) — replaces the deleted table banner ----
+/* ---- incomplete-card row state + hover card (owl #36, revised by owl #41 —
+   nodes 537:69131 / 537:69135 / I578:56516;484:27906) ----
 
    R-warn-a: the frame draws the amber-300 as a full "stroke" around the row
-   and grows the row to 113px with a 280px name column. Neither is buildable
-   against this table without breaking it: .col-name is fluid (width:auto) and
-   the row height is content-derived from td padding, so the accent is a 3px
-   LEFT inset on the first cell and the geometry stays the table's. Declared
-   ONCE, here — no other rule draws it. */
-.ptable tr.prow.warn > td { background: var(--amber-50); }
+   and grows the row past a 280px name column. Neither is buildable against
+   this table without breaking it: .col-name is fluid (width:auto) and the row
+   height is content-derived from td padding, so the accent is a 3px LEFT inset
+   on the first cell and the geometry stays the table's. Declared ONCE, here —
+   no other rule draws it. The row getting shorter now that the message line is
+   deleted is an OUTCOME of that deletion, never a target: no rule in this file
+   sets a row height, and the guards assert the absence of the message line
+   rather than any number.
+
+   R-warn-o (owl #41): the amber-50 row wash that shipped in batch 5 is GONE.
+   That is Miles ruling the amber-wall question I raised in my #21 — 247 of 249
+   live rows warn, so the wash was painting the table rather than a state. What
+   carries the warning now is this accent plus the 14px icon in the MC# cell,
+   and nothing else.
+
+   PRECEDENCE, by construction instead of by override: with the wash deleted NO
+   rule in this file paints a warned row's background — the accent below sets
+   box-shadow only, and only on td:first-child. So `.ptable tr.blocked td`
+   (--red-50, above) is uncontested on a row that is both blocked and warned,
+   and R-warn-g holds because nothing competes for the property, not because a
+   later rule out-specifies it. That is exactly why the old .prow.warn.blocked
+   override went out with the wash: it existed solely to out-specify the wash,
+   and now overrides nothing. */
 .ptable tr.prow.warn > td:first-child { box-shadow: inset 3px 0 0 0 var(--amber-300); }
-/* a 🛑 blocker is the stronger signal, and it held the row red before this
-   state existed — the amber fill must not quietly demote it. The left accent
-   still draws, so a row that is both reads "blocked, and also incomplete". */
-.ptable tr.prow.warn.blocked > td { background: var(--red-50); }
-/* the frame's `content › subtone-offset` gap under the card name. 6px matches
-   the popover's first-list-item gap; the annotation carries no px value. */
-.warnwrap { display: block; margin-top: 6px; }
-/* THE click target — the row itself stays presentation only */
-.warnmsg {
-  display: inline-flex; align-items: center; gap: var(--space-4);
-  border: none; background: none; padding: 0; cursor: pointer;
-  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; line-height: 1.4;
-  color: var(--amber-600); text-decoration: underline;
+/* the MC# label and its warning icon are ONE group: .mccell's 16px gap
+   separates the CHEVRON from the identity, not the label from its own icon.
+   The frame's `content › icon-offset (utility-icons-small)` carries no px
+   value — R-warn-n, the same unmeasured-token situation as batch 5's
+   `subtone-offset` — so 4px here plus the button's own 4px pad reads as the
+   8px the frame shows. Rendered on every row, warned or not; it is layout, not
+   state. */
+.ptable .mcid { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
+/* rendered only on a warned row, because it is the focusout host and a clean
+   row must not attach a listener. Nothing in this subtree may gain transform /
+   filter / contain: .warnpop is position:fixed, and any of the three would
+   make THIS box its containing block instead of the viewport, re-anchoring the
+   card to the cell it was made fixed to escape. */
+.warnhost { display: flex; align-items: center; flex: none; }
+/* THE trigger — the row itself stays presentation only. The annotation asks
+   for a hit area larger than the glyph, so a 14px icon sits in a 22px box; the
+   pad is what the pointer and the focus ring actually aim at. The ring is the
+   table's one shared rule above, not a second one restated here. */
+.warnbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: none; padding: var(--space-4); cursor: pointer;
+  border-radius: var(--radius-xs); color: var(--amber-600);
 }
-.warnmsg svg { color: var(--amber-600); flex: none; }
+.warnbtn:hover { color: var(--amber-700); }
 /* shares .selectmenu/.duepop's fixed-box recipe above; the annotation's
-   slate-100 stroke is the ONE value that forks from it */
+   slate-100 stroke is the ONE value that forks from it. The squared TOP-LEFT
+   is deliberate (owl #41): the card left-aligns to the icon and sits just
+   under it, and a corner missing exactly there reads as a caption growing out
+   of the icon rather than a panel floating over the row. Four explicit values,
+   top-left first, so the asymmetry cannot be read as an accident. */
 .warnpop {
-  width: 235px; z-index: 40; box-sizing: border-box; border-radius: var(--radius-md);
+  width: 235px; z-index: 40; box-sizing: border-box;
+  border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
   padding: var(--space-16); gap: var(--space-12); font-family: var(--font-sans);
   border-color: var(--slate-100);
 }
+/* flipped ABOVE the icon — placeBox decided `up` and now says so in
+   warnPopPos, which is the only carrier of that fact. Mirror the square corner
+   to the BOTTOM-left so the card still grows out of the icon. The annotation
+   specifies the anchored-below case only; this default is mine, recorded as
+   R-warn-i and flagged to Miles. */
+.warnpop.flip { border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 0; }
+/* THE HOVER BRIDGE. The card sits one --space-4 clear of the icon, so without
+   this the pointer crosses dead space, mouseleave fires, and the close timer
+   can run out before the pointer reaches `Open Card` — which is the whole
+   reason the annotation insists this is a hover CARD and not a tooltip. It is
+   transparent and paints nothing; it is exactly the gap tall; and it flips
+   with the card, because the case it matters most in is the bottom of the
+   viewport, which is precisely where the card flips. It cannot outlive the
+   card — the card is not rendered while closed, so neither is this.
+   Absolutely positioned, therefore out of flow: it is not a flex item of
+   .warnpop and takes no share of the card's gap. .warnpop is already
+   position:fixed and so is its own containing block — do NOT add
+   position:relative, which would drop the card back inside the .pscroll clip.
+   Two honest edges, both for the live pass (R-warn-p). (1) The containing
+   block is the card's PADDING box — the box inside the border, padding
+   included — so left:0/right:0 spans the full 235px LESS the two 1px borders,
+   and top:-4px starts 1px inside the gap rather than at its far edge. The
+   pointer crosses that one pixel within a frame, far inside the close delay.
+   (2) placeBox decides `up` BEFORE the on-screen clamp, so on a viewport too
+   short for the flipped card the clamp can slide it back over its own icon —
+   in that one case the strip is not over a gap at all. Neither is compensable
+   without a raw px here, which is a defect; the delay is what carries the
+   pointer across. */
+.warnpop::before {
+  content: ''; position: absolute; left: 0; right: 0;
+  top: calc(var(--space-4) * -1); height: var(--space-4);
+}
+.warnpop.flip::before { top: auto; bottom: calc(var(--space-4) * -1); }
 .wphead { display: flex; align-items: center; gap: var(--space-8); }
 .wphead svg { color: var(--amber-700); }
 .wptitle { font-size: var(--text-body); font-weight: 600; color: var(--amber-700); }

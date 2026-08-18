@@ -100,8 +100,8 @@ const DUE_POP_H = 420;
    it is the OPEN WORK KPI, which still counts `corrections`.
 
    WARN_LABEL is a VARIABLE string, not a literal at the render site: 'Needs
-   Info' today, 'Incomplete'/'Action' later. The row message and the popover
-   title both read it, so they cannot drift apart. */
+   Info' today, 'Incomplete'/'Action' later. The icon's accessible name and the
+   popover title both read it, so they cannot drift apart. */
 const WARN_LABEL = 'Needs Info';
 /* WHY each missing field matters — the payload of the popover, and the whole
    reason it exists. Keyed by the SERVER's own `missing` tokens, so the copy
@@ -117,10 +117,14 @@ const WARN_WHY = {
    decide flip-up and the horizontal clamp before the element exists. The
    HEIGHT hugs its content (one wrapping list-item per missing field: ~202px
    for one problem, ~346px for all three), so this is the WORST case, the same
-   way REQ_MENU_H is the select's cap — openWarnPop measures the box that
+   way REQ_MENU_H is the select's cap — showWarnPop measures the box that
    actually rendered and places it a second time. Nothing in CSS pins it. */
 const WARN_POP_W = 235;
 const WARN_POP_H = 346;
+/* The hover card's close DELAY. Not specified by the annotation — 150ms is
+   long enough to cross the 4px gap and short enough not to feel sticky
+   (R-warn-j, flagged to Miles as a number he may want to tune). */
+const WARN_CLOSE_MS = 150;
 /* ONE recipe for the warning, derived from the row the server already sends.
    Returns null for a complete card — the template's only test — or
    { label, items:[{ label, why }] }. items[0] is ALWAYS the card's OWN
@@ -131,6 +135,13 @@ const rowWarning = (row) => {
   if (!miss.length) return null;
   return {
     label: WARN_LABEL,
+    /* The icon is now the ONLY textual carrier of the warning — the message
+       line is gone — so a screen-reader user has nothing else on the row that
+       announces it. Composed HERE and never in the markup: pluralising a count
+       is arithmetic, and the template must not do arithmetic. `miss.length` is
+       `items.length - 1` by construction — items[0] is the card's own identity
+       (R-warn-m). */
+    srLabel: `${WARN_LABEL} — ${miss.length} missing field${miss.length === 1 ? '' : 's'} — ${row.mcLabel} ${row.name}`,
     items: [
       { label: row.mcLabel, why: row.name },
       ...miss.map((f) => ({ label: f, why: WARN_WHY[f] || '' })),
@@ -463,8 +474,10 @@ const app = new Ractive({
     dueStaged: null, // clicked day — STAGED only; Apply is what writes (W2)
     dueBaseline: null, // value the popover opened on — the Apply no-op guard
     savingDeadline: {},
-    warnPop: null, // cardId whose incomplete-card popover is open (node 537:69135)
-    warnPopPos: { left: 0, top: 0 }, // fixed-position anchor, flipped and clamped on open
+    warnPop: null, // cardId whose incomplete-card hover card is open (node 537:69135)
+    // `up` is the FLIP decision, and the markup needs it: the squared corner
+    // and the hover bridge both sit on the gap side of the card (R-warn-p)
+    warnPopPos: { left: 0, top: 0, up: false },
     dowNames: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
     pipeThumb: { needed: false, left: 0, width: 100 },
     iconSprite: ICON_SPRITE,
@@ -1285,23 +1298,66 @@ function anyMenuOpen() {
    click restores nothing: focus has already gone to whatever was clicked, and
    a re-click on the trigger is standing on it. */
 let overlayTrigger = null;
+/* The hover card's pending close. ONE handle for the whole table, not one per
+   row: moving the pointer from row A's icon to row B's must not let A's close
+   fire and shut B, and a per-row handle makes that a race between two timers
+   nobody holds. Cleared on every open and every close (see openOverlay and
+   closeMenus below), so a timer can never outlive the state it was scheduled
+   against. */
+let warnCloseTimer = null;
+/* True only for the duration of closeMenus' programmatic focus return. The
+   warning icon now OPENS on focus, so restoring focus to it after Escape (or
+   after any dismissal that unmounted the element holding focus) would re-fire
+   `focus` and re-open the card we just closed — Escape would look broken.
+   `focus()` dispatches synchronously, so the flag is held across exactly one
+   call and read by exactly one opener. */
+let restoringFocus = false;
 function closeMenus({ restoreFocus = false } = {}) {
+  warnPopCancelClose(); // one door out: no pending close survives a close
   const t = overlayTrigger;
   const ae = document.activeElement;
   const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .warnpop'));
+  /* RETURNING focus, never STEALING it. Every overlay before this batch opened
+     on a CLICK of its own <button>, so the captured trigger was also what the
+     browser had just focused and the restore was a no-op or a step back inside
+     the overlay. The hover card is the first that a POINTER opens, with focus
+     left wherever the user actually is — so Escape pressed in the search field
+     would otherwise drag the caret onto a warning icon the pointer merely
+     grazed, and swallow every keystroke after it. Restore only when focus is
+     already on the trigger, inside the overlay being closed, or nowhere (an
+     unmount, or a browser that does not focus a clicked button). */
+  const focusIsOurs = heldFocus || !ae || ae === document.body || ae === t;
   overlayTrigger = null;
   app.set({ ...NO_OVERLAYS });
   /* preventScroll because this same path runs from the capture-phase scroll
      dismisser: without it, dismissing by scrolling yanks the viewport back to
      the trigger the user just scrolled away from — the focus return would undo
      the gesture that triggered it. */
-  if ((restoreFocus || heldFocus) && t && t.isConnected) t.focus({ preventScroll: true });
+  if ((restoreFocus || heldFocus) && focusIsOurs && t && t.isConnected) {
+    restoringFocus = true;
+    t.focus({ preventScroll: true });
+    restoringFocus = false;
+  }
 }
 document.addEventListener('click', (e) => {
-  // the ignore list names the TRIGGERS, not their wrappers: `.warnwrap` is a
-  // block spanning the whole fluid name column, so listing it would make the
-  // blank strip beside `Needs Info` a dead zone for dismissing
-  if (anyMenuOpen() && !e.target.closest('.ubadge-wrap, .selectmenu, .duewrap, .duepop, .selwrap, .warnmsg, .warnpop')) closeMenus();
+  // the ignore list names the TRIGGERS, not their wrappers: `.warnhost` is a
+  // tight inline box now, but the rule is unchanged — a wrapper that spans
+  // dead space would make that space a dead zone for dismissing
+  if (!anyMenuOpen()) return;
+  if (e.target.closest('.ubadge-wrap, .selectmenu, .duewrap, .duepop, .selwrap, .warnpop')) return;
+  /* `.warnbtn` is shielded CONDITIONALLY, and it is the only entry that is.
+     The other four triggers own a click handler that toggles their overlay, so
+     the dismisser has to keep its hands off them. The warning icon has no
+     click handler at all — hover and focus open it — so it is shielded only
+     while ITS card is what is open, which is what keeps a click (and a touch
+     tap, R-warn-l) from dismissing the card the pointer is standing on. While
+     some OTHER overlay holds the screen the icon is ordinary outside-click
+     territory: shielding it there would make the click do nothing whatsoever —
+     showWarnPop refuses to open over an active edit (R-warn-r) and the
+     dismisser would refuse to close the thing that is actually open. A
+     deliberate click is not the passive mouse path R-warn-r exists to guard. */
+  if (app.get('warnPop') && e.target.closest('.warnbtn')) return;
+  closeMenus();
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && anyMenuOpen()) closeMenus({ restoreFocus: true });
@@ -1339,7 +1395,13 @@ function placeBox(rect, opts) {
     left = Math.max(4, Math.min(left, window.innerWidth - opts.clampW - 4));
     top = Math.max(4, Math.min(top, window.innerHeight - opts.h - 4));
   }
-  return { left: Math.round(left), top: Math.round(top) };
+  /* `up` rides out with the coordinates because the flip is a fact the MARKUP
+     needs, not just the placer: the hover card's squared corner and its hover
+     bridge both have to sit on the gap side. Recomputing it anywhere else
+     would be a second copy of this comparison that could disagree with the
+     one that actually moved the box. The other four overlays gain an unread
+     key; nothing reads it. */
+  return { left: Math.round(left), top: Math.round(top), up };
 }
 
 /* One opener for all five overlays. They differ only in state keys, box
@@ -1349,6 +1411,9 @@ function placeBox(rect, opts) {
    on screen. Mutual exclusion lives here — opening any one nulls the others —
    and so does the focus capture the shared close path restores from. */
 function openOverlay(ctx, cardId, opts) {
+  // one door in: opening ANY overlay kills a pending hover-card close, or the
+  // warning card's timer fires after the next overlay is already up and shuts it
+  warnPopCancelClose();
   // one write in flight per card (invariant 8); the read-only Requests
   // selects have no write to guard, so they pass no `saving` key
   if (opts.saving && app.get(`${opts.saving}.${cardId}`)) return;
@@ -1385,6 +1450,37 @@ function placeMeasured(trigger, id, opts) {
   if (!el) return false;
   app.set(opts.posKey, placeBox(trigger.getBoundingClientRect(), { h: el.offsetHeight, gap: 4, clampW: el.offsetWidth }));
   return true;
+}
+
+/* ---- the warning hover card's opener (owl #41, node 537:69135) ----
+   Hoisted on purpose: openOverlay and closeMenus above both call the canceller,
+   and the pair belongs beside the placer it uses rather than beside them. */
+function warnPopCancelClose() {
+  if (warnCloseTimer) { clearTimeout(warnCloseTimer); warnCloseTimer = null; }
+}
+
+/* The hover card opens on pointer-enter AND on keyboard focus, so opening has
+   to be IDEMPOTENT: openOverlay TOGGLES, and re-entering an already-open icon
+   would shut it. Guarded here rather than in openOverlay, whose toggle the
+   other four overlays depend on. */
+function showWarnPop(node, cardId) {
+  /* closeMenus hands focus back to the trigger, and the trigger is this icon:
+     without this the Escape that closed the card would immediately re-open it.
+     Checked BEFORE the cancel because closeMenus has already cancelled. */
+  if (restoringFocus) return;
+  warnPopCancelClose();
+  if (app.get('warnPop') === cardId) return;
+  /* A passive hover must not destroy an ACTIVE edit. openOverlay nulls every
+     other overlay, and the due popover holds a staged date that only Apply
+     writes (W2) — moving the pointer across the table is not consent to
+     discard it. Derived from OVERLAY_KEYS so a sixth overlay is one entry. */
+  if (OVERLAY_KEYS.some((k) => k !== 'warnPop' && app.get(k))) return;
+  openOverlay({ node }, cardId, { key: 'warnPop', posKey: 'warnPopPos', h: WARN_POP_H, gap: 4, clampW: WARN_POP_W });
+  // the height is one list-item per missing field, each wrapping — measure the
+  // rendered box and place it again, exactly as the Requests select does. The
+  // second placement is also what settles the FLIP the bridge rides on.
+  const m = { key: 'warnPop', posKey: 'warnPopPos', sel: '.warnpop' };
+  if (!placeMeasured(node, cardId, m)) requestAnimationFrame(() => placeMeasured(node, cardId, m));
 }
 
 /* loadAll may have replaced the rows array while a PATCH was in flight, so a
@@ -2226,16 +2322,76 @@ app.on({
       extra: { dueStaged: current, dueBaseline: current, dueMonth: monthOf(current || manilaToday()) },
     });
   },
-  /* ---- incomplete-card popover (owl #36, node 537:69135) ----
+  /* ---- incomplete-card HOVER CARD (owl #41, node 537:69135) ----
      Read-only: it explains what Trello is missing and links out. Same placer,
      same dismissers, same focus return as every other overlay — the only thing
-     it brings of its own is its box size. */
-  openWarnPop(ctx, cardId) {
-    openOverlay(ctx, cardId, { key: 'warnPop', posKey: 'warnPopPos', h: WARN_POP_H, gap: 4, clampW: WARN_POP_W });
-    // the height is one list-item per missing field, each wrapping — measure
-    // the rendered box and place it again, exactly as the Requests select does
-    const m = { key: 'warnPop', posKey: 'warnPopPos', sel: '.warnpop' };
-    if (!placeMeasured(ctx.node, cardId, m)) requestAnimationFrame(() => placeMeasured(ctx.node, cardId, m));
+     it brings of its own is its box size and the fact that a POINTER, not a
+     click, opens it. It is still a card and not a tooltip because it contains
+     `Open Card`, which a pointer-only overlay would put out of reach.
+     `warnPopIn` is bound to the icon AND to the card itself: the card's own
+     enter is what cancels the pending close while the pointer crosses the 4px
+     gap, so there is no separate "hold" handler. */
+  warnPopIn(ctx, cardId) { showWarnPop(ctx.node, cardId); },
+  warnPopOut(ctx) {
+    warnPopCancelClose();
+    /* Nothing of OURS is open, so nothing of ours is leaving. showWarnPop
+       REFUSES to open over another overlay (R-warn-r) — without the same rule
+       on this side, a pointer that merely grazed a warning icon while a due
+       popover was up would schedule a close that discards a staged date only
+       Apply writes (W2). The refusal to open has to be matched by a refusal to
+       close, or the guard only holds one way. */
+    if (!app.get('warnPop')) return;
+    /* Ractive delegates an each-block's events from the <tbody> with a CAPTURE
+       listener and then simulates bubbling by walking up from `ev.target` — so
+       a child's mouseleave is re-dispatched to this ancestor's handler even
+       though mouseleave does not bubble. Moving the pointer off the 14px glyph
+       onto the button's own padding, or between two lines inside the card,
+       would otherwise schedule a close while the pointer never left anything.
+       `relatedTarget` is where the pointer actually went; if that is still
+       inside the node this directive sits on, nothing left. Same shape as
+       warnPopFocusOut's guard, for the same reason. */
+    const to = ctx.event.relatedTarget;
+    if (to && ctx.node.contains(to)) return;
+    warnCloseTimer = setTimeout(() => {
+      warnCloseTimer = null;
+      /* A card the KEYBOARD opened is not the pointer's to close: the icon can
+         be focused with the mouse resting on it, and a nudge off the glyph
+         would otherwise strand a focused trigger with nothing open and no key
+         that reopens it. Focus-out and Escape own that card's dismissal.
+         Scoped to the host of the card that is ACTUALLY open, not to any host:
+         every warned row has one, so `closest('.warnhost')` alone stands down
+         for a card focus was never in — Tab to row A's icon, then hover row
+         B's and leave, and B is stranded open with no pointer on it and no
+         focus in it. `overlayTrigger` is the open card's own icon. */
+      const ae = document.activeElement;
+      const host = ae && ae.closest && ae.closest('.warnhost');
+      if (host && overlayTrigger && host.contains(overlayTrigger)) return;
+      closeMenus();
+    }, WARN_CLOSE_MS);
+  },
+  /* Dismiss only when focus leaves the icon AND the card — focus moving from
+     the icon INTO `Open Card` is a Tab we exist to allow, and `.warnhost`
+     contains both, which is the whole reason the host element exists.
+     Nulling `overlayTrigger` first is load-bearing: closeMenus' heldFocus
+     branch would otherwise yank focus straight back to the icon the moment the
+     user Tabs off `Open Card` — a focus trap. It is the same idiom
+     openOverlay's toggle branch uses. A null relatedTarget (window blur, a
+     click on non-focusable chrome) does NOT close: the document click
+     dismisser owns that case, and closing here would fight it. */
+  warnPopFocusOut(ctx) {
+    /* Only OUR card is this handler's to dismiss, and `.warnhost` renders on
+       EVERY warned row — so "is a card open" is not the question, "is the open
+       card inside this host" is. The icon is tabbable on all 247 of them, so
+       Tab can carry focus through one while a due popover is open (closeMenus
+       would discard that staged date, W2, for nothing — R-warn-r from the
+       focus side) or while a card the POINTER opened on another row is up
+       (closing it here would discard a trigger this host never captured). The
+       card is rendered inside this host exactly when it is ours. */
+    if (!ctx.node.querySelector('.warnpop')) return;
+    const to = ctx.event.relatedTarget;
+    if (!to || ctx.node.contains(to)) return;
+    overlayTrigger = null;
+    closeMenus();
   },
   duePick(_ctx, iso) { app.set('dueStaged', iso); }, // stages only — Apply writes
   dueNav(_ctx, dir) { app.set('dueMonth', monthShiftYm(app.get('dueMonth'), dir)); },

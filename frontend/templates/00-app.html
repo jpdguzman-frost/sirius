@@ -243,47 +243,62 @@
         </tr></thead>
         <tbody>
         {{#each pipelineRows as row}}
-          <!-- .warn is PRESENTATION ONLY (owl #36): the row keeps its one
-               keyboard behaviour (Enter expands the group) and not one of its
-               controls is disabled by an incomplete card. The MESSAGE in
-               col-name is the only new click target. -->
+          <!-- .warn is PRESENTATION ONLY (owl #36, revised by owl #41): the row
+               keeps its one keyboard behaviour (Enter expands the group) and
+               not one of its controls is disabled by an incomplete card. The
+               ICON in col-mc is the trigger — col-name carries nothing. -->
           <tr class="prow {{#if row.blocker}}blocked{{/if}} {{#if row.warning}}warn{{/if}}" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
             <td class="col-mc"><div class="mccell">
               <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{row.displayId}} work cards" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
-              <span class="mcnum">{{{hl(row.mcLabel)}}}</span>
-            </div></td>
-            <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}
-              <!-- the label is a VARIABLE string (`warning.label`) in all
-                   three places it appears — the message, its accessible name
-                   and the popover title — so renaming it renames it once.
-                   `row.warning` is the recipe's output STAMPED ONCE PER LOAD in
-                   loadAll, not a call: as an expression it re-ran seven times
-                   per row on every keystroke and handed each-blocks a new array
-                   identity every pass. -->
-              {{#if row.warning}}
-                <div class="warnwrap">
-                  <button class="warnmsg" on-click="['openWarnPop', row.cardId]" aria-haspopup="dialog"
-                          aria-expanded="{{warnPop === row.cardId ? 'true' : 'false'}}"
-                          aria-label="{{row.warning.label}} — {{row.mcLabel}} {{row.name}}">
-                    <svg class="i10" aria-hidden="true"><use href="#i-warning" /></svg><span class="warnlabel">{{row.warning.label}}</span>
-                  </button>
-                  {{#if warnPop === row.cardId}}
-                    <div class="warnpop" role="dialog" aria-label="{{row.warning.label}} — {{row.mcLabel}} {{row.name}}" style="left:{{warnPopPos.left}}px;top:{{warnPopPos.top}}px;">
-                      <div class="wphead"><svg class="i16" aria-hidden="true"><use href="#i-warning" /></svg><span class="wptitle">{{row.warning.label}}</span></div>
-                      <div class="wpitems">
-                        {{#each row.warning.items as it}}
-                          <div class="wpitem"><span class="wplabel">{{it.label}}</span><span class="wpwhy">{{it.why}}</span></div>
-                        {{/each}}
+              <div class="mcid">
+                <span class="mcnum">{{{hl(row.mcLabel)}}}</span>
+                <!-- owl #41: the warning is a 14px ICON here, not a message
+                     line under the card name. The icon is the only textual
+                     carrier of the warning left on the row, so its accessible
+                     name is composed in the RECIPE (label + pluralised
+                     missing-field count + card identity) — the template does
+                     no arithmetic. The card sits IMMEDIATELY AFTER the button
+                     in DOM order so Tab reaches `Open Card`; it is
+                     position:fixed, so the cell's overflow cannot clip it.
+                     Nothing in this subtree may gain transform/filter/contain
+                     — that would re-anchor the fixed box to the cell.
+                     mouseenter/mouseleave/focus do not bubble, but Ractive
+                     delegates an each-block's events with a CAPTURE listener on
+                     the <tbody>, and capture reaches a non-bubbling event just
+                     the same — so these arrive without a per-row listener. -->
+                {{#if row.warning}}
+                  <div class="warnhost" on-focusout="['warnPopFocusOut']">
+                    <button class="warnbtn"
+                            on-mouseenter="['warnPopIn', row.cardId]"
+                            on-mouseleave="['warnPopOut']"
+                            on-focus="['warnPopIn', row.cardId]"
+                            aria-haspopup="dialog"
+                            aria-expanded="{{warnPop === row.cardId ? 'true' : 'false'}}"
+                            aria-label="{{row.warning.srLabel}}">
+                      <svg class="i14" aria-hidden="true"><use href="#i-warning" /></svg>
+                    </button>
+                    {{#if warnPop === row.cardId}}
+                      <div class="warnpop{{#if warnPopPos.up}} flip{{/if}}" role="dialog"
+                           aria-label="{{row.warning.label}} — {{row.mcLabel}} {{row.name}}"
+                           style="left:{{warnPopPos.left}}px;top:{{warnPopPos.top}}px;"
+                           on-mouseenter="['warnPopIn', row.cardId]" on-mouseleave="['warnPopOut']">
+                        <div class="wphead"><svg class="i16" aria-hidden="true"><use href="#i-warning" /></svg><span class="wptitle">{{row.warning.label}}</span></div>
+                        <div class="wpitems">
+                          {{#each row.warning.items as it}}
+                            <div class="wpitem"><span class="wplabel">{{it.label}}</span><span class="wpwhy">{{it.why}}</span></div>
+                          {{/each}}
+                        </div>
+                        <!-- the separator exists only to divide the details from
+                             Open Card, so a card Trello has no URL for draws
+                             neither: one conditional, not two -->
+                        {{#if row.trelloUrl}}<div class="wpsep"></div><a class="wpopen" href="{{row.trelloUrl}}" target="_blank" rel="noopener">Open Card</a>{{/if}}
                       </div>
-                      <!-- the separator exists only to divide the details from
-                           Open Card, so a card Trello has no URL for draws
-                           neither: one conditional, not two -->
-                      {{#if row.trelloUrl}}<div class="wpsep"></div><a class="wpopen" href="{{row.trelloUrl}}" target="_blank" rel="noopener">Open Card</a>{{/if}}
-                    </div>
-                  {{/if}}
-                </div>
-              {{/if}}
-            </td>
+                    {{/if}}
+                  </div>
+                {{/if}}
+              </div>
+            </div></td>
+            <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}</td>
             <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{{hl(row.assetType)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-diff"><div class="ubadge-wrap">
               <button class="pbadge ubadge {{#if row.difficulty}}d-{{row.difficulty}}{{else}}unset{{/if}} {{#if savingDifficulty[row.cardId]}}saving{{/if}}"

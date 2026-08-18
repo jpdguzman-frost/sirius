@@ -349,6 +349,14 @@ export interface PipelineTableState {
   pipelineRows: PipeRow[];
   /** cardId whose warning popover is open, or null for every row closed */
   warnPop?: string | null;
+  /**
+   * Batch 10 (T165): `placeBox` now returns the flip decision alongside the
+   * coords, and the markup reads it — `up` is what puts `flip` on the card, and
+   * `flip` is what moves the hover bridge to the other side. It is therefore a
+   * view state a render test has to be able to set, not an implementation
+   * detail: the unflipped card and the flipped one are two different renders.
+   */
+  warnPopPos?: { left: number; top: number; up?: boolean };
   /** the SHIPPED recipe, executed out of 01-app.js — never a stub */
   rowWarning: (row: PipeRow) => unknown;
 }
@@ -378,7 +386,7 @@ export function renderPipelineTable(state: PipelineTableState): string {
     data: {
       pipelineRows: stampWarnings(state.pipelineRows, state.rowWarning),
       warnPop: state.warnPop ?? null,
-      warnPopPos: { left: 0, top: 0 },
+      warnPopPos: state.warnPopPos ?? { left: 0, top: 0, up: false },
       expanded: {},
       workCardsByMc: {},
       writesEnabled: false,
