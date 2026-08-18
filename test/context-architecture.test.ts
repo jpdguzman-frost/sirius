@@ -188,7 +188,7 @@ describe('decisions/ records (tolerant while absent — Stage 4b creates it)', (
   const dir = path.join(ROOT, 'decisions');
   const records = fs.existsSync(dir) ? fs.readdirSync(dir).filter((name) => /^\d{4}-.+\.md$/.test(name)) : [];
 
-  it('every NNNN-*.md is 20–60 lines with the four required headings', () => {
+  it('every NNNN-*.md is 20–60 lines with the six required headings', () => {
     // the architecture writes 20–40; the guard allows to 60 so a sanctioned
     // long record does not go red (same soft/hard pattern as HANDOFF)
     for (const name of records) {
@@ -196,11 +196,18 @@ describe('decisions/ records (tolerant while absent — Stage 4b creates it)', (
       const lines = text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
       expect(lines, `decisions/${name} is ${lines} lines (want 20–60)`).toBeGreaterThanOrEqual(20);
       expect(lines, `decisions/${name} is ${lines} lines (want 20–60)`).toBeLessThanOrEqual(60);
-      for (const heading of ['Status', 'Context', 'Decision', 'Consequences']) {
+      for (const heading of ['Status', 'Context', 'Decision', 'Consequences', 'Alternatives rejected', 'Sources']) {
         expect(text, `decisions/${name} lacks a ${heading} heading`).toMatch(
           new RegExp(`^(?:#{1,6}\\s+|\\*\\*)${heading}\\b`, 'm'),
         );
       }
     }
+  });
+
+  it('the directory holds at least 15 NNNN records (never quietly vacuous)', () => {
+    expect(
+      records.length,
+      `decisions/ holds ${records.length} NNNN-*.md records (want >= 15)`,
+    ).toBeGreaterThanOrEqual(15);
   });
 });

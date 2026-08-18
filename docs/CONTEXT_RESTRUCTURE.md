@@ -146,12 +146,24 @@ convention note.
       eslint ignores *.ts by design — tsc strict is the TS gate
 - [x] Commit · owl record
 
-### Stage 4b — decision records  `[queued]`
+### Stage 4b — decision records  `[DONE 2026-08-18]`
 
-~15 architectural decisions → `decisions/NNNN-*.md` (20–40 lines, immutable,
-supersede pattern; unclear rationale ⇒ `status: proposed` + open questions for
-JP). Verify: format, one-decision-per-file, traceability, no normative
-duplication with rulebooks/constitution.
+**21 records, 0001–0021, all `accepted`** (every one backed by a JP ruling,
+constitution text, or recorded gate — zero needed `proposed`). Extraction
+workflow drafted 19; BOTH verifiers failed the first gate, correctly:
+traceability caught two INVENTED "alternatives rejected" (manual-linking in
+0002 with a card count matching today's board, not the 2026-08-03 survey;
+statistical-acceptance in 0004 — never on any recorded table); format caught
+two compound records (fixtures vs TEST-board; capacity pin vs Option-B lock —
+the law amended each half separately) plus restated route mechanics that
+would rot inside never-edited records. Fix pass applied the full list
+(splits, renumber to 21, six drift trims to pointers, board-guard qualifier
+from trello-write.md rule 3 so the records can't read as blocking the prod
+pilot); independent re-verify PASS on all six checks. Guard test now
+requires all six headings + ≥15 records (can't go vacuous). Verified exact
+along the way: every date, number, and ruling attribution. Deliberate gaps:
+v4.4.0 reply contract (communication protocol, not architecture); records
+run 38–52 lines where sourced content demanded (60 is the hard stop).
 
 ### Stage 4c — module notes + end-to-end gate pass  `[queued]`
 
