@@ -26,5 +26,13 @@ _last-verified: 2026-08-18_
 - `frontend/styles/25-requests.css` — Requests v2.
 - `frontend/styles/30-planner.css` — schedules toolbar.
 - `frontend/styles/35-gantt.css` — planner body (pinned left block, --gw columns).
-- `frontend/templates/00-app.html` — ONE Ractive template; per-tab branches (schedules the biggest: gantt + modals).
+- `frontend/templates/layout.html` — the tpl-app script wrapper, icon sprite, shell nav + tabbar, banner, the `<main>` panel; carries the partials and views markers build.js fills.
+- `frontend/templates/partials/00-req-sync-strip.html` — reqSyncStrip: the read-only-from-Trello sentence, used by the Requests populated view and its empty state.
+- `frontend/templates/partials/10-due-calendar.html` — dueCalendar: month nav, day-of-week strip, day grid, shortcuts; shared by both due popovers (root state only).
+- `frontend/templates/views/20-requests.html` — Requests tab: filters, table, pager, rejects.
+- `frontend/templates/views/30-pipeline.html` — Pipeline tab: KPI metrics, search, the MC table and its expanded row.
+- `frontend/templates/views/40-schedules.html` — Schedules tab: planner toolbar, the gantt, and the modals (the biggest view).
+- `frontend/templates/views/50-deadlines.html` — Deadlines tab: month calendar, reference only.
+- `frontend/templates/views/60-forecast.html` — Forecast tab: model provenance panel and the per-phase table.
+- `frontend/templates/views/70-admin.html` — Admin tab: the allow-list table.
 <!-- /GEN:MODULES -->

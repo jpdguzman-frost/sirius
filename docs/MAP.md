@@ -18,7 +18,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 ## Areas
 
 <!-- GEN:AREAS -->
-- `frontend` — 23 files → docs/architecture/map-frontend.md — no-bundler Ractive app: numbered app scripts (one shared scope, filename order) + one template + numbered styles
+- `frontend` — 31 files → docs/architecture/map-frontend.md — no-bundler Ractive app: numbered app scripts (one shared scope, filename order) + a template layout with numbered partials and views + numbered styles
 - `backend` — 62 files → docs/architecture/map-backend.md — Express 5 + worker; lib/ holds the verbatim-port trio; scripts/ are ops
 <!-- /GEN:AREAS -->
 

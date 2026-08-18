@@ -9,14 +9,23 @@ _last-verified: 2026-08-18_
 
 No bundler. `node frontend/build.js` assembles `public/index.html` from
 `frontend/index.html` by replacing three markers: `<!-- inject:css -->` →
-concatenated `styles/*.css` (wrapped in `<style>`), `<!-- inject:templates -->` →
-concatenated `templates/*.html`, `<!-- inject:js -->` → concatenated
-`scripts/*.js` (wrapped in `<script>`). Files concatenate in sorted filename
-order — the numeric prefixes ARE the load order. The app scripts are ten
-numbered pieces (`10-constants` … `95-routing`, split 2026-08-18); tests that
-read shipped source go through `test/helpers/source.ts`, never a filename. Every Ractive template is
-parse-checked at build: a template that will not parse fails the build, not the
-browser.
+concatenated `styles/*.css` (in `<style>`), `<!-- inject:templates -->` → the
+composed Ractive template, `<!-- inject:js -->` → concatenated `scripts/*.js`
+(in `<script>`).
+
+The template is `templates/layout.html` — `tpl-app` wrapper, icon sprite, shell
+nav, banner, the `<main>` panel — carrying two markers of its own:
+`<!-- inject:partials -->` → `templates/partials/*.html`, the `{{#partial}}`
+registry; `<!-- inject:views -->` → `templates/views/*.html`, one file per tab.
+Every concatenation is sorted filename order — in all four directories the
+numeric prefixes ARE the load order. Every Ractive template is parse-checked at
+build, each piece alone and then the composed whole: a template that will not
+parse fails the build, not the browser.
+
+Tests read shipped source through `test/helpers/source.ts`, never a filename —
+a guard naming one file breaks at the next split. `template()` calls build.js's
+exported `composeTemplate()` rather than rebuilding the composition; importing
+build.js writes nothing, only running it directly does.
 
 ## Ractive hazards [authoritative here since the 2026-08-18 rewire; `{{! }}` incident: docs/history/state-log/2026-08-18.md, batch 7]
 
@@ -24,6 +33,10 @@ browser.
 - `{{! … }}` comments in ELEMENT-CONTENT position leak text after the first
   `}}` (an AST-scan test guards it). `{{!expr}}` in attributes is a negation
   and fine.
+- `{{#partial}}` registers template-wide ONLY at the top level. Nested in an
+  element it goes local, every `{{>call}}` elsewhere renders empty, and the
+  build still passes. Hence `<!-- inject:partials -->` above the chrome in
+  `layout.html`; guard `test/template-partials.test.ts`.
 
 ## Performance law [docs/history/state-log/2026-08-18.md, review sweep]
 

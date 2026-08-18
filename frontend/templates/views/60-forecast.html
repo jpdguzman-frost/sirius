@@ -1,0 +1,45 @@
+{{#if activeTab === 'forecast'}}
+  {{#if modelProvenance}}
+    <div class="greenpanel">
+      <div class="gtitle">✦ Forecast from measured delivery — {{modelProvenance.source}}{{#if modelProvenance.fallback}} · <span class="badge warn">snapshot fallback</span>{{/if}}</div>
+      <div class="gstats">
+        <span class="gstat"><span class="glabel">Median review wait</span><br /><span class="gvalue">{{modelReview.median}} d</span></span>
+        <span class="gstat"><span class="glabel">70th percentile</span><br /><span class="gvalue">{{modelReview['0.7']}} d</span></span>
+        <span class="gstat"><span class="glabel">85th percentile</span><br /><span class="gvalue">{{modelReview['0.85']}} d</span></span>
+        <span class="gstat"><span class="glabel">95th percentile</span><br /><span class="gvalue">{{modelReview['0.95']}} d</span></span>
+      </div>
+      <div class="gnote">Design time is keyed on difficulty <em>and</em> lane. Review n={{modelReview.n}}. The retired spreadsheet model put review waits at 12.5–22 days against these measured values.</div>
+    </div>
+  {{/if}}
+  <p class="explain">Same column names as the Delivery Forecast sheet, so the team reads it unchanged. Difficulty comes from the Trello card label and can’t be edited here; Confidence is the platform’s own lever. <strong>Review SLA</strong> is the manual override — enter actual review days and it replaces the modelled review time for that card, which drives Forecasted Review Time and every date to its right.</p>
+
+  <div class="scroll"><table class="grid">
+    <thead><tr><th>Request</th><th>Difficulty</th><th>Confidence</th><th class="slahead">Sketch SLA</th><th class="slahead">Render SLA</th>
+      <th>Sketch Delivery Date</th><th>Sketch Approved</th><th>Render Delivery Date</th><th>Render Approved</th>
+      <th>Baseline Review</th><th>Forecasted Review Time</th><th>Total Cycle Time</th><th>n</th></tr></thead>
+    <tbody>
+    {{#each forecastRows as row}}
+      <tr>
+        <td class="clip"><span class="mono">{{row.displayId}}</span> / {{row.name}}</td>
+        <td><span class="badge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span></td>
+        <td><select value="{{row.confidence}}" on-change="['setConfidence', row.cardId]">
+          <option value="Average">Average</option><option value="0.7">70th pct</option><option value="0.85">85th pct</option><option value="0.95">95th pct</option>
+        </select></td>
+        <td><input class="sla" type="number" min="0" step="0.5" value="{{row.slaSketch}}" on-change="['setSla', row.cardId, 'sla_sketch']" /></td>
+        <td><input class="sla" type="number" min="0" step="0.5" value="{{row.slaRender}}" on-change="['setSla', row.cardId, 'sla_render']" /></td>
+        {{#if row.forecast}}
+          <td class="nowrap"><strong>{{fmt(row.forecast.sketchDelivery)}}</strong></td><td class="nowrap">{{fmt(row.forecast.sketchApproved)}}</td>
+          <td class="nowrap {{#if row.forecast.late}}redtext{{/if}}"><strong>{{fmt(row.forecast.renderDelivery)}}</strong></td><td class="nowrap">{{fmt(row.forecast.renderApproved)}}</td>
+          <td class="dim">{{(row.forecast.sketchReview * 2).toFixed(2)}}</td>
+          <td>{{row.forecast.forecastedReviewTime.toFixed(2)}}</td>
+          <td><strong>{{row.forecast.totalCycleTime.toFixed(2)}}</strong></td>
+          <td class="dim">{{row.forecast.sampleSize}}</td>
+        {{else}}<td colspan="8" class="dim">no difficulty — cannot forecast</td>{{/if}}
+      </tr>
+    {{/each}}
+    </tbody>
+  </table></div>
+  {{#if modelProvenance}}
+    <div class="provenance">Model cells {{modelProvenance.cells}} · sample sizes shown per row (n) · recomputed nightly from a rolling window (FR-7.6)</div>
+  {{/if}}
+{{/if}}

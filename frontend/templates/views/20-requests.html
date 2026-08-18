@@ -1,0 +1,167 @@
+{{#if activeTab === 'requests'}}
+  {{#if requests.length || rejects.length}}
+  <div class="reqstack">
+    <!-- §3 breakdown stat bar — counts always from the UNFILTERED set; the
+         segments are the single-select status filter (click again clears).
+         Real buttons: Enter/Space activation is the platform's job -->
+    <div class="metrics rstats" role="group" aria-label="Request breakdown">
+      {{#each reqStats as s}}
+        <button type="button" class="metric rstat {{s.cls}} {{#if statOff(s.key)}}off{{/if}}" aria-pressed="{{requestFilter === s.key ? 'true' : 'false'}}" on-click="['setRequestFilter', s.key]"><span class="mlabel">{{s.label}}</span><span class="mvalue">{{s.value}}</span></button>
+      {{/each}}
+    </div>
+
+    {{>reqSyncStrip}}
+
+    <div class="searchbar reqsearch">{{{icon.search}}}<input name="requests-search" placeholder="Search cards or MC#" value="{{reqQ}}" lazy="250" aria-label="Search requests by card or MC number" /></div>
+
+    <!-- filter bar: four selects (options derived from the loaded rows) plus
+         the pager; every control here filters CLIENT-SIDE, one fetch per load -->
+    <div class="filterbar">
+      {{#each reqFilterDefs as f}}
+        <div class="rfilter">
+          <span class="flabel">{{f.label}}</span>
+          <div class="selwrap">
+            <button class="seltrigger {{#if f.value !== ''}}on{{/if}}" on-click="['openReqMenu', f.key]" aria-haspopup="listbox" aria-expanded="{{reqMenu === f.key ? 'true' : 'false'}}" aria-label="{{f.label}} filter">
+              <span class="selval">{{f.value === '' ? 'All' : f.value}}</span><span class="bchev"><svg class="i16"><use href="#i-badgeChevron" /></svg></span>
+            </button>
+            {{#if reqMenu === f.key}}
+              <div class="selectmenu reqmenu" role="listbox" aria-label="{{f.label}}" style="left:{{reqMenuPos.left}}px;top:{{reqMenuPos.top}}px;">
+                <div class="selecthead">{{f.label}}</div>
+                <button class="selectitem {{#if f.value === ''}}on{{/if}}" role="option" aria-selected="{{f.value === '' ? 'true' : 'false'}}" on-click="['pickReqFilter', f.key, '']">All</button>
+                {{#each f.options as o}}
+                  <button class="selectitem {{#if f.value === o}}on{{/if}}" role="option" aria-selected="{{f.value === o ? 'true' : 'false'}}" on-click="['pickReqFilter', f.key, o]">{{o}}</button>
+                {{/each}}
+              </div>
+            {{/if}}
+          </div>
+        </div>
+      {{/each}}
+
+      {{#if reqPageCount > 1}}
+        <nav class="pager" aria-label="Requests pages">
+          <button class="pnav prev" disabled="{{reqPage <= 1}}" on-click="['reqPageStep', -1]" aria-label="Previous page"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+          {{#each reqPages as p}}
+            {{#if p.gap}}<span class="pgap" aria-hidden="true">…</span>
+            {{else}}<button class="pbtn {{#if p.n === reqPage}}on{{/if}}" aria-current="{{p.n === reqPage ? 'page' : 'false'}}" on-click="['reqGoPage', p.n]">{{p.n}}</button>{{/if}}
+          {{/each}}
+          <button class="pnav" disabled="{{reqPage >= reqPageCount}}" on-click="['reqPageStep', 1]" aria-label="Next page"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+        </nav>
+      {{/if}}
+    </div>
+
+    {{#if reqFiltered.length}}
+    <div class="pscrollwrap reqwrap">
+      <div class="pscroll" on-scroll="['reqScrolled']">
+        <table class="ptable rtable">
+          <!-- owl #18: every column sorts except Brief and Frost Notes, which
+               carry no sort key in reqCols and so render as plain headers. The
+               sortable ones are real <button>s — Enter/Space activation is the
+               platform's job, as with the stat segments above. -->
+          <thead><tr>
+            {{#each reqCols as c}}
+              {{#if c.sort}}
+                <th class="{{c.cls}}" aria-sort="{{reqSortKey === c.sort ? (reqSortDir === 'desc' ? 'descending' : 'ascending') : 'none'}}">
+                  <button type="button" class="sortbtn" on-click="['reqSortBy', c.sort]" aria-label="Sort by {{c.label}}">
+                    <span>{{c.label}}</span>
+                    {{#if reqSortKey === c.sort}}<svg class="i16 sarrow {{reqSortDir}}" aria-hidden="true"><use href="#i-badgeChevron" /></svg>{{/if}}
+                  </button>
+                </th>
+              {{else}}
+                <th class="{{c.cls}}">{{c.label}}</th>
+              {{/if}}
+            {{/each}}
+          </tr></thead>
+          <tbody>
+          {{#each reqRows as r}}
+            <tr>
+              <!-- YEAR / MONTH ride the payload as-is; monthShort is the ONE
+                   place the sheet's month encoding is normalised (a full name,
+                   1-12 or an abbreviation all render 'Aug') -->
+              <td class="col-ryear">{{#if r.year}}<span class="rtext nowrap">{{r.year}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
+              <td class="col-rmonth">{{#if r.month}}<span class="rtext nowrap">{{monthShort(r.month)}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
+              <td class="col-rmc"><div class="mcstack">
+                <span class="mcval">{{{hlr(r.mc_number)}}}</span>
+                {{#if r.sheet_row}}
+                  {{#if sheetRowUrl(r.sheet_row)}}
+                    <a class="sheetrow" href="{{sheetRowUrl(r.sheet_row)}}" target="_blank" rel="noopener" title="Open row {{r.sheet_row}} in the intake sheet">row {{r.sheet_row}} {{{icon.extLink}}}</a>
+                  {{else}}
+                    <span class="sheetrow">row {{r.sheet_row}}</span>
+                  {{/if}}
+                {{/if}}
+              </div></td>
+              <td class="col-rname"><span class="rtext">{{{hlr(r.name)}}}</span></td>
+              <td class="col-rtype">{{#if r.asset_type}}<span class="rbadge">{{{hlr(r.asset_type)}}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
+              <td class="col-rcase"><span class="rtext">{{{hlr(r.use_case)}}}</span></td>
+              <td class="col-rwho">{{#if r.requestor}}<span class="rbadge">{{{hlr(r.requestor)}}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
+              <!-- invariant 14: the server resolves Trello due over sheet deadline; the tooltip names which -->
+              <td class="col-rdue">{{#if r.deadline}}<span class="rtext nowrap" title="{{r.deadline_source === 'trello' ? 'From Trello due date' : 'From intake sheet'}}">{{fmtLong(r.deadline)}}</span>{{else}}<span class="nopill">none</span>{{/if}}</td>
+              <td class="col-rbrief">{{#if r.brief}}<span class="rtext" title="{{r.brief}}">{{{hlr(clip180(r.brief))}}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
+              <!-- STATUS is two-valued (owls #34/#35): filed or not. There is no
+                   third badge, so the class map is a straight either/or and the
+                   TEXT is the server's own string, never re-typed here. -->
+              <td class="col-rstatus"><span class="sbadge {{r.status === statusFiled ? 'pipe' : 'file'}}">{{r.status}}</span></td>
+              <!-- FR-11 note cell. ONE freeform box in the editor (owl #15) and
+                   one resolved text everywhere else — noteText() joins any
+                   legacy clarify_reason in, so no branch repeats that. The
+                   clarification block keys on the SHARED clarified() predicate
+                   — the same one the FOR CLARIFICATION segment uses — so a
+                   FILED row that still carries the flag renders the plain
+                   remark box (In Pipeline wins, FR-11.3) and the clarification
+                   signal lives only here, never in the status. The buttons name
+                   themselves with the note TEXT: an aria-label overrides the
+                   contents of a button, so a bare "Edit note for MC-###" would
+                   read the affordance aloud and hide the note it is showing. -->
+              <td class="col-rnote"><div class="notewrap">
+                {{#if noteEditing === r.mc_number}}
+                  <div class="noteedit" on-keydown="['noteKeydown']">
+                    <textarea rows="3" class="{{#if noteDraft.clarify}}flagged{{/if}}" placeholder="Add a remark or a clarification" value="{{noteDraft.remark}}" autofocus></textarea>
+                    <label class="nchk"><input type="checkbox" checked="{{noteDraft.clarify}}" /> With Clarification</label>
+                    <div class="nsub">Marks the request as not fileable yet</div>
+                    {{#if noteError}}<span class="nerr">{{noteError}}</span>{{/if}}
+                    <div class="nbtns"><button class="nghost" on-click="['cancelNote']">Cancel</button><button class="nsubmit" on-click="['submitNote', r.mc_number]">Submit</button></div>
+                  </div>
+                {{elseif clarified(r)}}
+                  <button class="notebox flagged" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}} — with clarification: {{noteText(r.note)}}">
+                    <span class="clarpill">With Clarification</span>
+                    <span class="clarnote">{{{hlr(noteText(r.note))}}}</span>
+                  </button>
+                {{elseif noteText(r.note)}}
+                  <button class="notebox" on-click="['openNote', r.mc_number]" title="Edit note" aria-label="Edit note for {{r.mc_number}}: {{noteText(r.note)}}">{{{hlr(noteText(r.note))}}}</button>
+                {{else}}
+                  <button class="addremark" on-click="['openNote', r.mc_number]">Add Remarks</button>
+                {{/if}}
+              </div></td>
+            </tr>
+          {{/each}}
+          </tbody>
+        </table>
+      </div>
+      {{#if reqThumb.needed}}
+      <div class="hslider">
+        <button class="hnudge" on-click="['nudgeScroll', -1]" aria-label="Scroll table left">{{{icon.sliderLeft}}}</button>
+        <div class="htrack" on-click="['trackJump']"><div class="hthumb" style="left:{{reqThumb.left}}%;width:{{reqThumb.width}}%;"></div></div>
+        <button class="hnudge" on-click="['nudgeScroll', 1]" aria-label="Scroll table right">{{{icon.sliderRight}}}</button>
+      </div>
+      {{/if}}
+    </div>
+    <!-- the empty state REPLACES the table — a header-only table over its own
+         scroll slider is not an empty state — and names the real cause:
+         filters only when rows exist to hide, otherwise the sheet itself.
+         The outer gate owns the no-data case, so the last branch here can
+         only mean every parsed row landed in rejects. -->
+    {{elseif requests.length}}
+      <div class="rempty"><strong>No requests match</strong><span>Clear the search, the status card or a filter to see the other rows.</span></div>
+    {{else}}
+      <div class="rempty"><strong>No usable requests</strong><span>Every row the sync read needs correction in the sheet — it corrects on the next sync.</span></div>
+    {{/if}}
+  </div>
+  {{else}}
+    <div class="reqstack">
+      {{>reqSyncStrip}}
+      <div class="rempty">
+        <strong>No requests loaded</strong>
+        <span>The intake sheet mirror is deferred until the sheet stabilises. The sync service reads it server-side — nothing is edited here, ever.</span>
+      </div>
+    </div>
+  {{/if}}
+{{/if}}

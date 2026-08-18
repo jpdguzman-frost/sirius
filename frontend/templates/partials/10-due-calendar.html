@@ -1,0 +1,23 @@
+{{! The due popover's CALENDAR — month nav, day-of-week strip, day grid,
+    shortcuts. One copy, used by BOTH due popovers (the deliverable row's and
+    the task row's, owl #45): everything here reads root state (dueMonth,
+    dueStaged, dowNames) and never row context, which is what makes the share
+    legal. Only the action footers differ per kind and they stay inline. }}
+{{#partial dueCalendar}}
+  <div class="duehead">
+    <button class="duenav prev" on-click="['dueNav', -1]" aria-label="Previous month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+    <span class="duemonth">{{dueMonthLabel(dueMonth)}}</span>
+    <button class="duenav" on-click="['dueNav', 1]" aria-label="Next month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+  </div>
+  <div class="duedow" aria-hidden="true">{{#each dowNames as d}}<span>{{d}}</span>{{/each}}</div>
+  <div class="duegrid">
+    {{#each dueGrid(dueMonth, dueStaged) as c}}
+      <button class="dueday {{#if c.out}}out{{/if}} {{#if c.today}}today{{/if}} {{#if c.on}}on{{/if}}" on-click="['duePick', c.iso]" aria-pressed="{{c.on ? 'true' : 'false'}}" aria-label="{{fmtLong(c.iso)}}">{{c.day}}</button>
+    {{/each}}
+  </div>
+  <div class="dueshort">
+    <button on-click="['dueShortcut', 'today']">Today</button>
+    <button on-click="['dueShortcut', 'week']">In 1 Week</button>
+    <button on-click="['dueShortcut', 'monday']">Next Monday</button>
+  </div>
+{{/partial}}

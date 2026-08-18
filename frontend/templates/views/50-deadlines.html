@@ -1,0 +1,83 @@
+{{#if activeTab === 'deadlines'}}
+  <div class="toolbar">
+    <button class="navbtn" on-click="['monthShift', -1]">‹</button>
+    <span class="rangetitle">{{monthLabel}}</span>
+    <button class="navbtn" on-click="['monthShift', 1]">›</button>
+    <span class="note soft" style="margin:0 0 0 auto;">🔒 Reference only. Dates follow Sprint Schedules — replotting happens there.</span>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="klabel">Due this month</div><div class="kvalue">{{dueThisMonth}}</div></div>
+    <div class="kpi red"><div class="klabel">Urgent</div><div class="kvalue">{{urgentThisMonth}}</div></div>
+    <div class="kpi orange"><div class="klabel">Conflicts</div><div class="kvalue">{{deadlineConflicts.length}}</div></div>
+    <div class="kpi purple"><div class="klabel">Needs replotting</div><div class="kvalue">{{replot.length}}</div></div>
+  </div>
+
+  {{#each deadlineConflicts as c}}
+    <div class="conflict {{c.rule}}">
+      <button class="ack" on-click="['ackConflict', c.key]" title="Acknowledge — silences THIS situation only; any change to the cards involved, or to the project's weekly capacity, brings it back">✕</button>
+      <span class="ctag">{{ruleLabel(c.rule)}} · {{fmt(c.week)}}</span> — {{c.explanation}}
+      <div class="chips">{{#each c.items as i}}<span class="badge">{{i.displayId}} · {{i.phase}}</span>{{/each}}</div>
+    </div>
+  {{/each}}
+  {{#if acknowledged.length}}
+    <div class="note soft">Acknowledged ({{acknowledged.length}}) —
+      {{#each acknowledged as a}}
+        <span class="badge">{{ruleLabel(a.rule)}} {{fmt(a.week)}}{{#if a.ack && a.ack.reason}} · “{{a.ack.reason}}”{{/if}}</span>
+        <button class="chip" on-click="['restoreConflict', a.key]">restore</button>
+      {{/each}}
+    </div>
+  {{/if}}
+
+  {{#if replot.length}}
+    <div class="replotcard"><div class="rtitle">RAISE WITH THE PM FOR REPLOTTING</div>
+      {{#each replot as r}}<div class="rrow"><span class="mono">{{r.displayId}}</span><span>{{r.name}}</span><span class="dim">{{r.reasons.join(' · ')}}</span></div>{{/each}}
+    </div>
+  {{/if}}
+
+  <div class="dim" style="margin-top:0.6rem;">Click a week to plan its days. Drag an entry between days, or focus it and use ←/→; Backspace returns it to the forecast day. Day moves never change the week — replotting happens on Sprint Schedules.</div>
+  <div class="weekgrid">
+    {{#each deadlineWeeks as w}}
+      <div class="weekcard {{#if w.flagged}}flagged{{/if}} {{#if expandedWeek === w.key}}expanded{{/if}}">
+        <div class="whead">
+          <button class="wtitle wexpand" on-click="['toggleWeek', w.key]" aria-label="{{expandedWeek === w.key ? 'Collapse' : 'Expand'}} {{w.label}} to days">{{expandedWeek === w.key ? '▾' : '▸'}} {{w.label}}</button>
+          <span class="wmeta">{{fmtLoad(w.load)}} cards' worth due{{#if w.urgent}} · {{w.urgent}} urgent{{/if}}</span>
+        </div>
+        <div class="wsub">{{w.sub}}</div>
+        <div class="capbar"><div class="fill" style="width:{{w.capPct}}%;"></div></div>
+        <div class="capnote">{{fmtLoad(w.load)}} / {{capacity.weekly}} cards</div>
+        {{#if expandedWeek === w.key}}
+          <div class="daygrid">
+            {{#each dayCols(w.key) as d}}
+              <div class="daycol {{#if d.holiday}}holiday{{/if}} {{#if d.load > d.capacity}}over{{/if}}"
+                   on-dragover="['dayDragOver', d.holiday]" on-drop="['dropOnDay', d.day, d.holiday]">
+                <div class="dhead">{{dayName(d.day)}} <span class="dcap">{{#if d.holiday}}holiday{{else}}{{fmtLoad(d.load)}}/{{d.capacity}}{{/if}}</span></div>
+                {{#each d.items as m}}
+                  <div class="entry {{#if m.late}}late{{elseif m.urgent}}urgent{{/if}}" draggable="true" tabindex="0"
+                       on-dragstart="['dragMilestone', m.cardId, m.phase]"
+                       on-keydown="['milestoneKey', m.cardId, m.phase, d.day, w.key]"
+                       aria-label="{{m.displayId}} {{m.phase}} on {{dayName(d.day)}} — arrows move the day">
+                    <span class="who">{{m.displayId}}</span>
+                    <span class="badge {{m.phase}}">{{m.phase}}</span>
+                    {{#if m.plannedDay}}<button class="chev" on-click="['clearDayPlan', m.cardId, m.phase]" title="Back to the forecast day">✕</button>{{/if}}
+                  </div>
+                {{/each}}
+              </div>
+            {{/each}}
+          </div>
+        {{else}}
+          {{#each w.items as m}}
+            <div class="entry {{#if m.late}}late{{elseif m.urgent}}urgent{{/if}}">
+              <span class="who">{{m.displayId}}</span>
+              <span class="badge {{m.phase}}">{{m.phase}}</span>
+              {{#if m.urgent}}<span class="badge urgentchip">⚡</span>{{/if}}
+              {{#if m.late}}<span class="badge bad">late</span>{{/if}}
+              {{#if m.plannedDay}}<span class="badge" title="Day set by hand — the forecast day is {{fmt(m.date)}}">📍 {{dayName(m.plannedDay)}}</span>{{/if}}
+              <span class="edate">{{fmt(m.plannedDay || m.date)}}</span>
+              {{#if m.trelloUrl}}<a href="{{m.trelloUrl}}" target="_blank">↗</a>{{/if}}
+            </div>
+          {{/each}}
+        {{/if}}
+      </div>
+    {{/each}}
+  </div>
+{{/if}}

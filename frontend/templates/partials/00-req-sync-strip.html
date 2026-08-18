@@ -1,0 +1,11 @@
+{{! §3.2 sync strip — the Requests tab is read-only and this is the sentence
+    that says WHY, so it renders on the populated view and on the empty state
+    alike. Defined once as an inline partial (Ractive requires partial
+    definitions at the top level of the template) and used in both branches. }}
+{{#partial reqSyncStrip}}
+  <div class="syncstrip">
+    <svg class="i18" aria-hidden="true"><use href="#i-trello" /></svg>
+    <span class="sstext">Difficulty, list and Figma links are read from Trello and can't be edited here.</span>
+    <span class="ssmeta">{{syncStripLabel}}</span>
+  </div>
+{{/partial}}

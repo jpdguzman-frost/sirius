@@ -30,6 +30,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { composeTemplate } from '../../frontend/build.js';
 
 const FRONTEND = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'frontend');
 
@@ -48,7 +49,12 @@ export function appScripts(): string {
     .join('\n');
 }
 
-/** The shipped Ractive template. */
+/**
+ * The shipped Ractive template — COMPOSED by build.js's own `composeTemplate()`,
+ * never reassembled here. The template is a layout plus a partials directory
+ * plus a views directory, so any guard that rebuilt the composition would be a
+ * copy of it, free to drift (test/CLAUDE.md rule 2: derive, don't copy).
+ */
 export function template(): string {
-  return fs.readFileSync(path.join(FRONTEND, 'templates', '00-app.html'), 'utf8');
+  return composeTemplate();
 }

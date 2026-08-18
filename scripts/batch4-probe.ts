@@ -41,6 +41,7 @@ import { validateEnv } from '../src/config/env.ts';
 import { AuditLog, Deliverable, Project, Sprint, User, UserProject } from '../src/models/index.ts';
 import { runMigrations } from './migrate/migrations.ts';
 import { getHolidays, setHolidays } from '../lib/calendar.ts';
+import { composeTemplate } from '../frontend/build.js';
 
 let failures = 0;
 function check(label: string, ok: boolean, detail?: unknown): void {
@@ -279,7 +280,9 @@ try {
   });
   check('a null → null replot IS applied and audited by the route', noop.status === 200
     && (await AuditLog.countDocuments({ action: 'schedule.replot' })) === auditBeforeNoop + 1, noop.body);
-  const rowActionsTpl = await readFile(new URL('../frontend/templates/00-app.html', import.meta.url), 'utf8');
+  // The template is taken from build.js's own composer, so this probe reads the
+  // markup the browser receives however the template source is later carved up.
+  const rowActionsTpl = composeTemplate();
   // NOTE: historical batch instrument. 01-app.js was split into numbered pieces
   // (context restructure stage 5, 2026-08-18); a re-run must concatenate
   // frontend/scripts/*.js (minus the 00-* files) instead of reading one file.

@@ -1,0 +1,42 @@
+<script id="tpl-app" type="text/ractive">
+{{{iconSprite}}}
+<!-- inject:partials -->
+<header class="shellnav">
+  <div class="shellrow">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <span class="crumb-root">Frost: Sirius</span>
+      <span class="crumb-sep">{{{icon.crumbChevron}}}</span>
+      <span class="crumb-here" aria-current="page">{{tabLabel}}</span>
+    </nav>
+    <div class="shellctl">
+      <div class="proj">
+        <span class="projlabel">PROJECT</span>
+        {{#if boardId}}<a class="boardlink" href="https://trello.com/b/{{boardId}}" target="_blank">{{boardId}} {{{icon.extLink}}}</a>{{/if}}
+      </div>
+      <div class="projselect">
+        <select class="project-switcher" value="{{activeProjectId}}" on-change="['switchProject']" aria-label="Project">
+          {{#each projects as p}}<option value="{{p._id}}">{{p.name}}</option>{{/each}}
+        </select>
+      </div>
+      <span class="synced {{#if sync && !sync.ok}}bad{{/if}}">{{syncLabel}}</span>
+      <div class="userchip">
+        <span class="avatar">{{userInitial}}</span>
+        <span class="who"><span class="name">{{userName}}</span><button class="sub" on-click="['signOut']">Sign out</button></span>
+      </div>
+    </div>
+  </div>
+  <div class="tabbar" role="tablist" aria-label="Sections" on-keydown="['tabKey']">
+    {{#each tabs as t}}
+      <button id="tab-{{t.id}}" class="tab {{#if t.id === activeTab}}active{{/if}}" role="tab" aria-selected="{{t.id === activeTab ? 'true' : 'false'}}" aria-controls="view-panel" tabindex="{{t.id === activeTab ? '0' : '-1'}}" on-click="['switchTab', t.id]"><span class="ticon">{{{tabIcon(t.icon)}}}</span>{{t.label}}</button>
+    {{/each}}
+    <span class="tabfill" role="presentation"></span>
+  </div>
+</header>
+
+{{#if banner}}<div class="banner">{{banner}}</div>{{/if}}
+
+<main class="view {{activeTab === 'pipeline' || activeTab === 'requests' ? '' : 'legacybg'}}" id="view-panel" role="tabpanel" aria-labelledby="tab-{{activeTab}}">
+
+<!-- inject:views -->
+</main>
+</script>
