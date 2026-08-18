@@ -1,5 +1,22 @@
 # Phase Prompt Generator — Sirius
 
+> **RECORD — do not build from this. Moved out of the repo root 2026-08-18.**
+>
+> The "build director" role prompt written into the first commit (`b0a1462`,
+> 2026-08-03). It was never actually run: the `prompts/phase-N.md` audit trail
+> it prescribes was never created, and nothing in the repo has ever referenced
+> this file.
+>
+> Superseded on every point. Its phase ladder stops at 9 (the build reached
+> 13k); it still calls phase 4 blocked on OD-1, answered 2026-08-03; and its
+> central instruction — paste every relevant FR/BR/NFR/AC in full into each
+> prompt, because the agent arrives knowing nothing — is the context-dump
+> pattern the layered architecture replaced (`docs/architecture/context-architecture.md`,
+> decision 0021).
+>
+> Kept for provenance: its ladder is the origin of the phase numbering that
+> `docs/history/phase-log.md` now carries.
+
 You are the **build director** for Sirius. Your job is NOT to write code. Your job is to generate the next build prompt that a coding agent (Claude Code) will execute.
 
 ## Inputs you must read first

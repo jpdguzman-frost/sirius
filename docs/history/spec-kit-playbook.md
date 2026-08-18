@@ -1,5 +1,36 @@
 # Sirius — Spec-Driven Development Playbook (GitHub Spec Kit + Claude Code)
 
+> **RECORD — do not build from this. Moved out of the repo root 2026-08-18.**
+>
+> This is the setup guide that produced the Spec Kit scaffold on 2026-08-03
+> (commit `b0a1462`). Step 0 is a one-time install that already ran. It is kept
+> for provenance: it explains where `specs/001-sirius-v1/spec.md`, `plan.md`
+> and `tasks.md` came from, and those artefacts ARE live — the `T…` numbers in
+> every batch trace to `tasks.md`.
+>
+> **Three statements below are now WRONG and must not be followed:**
+> 1. **Step 3 names the stack as Next.js / Prisma / Auth.js / Cloud Run / Cloud
+>    SQL.** That was reversed by JP on 2026-08-03. The stack is Express 5 +
+>    Ractive.js + MongoDB/Mongoose + Redis + Passport, deployed beside ARES —
+>    root `CLAUDE.md` §Stack, which explicitly forbids the SPA + separate API
+>    split this file assumes.
+> 2. **It names `frost-sirius-v1.jsx` as the port source.** That file was never
+>    available; `lib/` was reconstructed from the compiled bundle at
+>    `docs/source-material/frost-sirius-v1.html` (decision 0012).
+> 3. **It writes the constitution to `memory/constitution.md`.** The mirror
+>    lives at `.specify/memory/constitution.md`.
+>
+> Also superseded: the nine-phase ladder (the build reached 13k), and the
+> "Decisions you still owe" table (OD-1 and OD-8 answered 2026-08-03, the TEST
+> board created as `tx8gDsTH`; only the BRD §9 amendment remains, tracked in
+> `STATE.md`).
+>
+> How requirement changes enter today: a ruling from product is recorded in the
+> area rulebook it governs (`specs/001-sirius-v1/gantt-rules.md`,
+> `pipeline-frame-notes.md`, `requests-frame-notes.md`) before any code moves —
+> the same principle as Step 6, with the destination moved from `spec.md` to
+> the rulebooks. See `docs/README.md` §Where law lives.
+
 The rule for this whole playbook: **your documents seed every phase. Spec Kit formats; it does not invent.** If any generated file contradicts BRD v2.2 or the Implementation Plan, the documents win and the generated file gets corrected.
 
 ---

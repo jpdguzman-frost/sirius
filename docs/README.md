@@ -74,6 +74,11 @@ one only when chasing a specific fact.
   root, which holds immutable ARCHITECTURAL records.
 - **context-restructure.md** — RECORD of the 2026-08-18 restructure that
   produced this layout (all stages complete).
+- **spec-kit-playbook.md** · **phase-prompt-generator.md** — RECORDS of how the
+  build was set up on 2026-08-03, moved off the repo root 2026-08-18. **Never
+  build from either**: the playbook names the pre-reversal stack (Next.js /
+  Prisma / Cloud Run) and the generator's phase ladder stops at 9. Both carry
+  banners listing what superseded them.
 - **build-spec-v1.1.md** — SUPERSEDED by `product/build-spec-v1.2.md`.
 - **build-spec-v1.1-errata.md** — RECORD: the build team's line-by-line corrections
   to v1.1, all six answered in `product/errata-reply-v1.2.md`.
@@ -96,6 +101,7 @@ report on demand — still gitignored; it carries the real board id.
 | Pipeline rules incl. R-warn-* rulings | `specs/001-sirius-v1/pipeline-frame-notes.md` |
 | Requests-tab rules | `specs/001-sirius-v1/requests-frame-notes.md` |
 | Trello write registry | `specs/001-sirius-v1/contracts/trello-write.md` |
-| Build process (spec → plan → tasks → implement) | root `SPEC_KIT_PLAYBOOK.md`; artefacts in `specs/001-sirius-v1/` |
+| Build artefacts (spec · plan · tasks; `T…` numbers trace here) | `specs/001-sirius-v1/` — live. The playbook that generated them is a RECORD: `history/spec-kit-playbook.md` (its stack section is wrong — see its banner) |
+| How a requirement change enters | the area rulebook it governs, before any code moves — see the rows above |
 | Documentation shape, caps, layers | `docs/architecture/context-architecture.md` |
 | Constitution, invariants, precedence | root `CLAUDE.md` — authoritative and auto-loading; mirrored (with the version number, **v4.4.0**) at `.specify/memory/constitution.md`. Amendments enter the root file first, then the mirror |
