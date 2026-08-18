@@ -1,5 +1,7 @@
 # ARES Outbound Push — Build Specification
 
+> **As-built note**: the Sirius-side authority is `specs/001-sirius-v1/contracts/ares-push.md` — the 2026-08-04 fallback-drill corrections live there, not here; the production-board push subscription (`hLL7WW2V`) is still outstanding with the ARES agent — today only the TEST board pushes and rt-837 rides the 15-minute poll.
+
 **Audience**: the agent building this feature inside the **ARES codebase**. This document is
 self-contained — no knowledge of any consumer's codebase is required or expected.
 **Owner**: JP (jpdguzman@frostdesigngroup.com). Questions and undecided items go to JP.

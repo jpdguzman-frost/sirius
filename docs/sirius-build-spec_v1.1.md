@@ -1,4 +1,5 @@
 # Frost: Sirius — build spec
+**SUPERSEDED by sirius-build-spec_v1.2.md (12 Aug 2026), which folds in the errata. Record only — do not build from this version.**
 
 The platform as it currently stands. Written as build instructions, with the
 rules and measured values that cannot be inferred from the design.

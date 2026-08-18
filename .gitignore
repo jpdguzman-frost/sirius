@@ -19,7 +19,7 @@ coverage/
 # Logs
 *.log
 docs/forecasting-block.csv
-docs/gate-t045-model-validation.md
+docs/gate-t045-model-validation.*
 docs/screenshots/
 
 # ARES deploy script copy — host/SSH details stay out of the repo

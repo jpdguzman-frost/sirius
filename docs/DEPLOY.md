@@ -1,5 +1,12 @@
 # Sirius — server setup & deploy runbook (staging beside ARES)
 
+> **No staging tier exists** (JP ruling 2026-08-05: "we don't really stage platform —
+> anything we deploy goes live"). The instance is production from first boot
+> (`NODE_ENV=production`, database `sirius`, live URL); safety comes from data, not
+> environment (TEST-board project only until G7). The proxy is **Apache + certbot**
+> per `SERVER_SETUP_SPEC.md` §3, which supersedes this runbook where they differ.
+> This title's "staging" framing is historical.
+
 Per OD-8 (resolved 2026-08-03): Sirius runs on the same host as ARES, uses the
 same Mongo server (its own `sirius` database), and follows the ARES deploy
 pattern. Invariant 15: all secrets live in the host's `.env`, never the repo.
@@ -11,6 +18,8 @@ pattern. Invariant 15: all secrets live in the host's `.env`, never the repo.
 2. **Directory**: create e.g. `/mnt/<volume>/sirius` (mirror ARES's layout).
 3. **Host `.env`** (never committed — copy keys from `.env.example`):
    - `NODE_ENV=staging` (staging) / `production` (later)
+   - `BASE_PATH=/sirius` (serve under the base path on the platforms host; default
+     `''` — nothing changes for local dev/tests. See `SERVER_SETUP_SPEC.md` §4)
    - `MONGODB_URI=mongodb://localhost:27017/sirius` (`sirius-staging` for staging)
    - `REDIS_URL=redis://localhost:6379`
    - `SESSION_SECRET=` (generate: `openssl rand -hex 32`)
@@ -42,7 +51,7 @@ pattern. Invariant 15: all secrets live in the host's `.env`, never the repo.
 ```bash
 cd <DEST_DIR>
 npm run migrate                       # version-controlled, idempotent
-CODE=rt-837 BOARD=tx8gDsTH NAME="GCash: Design Support (staging)" \
+CODE=rt-test BOARD=tx8gDsTH NAME="GCash: Design Support (staging)" \
   npx tsx scripts/migrate-open-cards.ts    # onboard against the TEST board
 # allow-list yourself:
 node --input-type=module -e "…create users doc + user_projects…"  # or via mongosh

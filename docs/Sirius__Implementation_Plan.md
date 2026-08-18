@@ -1,5 +1,15 @@
 # Frost: Sirius — Engineering Implementation
 
+> **Partially superseded — recorded rulings, not new judgement.**
+> §1–§3 (stack, infrastructure, repo layout) are superseded by the constitution's Stack
+> amendment (JP, 2026-08-03 — the ARES stack: Node/Express 5, MongoDB, Redis, Ractive) and
+> `specs/001-sirius-v1/plan.md`. §5.1's OD-1 gate was resolved 2026-08-03: the ARES read
+> API (`/api/v1/trello/*`). §5.3's one-write premise is superseded by the three-entry
+> write registry (`specs/001-sirius-v1/contracts/trello-write.md`). §6's staging→prod
+> pipeline is superseded by direct-to-live `deploy.sh` — no staging tier (JP, 2026-08-05).
+> §7 local dev is superseded: host mongod/redis + `npm run dev`.
+> Authority index: `docs/README.md`.
+
 **Supersedes** `frost-sirius-build-plan.md`, which predates the ARES findings, multi-project scope, the empirical model and the urgency write path.
 
 Current as of 3 August 2026, aligned to BRD v2.2.

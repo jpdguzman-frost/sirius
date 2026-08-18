@@ -1,6 +1,6 @@
 # Sirius — server setup & go-live specification
 
-**Status**: DRAFT for JP approval — nothing in here has been executed.
+**Status**: EXECUTED — G3–G6 executed 2026-08-05 (see the §7 log), site live at `platforms.frostdesigngroup.com/sirius`; G7 passed 2026-08-12 **as OBSERVATION MODE** (rt-837 onboarded with `writes_enabled: false`, rt-test RETAINED alongside — this differs from the §5 G7 row as originally written).
 **Written**: 2026-08-05. Supersedes the generic runbook in `DEPLOY.md` where they differ;
 `DEPLOY.md` remains the reference for the `.env` key list and the smoke checklist.
 **Rule of engagement (JP)**: every phase below has an explicit approval gate. No command
@@ -104,6 +104,8 @@ depends on it.
 | **G5** | First deploy + boot | `./deploy.sh` (tests → build → rsync → `npm ci` → migrate → pm2 start both apps); onboard staging project against the TEST board (`migrate-open-cards.ts`, `CODE=rt-test BOARD=tx8gDsTH` — rt-837 stays reserved for the real board at G7); allow-list JP; verify `https://…/sirius/healthz`, sign-in, tabs on synthetic data | yes |
 | **G6** | Smoke → phase 9 | The `DEPLOY.md` smoke checklist + urgency & due round-trips on `tx8gDsTH`; then the phase-9 drill sequence (T069–T076) on the live instance (TEST-board project only), each reported to JP | yes |
 | **G7** | Real-board onboarding | Separate approval, after drills: onboard the production-board project (`migrate-open-cards.ts`, `BOARD=hLL7WW2V`), deactivate/remove the TEST project, pilot go/no-go per *Pilot Security Readiness* | yes |
+
+*G7 as passed (2026-08-12) differs from the row above: OBSERVATION MODE — rt-837 onboarded with `writes_enabled: false` and the TEST project (rt-test) retained alongside; see the record in `STATE.md` / `docs/HANDOFF.md`.*
 
 ## 6. Decisions — answered by JP 2026-08-05
 
@@ -210,6 +212,7 @@ depends on it.
   name (grep + `apachectl -S`): today HTTP falls through to 000-default and HTTPS to the
   default 443 vhost with a mismatched cert — our vhost + cert fixes both.
 - **Port 3000 is taken** (apollo.live). 3100 free → Sirius binds 3100 as planned.
+  *(Superseded: the port later moved 3100 → 3955 — see §3 and the §7 "G5 prelude" entry.)*
 - `/mnt/volume_sgp1_01` exists with the platform apps at top level; `platforms/` subdir does
   not exist yet (created at G3). NB: the path sits on the root filesystem (58G, 62% used,
   23G free) — named like a block volume but isn't one.

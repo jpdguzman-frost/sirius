@@ -22,29 +22,37 @@ status notes, pins, conflict acknowledgements.
 
 ---
 
-## 2. The two writes
+## 2. The three writes
 
-Everything is read-only except **two enumerated writes**:
+*(Corrected 2026-08-18: the sole authority for the write registry is
+`specs/001-sirius-v1/contracts/trello-write.md` — it wins where this section
+differs.)*
 
-1. **Urgency** — adds or removes a Trello label named `Urgent`. Absence means
-   non-urgent; there is no second state to keep in sync.
-2. **Card due date** — editing a deadline on Pipeline writes the Trello due
+Everything is read-only except **three enumerated writes**:
+
+1. **W1 — the `Urgent` label** — adds or removes a Trello label named `Urgent`.
+   Absence means non-urgent; there is no second state to keep in sync.
+2. **W2 — the due date** — editing a deadline on Pipeline writes the Trello due
    date, set or clear. Default 17:00 Manila, existing time of day preserved.
    There is no Sirius-local override layer, so a change made in Trello flows
    back automatically.
+3. **W3 — the `Difficulty: …` label** — the Pipeline difficulty dropdown swaps
+   the card's `Difficulty: Easy | Medium | Hard` label (add-first, then remove
+   stale values). JP-approved 2026-08-12 per BRD-§9-A1.
 
 Nothing else is written anywhere.
 
-- Both are optimistic in the UI and **rolled back on failure**. Never show a
+- All are optimistic in the UI and **rolled back on failure**. Never show a
   state Trello does not hold.
 - Needs a Trello token with write scope. Trello cannot scope per board, so it
   must be a dedicated integration account holding membership of the Design
   Support boards only — never a personal admin token.
-- Every write of either kind produces an audit row.
+- Every write of any kind produces an audit row.
 
-**Adding a third write requires a governance amendment, not a code change.**
-The enumerated-write posture is quoted in the BRD, the pilot security readiness
-doc and the vendor assessment. If a ticket seems to need one, stop and raise it.
+**Growing the registry requires a governance amendment, not a code change** —
+W3 was added exactly that way (JP-approved 2026-08-12). The enumerated-write
+posture is quoted in the BRD, the pilot security readiness doc and the vendor
+assessment. If a ticket seems to need a new write, stop and raise it.
 
 ---
 
@@ -127,9 +135,11 @@ week comes from Sprint Schedules. Day capacity is the week's capacity across
 non-holiday days using **largest remainder**, so the total is exact — per-day
 rounding drifts it (22 over 4 days rounds to 24).
 
-**Conflict acknowledgement is keyed on the situation.** `week + rule + the exact
-cards involved`. Add, remove, replot or re-phase a card and it resurfaces. Never
-key on the rule alone — that turns a warning off permanently by accident.
+**Conflict acknowledgement is keyed on the situation.** `week | rule | capacity |
+sorted card:phase pairs` (constitution v4.3.0, amended 2026-08-17: the key carries
+the project's weekly capacity). Add, remove, replot or re-phase a card — or change
+the project's weekly capacity — and it resurfaces. Never key on the rule alone —
+that turns a warning off permanently by accident.
 
 ---
 
@@ -183,13 +193,13 @@ within a week, and you do not get a second first impression.
 
 | # | Question |
 |---|---|
-| OD-1 | How ARES exposes its data — shared DB view, API, or replication. **Blocks step 4** |
+| OD-1 | How ARES exposes its data — shared DB view, API, or replication. **Blocks step 4** — **RESOLVED 2026-08-03: the ARES read API** (`/api/v1/trello/*`, read-only key, server-side only) |
 | OD-2 | Model refresh window — 6 or 12 months |
 | OD-4 | Do acknowledged conflicts expire, or persist until the cards change |
 | OD-5 | Is `Client Approval` an ongoing or a done state |
 | OD-6 | Which projects beyond GCash are in v1 |
 | OD-7 | Retention for closed requests |
-| OD-8 | Hosting and ownership — Frost or GCash |
+| OD-8 | Hosting and ownership — Frost or GCash — **RESOLVED 2026-08-03: hosted beside ARES** (same host, same Mongo server, own `sirius` database, same deploy pattern) |
 
 Do not guess these. They change scope.
 
@@ -207,6 +217,9 @@ Do not guess these. They change scope.
 | Sheet via CSV import | Service account, scheduled |
 | Sprint edits, day plans, acknowledgements are session-only | Persisted and shared |
 
+*(As shipped, the production store is **MongoDB** via Mongoose — per the
+constitution's Stack section, amended 2026-08-03 — not Postgres.)*
+
 The parts worth lifting verbatim are `forecast()`, `forecastSmart()`,
 `workday()`, `toFriday()`, `weekLoad()`, `cardWeight()` and `suggestPlan()`.
 They are pure, tested against real data, and took several rounds to get right.
@@ -217,10 +230,13 @@ They are pure, tested against real data, and took several rounds to get right.
 
 | File | Covers |
 |---|---|
-| `BRD-frost-sirius.md` | Scope, requirements, business rules, acceptance criteria |
-| `frost-sirius-engineering.md` | Schema, stack, infrastructure, sync workers |
+| `docs/Sirius__BRD.md` | Scope, requirements, business rules, acceptance criteria |
+| `docs/Sirius__Implementation_Plan.md` | Schema, stack, infrastructure, sync workers |
 | `frost-sirius-roadmap.md` | Phases, gates, sequencing |
 | `ares-sirius-review.md` | What ARES already provides and what to inherit |
 | `sirius-live-sheet-runbook.md` | Sheet connection, step by step |
 | `pilot-security-readiness.md` | Controls and go/no-go |
 | `frost-sirius-v1-functionality.md` | Everything the prototype does |
+
+*(Filenames updated 2026-08-18 where the document is checked into this repo; the
+remaining five are not in-repo.)*
