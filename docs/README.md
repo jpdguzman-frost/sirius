@@ -33,8 +33,9 @@ rules (BRD vs Implementation Plan) are stated there, not here.
 
 ## Historical / superseded — records, not law
 
-- **sirius-build-spec_v1.1.md** — SUPERSEDED by v1.2.
-- **sirius-build-spec_v1.1_errata.md** — ANSWERED record: build team's line-by-line corrections to v1.1.
+- **archive/** — retired records, moved on JP's ruling; nothing live points here.
+- **archive/sirius-build-spec_v1.1.md** — SUPERSEDED by v1.2 (archived 2026-08-18).
+- **archive/sirius-build-spec_v1.1_errata.md** — ANSWERED record: build team's line-by-line corrections to v1.1 (archived 2026-08-18).
 - **sirus_errata-reply-v1.2.md** — ANSWERED record: product's reply (all six corrections accepted; count-basis ruling).
 - **AGENTS.md** — MIXED: §2's enumerated-write posture stands, but the authoritative registry is `specs/001-sirius-v1/contracts/trello-write.md`, which has grown past §2's count; §7/§8/§9 are historical (OD-1/OD-8 shown open, "Postgres") per STATE.md's decisions table (2026-08-12 row).
 - **frost-sirius-v1.html** — the compiled prototype `lib/` was ported from. NEVER DELETE: it is the golden tests' provenance (constitution invariant 5).

@@ -1,6 +1,19 @@
 # Business Requirements Document
 ## Frost: Sirius — Delivery Pipeline & Forecasting Platform
 
+> **Interim engineering note (2026-08-18, JP-approved; product's next revision
+> supersedes this banner.)** Four points below have moved on since v2.2:
+> the write surface is now the THREE-entry registry in
+> `specs/001-sirius-v1/contracts/trello-write.md` — Urgent label, due date,
+> Difficulty label — not the single urgency write §§2.2/3/4/9 describe (the
+> product-side amendment is pending, tracked in `STATE.md` §BRD §9) · §13's
+> OD-1 and OD-8 were resolved 2026-08-03 (ARES read API; hosted beside ARES) ·
+> the acknowledgement key of BR-9a/FR-6.7 now includes the project's weekly
+> capacity (constitution v4.3.0, 2026-08-17) · §2.1's "Forecast — dual-mode"
+> line is a v2.1 leftover contradicted by BR-2/FR-7.2 and the v2.2 change
+> list. Scope and BR-1…BR-10 otherwise govern as written; current authority
+> map: `docs/README.md`.
+
 | | |
 |---|---|
 | **Document** | BRD — Frost: Sirius |

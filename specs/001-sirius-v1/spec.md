@@ -513,7 +513,7 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 
 ### Session 2026-08-12 (JP) — build spec v1.1 alignment
 
-- The product team's build spec v1.1 (`docs/sirius-build-spec_v1.1.md`) was reviewed against the live system; corrections returned as `docs/sirius-build-spec_v1.1_errata.md`.
+- The product team's build spec v1.1 (`docs/sirius-build-spec_v1.1.md`) was reviewed against the live system; corrections returned as `docs/sirius-build-spec_v1.1_errata.md`. *(Both archived 2026-08-18 per JP → `docs/archive/`.)*
 - **W2 confirmed standing**: the doc's §4.2 "open decision" on writing the Trello due date predates the 2026-08-04 amendment. The decision holds — a Sirius deadline edit writes the Trello due date; no Sirius-local override layer exists or will be built.
 - **Frost notes adopted** → FR-11, AC-21 (build spec §3.7–3.8).
 - **Daily plotting adopted** → FR-12, AC-22/AC-23 (build spec §6.2).

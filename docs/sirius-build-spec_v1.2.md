@@ -2,6 +2,19 @@
 
 **v1.2** · 12 August 2026 · supersedes v1.1, incorporating the build team's errata.
 
+> **Interim engineering note (2026-08-18, JP-approved; product's next revision
+> supersedes this banner.)** Five sections were reversed by later JP rulings —
+> do not build from them as written: §3.7 the Requests STATUS column is
+> TWO-valued, In Pipeline / For Filing (clarification is a note-state pill,
+> 2026-08-17) · §4.1/§4.3 the Difficulty label is now the registry's THIRD
+> write, set from the Pipeline dropdown (W3, 2026-08-12) · §4.4's amber
+> incomplete-cards panel is gone — replaced by the per-row warning icon +
+> hover card (2026-08-18) · §5.1/§5.2 the Gantt bars ARE draggable and the
+> drag handle is the coloured run only, never the row (current law:
+> `specs/001-sirius-v1/gantt-rules.md` §1) · §5.4 rt-837's capacity is
+> LOCKED at 120 (Option B; admin unlock audited). Where the rulebooks are
+> silent, this spec still governs the UI; authority map: `docs/README.md`.
+
 The platform as it currently stands. Written as build instructions, with the
 rules and measured values that cannot be inferred from the design.
 
