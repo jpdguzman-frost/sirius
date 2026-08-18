@@ -9,6 +9,7 @@ Verdict first, one line per file: which documents **govern**, which merely
 - **HANDOFF.md** — READ FIRST on resume, together with root `STATE.md` (current phase table, decisions, AC scoreboard).
 - **state-log/** — ARCHIVE: STATE.md session entries rotated out verbatim, one dated file per day, newest-first.
 - **CONTEXT_RESTRUCTURE.md** — PLAN+RECORD of the 2026-08-18 docs restructure (this index is one of its stages).
+- **CONTEXT_ARCHITECTURE.md** — GOVERNS documentation shape: the four context layers, caps, growth rule, rigidity log (JP-ruled 2026-08-18).
 - **MAP.md** — CODE MAP: one line per source file (purpose, key exports, guarding tests); read it before exploring the codebase.
 - **README.md** — this index.
 

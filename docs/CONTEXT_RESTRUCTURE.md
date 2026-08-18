@@ -112,7 +112,43 @@ stage; same treatment later if the pattern proves out.
       law-adjacent parentheticals are descriptors, not law
 - [x] Commit · owl record
 
-## Stage 4 — split `frontend/scripts/01-app.js`  `[PARKED — blocked]`
+## Stage 4 — T-shape context architecture (JP-ruled 2026-08-18)
+
+Architecture locked in `docs/CONTEXT_ARCHITECTURE.md` (JP's layer definitions;
+file-per-area granularity provisional with a standing Rigidity log; skim
+replaces MAP.md). Sub-stages:
+
+### Stage 4a — skim + generator + guard test  `[in progress]`
+
+Rebuild `docs/MAP.md` as the Layer-0 skim (≤150 lines, standing rules with the
+two-way authority wording, fact+pointer only, marked HAND-WRITTEN block);
+`scripts/generate-index.ts` regenerates the factual sections (STATUS from
+STATE.md's own tables, DOC MAP, module skeleton) idempotently between markers;
+`test/context-architecture.test.ts` asserts the caps table; STATE.md's session
+index trimmed to the 10-session window with the window rule added to its
+convention note.
+
+- [ ] Workflow build (skim+generator, then guards+rotation)
+- [ ] Verify A: skim gates + generator idempotency (run twice, byte-compare)
+- [ ] Verify B: conservation (dropped index lines' targets exist), drift
+      (no skim line explains), tree scoped, guard test green
+- [ ] Gate: tsc · eslint · new guard suite green · idempotency re-run
+- [ ] Commit · owl record
+
+### Stage 4b — decision records  `[queued]`
+
+~15 architectural decisions → `decisions/NNNN-*.md` (20–40 lines, immutable,
+supersede pattern; unclear rationale ⇒ `status: proposed` + open questions for
+JP). Verify: format, one-decision-per-file, traceability, no normative
+duplication with rulebooks/constitution.
+
+### Stage 4c — module notes + end-to-end gate pass  `[queued]`
+
+`lib/CLAUDE.md` + `src/CLAUDE.md` (≤4KB, self-contained, coupling flagged not
+papered over); staleness stamps across scope; the T-shape spec's full gate
+list + our conservation/drift gates run once end-to-end.
+
+## Stage 5 (was 4) — split `frontend/scripts/01-app.js`  `[HELD by JP 2026-08-18]`
 
 Blocked until the in-flight pipeline-warning work lands (it edits 01-app.js and
 test files). Then: add `test/helpers/source.ts` returning the concatenation of
@@ -151,3 +187,9 @@ touching `lib/**`, the wire, schema, or the write registry.
   PASS), 6 nits fixed at gate. The STATE.md rotation convention was followed
   correctly by the concurrent batch-10 session unprompted — the Stage-1
   design survived first contact.
+- 2026-08-18 — JP ruled the T-shape adoption: rule files one-per-AREA
+  (provisional, rigidity tested as we build), skim replaces MAP.md, layer
+  definitions his (L0 entry/latest read-first, L1 current-state rot-protected,
+  lower layers delegated). Alignment confirmed; architecture codified in
+  docs/CONTEXT_ARCHITECTURE.md; stage 4 = 4a/4b/4c; script split renumbered
+  stage 5, HELD.
