@@ -13,9 +13,11 @@ _last-verified: 2026-08-18_
 - **`MAP.md`** — the codebase in one skim: live status, the two areas, the doc
   layers, the load-bearing test guards. Read it instead of exploring; its factual
   blocks are generated (`npx tsx scripts/generate-index.ts`; `--check` exits 1 on drift).
-- **root `STATE.md`** — the current state: phase table, blocking decisions, AC
-  scoreboard, comms, newest session entry. The only Layer-1 file — `HANDOFF.md`
-  was retired 2026-08-18 (JP).
+- **root `STATE.md`** — the current state, and ONLY what is still live: open
+  phases, unanswered decisions, AC scoreboard, comms, a 10-line window of
+  session summaries. Anything settled rotates to `history/` the session it
+  settles (decision 0024). The only Layer-1 file — `HANDOFF.md` was retired
+  2026-08-18 (JP).
 - **`decisions/`** (repo root) — the why: one settled architectural decision per
   numbered record, never edited once accepted; `decisions/README.md` indexes all.
 - **`README.md`** — this guide.
@@ -56,10 +58,20 @@ Entry sequence on resume: root `CLAUDE.md` (auto-loads) → `MAP.md` → `STATE.
 - **ares-push-spec.md** — RECORD: the spec written FOR the ARES codebase. The
   Sirius-side authority is `specs/001-sirius-v1/contracts/ares-push.md`.
 
-## history/ — records only; nothing live points here
+## history/ — records only; STATE.md points here, nothing else does
 
-- **state-log/** — ARCHIVE: STATE.md session entries rotated out verbatim, one
-  dated file per day. The filenames are the index.
+The three archives that let Layer 1 stay small. Deliberately UNCAPPED — capping
+them would push content back up into `STATE.md`. Never loaded on resume; read
+one only when chasing a specific fact.
+
+- **state-log/** — ARCHIVE: the FULL session narrative, written here directly
+  and never into STATE.md (decision 0024). One dated file per day, entries
+  newest-first. The filenames are the index.
+- **phase-log.md** — ARCHIVE: every phase and batch, verbatim, append-only.
+  STATE.md keeps only the open and undeployed ones.
+- **decision-log.md** — ARCHIVE: questions once answered, gates once passed,
+  deviations once approved. Not to be confused with `decisions/` at the repo
+  root, which holds immutable ARCHITECTURAL records.
 - **context-restructure.md** — RECORD of the 2026-08-18 restructure that
   produced this layout (all stages complete).
 - **build-spec-v1.1.md** — SUPERSEDED by `product/build-spec-v1.2.md`.
