@@ -1,5 +1,7 @@
 # Context restructure — staged plan & checklist
 
+_All stages complete 2026-08-18; this file is now the RECORD of the restructure. Live law: docs/CONTEXT_ARCHITECTURE.md._
+
 _Started 2026-08-18 · JP-approved. Goal: cut agent session-start token burn
 (~34k → ~10k) and make the repo navigable for agents. No product change of any
 kind. Each stage runs as a workflow with independent verification, then a gate,
@@ -241,23 +243,6 @@ next product-touching pass): 7 shipped-source comments still say 01-app.js
 (00-router:6, 20-pipeline.css:178, 35-gantt.css ×3, template ×2).
 Coherence verifier failed the first gate on stale test-comment prose + the
 helper's exception list — fixed at gate.
-
-Blocked until the in-flight pipeline-warning work lands (it edits 01-app.js and
-test files). Then: add `test/helpers/source.ts` returning the concatenation of
-`scripts/*.js`, migrate source-regex guards to it, split 01-app.js into
-numbered files (build.js sort-concatenates; styles already use this pattern).
-**Build effect**: `public/index.html` changes ONLY by the per-file banner
-comments build.js inserts; the executed JS must be content-identical.
-
-- [ ] Precondition: quarantine cleared — in-flight work landed as `7bdf6b4`
-      mid-Stage-1, BUT that batch's live pass / deploy may still be owed by the
-      other session; Stage 4 additionally waits for JP's explicit go since it
-      is the one build-touching stage
-- [ ] Workflow build (helper first, guard migration, then the split)
-- [ ] Gate: built JS byte-identical after stripping `/* ==== ... ==== */`
-      banners · tsc · eslint · vitest dual-TZ full suite · no template/CSS
-      byte changes
-- [ ] Commit · owl record · JP decides if a deploy is wanted (not required)
 
 ## Explicitly out of scope
 

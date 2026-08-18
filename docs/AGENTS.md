@@ -1,5 +1,7 @@
 # AGENTS.md — Frost: Sirius
 
+_last-verified: 2026-08-18_
+
 Read this before writing code. It records what is **not** derivable from the
 Figma file, the prototype source, or the Trello board — the reasoning, the
 traps, and the boundaries.

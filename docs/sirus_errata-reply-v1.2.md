@@ -1,5 +1,9 @@
 # Reply to errata — Sirius build spec v1.1
 
+_Answered record (2026-08-12) — all six corrections confirmed; kept at this exact path (cited by specs/001-sirius-v1/tasks.md). The filename's spelling is historical — do not fix it._
+
+_last-verified: 2026-08-18_
+
 **To:** Sirius build · **From:** Product · **Date:** 12 August 2026
 **Re:** `sirius-build-spec_v1.1_errata.md`
 

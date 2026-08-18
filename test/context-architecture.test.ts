@@ -230,12 +230,20 @@ describe('staleness stamps', () => {
   // it himself) and STATE.md/docs/HANDOFF.md (Layer 1 current-state files —
   // their freshness IS their content, updated every session by convention).
   // The set is DERIVED, not listed: a new rulebook, area map, or directory
-  // CLAUDE.md is covered by this assertion the day it appears.
+  // CLAUDE.md is covered by this assertion the day it appears. The
+  // hand-written Layer-2 operational docs are the exception — no glob names
+  // them, so they are listed explicitly below.
   const stamped = [
     'docs/MAP.md',
     'docs/README.md',
     'docs/CONTEXT_ARCHITECTURE.md',
     'decisions/README.md',
+    // hand-written Layer-2 operational docs (listed explicitly)
+    'docs/DEPLOY.md',
+    'docs/SERVER_SETUP_SPEC.md',
+    'docs/AGENTS.md',
+    'docs/ARES_PUSH_BUILD_SPEC.md',
+    'docs/sirus_errata-reply-v1.2.md',
     ...areaMapsOnDisk(),
     ...fs
       .readdirSync(path.join(ROOT, 'specs', '001-sirius-v1'))

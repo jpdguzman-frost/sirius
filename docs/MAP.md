@@ -31,7 +31,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 - Layer 3 · archive — docs/state-log/ · archived frame-notes (gantt today; banner marks each) · git history · owl threads
 <!-- /GEN:DOCMAP -->
 
-## Test guards (load-bearing only, of 58 suites + helpers and the golden oracle)
+## Test guards (load-bearing only, of 60 suites + helpers and the golden oracle)
 
 - golden: test/golden/original.mjs — VERBATIM oracle, DO NOT EDIT; calendar/forecast/planner.test.ts pin port-trio parity — highest-value tests; forecast.legacy/.workbook.test.ts (40 sanitized workbook rows) pin BR-1/AC-10.
 - test/helpers/gantt-render.ts — renders the shipped schedules template with real Ractive — the template-proof harness.

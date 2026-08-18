@@ -1,5 +1,7 @@
 # Sirius — server setup & go-live specification
 
+_last-verified: 2026-08-18_
+
 **Status**: EXECUTED — G3–G6 executed 2026-08-05 (see the §7 log), site live at `platforms.frostdesigngroup.com/sirius`; G7 passed 2026-08-12 **as OBSERVATION MODE** (rt-837 onboarded with `writes_enabled: false`, rt-test RETAINED alongside — this differs from the §5 G7 row as originally written).
 **Written**: 2026-08-05. Supersedes the generic runbook in `DEPLOY.md` where they differ;
 `DEPLOY.md` remains the reference for the `.env` key list and the smoke checklist.
@@ -199,6 +201,8 @@ depends on it.
   each reload); LE certificate issued (expires 2026-11-02, certbot.timer auto-renews);
   HTTP→HTTPS 301; placeholder page at `/`; `/sirius` proxies to 127.0.0.1:3955 (503 until
   G5 boots the app — correct); `X-Forwarded-Proto https` set in the ssl vhost.
+
+_Log ends 2026-08-05; later operations are recorded in STATE.md / docs/state-log/._
 
 ## 7a. G2 discovery findings (read-only, 2026-08-05)
 
