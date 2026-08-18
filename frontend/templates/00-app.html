@@ -343,8 +343,10 @@
                    frame specs the EXPANDED state, so it renders only there,
                    where parent-vs-children is the distinction it teaches; the
                    collapsed table is not this spec's to change. Flagged to
-                   Miles as a default taken, not a ruling. -->
-              {{#if expanded[row.mcNumber]}}<span class="subtone">Main Card</span>{{/if}}</td>
+                   Miles as a default taken, not a ruling. firstOfMc because
+                   mc_number repeats across sibling rows (invariant 3): the
+                   SubTone marks the row the task list hangs under. -->
+              {{#if row.firstOfMc && expanded[row.mcNumber]}}<span class="subtone">Main Card</span>{{/if}}</td>
             <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{{hl(row.assetType)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-diff"><div class="ubadge-wrap">
               <button class="pbadge ubadge {{#if row.difficulty}}d-{{row.difficulty}}{{else}}unset{{/if}} {{#if savingDifficulty[row.cardId]}}saving{{/if}}"
@@ -409,7 +411,12 @@
               {{else}}<span class="srclink off" aria-disabled="true"><svg class="i18"><use href="#i-figma" /></svg></span>{{/if}}
             </td>
           </tr>
-          {{#if expanded[row.mcNumber]}}
+          {{! firstOfMc: mc_number is NOT unique (invariant 3 — one MC can
+              carry 99 deliverable rows) and expansion is per-MC, so the task
+              list renders under the group's FIRST row only; under every
+              sibling it would duplicate the whole list — and an open task
+              popover — once per row (review pass 2026-08-18). }}
+          {{#if row.firstOfMc && expanded[row.mcNumber]}}
             {{#each workCardsByMc[row.mcNumber] as w}}
               <!-- owl #45, node 520:54192 — the expanded MC's task cards.
                    One <tr> in the SAME table: parent and child share one
@@ -443,7 +450,7 @@
                          three handlers is the template SAYING the kind it
                          knows by construction, so the client never re-derives
                          it from set-membership. -->
-                    <button class="datefield {{#if !w.due}}missing{{/if}} {{#if savingDeadline[w.cardId]}}saving{{/if}}"
+                    <button class="datefield {{w.due ? (w.overdue ? 'overdue' : '') : 'missing'}} {{#if savingDeadline[w.cardId]}}saving{{/if}}"
                       disabled="{{savingDeadline[w.cardId]}}"
                       on-click="['openDuePopover', w.cardId, 'task']" aria-haspopup="dialog" aria-expanded="{{duePopover === w.cardId ? 'true' : 'false'}}"
                       title="{{w.due ? 'Task due date' : 'No due date'}} — Apply writes the Trello due date (write registry W2, task-card scope)">
@@ -459,7 +466,7 @@
                       </div>
                     {{/if}}
                   {{else}}
-                    <span class="datefield readonly {{#if !w.due}}missing{{/if}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{w.due ? fmtLong(w.due) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
+                    <span class="datefield readonly {{w.due ? (w.overdue ? 'overdue' : '') : 'missing'}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{w.due ? fmtLong(w.due) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
                   {{/if}}
                 </div></td>
                 <td class="col-started">{{#if w.started}}<span class="plaincell nowrap" title="{{fmtInstant(w.started, w.startedTs)}}">{{fmtLong(w.started)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>

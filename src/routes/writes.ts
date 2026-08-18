@@ -28,28 +28,29 @@ interface WriteContext<TDoc> {
   trello: TrelloWriter;
 }
 
+/** The card kinds a registry write can target, and each kind's doc type. */
+type KindDoc = {
+  deliverable: InstanceType<typeof Deliverable>;
+  work_card: InstanceType<typeof WorkCard>;
+};
+
 /**
  * Guards shared by every registry write; responds and returns null on refusal.
  * `kind` widens the lookup to task cards for W2's task-card scope (JP
  * 2026-08-18, contracts/trello-write.md §W2 scope clarification) — every
  * refusal guard is identical for both kinds, which is the point of the ONE
- * door (src/CLAUDE.md rule 3). The overloads keep `ctx.doc` COMPILER-typed by
- * the kind asked for, so no caller narrows with a cast the type system cannot
- * check — the enumerated union is exactly the two collections that exist.
+ * door (src/CLAUDE.md rule 3). Generic over the kind, so `ctx.doc` is
+ * COMPILER-typed at every call site: a literal kind narrows to its doc, a
+ * variable kind yields the union (fine for handlers that touch only the
+ * fields both kinds share, which is exactly the shared-handler case).
  */
-async function writeGuards(
-  env: Env, trello: TrelloWriter | null, req: Request, res: Response,
-): Promise<WriteContext<InstanceType<typeof Deliverable>> | null>;
-async function writeGuards(
-  env: Env, trello: TrelloWriter | null, req: Request, res: Response, kind: 'work_card',
-): Promise<WriteContext<InstanceType<typeof WorkCard>> | null>;
-async function writeGuards(
+async function writeGuards<K extends keyof KindDoc = 'deliverable'>(
   env: Env,
   trello: TrelloWriter | null,
   req: Request,
   res: Response,
-  kind: 'deliverable' | 'work_card' = 'deliverable',
-): Promise<WriteContext<InstanceType<typeof Deliverable> | InstanceType<typeof WorkCard>> | null> {
+  kind?: K,
+): Promise<WriteContext<KindDoc[K]> | null> {
   const projectId = res.locals.project._id as Types.ObjectId;
   const boardId = res.locals.project.trello_board_id as string;
   const cardId = String(req.params.cardId);
@@ -76,10 +77,13 @@ async function writeGuards(
     return null;
   }
 
+  // active: true — a card that flipped kind (gained/lost the Main Card
+  // label) leaves a deactivated doc in its old collection, and that ghost
+  // must not keep answering writes (review pass 2026-08-18).
   const doc =
     kind === 'work_card'
-      ? await WorkCard.findOne({ project_id: projectId, trello_card_id: cardId })
-      : await Deliverable.findOne({ project_id: projectId, trello_card_id: cardId });
+      ? await WorkCard.findOne({ project_id: projectId, trello_card_id: cardId, active: true })
+      : await Deliverable.findOne({ project_id: projectId, trello_card_id: cardId, active: true });
   if (!doc) {
     res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
     return null;
@@ -92,7 +96,9 @@ async function writeGuards(
     res.status(503).json({ ok: false, error: { code: 'TRELLO_NOT_CONFIGURED', message: 'TRELLO_API_KEY / TRELLO_TOKEN are not set.' } });
     return null;
   }
-  return { projectId, boardId, cardId, actor: (req.user as SessionUser).email, doc, trello };
+  // the branch above proves doc matches `kind`; TS cannot narrow K from a
+  // value comparison, so this is the ONE place the correspondence is asserted
+  return { projectId, boardId, cardId, actor: (req.user as SessionUser).email, doc: doc as KindDoc[K], trello };
 }
 
 export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
@@ -112,7 +118,7 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       const ctx = await writeGuards(env, trello, req, res);
       if (!ctx) return;
 
-      const doc = ctx.doc; // typed deliverable by the overload — urgency exists nowhere else
+      const doc = ctx.doc; // typed deliverable by the guard's generic — urgency exists nowhere else
       const before = doc.urgency;
       const after = body.data.urgent ? 'Urgent' : 'Non-Urgent';
       try {
@@ -142,19 +148,29 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
   const dueHandler = (kind: 'deliverable' | 'work_card') =>
     async (req: Request, res: Response) => {
       const body = z
-        .object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() })
+        .object({
+          date: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            // the regex admits calendar-impossible days (2026-02-30) that
+            // would make composeDueIso throw OUTSIDE the try — a 500 with no
+            // audit trail (review pass 2026-08-18). A real-date check keeps
+            // bad input in the 400 lane, where non-attempts belong.
+            .refine((d) => {
+              const t = new Date(`${d}T00:00:00Z`).getTime();
+              return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === d;
+            }, 'not a real calendar date')
+            .nullable(),
+        })
         .strict()
         .safeParse(req.body);
       if (!body.success) {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
       }
-      // the ternary (not a variable kind argument) is what lets each overload
-      // resolve, so ctx.doc is compiler-typed on both branches — and both
-      // schemas carry the same W2 field pair, so the shared tail just reads it
-      const ctx = kind === 'work_card'
-        ? await writeGuards(env, trello, req, res, 'work_card')
-        : await writeGuards(env, trello, req, res);
+      // a variable kind yields the union-typed doc — exactly right for a
+      // handler that touches only the field pair both kinds share
+      const ctx = await writeGuards(env, trello, req, res, kind);
       if (!ctx) return;
 
       const doc = ctx.doc;
@@ -173,12 +189,12 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         doc.trello_due_at = dueIso ? new Date(dueIso) : null;
         await doc.save();
         await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'due.set', entity: kind, entity_id: ctx.cardId, before: { trello_due: before }, after: { trello_due: after } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, due: after } });
+        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, kind, due: after } });
         res.json({ ok: true, trello_due: after });
       } catch (err) {
         const message = (err as Error).message;
         await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'due.set_failed', entity: kind, entity_id: ctx.cardId, before: { trello_due: before }, after: { attempted: after, error: message } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, due: after } });
+        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, kind, due: after } });
         res.status(502).json({ ok: false, error: { code: 'TRELLO_WRITE_FAILED', message } });
       }
     };
@@ -211,7 +227,7 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       const ctx = await writeGuards(env, trello, req, res);
       if (!ctx) return;
 
-      const doc = ctx.doc; // typed deliverable by the overload (W3's surface today)
+      const doc = ctx.doc; // typed deliverable by the guard's generic (W3's surface today)
       const before = doc.difficulty ?? null;
       const after = body.data.difficulty;
       if (before === after) {

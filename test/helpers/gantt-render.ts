@@ -39,7 +39,7 @@ interface RactiveInstance {
   toHTML(): string;
 }
 interface RactiveCtor {
-  new (opts: { template: string; data: Record<string, unknown> }): RactiveInstance;
+  new (opts: { template: string; data: Record<string, unknown>; partials?: Record<string, string> }): RactiveInstance;
   DEBUG: boolean;
   parse(template: string): unknown;
 }
@@ -423,8 +423,30 @@ export type WorkCardRow = Pick<WorkCardWire, 'cardId' | 'name'> & Partial<WorkCa
  * rather than handing Ractive functions: the recipes under test are still the
  * shipped ones, and the render proves the same wiring the browser runs.
  */
-const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, byMc: Record<string, WorkCardRow[]>) =>
-  rows.map((r) => ({ ...r, warning: recipe(r), hasTasks: !!byMc[r.mcNumber] }));
+const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, byMc: Record<string, WorkCardRow[]>) => {
+  const seen = new Set<string>();
+  return rows.map((r) => {
+    const firstOfMc = !!r.mcNumber && !seen.has(r.mcNumber);
+    if (r.mcNumber) seen.add(r.mcNumber);
+    return { ...r, warning: recipe(r), hasTasks: !!byMc[r.mcNumber], firstOfMc };
+  });
+};
+
+/**
+ * The dueCalendar partial's BODY, sliced from the shipped template. Partial
+ * definitions live at the template's top level — outside every fragment
+ * divFragment can slice — and Ractive silently swallows an unresolved
+ * `{{>name}}`, so without registering the shipped body on the instance the
+ * calendar guards pass vacuously against markup that never rendered (the
+ * rule-6 hazard; caught by the 2026-08-18 review pass).
+ */
+const DUE_CALENDAR_PARTIAL = (() => {
+  const marker = '{{#partial dueCalendar}}';
+  const open = TEMPLATE.indexOf(marker);
+  const close = TEMPLATE.indexOf('{{/partial}}', open);
+  if (open < 0 || close < 0) throw new Error('gantt-render: no dueCalendar partial in the shipped template');
+  return TEMPLATE.slice(open + marker.length, close);
+})();
 
 /**
  * Renders the Pipeline table (`<div class="pscrollwrap">`, which occurs
@@ -438,6 +460,7 @@ const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, byMc: Rec
 export function renderPipelineTable(state: PipelineTableState): string {
   const instance = new Ractive({
     template: divFragment('<div class="pscrollwrap">'),
+    partials: { dueCalendar: DUE_CALENDAR_PARTIAL },
     data: {
       pipelineRows: stampRows(state.pipelineRows, state.rowWarning, state.workCardsByMc ?? {}),
       warnPop: state.warnPop ?? null,

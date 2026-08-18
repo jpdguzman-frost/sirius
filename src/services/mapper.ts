@@ -11,6 +11,7 @@
 import { laneOf } from '../../lib/model.ts';
 import { URGENT_LABEL_NAME } from '../../lib/trello.ts';
 import type { AresCard } from './ares.ts';
+import { manilaDate } from './pipeline.ts';
 
 export const MAIN_CARD_LABEL = 'Main Card';
 const MC_RE = /\bMC[-\s]?(\d+)\b/i;
@@ -90,7 +91,17 @@ function figmaOf(card: AresCard): string | undefined {
   return m ? m[0] : undefined;
 }
 
-const dateOnly = (iso: string | null | undefined): string | null => (iso ? iso.slice(0, 10) : null);
+/* MANILA-day, not a UTC slice (review pass 2026-08-18, finding on both W2
+   halves): a Trello due set 00:00–07:59 Manila arrives as the PREVIOUS UTC
+   day, and slicing stored it a day early beside the manilaDate()-true
+   Started/Done on the same row — misleading the no-op guard into a rewrite.
+   DATE_ONLY documents itself as "an Asia/Manila calendar day" (invariant 11);
+   now it is one. Stored values self-heal on the next sync's $set. */
+const dateOnly = (iso: string | null | undefined): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : manilaDate(d);
+};
 
 /**
  * Map a board's cards for one project. `projectLabel` null means the whole

@@ -36,6 +36,20 @@ const sourceEventId = (m: AresMovement) =>
   `${m.cardId}|${m.fromList ?? ''}|${m.toList ?? ''}|${m.detectedAt}`;
 
 /**
+ * A due instant from the wire, or null — NEVER an Invalid Date (review pass
+ * 2026-08-18): `new Date(garbage)` yields Invalid Date, Mongoose's cast
+ * throws at updateOne, and one malformed ARES string then aborts the whole
+ * project's sequential sync loop every tick until the source changes. A
+ * malformed instant degrades to "no due", which the next good read heals.
+ * The date-only twin is guarded at the source (mapper's dateOnly).
+ */
+function dueInstant(iso: string | null | undefined): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
  * Ownership-safe deliverable upsert — Trello-owned fields only; Sirius-owned
  * planning fields are NEVER touched by sync (§1.2 ownership). Urgency and the
  * due instant reconcile FROM Trello via ARES (FR-9.5): a manual change made
@@ -61,7 +75,7 @@ export async function upsertDeliverable(
         figma_url: d.figma_url ?? null,
         labels: d.labels,
         trello_due: d.trello_due,
-        trello_due_at: d.trello_due_at ? new Date(d.trello_due_at) : null,
+        trello_due_at: dueInstant(d.trello_due_at),
         urgency: d.urgent ? 'Urgent' : 'Non-Urgent',
         trello_url: d.trello_url ?? null,
         active: d.active,
@@ -90,7 +104,7 @@ export async function upsertWorkCard(projectId: Types.ObjectId, w: MappedWorkCar
         // W2 task-card scope (2026-08-18): Trello-owned, so a manual change in
         // Trello — and every Sirius write's echo — reconciles here (invariant 8)
         trello_due: w.trello_due,
-        trello_due_at: w.trello_due_at ? new Date(w.trello_due_at) : null,
+        trello_due_at: dueInstant(w.trello_due_at),
         active: w.active,
       },
       $setOnInsert: { project_id: projectId },

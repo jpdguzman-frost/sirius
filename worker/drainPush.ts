@@ -45,11 +45,24 @@ export async function reconcileCard(
     const existing = await Deliverable.find({ project_id: project._id }).select('trello_card_id display_id');
     const ids = assignDisplayIds(new Map(existing.map((x) => [x.trello_card_id, x.display_id])), [d]);
     await upsertDeliverable(project._id, d, ids.get(d.trello_card_id));
+    // a card that just GAINED the Main Card label may have lived in the other
+    // collection: deactivate the twin here rather than waiting up to an hour
+    // for the full sync's sweep, or the same trello_card_id is served — and
+    // writable — as both kinds meanwhile (review pass 2026-08-18)
+    await WorkCard.updateOne(
+      { project_id: project._id, trello_card_id: cardId, active: true },
+      { $set: { active: false } },
+    );
     await insertCardEvents(project._id, movements);
     return 'deliverable';
   }
   if (mapped.workCards.length > 0) {
     await upsertWorkCard(project._id, mapped.workCards[0]!);
+    // the mirror case: a card that just LOST the Main Card label
+    await Deliverable.updateOne(
+      { project_id: project._id, trello_card_id: cardId, active: true },
+      { $set: { active: false, updated_at: new Date() } },
+    );
     await insertCardEvents(project._id, movements);
     return 'work_card';
   }

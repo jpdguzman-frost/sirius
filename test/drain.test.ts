@@ -11,7 +11,7 @@ import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { drainPushEvents, reconcileCard, shouldRunFullSync } from '../worker/drainPush.ts';
 import type { AresClient, AresCard, AresMovement } from '../src/services/ares.ts';
 import { validateEnv } from '../src/config/env.ts';
-import { CardEvent, Deliverable, Project, PushEvent, SyncRun } from '../src/models/index.ts';
+import { CardEvent, Deliverable, Project, PushEvent, SyncRun, WorkCard } from '../src/models/index.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -134,6 +134,44 @@ describe('reconcileCard edges (FR-9.5)', () => {
     );
     expect(outcome).toBe('descoped');
     expect((await Deliverable.findOne({ trello_card_id: 'c9' }))?.active).toBe(false);
+  });
+
+  it('a card that FLIPPED kind deactivates its twin in the other collection (2026-08-18 review)', async () => {
+    /* Removing/adding the Main Card label used to leave the old doc active
+       for up to an hour (the full sync's healthy-push cadence), during which
+       the same trello_card_id was served — and writable — as both kinds. */
+    const project = await Project.create({ code: 'rt-x', name: 'X', trello_board_id: 'b1', weekly_capacity: 3 });
+    await Deliverable.create({ project_id: project._id, mc_number: 'MC-9', display_id: 'MC-9', trello_card_id: 'c9', name: 'was a main card', active: true });
+    // the card now reads as a TASK (no Main Card label, verb prefix + MC#)
+    const client = stubClient({
+      cardWithMovements: async () => ({ card: aresCard({ name: 'Render Asset: MC-9 exports', labels: [] }), movements: [] as AresMovement[] }),
+    });
+    const kind = await reconcileCard(client, (await Project.findById(project._id))!, 'c9');
+    expect(kind).toBe('work_card');
+    expect((await WorkCard.findOne({ trello_card_id: 'c9' }))?.active).toBe(true);
+    expect((await Deliverable.findOne({ trello_card_id: 'c9' }))?.active).toBe(false);
+
+    // and the mirror: it regains the Main Card label
+    const back = stubClient({
+      cardWithMovements: async () => ({ card: aresCard(), movements: [] as AresMovement[] }),
+    });
+    expect(await reconcileCard(back, (await Project.findById(project._id))!, 'c9')).toBe('deliverable');
+    expect((await Deliverable.findOne({ trello_card_id: 'c9' }))?.active).toBe(true);
+    expect((await WorkCard.findOne({ trello_card_id: 'c9' }))?.active).toBe(false);
+  });
+
+  it('a malformed due instant degrades to no-due instead of aborting the reconcile (2026-08-18 review)', async () => {
+    /* new Date(garbage) is Invalid Date and Mongoose's cast throws — one bad
+       ARES string then re-fails the whole loop every tick. It must store as
+       null and heal on the next good read. */
+    const project = await Project.create({ code: 'rt-y', name: 'Y', trello_board_id: 'b1', weekly_capacity: 3 });
+    const client = stubClient({
+      cardWithMovements: async () => ({ card: aresCard({ name: 'Render Asset: MC-9 exports', labels: [], due: 'not-a-date' }), movements: [] as AresMovement[] }),
+    });
+    expect(await reconcileCard(client, (await Project.findById(project._id))!, 'c9')).toBe('work_card');
+    const doc = await WorkCard.findOne({ trello_card_id: 'c9' });
+    expect(doc?.trello_due ?? null).toBeNull();
+    expect(doc?.trello_due_at ?? null).toBeNull();
   });
 
   it('a card ARES no longer knows is left to the full board sync', async () => {

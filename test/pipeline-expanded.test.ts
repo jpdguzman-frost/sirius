@@ -67,10 +67,11 @@ const collapsed = () =>
   renderPipelineTable({ pipelineRows: [PARENT, CHILDLESS], rowWarning, workCardsByMc: TASKS });
 const open = (over: Record<string, unknown> = {}) =>
   renderPipelineTable({ pipelineRows: [PARENT, CHILDLESS], rowWarning, workCardsByMc: TASKS, expanded: { 'MC-837': true }, ...over });
-/* the two option-free renders, hoisted once — the gantt-requestor-clip
+/* the three recurring renders, hoisted once — the gantt-requestor-clip
    precedent; fresh calls remain only where options differ */
 const COLLAPSED = collapsed();
 const OPEN = open();
+const WRITABLE = open({ writesEnabled: true });
 
 /** All `<tr class="ptask">…</tr>` blocks of a render. */
 const taskRows = (html: string): string[] =>
@@ -221,14 +222,14 @@ describe('the parent’s SubTone appears with the expansion, and only then', () 
 
 describe('the task due cell is the SAME W2 recipe, bound to the task card', () => {
   it('renders the datefield with the task’s date, keyed on the task’s own cardId', () => {
-    const due = cell(taskRows(open({ writesEnabled: true }))[0]!, 'col-due');
+    const due = cell(taskRows(WRITABLE)[0]!, 'col-due');
     expect(due).toContain('class="datefield');
     expect(due).toContain('2026-08-07');
     expect(due).toContain('write registry W2, task-card scope');
   });
 
   it('shows `Select Date` and the missing dress on a task without one', () => {
-    const due = cell(taskRows(open({ writesEnabled: true }))[1]!, 'col-due');
+    const due = cell(taskRows(WRITABLE)[1]!, 'col-due');
     expect(due).toContain('Select Date');
     expect(due).toMatch(/class="datefield[^"]*missing/);
   });
@@ -245,7 +246,7 @@ describe('the task due cell is the SAME W2 recipe, bound to the task card', () =
   });
 
   it('renders read-only datefields when the project’s writes are off', () => {
-    const due = cell(taskRows(open({ writesEnabled: false }))[0]!, 'col-due');
+    const due = cell(taskRows(OPEN)[0]!, 'col-due')  // writesEnabled false is the default;
     expect(due).toContain('class="datefield readonly');
     expect(due).not.toContain('<button');
   });
@@ -272,9 +273,12 @@ describe('the task due cell is the SAME W2 recipe, bound to the task card', () =
     const oneDoor = fnBody('writeDeadline');
     expect(oneDoor).toContain('/deliverables/');
     expect(oneDoor).not.toContain('/workcards/');
-    // same optimistic contract on the task half: a no-op returns before any
-    // call, a failure reverts and says so
-    expect(taskHalf).toContain("if ((value || null) === (found.card.due || null)) return;");
+    /* same optimistic contract on the task half, asserted as ORDER, not as a
+       source snapshot (rule 1): the no-op comparison against the task's own
+       due must come BEFORE the network call, and a failure reverts + says so */
+    const guardAt = taskHalf.search(/=== \(found\.card\.due/);
+    expect(guardAt, 'no no-op comparison against the task due').toBeGreaterThan(-1);
+    expect(guardAt).toBeLessThan(taskHalf.indexOf('api.send'));
     expect(taskHalf).toContain('flashBanner');
   });
 
@@ -319,5 +323,80 @@ describe('expansion is per-project view state', () => {
       expanded: { 'MC-837': true, 'MC-850': true },
     });
     expect(taskRows(both)).toHaveLength(3);
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* F — the 2026-08-18 review pass's guards                                  */
+/* ---------------------------------------------------------------------- */
+
+describe('a multi-deliverable MC renders its task list ONCE (invariant 3)', () => {
+  /* mc_number is not unique — MC-825 carries 99 deliverable rows — and
+     expansion is per-MC, so the block after EVERY sibling row rendered the
+     whole task list once per sibling: 99×N duplicated rows and, with a task
+     popover open, 99 duplicate role=dialog boxes. The list and the SubTone
+     hang under the group's FIRST row only, via the stamped firstOfMc. */
+  const SIBLING = row({ cardId: 'main-1b', displayId: 'MC-837.2', name: 'Second deliverable, same MC' });
+  const multi = renderPipelineTable({
+    pipelineRows: [PARENT, SIBLING, CHILDLESS], rowWarning, workCardsByMc: TASKS,
+    expanded: { 'MC-837': true }, duePopover: 'task-1', writesEnabled: true,
+  });
+
+  it('renders each task row once, not once per sibling', () => {
+    expect(taskRows(multi)).toHaveLength(2);
+  });
+
+  it('renders an open task popover once, not once per sibling', () => {
+    expect([...multi.matchAll(/<div class="duepop"/g)]).toHaveLength(1);
+  });
+
+  it('shows the SubTone on the first sibling only', () => {
+    expect([...multi.matchAll(/class="subtone"/g)]).toHaveLength(1);
+  });
+
+  it('is stamped in loadAll beside hasTasks, never asked in the template', () => {
+    const stamp = fnBody('loadAll');
+    expect(stamp).toContain('r.firstOfMc');
+    expect(stamp).toContain('r.hasTasks');
+  });
+});
+
+describe('the keyboard path refuses exactly where the chevron refuses (R-exp-c)', () => {
+  it('pipeRowKey checks hasTasks before toggling expansion', () => {
+    // Enter on a childless row used to set a stale expanded flag that showed
+    // the SubTone with zero task rows and pre-expanded the group if tasks
+    // later arrived — the affordance-that-lies, back through the keyboard
+    const at = jsCode.indexOf('pipeRowKey(');
+    const body = jsCode.slice(at, jsCode.indexOf('\n  },', at));
+    expect(body).toContain('hasTasks');
+    expect(body.indexOf('hasTasks')).toBeLessThan(body.indexOf('app.toggle'));
+  });
+});
+
+describe('the shared calendar really renders (the rule-6 vacuous hazard)', () => {
+  it('a task popover render contains the partial’s own blocks', () => {
+    // the partial is registered on the render instance from the SHIPPED
+    // template's own body; if that registration breaks, these vanish and
+    // this fails instead of every calendar guard passing against nothing
+    const due = cell(taskRows(renderPipelineTable({
+      pipelineRows: [PARENT], rowWarning, workCardsByMc: TASKS,
+      expanded: { 'MC-837': true }, duePopover: 'task-1', writesEnabled: true,
+    }))[0]!, 'col-due');
+    expect(due).toContain('class="duehead"');
+    expect(due).toContain('class="dueshort"');
+    expect(due).toContain('Next Monday');
+  });
+});
+
+describe('the task due wears the parent’s FULL dress, overdue included', () => {
+  it('tints a past-due task the way the parent recipe would', () => {
+    const late = renderPipelineTable({
+      pipelineRows: [PARENT], rowWarning,
+      workCardsByMc: { 'MC-837': [task({ overdue: true })] },
+      expanded: { 'MC-837': true },
+    });
+    expect(cell(taskRows(late)[0]!, 'col-due')).toMatch(/class="datefield readonly overdue/);
+    // …and a current one stays undressed
+    expect(cell(taskRows(OPEN)[0]!, 'col-due')).not.toContain('overdue');
   });
 });

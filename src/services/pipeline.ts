@@ -125,7 +125,8 @@ export interface WorkCardWire {
   trelloUrl: string | null;
   figmaUrl: string | null;
   due: string | null;
-  dueAt: string | null;
+  /** parity with the parent row's recipe (R-exp-b): amber dress past due */
+  overdue: boolean;
   started: string | null;
   startedTs: string | null;
   done: string | null;
@@ -177,8 +178,12 @@ export async function loadPipeline(
       // task-card scope — contracts/trello-write.md), Started and Done. Task
       // dues play NO part in deadline precedence or forecasting — those stay
       // deliverable-only, which is why this is a plain field, not a resolver.
+      // No due INSTANT rides along: nothing reads one, the server preserves
+      // time-of-day from its own doc, and a stale copy after an optimistic
+      // write would be a trap for its first consumer (review pass 2026-08-18).
       due: w.trello_due ?? null,
-      dueAt: w.trello_due_at ? w.trello_due_at.toISOString() : null,
+      // same comparison the deliverable's overdue uses: Manila day strings
+      overdue: !!w.trello_due && w.trello_due < today,
       started: w.work_started_at ? manilaDate(w.work_started_at) : null,
       startedTs: w.work_started_at ? w.work_started_at.toISOString() : null,
       done: w.work_done_at ? manilaDate(w.work_done_at) : null,

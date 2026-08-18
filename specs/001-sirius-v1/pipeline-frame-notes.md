@@ -201,6 +201,24 @@ empty first cell is simply an empty `<td>` in the parent's first column. Guards:
 | **R-exp-e** | **Task due = W2's task-card half** (JP 2026-08-18; `contracts/trello-write.md` §W2 scope). ONE route handler serves both kinds through the same `writeGuards` door — same Zod body, no-op guard, Trello-first rollback, board guard, `writes_enabled`, audit (+`entity: 'work_card'`) and sync-run rows; the client's `writeDeadline` stays the one door and routes a cardId `rows` does not know to the task half. A task due has no sheet fallback and no precedence part — its display field IS its Trello field, and Clear means cleared. The popover markup is duplicated in the task cell (two data shapes), but the CSS recipe, the calendar state keys and the handler set are ONE. | Yes — route halves cross-404 each other's kind; rollback, audit entity, time-of-day preservation all asserted server-side |
 | **R-exp-f** | **Expansion is per-project view state** and now resets on project switch — the recon found it keyed on `mc_number` alone, which repeats across projects (invariant 3), so project A's expanded MC-655 arrived pre-expanded in project B. Multi-expand stays (per-MC map); refresh persistence stays out (per-tab URL sub-state is the parked home if wanted). | Yes — reset asserted in the shared block; multi-expand rendered |
 
+**Review pass (2026-08-18, same evening — /simplify + /code-review over the
+batch):** the amendments that bind. **R-exp-a**: the task list AND the SubTone
+hang under the MC group's **first row only** (`firstOfMc`, stamped) —
+`mc_number` repeats across sibling deliverable rows (invariant 3), and the
+per-sibling render duplicated the whole list, popover included, once per row.
+**R-exp-b**: task dues wear the parent's **full** dress — `overdue` rides the
+wire and tints exactly as the parent recipe does (the omission was the review's
+find, not a ruling). **R-exp-c**: the keyboard path refuses where the chevron
+refuses — `pipeRowKey`'s Enter checks `hasTasks`. **R-exp-e**: the due
+dispatch is EXPLICIT (the template passes `'task'`; kind is never re-derived
+from set-membership), the task write's post-success reload is **correctness,
+not precedence** (a concurrent pre-commit reload would strand the old value
+with no client poll to heal it — do not remove it again), and the failure
+revert re-finds by cardId at write-back time. `dateOnly` is the **Manila**
+day on both W2 halves (invariant 11); the calendar lives once as the
+`dueCalendar` partial, registered on the test renderer so its guards render
+what ships.
+
 ## Build mechanics
 
 - Tokens: extracted variable set (slate/red/amber/blue/green scales, text/caption 10 · label 12 · body 14 · title 24 · display 32, radius/xs 2 · sm 4, space/4 · 8 · 24, Shadow/xs) → CSS custom properties, names preserved (`--slate-50`, `--text-body`, `--radius-sm`…).

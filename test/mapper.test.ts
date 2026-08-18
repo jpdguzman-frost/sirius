@@ -73,6 +73,23 @@ describe('taxonomy (BRD §5)', () => {
     expect(d.trello_due).toBe('2026-08-21');
   });
 
+  it('slices the due to the MANILA day, not the UTC day (2026-08-18 review — both W2 halves)', () => {
+    // 16:30Z = 00:30 the NEXT day in Manila: the UTC slice stored it a day
+    // early beside the manilaDate()-true Started/Done on the same row
+    const r = mapTrello(
+      [
+        card('MC-4 / Main Card: Early-morning due', ['Main Card'], { due: '2026-08-21T16:30:00.000Z' }),
+        card('Render Asset: MC-4 exports', [], { due: '2026-08-21T16:30:00.000Z', cardId: 'wc-tz' }),
+      ],
+      null,
+    );
+    expect(r.deliverables[0]?.trello_due).toBe('2026-08-22');
+    expect(r.workCards[0]?.trello_due).toBe('2026-08-22');
+    // and a garbage instant degrades to no-due instead of poisoning the sync
+    const bad = mapTrello([card('Render Asset: MC-5 exports', [], { due: 'not-a-date' })], null);
+    expect(bad.workCards[0]?.trello_due).toBeNull();
+  });
+
   it('carries a WORK card due as the same date-only + instant pair (owl #45, W2 task-card scope)', () => {
     const r = mapTrello(
       [card('Render Asset: MC-2 exports', [], { due: '2026-08-21T09:00:00.000Z' })],

@@ -147,13 +147,20 @@ async function writeTaskDue(cardId, value) {
   app.set(`savingDeadline.${cardId}`, true);
   try {
     await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/workcards/${cardId}/deadline`, { date: value });
-    /* NO reload — the urgency write's precedent, not the deliverable due's:
-       a task due has no precedence fallback and no forecast key, so the
-       optimistic value already equals the server's confirmed one, and the
-       standing poll/push reconcile owns everything else. The deliverable
-       half reloads because BR-9 precedence can change what the cell shows. */
+    /* The reload is CORRECTNESS, not precedence (review pass 2026-08-18,
+       reversing the /simplify removal): with no client poll, a concurrent
+       loadAll that read Mongo pre-commit and landed after the optimistic set
+       would leave the OLD value on screen forever. Reloading after the
+       commit is the same self-heal the deliverable half has always had. */
+    await loadAll();
   } catch (err) {
-    app.set(`${found.keypath}.due`, prev);
+    /* RE-FIND at write-back time — patchRow's own rule: the pre-await
+       keypath can point at a DIFFERENT card after a reload reshuffles the
+       map, or at another project's map after a switch (where setting it
+       would fabricate a phantom entry). A miss means the entry is gone or
+       foreign; reverting nothing is correct — the next load owns the truth. */
+    const still = findWorkCard(cardId);
+    if (still) app.set(`${still.keypath}.due`, prev);
     flashBanner(`Deadline write failed — reverted. ${errText(err)}`);
   } finally {
     app.set(`savingDeadline.${cardId}`, false);
@@ -261,6 +268,7 @@ async function loadAll() {
        every urgency/difficulty/due write and every load. Stamped once here it
        is a plain keypath, which also gives `{{#each row.warning.items}}` a
        stable array identity instead of a fresh one to diff each pass. */
+    const seenMc = new Set();
     pipeline.rows.forEach((r) => {
       r.blob = `${r.displayId} ${r.mcNumber || ''} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
       r.warning = rowWarning(r);
@@ -271,6 +279,12 @@ async function loadAll() {
          workCardsByMc land in the same app.set below, so the stamp cannot
          desync from the map it derives from. */
       r.hasTasks = !!pipeline.workCardsByMc[r.mcNumber];
+      /* mc_number is NOT unique (invariant 3 — MC-825 carries 99 deliverable
+         rows) and expansion is per-MC, so the task list and the SubTone hang
+         under the GROUP'S FIRST row only — rendered under every sibling they
+         would duplicate 99× (review pass 2026-08-18). */
+      r.firstOfMc = !!r.mcNumber && !seenMc.has(r.mcNumber);
+      if (r.mcNumber) seenMc.add(r.mcNumber);
     });
     capServer = pipeline.capacity.weekly; // server truth — the capacity rollback target
     app.set({

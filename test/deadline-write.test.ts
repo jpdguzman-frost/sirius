@@ -147,6 +147,25 @@ describe('W2 — the due-date write (FR-9.1)', () => {
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_BODY');
   });
+
+  it('rejects calendar-impossible dates as 400, never an unaudited 500 (2026-08-18 review)', async () => {
+    // the shape regex admits 2026-02-30 / 2026-13-01; composeDueIso would
+    // throw OUTSIDE the try — the only trail-less failure in the file
+    const { project, agent, trello } = await setup();
+    for (const bad of ['2026-02-30', '2026-13-01', '2026-00-10']) {
+      const res = await patchDeadline(agent, project._id, bad);
+      expect(res.status, bad).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_BODY');
+    }
+    expect(trello.dueCalls).toHaveLength(0);
+    expect(await AuditLog.countDocuments({})).toBe(0); // non-attempts never audit
+  });
+
+  it('a DEACTIVATED doc no longer answers writes — kind flips leave ghosts (2026-08-18 review)', async () => {
+    const { project, agent } = await setup({}, { active: false });
+    const res = await patchDeadline(agent, project._id, '2026-08-21');
+    expect(res.status).toBe(404);
+  });
 });
 
 /**

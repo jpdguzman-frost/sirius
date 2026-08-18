@@ -178,6 +178,11 @@ app.on({
   pipeRowKey(ctx, mcNumber) {
     if (ctx.event.key !== 'Enter' || ctx.event.target !== ctx.node) return;
     ctx.event.preventDefault();
+    // a childless MC has no expansion to toggle (R-exp-c): the keyboard path
+    // must refuse exactly where the chevron refuses to render, or Enter sets
+    // a stale flag that pre-expands the group when tasks later arrive
+    const row = app.get('rows').find((r) => r.mcNumber === mcNumber);
+    if (!row || !row.hasTasks) return;
     app.toggle(`expanded.${mcNumber}`);
   },
   openUrgencyMenu(ctx, cardId) {
