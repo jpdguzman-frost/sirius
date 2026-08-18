@@ -256,6 +256,40 @@ one home instead of two.
     sprites, aria-labelled and keyboard-operable; Calendar Remove is
     disabled on pinned and on unslotted rows (rules 13, 38).
     [13j]
-56. **The status-note affordance is the `manual` chip** (ghost pencil when
-    empty); placement is provisional pending Miles's design pass.
-    [carried over 2026-08-18]
+56. **The status-note affordance is the note chip** (ghost pencil when
+    empty). Placement in the scope cell is CONFIRMED (owl #48); the chip's
+    treatment may still change in the row-controls design pass.
+    [carried over 2026-08-18; amended by owls #48/#49]
+
+## 7. The chip grammar (product ruling, owls #48 + #49, 2026-08-18)
+
+57. **Coloured chips carry STATE, neutral chips carry CONTENT.** Urgency and
+    difficulty are coloured; requestor and the status note wear the base
+    badge — slate-100 fill, slate-300 stroke, slate-500 ink. A content chip
+    therefore declares no colourway of its own; it inherits the rule the
+    other content chip uses, so the family cannot drift by copying. A guard
+    fails if any `.gnote` rule declares a background. [owl #49]
+58. **A content chip shows its value, never a word standing in for it.** The
+    note chip renders the note; the fixed word it shipped with told the
+    reader a note existed but not what it said, so the note had to be opened
+    to be read — defeating the point of putting it on the row. [owl #48]
+59. **Truncation is MEASURED, never counted** — the shared `.clipbadge` /
+    `.cliptext` recipe plus the one post-render sweep, for every clipped
+    value. Same guards, same hover-and-focus reveal. [owls #39/#40, #43-C,
+    #48]
+60. **Where a clipped value is also a control, the accessible name and the
+    tooltip are two different strings.** The non-interactive badges feed
+    their tooltip from `aria-label`, which is correct while name and value
+    are the same thing. A button's name must say what pressing it does, so
+    the note chip's tooltip reads `data-note` instead — both still written
+    from the one template expression, so they cannot drift.
+61. **The chips line never wraps.** It is held to one row and only the note
+    may shrink: a second line grows the row past its 84px floor and the
+    pinned pane stops lining up with the timeline bars. Urgency and
+    difficulty carry fixed vocabularies and are never cut; the note's real
+    truncation budget is the cell minus those two chips.
+62. **A freeform value's tooltip wraps and is capped.** The shared recipe's
+    single nowrap line is right for a person or an asset type and wrong for
+    a note, which can be any length — uncapped, a long one runs off the
+    viewport where no pointer can reach it. This is the note chip's one
+    documented deviation from the shared recipe.

@@ -183,6 +183,34 @@ describe('the clarification colourway dresses one element (CSS)', () => {
   it('keeps the note text red-600, per the verified render', () => {
     expect(cssRule('.notewrap .clarnote', REQUESTS_CSS)).toContain('var(--red-600)');
   });
+
+  /* Product correction, owl #51, verified from the frame's SVG: the container
+     holds one red element, a 4px bar at x=0 running full height. "Border" in
+     the annotation meant an edge accent — the same word, the same wrong build,
+     as the Pipeline row's amber. */
+  it('draws the clarification note as a 4px left accent and nothing else', () => {
+    const rule = cssRule('.notewrap .clarnote', REQUESTS_CSS);
+    expect(rule).toContain('border-left: 4px solid var(--red-500)');
+    // no four-sided outline anywhere in the rule — the defect being corrected
+    expect(rule).not.toMatch(/[^-]border:\s/);
+  });
+
+  it('holds the text 11px in from the container edge — the accent plus its gap', () => {
+    const rule = cssRule('.notewrap .clarnote', REQUESTS_CSS);
+    const accent = Number(/border-left: (\d+)px/.exec(rule)![1]);
+    const pad = Number(/padding:[^;]*?\s(\d+)px;/.exec(rule)![1]);
+    // border-box, so the accent counts toward the inset rather than adding to it
+    expect(rule).toContain('box-sizing: border-box');
+    expect(accent + pad).toBe(11);
+  });
+
+  it('still hugs its content — nothing here truncates or pins a height', () => {
+    const rule = cssRule('.notewrap .clarnote', REQUESTS_CSS);
+    expect(rule).not.toMatch(/(?:^|[\s;])height:/); // line-height is not a fixed height
+    expect(rule).not.toContain('max-height');
+    expect(rule).not.toContain('text-overflow');
+    expect(rule).toContain('overflow-wrap: anywhere');
+  });
 });
 
 describe('a note save cannot move the status any more', () => {

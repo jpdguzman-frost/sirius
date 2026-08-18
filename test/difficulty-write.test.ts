@@ -57,7 +57,10 @@ describe('W3 — difficulty write (BRD-§9-A1)', () => {
   it('persists the new value only after Trello succeeded, and everything is audited', async () => {
     const { project, agent, trello } = await setup();
     await agent.patch(`/api/projects/${project._id}/deliverables/card1/difficulty`).send({ difficulty: 'Hard' }).expect(200);
-    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.difficulty).toBe('Hard');
+    const doc = await Deliverable.findOne({ trello_card_id: 'card1' });
+    expect(doc?.difficulty).toBe('Hard');
+    // the stamp a later reconcile compares its read instant against (owl #50)
+    expect(doc?.registry_written_at).toBeInstanceOf(Date);
     expect(trello.calls).toEqual([{ cardId: 'card1', boardId: 'testBoardX', difficulty: 'Hard' }]);
     expect(await AuditLog.countDocuments({ action: 'difficulty.set' })).toBe(1);
     expect(await SyncRun.countDocuments({ source: 'trello_write', ok: true })).toBe(1);
@@ -69,7 +72,11 @@ describe('W3 — difficulty write (BRD-§9-A1)', () => {
     const res = await agent.patch(`/api/projects/${project._id}/deliverables/card1/difficulty`).send({ difficulty: 'Hard' });
     expect(res.status).toBe(502);
     expect(res.body.error.code).toBe('TRELLO_WRITE_FAILED');
-    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.difficulty).toBe('Medium'); // never diverges from Trello
+    const doc = await Deliverable.findOne({ trello_card_id: 'card1' });
+    expect(doc?.difficulty).toBe('Medium'); // never diverges from Trello
+    // no stamp either: Trello was never changed, so there is nothing a later
+    // read could contradict and nothing to shield from reconcile (owl #50)
+    expect(doc?.registry_written_at).toBeUndefined();
     expect(await AuditLog.countDocuments({ action: 'difficulty.set_failed' })).toBe(1);
     expect(await SyncRun.countDocuments({ source: 'trello_write', ok: false })).toBe(1);
   });

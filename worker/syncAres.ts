@@ -50,33 +50,69 @@ function dueInstant(iso: string | null | undefined): Date | null {
 }
 
 /**
+ * The stale-reconcile guard (product owl #50, 2026-08-18). Reconciliation is
+ * read-then-write, so there is a window in which the ARES payload in hand
+ * predates a registry write that has since landed: the full sync reads the
+ * whole board and then loops upserts, and the push drain reads a card and
+ * upserts it milliseconds later. Overwriting inside that window silently
+ * reverts the value the user just set and watched stick — the ONE failure in
+ * this area that shows a wrong value rather than merely looking untidy.
+ *
+ * The guard is a FILTER, not an expression: a registry-owned field is written
+ * only when Sirius's own last write to the card is no newer than the instant
+ * this read was ISSUED. It is time-bounded by construction and needs no
+ * expiry — the next read that starts after the write is authoritative again,
+ * so invariant 8 keeps its promise exactly: a manual change made in Trello
+ * still surfaces, at most one reconcile later.
+ *
+ * Absent `registry_written_at` (every card Sirius has never written, i.e.
+ * nearly all of them) passes the guard, so no backfill and no migration are
+ * needed — the field's absence already means "never written by us".
+ *
+ * Deliberately NOT an aggregation-pipeline update, which would fold both
+ * writes into one op: in pipeline form every `$set` value is an EXPRESSION,
+ * so a Trello card named `$name` would resolve to a field path instead of
+ * storing its own title. Two plain updates cost one extra round trip per card
+ * and cannot be read wrong.
+ */
+const staleGuard = (readAt: Date) => ({
+  // STRICTLY older, so a same-millisecond tie counts as stale and the write
+  // is left alone. The two mistakes are not equally bad: skipping a good
+  // reconcile costs one cycle of staleness and heals itself, while applying a
+  // stale one shows the user a value they did not choose.
+  $or: [{ registry_written_at: { $exists: false } }, { registry_written_at: { $lt: readAt } }],
+});
+
+/**
  * Ownership-safe deliverable upsert — Trello-owned fields only; Sirius-owned
- * planning fields are NEVER touched by sync (§1.2 ownership). Urgency and the
- * due instant reconcile FROM Trello via ARES (FR-9.5): a manual change made
- * in Trello surfaces here, and the echo of Sirius's own write is a same-value
- * no-op. Shared by the full board sync and the push drain.
+ * planning fields are NEVER touched by sync (§1.2 ownership). Urgency, the due
+ * pair and difficulty reconcile FROM Trello via ARES (FR-9.5): a manual change
+ * made in Trello surfaces here, and the echo of Sirius's own write is a
+ * same-value no-op. Shared by the full board sync and the push drain.
+ *
+ * `readAt` is the instant the caller ISSUED its ARES read — required, never
+ * defaulted: a caller that passed `new Date()` here would disable the guard
+ * silently, which is the exact bug it exists to prevent.
  */
 export async function upsertDeliverable(
   projectId: Types.ObjectId,
   d: MappedDeliverable,
   displayId: string | undefined,
+  readAt: Date,
 ): Promise<void> {
+  const key = { project_id: projectId, trello_card_id: d.trello_card_id };
   await Deliverable.updateOne(
-    { project_id: projectId, trello_card_id: d.trello_card_id },
+    key,
     {
       $set: {
         name: d.name,
         mc_number: d.mc_number,
         display_id: displayId,
         current_list: d.current_list,
-        difficulty: d.difficulty ?? null,
         lane: d.lane,
         blocker: d.blocker ?? null,
         figma_url: d.figma_url ?? null,
         labels: d.labels,
-        trello_due: d.trello_due,
-        trello_due_at: dueInstant(d.trello_due_at),
-        urgency: d.urgent ? 'Urgent' : 'Non-Urgent',
         trello_url: d.trello_url ?? null,
         active: d.active,
         trello_synced_at: new Date(),
@@ -86,12 +122,31 @@ export async function upsertDeliverable(
     },
     { upsert: true },
   );
+  // W1 urgency, W2 due, W3 difficulty — the whole write registry, and so the
+  // whole set a stale payload can revert. No upsert: the write above made the
+  // document exist.
+  await Deliverable.updateOne(
+    { ...key, ...staleGuard(readAt) },
+    {
+      $set: {
+        difficulty: d.difficulty ?? null,
+        trello_due: d.trello_due,
+        trello_due_at: dueInstant(d.trello_due_at),
+        urgency: d.urgent ? 'Urgent' : 'Non-Urgent',
+      },
+    },
+  );
 }
 
 /** Ownership-safe work-card upsert — shared by full sync and the push drain. */
-export async function upsertWorkCard(projectId: Types.ObjectId, w: MappedWorkCard): Promise<void> {
+export async function upsertWorkCard(
+  projectId: Types.ObjectId,
+  w: MappedWorkCard,
+  readAt: Date,
+): Promise<void> {
+  const key = { project_id: projectId, trello_card_id: w.trello_card_id };
   await WorkCard.updateOne(
-    { project_id: projectId, trello_card_id: w.trello_card_id },
+    key,
     {
       $set: {
         name: w.name,
@@ -101,15 +156,20 @@ export async function upsertWorkCard(projectId: Types.ObjectId, w: MappedWorkCar
         current_list: w.current_list,
         figma_url: w.figma_url ?? null,
         trello_url: w.trello_url ?? null,
-        // W2 task-card scope (2026-08-18): Trello-owned, so a manual change in
-        // Trello — and every Sirius write's echo — reconciles here (invariant 8)
-        trello_due: w.trello_due,
-        trello_due_at: dueInstant(w.trello_due_at),
         active: w.active,
       },
       $setOnInsert: { project_id: projectId },
     },
     { upsert: true },
+  );
+  // W2 task-card scope (2026-08-18): Trello-owned, so a manual change in
+  // Trello — and every Sirius write's echo — reconciles here (invariant 8),
+  // under the same stale guard as the deliverable's due. Difficulty is NOT
+  // guarded on a task card: W3 writes deliverables only, so nothing here can
+  // be reverting a Sirius write.
+  await WorkCard.updateOne(
+    { ...key, ...staleGuard(readAt) },
+    { $set: { trello_due: w.trello_due, trello_due_at: dueInstant(w.trello_due_at) } },
   );
 }
 
@@ -256,6 +316,12 @@ export async function syncProject(
 ): Promise<SyncStats> {
   const projectId = project._id;
 
+  // Stamped BEFORE the read, so it is never later than the data it describes.
+  // The full sync has the widest stale window in the app — one board read,
+  // then an upsert per card — so every registry write racing this loop is
+  // compared against the moment the board was fetched, not the moment its own
+  // card's turn came round.
+  const readAt = new Date();
   const cards = await client.boardCards(project.trello_board_id);
   const mapped = mapTrello(cards, project.trello_label ?? null);
 
@@ -269,13 +335,13 @@ export async function syncProject(
   const seenDeliverables = new Set<string>();
   for (const d of mapped.deliverables) {
     seenDeliverables.add(d.trello_card_id);
-    await upsertDeliverable(projectId, d, displayIds.get(d.trello_card_id));
+    await upsertDeliverable(projectId, d, displayIds.get(d.trello_card_id), readAt);
   }
 
   const seenWork = new Set<string>();
   for (const w of mapped.workCards) {
     seenWork.add(w.trello_card_id);
-    await upsertWorkCard(projectId, w);
+    await upsertWorkCard(projectId, w, readAt);
   }
 
   // Cards gone from the board: inactive, never deleted (mirror of FR-8.4).

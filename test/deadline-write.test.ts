@@ -221,6 +221,9 @@ describe('W2 — the task-card due write (owl #45 scope)', () => {
     const doc = await WorkCard.findOne({ trello_card_id: 'task1' });
     expect(doc?.trello_due).toBeNull();
     expect(doc?.trello_due_at).toBeNull();
+    // a CLEAR is a registry write like any other, so it earns the same shield
+    // against a reconcile still holding the old date (owl #50)
+    expect(doc?.registry_written_at).toBeInstanceOf(Date);
   });
 
   it('no-op guard holds: same value → 400 NO_OP, no Trello call, no audit row', async () => {

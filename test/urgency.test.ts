@@ -75,7 +75,9 @@ describe('the one write (FR-4.6)', () => {
     const res = await agent.patch(`/api/projects/${project._id}/deliverables/card1/urgency`).send({ urgent: true });
     expect(res.status).toBe(502);
     expect(res.body.error.code).toBe('TRELLO_WRITE_FAILED');
-    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.urgency).toBe('Non-Urgent'); // never diverges from Trello
+    const doc = await Deliverable.findOne({ trello_card_id: 'card1' });
+    expect(doc?.urgency).toBe('Non-Urgent'); // never diverges from Trello
+    expect(doc?.registry_written_at).toBeUndefined(); // nothing written, nothing to shield (owl #50)
     expect(await SyncRun.countDocuments({ source: 'trello_write', ok: false })).toBe(1);
     expect(await AuditLog.countDocuments({ action: 'urgency.set_failed' })).toBe(1);
   });

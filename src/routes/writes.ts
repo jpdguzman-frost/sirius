@@ -7,6 +7,12 @@
  * written FIRST, and the local field changes only after Trello succeeded —
  * Sirius never displays a state Trello lacks. Every attempt, success or
  * failure, writes audit_log AND sync_runs.
+ *
+ * Every success also stamps `registry_written_at`, which is what stops a
+ * reconcile holding an older ARES read from reverting the value a moment
+ * later (product owl #50; the guard itself is `staleGuard` in
+ * worker/syncAres.ts). It is stamped on the SUCCESS path only: a failed write
+ * left Trello unchanged, so there is nothing for a later read to contradict.
  */
 
 import { Router, type Request, type Response } from 'express';
@@ -124,6 +130,7 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       try {
         await ctx.trello.setUrgency(ctx.cardId, ctx.boardId, body.data.urgent);
         doc.urgency = after;
+        doc.registry_written_at = new Date();
         await doc.save();
         await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'urgency.set', entity: 'deliverable', entity_id: ctx.cardId, before: { urgency: before }, after: { urgency: after } });
         await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, urgent: body.data.urgent } });
@@ -187,6 +194,7 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         await ctx.trello.setDue(ctx.cardId, dueIso);
         doc.trello_due = after;
         doc.trello_due_at = dueIso ? new Date(dueIso) : null;
+        doc.registry_written_at = new Date();
         await doc.save();
         await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'due.set', entity: kind, entity_id: ctx.cardId, before: { trello_due: before }, after: { trello_due: after } });
         await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, kind, due: after } });
@@ -239,6 +247,7 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       try {
         await ctx.trello.setDifficulty(ctx.cardId, ctx.boardId, after);
         doc.difficulty = after;
+        doc.registry_written_at = new Date();
         await doc.save();
         await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'difficulty.set', entity: 'deliverable', entity_id: ctx.cardId, before: { difficulty: before }, after: { difficulty: after } });
         await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, difficulty: after } });

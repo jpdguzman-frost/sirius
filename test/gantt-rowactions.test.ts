@@ -20,7 +20,9 @@ import {
   APP_JS,
   GANTT_CSS,
   ICONS_JS,
+  PIPELINE_CSS,
   TEMPLATE,
+  cssRule,
   type PlannerGroup,
   type PlannerRow,
   renderGantt,
@@ -205,9 +207,66 @@ describe('the status-note affordance kept its home, outside the cluster (#27)', 
 
   it('turns the chip that announces a note into the button that edits it', () => {
     const scope = /<div class="gchips">[\s\S]*?<\/div>/.exec(row(html, 'c4'))![0];
-    expect(scope).toContain('<button class="pbadge gsm gnote"');
-    expect(scope).toContain('>manual</button>');
+    expect(scope).toContain('gnote');
     expect(scope).toContain('aria-label="Edit the status note on MC-777: client paused it"');
+  });
+
+  /* Product ruling, owls #48 + #49. The chip is a CONTENT chip: it shows the
+     note, in the neutral dress the other content chip wears. Each rule is
+     stated once and asserted on its own, so a future change breaks the one it
+     actually contradicts. */
+  it('shows the note itself, never a fixed status word', () => {
+    const scope = /<div class="gchips">[\s\S]*?<\/div>/.exec(row(html, 'c4'))![0];
+    expect(scope).toContain('>client paused it</span>');
+    expect(scope).not.toContain('>manual<');
+  });
+
+  it('truncates by the shared measured recipe, not by a character count', () => {
+    const scope = /<div class="gchips">[\s\S]*?<\/div>/.exec(row(html, 'c4'))![0];
+    // the same two classes the Requestor and Asset Type badges carry, so the
+    // one sweep in the shipped source measures this chip too
+    expect(scope).toMatch(/class="[^"]*\bgnote\b[^"]*\bclipbadge\b[^"]*"/);
+    expect(scope).toContain('<span class="cliptext">');
+    expect(APP_JS).toContain(".querySelectorAll('.clipbadge')");
+  });
+
+  it('names the ACTION for a screen reader and reveals the VALUE on hover — two jobs, two strings', () => {
+    const scope = /<div class="gchips">[\s\S]*?<\/div>/.exec(row(html, 'c4'))![0];
+    // unlike its non-interactive siblings this chip is a button: its
+    // accessible name must say what pressing it does…
+    expect(scope).toMatch(/aria-label="Edit the status note on [^"]*: client paused it"/);
+    // …so the tooltip reads a separate attribute holding the bare value
+    expect(scope).toContain('data-note="client paused it"');
+    expect(cssRule('.gantt .gnote[data-clipped]:hover::after,\n.gantt .gnote[data-clipped]:focus-visible::after'))
+      .toContain('content: attr(data-note)');
+  });
+
+  it('has no colourway of its own — content chips inherit the neutral base', () => {
+    // declarations only: the rule that dressed it amber is gone, not recoloured
+    const dressed = GANTT_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .split('\n')
+      .filter((l) => l.includes('.gnote') && l.includes('background'));
+    expect(dressed).toEqual([]);
+    // and the base every content chip shares IS the ruled neutral pair
+    const base = cssRule('.pbadge', PIPELINE_CSS);
+    expect(base).toContain('var(--slate-100)');
+    expect(base).toContain('var(--slate-300)');
+  });
+
+  it('cannot change the row height — the chips line holds one row, the note shrinks', () => {
+    // row heights are what keep the pinned pane aligned to the timeline bars,
+    // and the note is the first chip whose width is freeform
+    expect(cssRule('.gantt .gchips')).toContain('flex-wrap: nowrap');
+    expect(cssRule('.gantt .gchips > *')).toContain('flex-shrink: 0');
+    const note = cssRule('.gantt .pbadge.gnote');
+    expect(note).toContain('flex-shrink: 1');
+    expect(note).toContain('min-width: 0'); // or the flex item refuses to shrink and overflows
+  });
+
+  it('caps and wraps the note tooltip — a freeform value cannot run off screen', () => {
+    const tip = cssRule('.gantt .gnote[data-clipped]:hover::after,\n.gantt .gnote[data-clipped]:focus-visible::after');
+    expect(tip).toContain('white-space: normal');
+    expect(tip).toMatch(/max-width: \d+px/);
   });
 
   it('offers a ghost pencil in the same chips row when there is no note', () => {
