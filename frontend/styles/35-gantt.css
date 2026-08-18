@@ -331,13 +331,28 @@
    keeps its own. Both paths end in the same `moveRows` — the box maps the
    pointer's X to a week column itself (`weekAtX`, 01-app.js §3.1), the cells
    are simply hit. `inset: 0` keeps the wrapper's box identical to the track's.
-   `.grun` is `top: 0; bottom: 0` — a purely HORIZONTAL box. That is load-
-   bearing: `.gantt .gtrack .gseg` below centres each segment with `top: 50%;
-   transform: translateY(-50%)` against its nearest positioned ancestor, which
-   used to be `.gbar` at full track height and is now `.grun`. Same height, same
-   containing block, so the segments provably cannot move vertically — and the
-   grab target is the full 84px row rather than the 26px bar, which is free
-   because the box paints nothing.
+   `.grun` IS THE BAR STRIP (JP, 2026-08-18, batch 9). It was `top: 0; bottom:
+   0` — the whole 99px row — and the browser's drag image is a snapshot of the
+   SOURCE'S BOX, so a row-tall transparent box handed Chrome a row-tall picture:
+   it painted the week gridlines crossing it and wrapped the tall silhouette in
+   its own shadow. JP wants the ghost to be the coloured bars, so the source box
+   is now the coloured bars' own band — `--gbar-h` tall, centred in the row.
+   The centring MOVED UP ONE LEVEL and is byte-identical arithmetic. `top: 50%;
+   transform: translateY(-50%); height: var(--gbar-h)` was on `.gantt .gtrack
+   .gseg` and is now here; the 50% resolves against `.gbar`, which is `inset: 0`
+   of the same `.gtrack` the segments used to resolve against, so the strip's top
+   edge lands on the pixel the segments' top edge landed on. `.gseg` below then
+   fills the strip with `top: 0; bottom: 0` instead of centring itself, so it
+   ends up in exactly the same place on screen. Nothing about where the bars
+   appear changed; only the box the browser snapshots did. The corollary is JP's
+   ruling, not a regression: the vertical grab area is the 26px band, not the
+   whole row. Only the coloured bars are the handle.
+   `transform` here is the centring, and its two side effects are both wanted or
+   harmless: `.grun` becomes a stacking context (so Chrome's drag snapshot has a
+   smaller chance of reaching sibling content at all) and a containing block for
+   its absolute `.gseg` children, which it already was by virtue of `position:
+   absolute`. Paint order is unchanged — `.gdl` and `.gghost` are later siblings
+   of `.gbar` at `z-index: auto` and still paint on top.
    The minimum grab width is ARITHMETIC, in `phaseRun`, never CSS. A `min-width`
    (or padding, or a border) here would widen the RENDERED box, and the segments
    inside are positioned in percentages OF THAT BOX — so every short run would
@@ -352,7 +367,10 @@
    now, and needs none — a `pointer-events: none` box never receives hover, so
    the arrow over empty track comes from the cells and the row beneath. */
 .gantt .gbar { position: absolute; inset: 0; pointer-events: none; }
-.gantt .grun { position: absolute; top: 0; bottom: 0; pointer-events: auto; cursor: default; }
+.gantt .grun {
+  position: absolute; top: 50%; transform: translateY(-50%); height: var(--gbar-h);
+  pointer-events: auto; cursor: default;
+}
 .gantt .grun .gseg { pointer-events: auto; cursor: grab; }
 .gantt .grun .gseg:active { cursor: grabbing; }
 /* The ONE thing that still hides for the duration of a drag is the deadline
@@ -387,9 +405,23 @@
    its phase title. */
 .gantt .growr.pinned .grun .gseg,
 .gantt .growr.pinned .grun .gseg:active { cursor: not-allowed; }
+/* The segments FILL the strip rather than centring against the row. `.grun`
+   above is now `--gbar-h` tall and centred, so `top: 0; bottom: 0` here resolves
+   to the same top edge and the same 26px height the old `top: 50%;
+   transform: translateY(-50%); height: var(--gbar-h)` resolved to — the
+   centring did not disappear, it moved up one level to the strip. The height is
+   deliberately NOT restated here: `--gbar-h` has exactly one owner inside the
+   track now (`.grun`), and a second copy could drift.
+   Horizontal geometry is untouched — `left`/`width` still arrive as inline
+   percentages of the run box out of `phaseRun`.
+   This rule is scoped to `.gtrack` on purpose and the legend is NOT inside one:
+   `.glegend .gseg` (§1) is a static 20×10 inline-block swatch and must keep its
+   own box, so it must never be reached from here. The four phase classes above
+   carry colour only — no box at all — which is what lets both share them.
+   (Naming any one of them again in this file would read as a second colour map
+   to the drift guard in test/gantt-legend.test.ts, so they are not listed.) */
 .gantt .gtrack .gseg {
-  position: absolute; top: 50%; transform: translateY(-50%);
-  height: var(--gbar-h); border-radius: var(--radius-xs);
+  position: absolute; top: 0; bottom: 0; border-radius: var(--radius-xs);
 }
 /* the frame draws the client deadline as a LIGHT 2px tick (dump row84
    'Deadline Marker' → mark: stroke #94a3b8, stroke-width 2), not the legacy

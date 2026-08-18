@@ -529,12 +529,24 @@ describe('phaseRun hands the template finished strings, never numbers to multipl
 describe('the invisible extension stays invisible — the trap this batch had to avoid', () => {
   const RUN_RULE = cssRule('.gantt .grun');
 
-  it('is a bare positioned box: absolute, full row height, hit-testable, neutral cursor', () => {
+  it('is a bare positioned box: absolute, ONE BAR STRIP tall, centred, hit-testable, neutral cursor', () => {
     expect(RUN_RULE).toContain('position: absolute');
-    expect(RUN_RULE).toContain('top: 0');
-    expect(RUN_RULE).toContain('bottom: 0');
+    expect(RUN_RULE).toContain('top: 50%');
+    expect(RUN_RULE).toContain('transform: translateY(-50%)');
+    expect(RUN_RULE).toContain('height: var(--gbar-h)');
     expect(RUN_RULE).toContain('pointer-events: auto');
     expect(RUN_RULE).toContain('cursor: default');
+    // BATCH 9 — the row-tall box is gone, and that is the whole batch. The
+    // browser's drag image is a snapshot of the SOURCE'S BOX, so a row-tall
+    // transparent source handed Chrome a row-tall picture (week gridlines, a
+    // shadow round the tall silhouette). Restoring either of these two
+    // declarations restores that ghost, silently, with the bars still correct.
+    // Whitespace-insensitive on purpose: a revert typed `top:0` is the same
+    // revert, and a guard against a SILENT regression must not depend on house
+    // formatting to fire. (The positive assertions above catch it too; this is
+    // the belt to their braces, and a belt with a hole in it is worse than none.)
+    expect(RUN_RULE, 'the run box must not span the row again').not.toMatch(/\btop\s*:\s*0\b/);
+    expect(RUN_RULE, 'the run box must not span the row again').not.toMatch(/\bbottom\s*:/);
   });
 
   it('declares NO width minimum in CSS — that would visibly stretch every short bar', () => {
@@ -550,6 +562,10 @@ describe('the invisible extension stays invisible — the trap this batch had to
   });
 
   it('paints nothing at all — only the .gseg children have colour', () => {
+    // `transform` is NOT on this list and must not join it: here it is the
+    // vertical centring, geometry rather than paint. Everything below would put
+    // ink on a box whose whole job is to be an invisible handle — and, since
+    // batch 9, to be the picture Chrome drags.
     for (const banned of ['background', 'outline', 'box-shadow', 'opacity', 'border-radius', 'transition', 'z-index']) {
       expect(RUN_RULE, `.gantt .grun must not declare ${banned}`).not.toContain(banned);
     }
@@ -557,17 +573,210 @@ describe('the invisible extension stays invisible — the trap this batch had to
     expect(GANTT_CSS).not.toMatch(/\.grun:hover/);
   });
 
-  it('sets no height, so the segments keep centring against the same-height box they do today', () => {
-    // `.gantt .gtrack .gseg` centres with `top: 50%; transform: translateY(-50%)`
-    // against its nearest positioned ancestor. That ancestor is `.grun` now, so
-    // `top: 0; bottom: 0` is what makes that rule byte-identical to before.
-    expect(RUN_RULE).not.toMatch(/\bheight:/);
-    expect(GANTT_CSS).toMatch(/\.gantt \.gtrack \.gseg \{[\s\S]*?top: 50%[\s\S]*?translateY\(-50%\)/);
-    expect(GANTT_CSS).toMatch(/\.gantt \.gtrack \.gseg \{[\s\S]*?height: var\(--gbar-h\)/);
+  it('owns the bar height alone — the segments FILL the strip instead of centring against the row', () => {
+    // The centring did not disappear, it moved up one level: `top: 50%;
+    // transform: translateY(-50%); height: var(--gbar-h)` used to be on the
+    // segment and is now on the strip, and the segment simply fills what
+    // contains it. Two copies of `--gbar-h` inside the track is the drift this
+    // bans — a second height on `.gseg` would over-constrain the box (`bottom`
+    // is the declaration CSS drops) and could then be re-tuned on its own.
+    expect(GANTT_CSS).toMatch(/\.gantt \.gtrack \.gseg \{[\s\S]*?top: 0; bottom: 0/);
+    expect(GANTT_CSS).not.toMatch(/\.gantt \.gtrack \.gseg \{[^}]*translateY/);
+    expect(GANTT_CSS).not.toMatch(/\.gantt \.gtrack \.gseg \{[^}]*height:/);
   });
 
   it('carries no title — an invisible extension must not pop a tooltip over empty track', () => {
     const runTag = /<div class="grun"[^>]*>/.exec(TEMPLATE)![0];
     expect(runTag).not.toContain('title=');
+  });
+});
+
+/* ====================================================================== *
+ * SUITE 6 — THE VERTICAL POSITION INVARIANT (batch 9)
+ *
+ * SUITE 1 proves the horizontal half: re-basing the segments onto the run box
+ * moved no bar sideways. Batch 9 changes the OTHER axis of the same box — the
+ * drag source shrinks from the whole row to the 26px bar strip — and the same
+ * promise has to hold: the coloured segments land on the same screen pixels.
+ *
+ * The method is SUITE 1's, transposed. There, a frozen transcription of the old
+ * helper is the oracle and the shipped helper is executed against it. Here, a
+ * frozen transcription of the old CSS declarations is the oracle and the SHIPPED
+ * declarations — sliced out of 35-gantt.css, not retyped — are resolved against
+ * it, through a resolver small enough to read.
+ *
+ * Both sides are exact reals. There is no `.toFixed(2)` on this axis and so no
+ * tolerance: the assertion is equality. A change that actually moved a bar
+ * vertically fails by whole pixels.
+ *
+ * WHAT THIS STILL CANNOT PROVE, same as the header says: nothing here renders,
+ * so the resolver is a model of CSS, not CSS. What it pins is that the two rule
+ * sets describe the same box — the failure mode this batch could plausibly ship
+ * (a strip that is centred a few pixels off, or segments that collapse because
+ * the strip stopped declaring a height). The pixel proof is the orchestrator's
+ * before/after screenshot with a real mouse.
+ * ====================================================================== */
+
+/** One rule body as a declaration map, sliced out of the SHIPPED stylesheet. */
+function declsOf(rule: string): Record<string, string> {
+  const body = rule.slice(rule.indexOf('{') + 1, rule.lastIndexOf('}'));
+  const out: Record<string, string> = {};
+  for (const d of body.split(';')) {
+    const at = d.indexOf(':');
+    if (at < 0) continue;
+    out[d.slice(0, at).trim()] = d.slice(at + 1).trim();
+  }
+  return out;
+}
+
+interface VBox {
+  top: number;
+  height: number;
+}
+
+/**
+ * The vertical geometry of an absolutely positioned box, resolved against a
+ * containing block `containerH` tall. Deliberately total: an input it cannot
+ * resolve throws rather than defaulting, so a future declaration this model does
+ * not understand fails the suite instead of being silently ignored.
+ *
+ * The one subtlety it encodes is the one the batch turns on: a percentage in
+ * `translateY` resolves against the ELEMENT'S OWN height, not the container's,
+ * which is what makes `top: 50%; translateY(-50%); height: h` mean "centred"
+ * for any h.
+ */
+function verticalBox(raw: Record<string, string>, containerH: number, barH: number): VBox {
+  // `.gbar` says `inset: 0`, so the shorthand has to be expanded or the frame
+  // both models hang from reads as unconstrained. Longhands written out in the
+  // sheet win over the shorthand, which is the cascade's own order here.
+  let decls = raw;
+  if (raw['inset'] !== undefined) {
+    const parts = raw['inset'].trim().split(/\s+/);
+    if (parts.length !== 1) throw new Error(`verticalBox: only the one-value \`inset\` shorthand is modelled`);
+    decls = { top: parts[0]!, bottom: parts[0]!, ...raw };
+  }
+  const len = (v: string): number => {
+    if (v === '0') return 0;
+    if (v.endsWith('%')) return (parseFloat(v) / 100) * containerH;
+    if (v === 'var(--gbar-h)') return barH;
+    if (v.endsWith('px')) return parseFloat(v);
+    throw new Error(`verticalBox: cannot resolve length \`${v}\``);
+  };
+  if (decls['position'] !== 'absolute') throw new Error('verticalBox: the box is not absolutely positioned');
+  let top: number;
+  let height: number;
+  if (decls['height'] !== undefined) {
+    height = len(decls['height']);
+    if (decls['top'] !== undefined) top = len(decls['top']);
+    else if (decls['bottom'] !== undefined) top = containerH - len(decls['bottom']) - height;
+    else throw new Error('verticalBox: a sized box still needs an edge to hang from');
+  } else {
+    if (decls['top'] === undefined || decls['bottom'] === undefined) {
+      throw new Error('verticalBox: an unsized box needs BOTH edges, or it collapses');
+    }
+    top = len(decls['top']);
+    height = containerH - top - len(decls['bottom']);
+  }
+  if (decls['transform'] !== undefined) {
+    const m = /^translateY\((-?[\d.]+)%\)$/.exec(decls['transform']);
+    if (!m) throw new Error(`verticalBox: unsupported transform \`${decls['transform']}\``);
+    top += (parseFloat(m[1]!) / 100) * height; // percent of the element's OWN box
+  }
+  return { top, height };
+}
+
+/**
+ * THE FROZEN ORACLE — 35-gantt.css exactly as it stood at 79c1ad3, transcribed
+ * because the file no longer contains it. Frozen for SUITE 1's reason: it is the
+ * fixed point that proves the bars did not move, not a mirror that tracks the
+ * source. `.gbar` is unchanged and so is read from the shipped sheet on both
+ * sides — it is the track-sized frame both models hang from.
+ */
+const RUN_AT_79c1ad3 = { position: 'absolute', top: '0', bottom: '0' };
+const SEG_AT_79c1ad3 = {
+  position: 'absolute',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  height: 'var(--gbar-h)',
+};
+
+describe('shrinking the drag source moves no bar — the vertical position invariant', () => {
+  const BAR_H = 26;
+  const GBAR = declsOf(cssRule('.gantt .gbar'));
+  const RUN = declsOf(cssRule('.gantt .grun'));
+  const SEG = declsOf(cssRule('.gantt .gtrack .gseg'));
+
+  /** Row heights: the 84px frame nominal, the 99px the orchestrator measured live, and a tall outlier. */
+  const ROW_HEIGHTS = [84, 99, 120, 26];
+
+  it('reads --gbar-h from the sheet rather than believing the number in this file', () => {
+    expect(GANTT_CSS).toMatch(/--gbar-h: 26px;/);
+    expect(cssRule('.gantt .gghost')).toContain('height: var(--gbar-h)'); // the ghost tracks the same token
+  });
+
+  it('resolves the model correctly on the cases the batch turns on', () => {
+    // a resolver that quietly returned 0 everywhere would make every assertion
+    // below pass, so it is exercised on hand-computed answers first
+    expect(verticalBox({ position: 'absolute', top: '0', bottom: '0' }, 99, BAR_H)).toEqual({ top: 0, height: 99 });
+    expect(verticalBox({ position: 'absolute', inset: '0' }, 99, BAR_H)).toEqual({ top: 0, height: 99 });
+    expect(verticalBox({ position: 'absolute', top: '50%', transform: 'translateY(-50%)', height: '26px' }, 99, BAR_H))
+      .toEqual({ top: 36.5, height: 26 });
+    expect(() => verticalBox({ position: 'absolute', top: '0' }, 99, BAR_H)).toThrow(/collapses/);
+    expect(() => verticalBox({ position: 'absolute', top: '4em', bottom: '0' }, 99, BAR_H)).toThrow(/cannot resolve/);
+  });
+
+  for (const H of ROW_HEIGHTS) {
+    it(`a ${H}px row: the segment's top edge and height are byte-for-byte the 79c1ad3 ones`, () => {
+      // `.gbar` is `inset: 0` of the track and is the containing block on BOTH
+      // sides — unchanged by this batch, and read from the shipped sheet.
+      const bar = verticalBox(GBAR, H, BAR_H);
+      expect(bar).toEqual({ top: 0, height: H });
+
+      // BEFORE: row-tall run, segment centred against it
+      const runWas = verticalBox(RUN_AT_79c1ad3, bar.height, BAR_H);
+      const segWas = verticalBox(SEG_AT_79c1ad3, runWas.height, BAR_H);
+      const beforeTop = bar.top + runWas.top + segWas.top;
+
+      // AFTER: run IS the strip, segment fills it
+      const runNow = verticalBox(RUN, bar.height, BAR_H);
+      const segNow = verticalBox(SEG, runNow.height, BAR_H);
+      const afterTop = bar.top + runNow.top + segNow.top;
+
+      expect(afterTop, 'the coloured bar moved vertically').toBe(beforeTop);
+      expect(segNow.height, 'the coloured bar changed height').toBe(segWas.height);
+      expect(segNow.height).toBe(BAR_H);
+    });
+
+    it(`a ${H}px row: the DRAG SOURCE is the bar strip, not the row`, () => {
+      const bar = verticalBox(GBAR, H, BAR_H);
+      const runNow = verticalBox(RUN, bar.height, BAR_H);
+      // the snapshot Chrome drags is this box: 26px, exactly the coloured band
+      expect(runNow.height).toBe(BAR_H);
+      expect(runNow.top).toBe((H - BAR_H) / 2);
+      // …and the segment sits flush inside it, top and bottom, so the picture
+      // has no transparent margin above or below the colour
+      const segNow = verticalBox(SEG, runNow.height, BAR_H);
+      expect(segNow.top).toBe(0);
+      expect(segNow.height).toBe(runNow.height);
+    });
+  }
+
+  it('is not vacuous — the two shapes this batch could have shipped instead both fail it', () => {
+    const H = 99;
+    const bar = verticalBox(GBAR, H, BAR_H);
+    const truth = bar.top + verticalBox(RUN_AT_79c1ad3, bar.height, BAR_H).top
+      + verticalBox(SEG_AT_79c1ad3, verticalBox(RUN_AT_79c1ad3, bar.height, BAR_H).height, BAR_H).top;
+
+    // 1. the strip pinned to the TOP of the row instead of centred — the
+    //    tempting one-liner, and 36.5px wrong
+    const topAligned = verticalBox({ position: 'absolute', top: '0', height: 'var(--gbar-h)' }, bar.height, BAR_H);
+    expect(bar.top + topAligned.top + verticalBox(SEG, topAligned.height, BAR_H).top).not.toBe(truth);
+
+    // 2. the strip centred, but the segments left centring against it TOO —
+    //    harmless here only because the strip happens to be exactly --gbar-h;
+    //    it is the shape that silently breaks the moment the strip is re-tuned
+    const doubleCentred = verticalBox(SEG_AT_79c1ad3, 40, BAR_H);
+    expect(doubleCentred.top).not.toBe(0);
+    expect(verticalBox(SEG, 40, BAR_H)).toEqual({ top: 0, height: 40 });
   });
 });

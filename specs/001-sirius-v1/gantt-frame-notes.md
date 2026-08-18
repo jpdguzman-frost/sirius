@@ -1247,7 +1247,12 @@ A one-day run on the last workday (unit 59) gives `W = 1.3043`,
 The left-edge mirror needs no special case: `R0 = 0` → `min(0, …) = 0` →
 `max(0, 0) = 0`.
 
-## Vertical extent: `top: 0; bottom: 0`, not a 26px box
+## Vertical extent: `top: 0; bottom: 0`, not a 26px box — **SUPERSEDED by batch 9**
+
+> **Reversed 2026-08-18 by JP, after seeing it live.** The row-tall box is what
+> put the week gridlines in the drag ghost. Batch 9 makes `.grun` the 26px bar
+> strip and moves the centring onto it. The paragraph below is kept as the
+> reasoning that was correct about the bars and wrong about the ghost.
 
 `.gantt .gtrack .gseg` centres each segment with `top: 50%; transform:
 translateY(-50%)` against its nearest positioned ancestor. That ancestor was
@@ -1480,3 +1485,191 @@ The real-mouse pass owed on top of T155(a)–(g):
 - (l) a **pinned** row still refuses the grab on its colour and still accepts
   someone else's drop, both on its run and on its empty track;
 - (m) a **before/after screenshot** that is identical apart from the cursor.
+
+---
+
+# Batch 9 — the drag ghost is the coloured bars (phase 13k cont., 2026-08-18)
+
+## JP's ruling, from the live build
+
+> While dragging, the ghost that follows the pointer shows a background with the
+> week grid lines and a drop shadow. I want only the coloured bars.
+
+## The measured cause
+
+`.gantt .grun` — the drag source since batch 8 — was `top: 0; bottom: 0`: the
+**full row height** (99px measured on the live page) by the run's width (184px
+measured), and transparent.
+
+The browser's default drag image is **a snapshot of the source element's box**.
+A row-tall source therefore hands Chrome a row-tall picture. Blink paints that
+snapshot starting at the nearest stacking context and clips it to the source's
+own bounds — its own source comment says the snapshot "will also paint the
+contents behind the object if the object contains transparency and there are
+other elements in the same stacking context which stacked below" — so the
+`.gweek` gridlines and the row surface crossing that 99×184 rectangle came with
+it, and the shadow wrapped the tall silhouette rather than the bars.
+
+Nothing was wrong with the bars. The wrong thing was the **box**.
+
+## The fix: the drag source IS the bar strip
+
+Two rules, in `frontend/styles/35-gantt.css`. No JavaScript, no template change.
+
+| | before (`79c1ad3`) | after |
+|---|---|---|
+| `.gantt .grun` | `position: absolute; top: 0; bottom: 0` | `position: absolute; top: 50%; transform: translateY(-50%); height: var(--gbar-h)` |
+| `.gantt .gtrack .gseg` | `position: absolute; top: 50%; transform: translateY(-50%); height: var(--gbar-h); border-radius: …` | `position: absolute; top: 0; bottom: 0; border-radius: …` |
+
+**The centring did not disappear — it moved up one level.** The identical triple
+came off the segment and went onto the strip, and its `50%` resolves against the
+**same containing block it always did**: `.gbar`, which is `inset: 0` of
+`.gtrack` and is untouched by this batch. So the strip's top edge lands on the
+pixel the segment's top edge landed on, and the segment then fills the strip
+edge to edge. The bars are in the same place on screen, in exact reals — there
+is no rounding on this axis at all, unlike the horizontal one.
+
+Horizontal geometry is **byte-for-byte untouched**: `phaseRun`'s arithmetic, the
+percent `left`/`width` on both boxes, and the 24px minimum grab clamp.
+`frontend/scripts/01-app.js` was not edited.
+
+## The one rule above all, unmoved
+
+`pointer-events: auto` stays on `.grun` and on `.grun .gseg`, in every state.
+Chrome cancels a drag whose source cannot be hit — proven with real mouse input
+in batch 7 — and `test/drag-hittest.test.ts` bans the alternative outright. **No
+`pointer-events` declaration anywhere in the app changed**; the inventory is
+still 8. The source moved boxes in batch 8 and changed shape in batch 9; it has
+never once stopped being hit-testable.
+
+## The corollary is the ruling, not a regression
+
+The vertical grab area shrinks from the whole 99px row to the 26px band. That is
+**exactly what JP ruled** — only the coloured bars are the handle — and it is the
+same ruling T157 applied to the cursor, now applied to the hit area itself, so
+the affordance and the target finally agree on both axes. Nothing was added to
+widen it back, and nothing should be. Horizontally the ~6px invisible
+minimum-grab extension survives unchanged: a one-day phase is still catchable.
+
+## Two side effects of `transform`, both accounted for
+
+1. `.grun` becomes a **stacking context**. Paint order is unchanged: `.gdl` and
+   `.gghost` are later siblings of `.gbar` at `z-index: auto` and still paint on
+   top. It may also help the ghost — a stacking context is a smaller thing for
+   the snapshot painter to start from — but that is not what the fix rests on.
+2. `.grun` becomes a **containing block** for absolutely positioned descendants.
+   It already was one, by virtue of `position: absolute`.
+
+`--gbar-h` now has exactly **one owner inside the track** (`.grun`). `.gseg`
+deliberately does not restate it: a second copy would over-constrain the box
+(CSS drops `bottom` when `top`, `bottom` and `height` all appear) and could then
+be re-tuned on its own.
+
+## What the legend does — and why this rule cannot reach it
+
+Checked before editing, quoted here because the batch brief asked for it:
+
+| selector | what it is | touched? |
+|---|---|---|
+| `.gantt .gtrack .gseg` | the run segments — the rule that changed | **yes** |
+| `.glegend .gseg` | the legend swatch: `display: inline-block; width: 20px; height: 10px; border-radius: var(--radius-sm)` | no |
+| `.gseg.sketch` / `.review` / `.render` / `.renderOverdue` | colour only, no box — the single phase→colour map both share | no |
+| `.gantt .grun .gseg` / `…:active` | the T157 cursor affordance | no |
+| `.gantt .growr.pinned .grun .gseg` / `…:active` | the pinned refusal, (0,5,0) | no |
+
+`.glegend` is a sibling of `.gwrap` and sits **outside** every `.gtrack`, so the
+changed rule cannot select it. That is why the swatch keeps its own 20×10 box
+while sharing the colour classes. `test/gantt-legend.test.ts` is untouched and
+green, which is the check.
+
+## Verification (T160)
+
+`test/gantt-run-geometry.test.ts` grows **SUITE 6 — the vertical position
+invariant**, built the way SUITE 1 was built for the horizontal one:
+
+- a **frozen transcription** of the `79c1ad3` declarations as the oracle (frozen
+  as a fixed point, not a mirror that tracks the source);
+- the **shipped** declarations sliced out of `35-gantt.css` on the other side —
+  `.gbar` read from the sheet on both sides, since it is the frame both hang
+  from;
+- a small, **total** CSS resolver between them that throws rather than
+  defaulting on anything it does not model, so a future declaration it does not
+  understand fails the suite instead of being silently ignored. It encodes the
+  one subtlety the batch turns on: a percentage in `translateY` resolves against
+  the element's **own** height, which is what makes the triple mean "centred"
+  for any height.
+
+Both sides are exact reals, so the assertion is **equality, not a tolerance**,
+across four row heights: 84 (frame nominal), 99 (measured live), 120, and the
+degenerate 26.
+
+SUITE 5's two `.grun` shape tests were **repointed, not weakened**. The box must
+now name `top: 50%`, `translateY(-50%)` and `height: var(--gbar-h)`, and must
+**not** name `top: 0` or any `bottom` — restoring either restores the ghost
+silently, with the bars still perfectly correct, which is precisely the failure a
+test has to catch. The `.gseg` rule must restate neither a height nor a
+translate. `transform` is explicitly kept off the "paints nothing" ban list, with
+the reason written beside it: here it is geometry, not ink.
+
+**Mutation-probed on the real sheet**: putting `top: 0; bottom: 0` back on
+`.grun` fails **7 named tests**. A `not vacuous` case pins the two shapes that
+could have shipped instead — a top-aligned strip (36.5px wrong on a 99px row)
+and segments left double-centring inside the strip.
+
+Suite **783 → 794** (58 files), green on default TZ and on `TZ=UTC`;
+`npx tsc --noEmit` and `npx eslint .` clean; `node frontend/build.js`
+335,370 bytes.
+
+## One defect found at build, by an unrelated guard
+
+A new CSS comment named the four phase colour classes while explaining which
+`.gseg` users the batch must not touch. That turned `test/gantt-legend.test.ts`
+red on *"declares each phase colour exactly once in the whole stylesheet"* — the
+drift guard counts `.gseg.<phase>` occurrences in the **raw stylesheet text**,
+comments included, so prose about the map read as a second copy of it.
+
+**The guard was right and the comment was reworded**, not the guard, with a note
+beside it saying why the classes are described rather than named. This is the
+second time a comment in this codebase has collided with a drift guard reading it
+as code (batch 8's was `0.083` in `01-app.js`); it is worth stating as a standing
+constraint: **a guard that counts occurrences in a source file counts your
+comments too.**
+
+## What is ours and what is Chrome's — be honest about the line
+
+**Ours (CSS controls it):** the **size and content of the snapshot**. It is now
+a 26px-tall box the width of the run, containing the coloured segments, instead
+of a 99px-tall box containing the gridlines behind them.
+
+**Chrome's (CSS cannot touch it):**
+
+- the **translucency** the drag image is composited at — the browser picks it;
+- the **drop shadow** drawn around the drag image — macOS/Chrome's, applied to
+  whatever bitmap is handed over;
+- the **grab offset** of the pointer within the image;
+- the fact that the source element **stays painted in place** during the drag.
+
+There is exactly one lever over any of that, and this batch deliberately did not
+pull it: `event.dataTransfer.setDragImage(node, x, y)` in `dragRow`, which would
+replace the snapshot with an element or canvas of our choosing. That is a
+JavaScript change to a drag handler the brief put out of scope, and it is the
+right next step **only if** the live check still shows something unwanted.
+
+**Residual risk, stated rather than hidden [likely]:** the snapshot is clipped to
+the source's bounds but paints what is behind a transparent source within those
+bounds. The vertical gridlines run the full height of the row, so they still
+cross the 26px band — the opaque segments cover them across the run's own extent,
+but two slivers remain where the segments do not paint: the `--radius-xs`
+rounded corners, and the up-to-6px invisible minimum-grab extension on a short
+run. Expect a ghost that is bars; do not be shocked by a hairline at a corner.
+T161 is the check, and `setDragImage()` is the answer if it fails.
+
+## Owed: a live-browser pass (T161, folds into T155)
+
+Nothing here proves a drag works and **nothing here can see a repaint**. There is
+no jsdom and no browser runner; every assertion is a read or an execution of
+shipped source text. **No synthetic `DragEvent` was added and none may be.** With
+a real mouse: the ghost is the coloured bars only; a before/after screenshot of
+the resting planner is identical to batch 8's to the pixel; the grab still starts
+anywhere on the band; the 26px vertical target is comfortable in practice (JP's
+call); and whatever Chrome still adds of its own is recorded rather than fought.
