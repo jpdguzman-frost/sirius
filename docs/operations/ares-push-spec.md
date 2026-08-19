@@ -2,7 +2,7 @@
 
 _last-verified: 2026-08-18_
 
-> **As-built note**: the Sirius-side authority is `specs/001-sirius-v1/contracts/ares-push.md` — the 2026-08-04 fallback-drill corrections live there, not here; the production-board push subscription (`hLL7WW2V`) is still outstanding with the ARES agent — today only the TEST board pushes and rt-837 rides the 15-minute poll.
+> **As-built note**: the Sirius-side authority is `specs/001-sirius-v1/contracts/ares-push.md` — the 2026-08-04 fallback-drill corrections live there, not here; the production-board push subscription (`hLL7WW2V`) was asked for three times (owl #07/#08/#09) and never answered, and JP CLOSED the chase on 2026-08-19 — do not send a fourth note. Today only the TEST board pushes and rt-837 rides the 15-minute poll, which covers it. Reopen only if the ARES side replies or JP says so.
 
 **Audience**: the agent building this feature inside the **ARES codebase**. This document is
 self-contained — no knowledge of any consumer's codebase is required or expected.

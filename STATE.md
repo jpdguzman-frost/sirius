@@ -70,10 +70,9 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   content against the owl BEFORE building — delegable to a recon agent with a
   halt-on-mismatch rule. Rex (channel 7782) is needed only for plugin-API
   introspection (component-set walks) or writing into the file.
-- **File drop `../owl/` (ARES agent)** — outstanding: add `hLL7WW2V` to
-  `PUSH_SUBSCRIBER_BOARDS` (#07/#08/#09, no reply to any — channel may be
-  unwatched). Measured 2026-08-19: 7 days of `push_events` = 17, all
-  `tx8gDsTH`, zero `hLL7WW2V`.
+- **File drop `../owl/` (ARES agent)** — **CLOSED 2026-08-19** (JP: don't
+  chase, wait for new status). `hLL7WW2V` push subscription: #07/#08/#09, no
+  reply file, zero events in 7 days. No fourth note; rt-837 rides the poll.
 
 ## Still open
 
@@ -92,7 +91,6 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
-- **ARES agent**: push subscription for `hLL7WW2V`.
 - **Agent backlog**: T075 AC sweep · non-member 403 check · `Last Synced`
   browser-TZ + col-done width leftovers · schedules-tab full tokenization
   beyond the planner · per-tab URL sub-state (filters/week/sort as query
