@@ -24,8 +24,7 @@ under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **007** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
 ~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
-rule 5; its real fix is parked below. `--dir test` is RETIRED — the second
-session's worktree is gone, so a bare `vitest run` is correct again.
+rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 
 ## Decisions needed from JP (blocking)
 
@@ -64,16 +63,17 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   incl. a task due set/clear · whether ARES's read path is cached (the one
   part of the stale-reconcile guard this side cannot see). Closed threads →
   `docs/history/state-log/`.
-- **Figma reads** — Rex MCP is OFFLINE (server disconnected). **The official
-  Figma MCP is the verified path**: `get_design_context` returns the
-  categorized annotations as `data-*-annotations` attributes plus exact pixel
-  facts (load the figma-design-to-code skill first). File
-  `abDRsIVDs1XjJKeR8xYOoF`. Verify annotation count and content against the
-  owl BEFORE building — delegable to a recon agent with a halt-on-mismatch
-  rule. Rex (channel 7782) is needed again only for plugin-API introspection
-  (component-set walks) or writing into the file.
-- **File drop `../owl/` (ARES agent)** — still outstanding: add `hLL7WW2V` to
-  `PUSH_SUBSCRIBER_BOARDS` (#07, nudged #08 — no reply file yet).
+- **Figma reads** — Rex MCP is OFFLINE. **The official Figma MCP is the
+  verified path**: `get_design_context` returns categorized annotations as
+  `data-*-annotations` plus exact pixel facts (load the figma-design-to-code
+  skill first). File `abDRsIVDs1XjJKeR8xYOoF`. Verify annotation count and
+  content against the owl BEFORE building — delegable to a recon agent with a
+  halt-on-mismatch rule. Rex (channel 7782) is needed only for plugin-API
+  introspection (component-set walks) or writing into the file.
+- **File drop `../owl/` (ARES agent)** — outstanding: add `hLL7WW2V` to
+  `PUSH_SUBSCRIBER_BOARDS` (#07/#08/#09, no reply to any — channel may be
+  unwatched). Measured 2026-08-19: 7 days of `push_events` = 17, all
+  `tx8gDsTH`, zero `hLL7WW2V`.
 
 ## Still open
 
