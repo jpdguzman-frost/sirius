@@ -20,14 +20,15 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 13k b13 | Owls #47–#51: the stale-reconcile guard (decisions/0025 — a reconcile can no longer revert a registry write) · status-note chip carries the note, neutral, measured truncation · clarification note = 4px left accent | **DEPLOYED + LIVE 2026-08-18** (`4499484`; 976 + 24 todo dual-TZ) | healthz 200 + 6 bundle markers ✓; the 652-card board re-synced clean under the new two-op upsert ✓ |
 | ctx t-split | Template split: `00-app.html` → `layout.html` + `partials/` + `views/` | **COMMITTED, NOT DEPLOYED** | composed template = b13's single file byte-for-byte; next deploy carries it |
 
-**Build health (2026-08-18, post-template-split):** 982/982 tests + 24 `it.todo`,
-62 files — green under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
+**Build health (2026-08-19):** 982/982 tests + 24 `it.todo`, 62 files — green
+under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **007** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
 ~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
-rule 5; its real fix is parked below. **Run the suite with `--dir test`** while
-a second session's worktree sits in `.claude/worktrees/` — a bare `vitest run`
-collects its copy of every suite and reports its failures as main's.
+rule 5; its real fix is parked below. The `--dir test` workaround is RETIRED:
+the second session's worktree is gone, `.claude/worktrees/` is empty and its
+branch was merged and deleted, so a bare `vitest run` collects 62 files and
+nothing else (re-verified 2026-08-19).
 
 ## Decisions needed from JP (blocking)
 
