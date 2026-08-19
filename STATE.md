@@ -17,18 +17,15 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 0–8a | Setup · schema · auth+audit · `lib/` port · ARES read · intake · model refresh · five tabs · urgency write · conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 gate ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 backup/restore ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸ (team UI update), T075 sweep pending, non-member 403 parked | G7 passed; write-enable on rt-837 = next JP gate |
 | 10–13k b12, ctx | Two-way sync · admin panel · Pipeline redesign · Gantt planner · batches 1–12 · context restructure · the expanded MC row (owl #45) + its review pass | **DEPLOYED + LIVE-VERIFIED through 2026-08-18** (T077–T178, ..`8b7bfcd`; both b12 defaults confirmed by product, owl #47) | per-batch detail: `docs/history/phase-log.md` |
-| 13k b13 | Owls #47–#51: the stale-reconcile guard (decisions/0025 — a reconcile can no longer revert a registry write) · status-note chip carries the note, neutral, measured truncation · clarification note = 4px left accent | **DEPLOYED + LIVE 2026-08-18** (`4499484`; 976 + 24 todo dual-TZ) | healthz 200 + 6 bundle markers ✓; the 652-card board re-synced clean under the new two-op upsert ✓ |
-| ctx t-split | Template split: `00-app.html` → `layout.html` + `partials/` + `views/` | **COMMITTED, NOT DEPLOYED** | composed template = b13's single file byte-for-byte; next deploy carries it |
+| 13k b13 · t-split | Owls #47–#51: the stale-reconcile guard (decisions/0025 — a reconcile can no longer revert a registry write) · status-note chip carries the note, neutral, measured truncation · clarification note = 4px left accent · then the template split (`layout.html` + `partials/` + `views/`) | **DEPLOYED + LIVE 2026-08-19** (`b401bac`; 982 + 24 todo dual-TZ) | healthz 200, mongo+redis connected ✓ · host `public/index.html` sha256 == local ✓ · the 652-card board re-synced clean under the two-op upsert ✓. `public/` is GITIGNORED — hash the host file; a `git diff` over it proves nothing |
 
 **Build health (2026-08-19):** 982/982 tests + 24 `it.todo`, 62 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **007** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
 ~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
-rule 5; its real fix is parked below. The `--dir test` workaround is RETIRED:
-the second session's worktree is gone, `.claude/worktrees/` is empty and its
-branch was merged and deleted, so a bare `vitest run` collects 62 files and
-nothing else (re-verified 2026-08-19).
+rule 5; its real fix is parked below. `--dir test` is RETIRED — the second
+session's worktree is gone, so a bare `vitest run` is correct again.
 
 ## Decisions needed from JP (blocking)
 
@@ -113,10 +110,9 @@ archive entries as complete as ever; length there is fine. This window holds
 the newest 10 lines and older ones are deleted — `docs/history/state-log/`
 is self-indexing by date.
 
+- 2026-08-19 — **Leftover sweep + template split DEPLOYED** (`b401bac`): the second session's worktree was already gone and merged — branch deleted, the `--dir test` workaround retired. Deploy aborted once on STATE.md's own 10KB cap, then green: healthz 200, host bundle sha256 == local. Corrected a wrong claim — `public/` is gitignored, so a `git diff` over it proves nothing. `build.js` byte count was under-reporting by 1.4KB (UTF-16 length vs bytes). → docs/history/state-log/2026-08-19.md
 - 2026-08-18 — **Template split** (ARES pattern): `00-app.html` → `layout.html` + `partials/` + `views/`; composed output = the single file byte-for-byte; new guard for the nested-`{{#partial}}` hazard it creates. 976 → 982 + 24 todo. Not deployed. → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — **Batch 13: owls #47–#51** — the stale-reconcile guard (`decisions/0025`) stops an older ARES read reverting a registry write; product's other three cadence worries were impossible (no client refresh loop). Note chip carries the note, neutral; clarification note → left accent. 962 → 976 + 24 todo. → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — **Review pass over batches 11+12** (/simplify: 14 findings applied, `47c65e0` · /code-review high: 15 defects fixed, ten CONFIRMED — the worst: task lists rendering once per sibling row under multi-deliverable MCs, a stale-overwrite race the sweep itself introduced, one malformed ARES date aborting a project's sync). Manila-true due slice on both W2 halves is the one deliberate behaviour change; suite 947 → 962 + 24 todo. → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — **Batches 11 + 12 DEPLOYED LIVE** (T167–T178, `5934c26`..`5cd662e`): batch 11's four ruled changes live-verified (closing line ✓, 24×24 ✓; sub-350 scroll check owed — the pass discovered the browser was shared with JP); the #45 expanded MC row built to spec same-day and deployed — one-table column model, task due = W2's task-card half (route + sync chain + client), childless chevron and expanded-only SubTone as flagged defaults, expansion resets on project switch; `due-roundtrip.ts` smoke ✓ zero net change; 947 + 24 todo dual-TZ. The two deploys also carried the stage-5 script split into production. → docs/history/state-log/2026-08-18.md
 - 2026-08-18 — Batch 11 build detail: owls #42–#46 processed end-to-end; R-warn-x/y/z; Asset Type clip; T152 closed; the 7 stale `01-app.js` comments repointed; #45 recon + jp→miles #40; JP's W2 task-card scope ruling → docs/history/state-log/2026-08-18.md
-- 2026-08-18 — Context restructure stages 1–5 + JP's doc workflows: state-log rotation, gantt-rules, T-shape, decisions/, script split (baseline `4dd5186…`), hygiene audit + archival rulings → docs/history/state-log/2026-08-18.md
-- 2026-08-18 — Batch 10: Pipeline warning becomes icon + hover card, amber wash removed; four lens-caught defects (T163–T166, R-warn-u/v/w) → docs/history/state-log/2026-08-18.md

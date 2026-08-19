@@ -85,7 +85,9 @@ function main() {
   fs.mkdirSync(publicDir, { recursive: true });
   fs.writeFileSync(path.join(publicDir, 'index.html'), out);
 
-  console.log(`[build] public/index.html written (${out.length} bytes)`);
+  // Buffer.byteLength, not .length — `·`, `—` and `✓` are multibyte, so the
+  // string length under-reports the written file by ~1.4KB.
+  console.log(`[build] public/index.html written (${Buffer.byteLength(out)} bytes)`);
 }
 
 /** This file's path as node would report it for a direct run, symlinks resolved. */
