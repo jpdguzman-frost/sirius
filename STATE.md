@@ -17,11 +17,12 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 0–8a | Setup · schema · auth+audit · `lib/` port · ARES read · intake · model refresh · five tabs · urgency write · conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 gate ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 backup/restore ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸ (team UI update), T075 sweep pending, non-member 403 parked | G7 passed; write-enable on rt-837 = next JP gate |
 | 10–13k b13, ctx, t-split | Two-way sync · admin panel · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · the expanded MC row · the stale-reconcile guard (decisions/0025) · the template split | **DEPLOYED + LIVE-VERIFIED through 2026-08-19** (T077–T178, ..`b401bac`) | per-batch detail: `docs/history/phase-log.md`; batch law: `specs/001-sirius-v1/pipeline-frame-notes.md` |
+| 14 pf | **Pipeline filter + sort** (owl #62, five nodes): 8 sorts · 5 filter axes with facet counts · migration 008 stores the card's own filing date | **DEPLOYED + LIVE 2026-08-20** (`97fd82a`; 1035 + 24 todo dual-TZ) | healthz 200 · host sha256 == local ✓ · 008 applied, filedAt backfilled 217/217 active rows ✓ |
 | 13k b14 | Owls #52–#61: a shared MC stops attributing its tasks (R-exp-g..l) · unattached work surfaced (R-exp-m/n — 35 cards in no row and no week) · hover-card shadow + clamp bleed (R-warn-p/q) · underline withdrawn (R-warn-r/s) · row-control reveal rules (R-row-a..d) | **DEPLOYED + LIVE 2026-08-20** (`7dbbb3b`; 1005 + 24 todo dual-TZ) | healthz 200 · host bundle sha256 == local ✓ · live DB matches the probe (37 MC / 19 shared / max 60) ✓ |
 
-**Build health (2026-08-20):** 1005/1005 tests + 24 `it.todo`, 62 files — green
+**Build health (2026-08-20):** 1035/1035 tests + 24 `it.todo`, 63 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
-`TZ=America/New_York`). Migrations applied through **007** (0025's guard
+`TZ=America/New_York`). Migrations applied through **008** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
 ~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
 rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
@@ -55,10 +56,10 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority: twice an owl
   asserted a ruling JP had not made or later declined, so verify with JP
-  before building on one. **Thread position**: miles→jp acked through **#61**; jp→miles sent through **#48**.
-  **Awaiting Miles**: ONLY the ARES read-path caching answer. Everything else
-  they owed closed 2026-08-20 — row-controls #59, Smoke pass #60 (clean, incl.
-  the task due write BY HAND), caption #55/#58, underline withdrawn #57.
+  before building on one. **Thread position**: miles→jp acked through **#62**; jp→miles sent through **#50**.
+  **Awaiting Miles**: the ARES read-path caching answer · whether TYPE /
+  DIFFICULTY / REQUESTOR need a **"None"** filter value — without one the
+  incomplete rows are the only rows no filter can select (raised #49, #50).
   Closed threads → `docs/history/state-log/`.
 - **Figma reads** — Rex MCP is OFFLINE. **The official Figma MCP is the
   verified path**: `get_design_context` returns categorized annotations as
