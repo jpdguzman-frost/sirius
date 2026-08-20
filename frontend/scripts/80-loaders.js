@@ -268,7 +268,6 @@ async function loadAll() {
        every urgency/difficulty/due write and every load. Stamped once here it
        is a plain keypath, which also gives `{{#each row.warning.items}}` a
        stable array identity instead of a fresh one to diff each pass. */
-    const seenMc = new Set();
     pipeline.rows.forEach((r) => {
       r.blob = `${r.displayId} ${r.mcNumber || ''} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
       r.warning = rowWarning(r);
@@ -279,12 +278,11 @@ async function loadAll() {
          workCardsByMc land in the same app.set below, so the stamp cannot
          desync from the map it derives from. */
       r.hasTasks = !!pipeline.workCardsByMc[r.mcNumber];
-      /* mc_number is NOT unique (invariant 3 — MC-825 carries 99 deliverable
-         rows) and expansion is per-MC, so the task list and the SubTone hang
-         under the GROUP'S FIRST row only — rendered under every sibling they
-         would duplicate 99× (review pass 2026-08-18). */
-      r.firstOfMc = !!r.mcNumber && !seenMc.has(r.mcNumber);
-      if (r.mcNumber) seenMc.add(r.mcNumber);
+      /* WHICH row the task list hangs under is NOT stamped here. It depends
+         on the rows as rendered, and a filter or a sort changes them — see the
+         `pipeMcAnchor` computed, which derives it from the visible order. A
+         stamp taken from the server's order left an MC's work cards
+         unreachable whenever a filter hid the row carrying it. */
       /* owl #52: how many deliverables share this MC. 1 → the task list is
          genuinely this card's and is attributed to it. >1 → the board does
          not record which main a task belongs to (probed 2026-08-20: no

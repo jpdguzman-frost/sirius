@@ -41,6 +41,30 @@ app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ'), noteText
    selectors below) that nothing tied to them. A sixth overlay is one entry. */
 const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop', 'pipeSortMenu', 'pipeFilterMenu'];
 const NO_OVERLAYS = Object.fromEntries(OVERLAY_KEYS.map((k) => [k, null]));
+/* WHAT MUST NOT DISMISS EACH OVERLAY — its own trigger and its own box, keyed
+   by the state key so the two lists cannot drift apart. They already had:
+   `pipeSortMenu` and `pipeFilterMenu` joined OVERLAY_KEYS in owl #62 and were
+   never added to the hand-written selector string below, so the document click
+   that opened a panel closed it again in the same event and neither panel could
+   appear at all. A missing entry here is now a failing test, not a dead button.
+   The list names TRIGGERS, never their wrappers: a wrapper spanning dead space
+   would make that space a dead zone for dismissing. */
+const OVERLAY_SHIELDS = {
+  urgencyMenu: '.ubadge-wrap, .selectmenu',
+  diffMenu: '.ubadge-wrap, .selectmenu',
+  duePopover: '.duewrap, .duepop',
+  reqMenu: '.selwrap, .selectmenu',
+  warnPop: '.warnpop',
+  pipeSortMenu: '.sfbtn, .pipemenu',
+  pipeFilterMenu: '.sfbtn, .pipemenu',
+};
+/** One selector string, derived — the click dismisser's ignore list. */
+const OVERLAY_SHIELD = [...new Set(OVERLAY_KEYS.flatMap((k) => OVERLAY_SHIELDS[k].split(',').map((x) => x.trim())))].join(', ');
+/* The SCROLL dismisser shields only the boxes that can scroll INSIDE
+   themselves — a scroll an overlay answers itself must not dismiss it. The
+   filter panel is here because its STATUS group is a deliberate internal
+   scroller (R-pf-e), so a wheel over it would otherwise shut the panel. */
+const OVERLAY_SELF_SCROLL = '.duepop, .selectmenu, .warnpop, .pipemenu';
 function anyMenuOpen() {
   return OVERLAY_KEYS.some((k) => app.get(k));
 }
@@ -100,7 +124,7 @@ document.addEventListener('click', (e) => {
   // tight inline box now, but the rule is unchanged — a wrapper that spans
   // dead space would make that space a dead zone for dismissing
   if (!anyMenuOpen()) return;
-  if (e.target.closest('.ubadge-wrap, .selectmenu, .duewrap, .duepop, .selwrap, .warnpop')) return;
+  if (e.target.closest(OVERLAY_SHIELD)) return;
   /* `.warnbtn` is shielded CONDITIONALLY, and it is the only entry that is.
      The other four triggers own a click handler that toggles their overlay, so
      the dismisser has to keep its hands off them. The warning icon has no
@@ -131,7 +155,7 @@ document.addEventListener('scroll', (e) => {
   // document, including the horizontal .pscroll drag, and the DOM walk is
   // pointless when nothing is open
   if (!anyMenuOpen()) return;
-  if (e.target.closest && e.target.closest('.duepop, .selectmenu, .warnpop')) return;
+  if (e.target.closest && e.target.closest(OVERLAY_SELF_SCROLL)) return;
   closeMenus();
 }, true);
 /* A trackpad nudge with the pointer inside the popover would otherwise chain

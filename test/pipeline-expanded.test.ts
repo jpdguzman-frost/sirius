@@ -19,6 +19,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  APP_JS,
   APP_JS_CODE,
   PIPELINE_CSS,
   TEMPLATE,
@@ -358,10 +359,31 @@ describe('a multi-deliverable MC renders its task list ONCE (invariant 3)', () =
     expect([...multi.matchAll(/class="subtone">Main Card</g)]).toHaveLength(1);
   });
 
-  it('is stamped in loadAll beside hasTasks, never asked in the template', () => {
+  it('stamps hasTasks in loadAll, but DERIVES the anchor from the rendered rows', () => {
+    /* `hasTasks` is per-row and constant, so it is stamped once (performance
+       law). WHICH row the list hangs under is not: it depends on the rows as
+       rendered, and owl #62's filter and sort change them. Stamped from the
+       server's order it went stale — see the next test for what that cost. */
     const stamp = fnBody('loadAll');
-    expect(stamp).toContain('r.firstOfMc');
     expect(stamp).toContain('r.hasTasks');
+    expect(stamp).not.toContain('firstOfMc');
+    expect(APP_JS).toContain('pipeMcAnchor()');
+  });
+
+  it('MOVES THE ANCHOR when a filter hides the group’s first row', () => {
+    /* The defect this replaces: filter to the requestor who owns only the
+       SECOND deliverable under a shared MC, and the row carrying the stamp is
+       no longer rendered — so the visible row drew no chevron and, even with
+       the group expanded, no task rows. The MC's work cards were unreachable
+       from the table entirely. */
+    const second = renderPipelineTable({
+      pipelineRows: [SIBLING], // the group's FIRST row filtered away
+      rowWarning: () => null,
+      workCardsByMc: TASKS,
+      expanded: { 'MC-837': true },
+    });
+    expect([...second.matchAll(/class="subtone">Main Card</g)]).toHaveLength(1);
+    expect(taskRows(second)).toHaveLength(2);
   });
 });
 

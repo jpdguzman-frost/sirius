@@ -195,6 +195,14 @@ deliverableSchema.index({ project_id: 1, trello_card_id: 1 }, { unique: true });
 deliverableSchema.index({ project_id: 1, slotted_week: 1 });
 deliverableSchema.index({ project_id: 1, mc_number: 1 });
 deliverableSchema.index({ project_id: 1, active: 1 });
+/* The Pipeline's default order, by the card's own filing date. Declared HERE
+   and not only in migration 008: every other index in this codebase is on the
+   schema and applied through `Model.syncIndexes()`, which DROPS anything it
+   does not find here — so an index created only by a raw `createIndex` would
+   be silently removed by the next migration that follows the pattern. The name
+   matches 008's so syncIndexes adopts the existing one rather than rebuilding
+   it. */
+deliverableSchema.index({ project_id: 1, trello_created_at: -1 }, { name: 'project_filed_desc' });
 
 // ============ work cards ============
 

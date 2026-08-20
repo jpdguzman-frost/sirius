@@ -279,6 +279,26 @@ const app = new Ractive({
       }
       return out;
     },
+    /* WHICH ROW THE TASK LIST HANGS UNDER, per MC — derived from the rows as
+       RENDERED, not from the order the server sent.
+
+       It used to be stamped once in `loadAll` while walking the server's order
+       (`firstOfMc`). Filtering broke it: filter to a Requestor who owns the
+       SECOND deliverable under MC-825 and the stamped row is hidden, so the
+       visible row shows no chevron and, even with the group expanded, no task
+       rows — the MC's work cards become unreachable. Sorting broke it more
+       quietly, parking the task list under whichever row happened to carry the
+       stamp rather than under the first one on screen.
+
+       mc_number is NOT unique (invariant 3), which is why this is needed at
+       all: rendered under every sibling the list would repeat up to 99 times. */
+    pipeMcAnchor() {
+      const first = {};
+      for (const r of this.get('pipelineRows')) {
+        if (r.mcNumber && !(r.mcNumber in first)) first[r.mcNumber] = r.cardId;
+      }
+      return first;
+    },
     /* ---- Deadlines (owl #64, node 630:51389) ----------------------------
        Search filters the CARDS by MC number or deliverable name, and a week the
        search empties is DROPPED rather than left standing empty — the frame's

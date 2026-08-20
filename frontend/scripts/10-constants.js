@@ -452,6 +452,12 @@ const pipeFacetList = (rows, sel) => {
      because an axis ignores its own selection (R-pf-c); a row rejected by two
      or more belongs to none. */
   const facets = PIPE_FILTERS.map((f) => ({ f, counts: new Map(), picked: sel[f.key] || [] }));
+  /* A PICKED value always keeps its checkbox, even at zero. Seeding only from
+     the rows meant a search that eliminated every row carrying a selected value
+     removed that value from the panel — leaving an empty table, a Filter button
+     still reporting "1 applied", and no way to un-pick it short of Clear. The
+     template already draws a zero-count-but-picked value as enabled. */
+  for (const facet of facets) for (const v of facet.picked) facet.counts.set(v, 0);
   const vals = new Array(facets.length);
   for (const r of rows) {
     let fails = 0;

@@ -154,6 +154,32 @@
 .dlsub .dllinks a { display: inline-flex; }
 .dlsub .dllinks svg { display: block; }
 
+/* ---- the day planner's milestone entries (FR-12). The rebuild renamed the
+   container from `.weekcard` to `.dlweek`, which orphaned the v1 recipe these
+   were wearing — the entries rendered as unstyled runs of text and, worse, the
+   LATE and URGENT left accents disappeared with it. BR-9a: a card-level late
+   flag is never suppressed, so that accent is load-bearing, not decoration.
+   `.daycol .entry` also carries `cursor: grab` and its focus ring from
+   10-ui.css; only the box and the accents live here. */
+.daycol .entry {
+  display: flex; align-items: center; gap: var(--space-8);
+  margin: var(--space-4) 0; padding: var(--space-4) var(--space-8);
+  background: var(--white);
+  border: 1px solid var(--border-border); border-left: 3px solid var(--border-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-label); line-height: 1.4;
+}
+.daycol .entry.urgent { border-left-color: var(--amber-500); }
+/* late wins over urgent — the template's own elseif says so, and a forecast
+   past the client's deadline is the louder of the two */
+.daycol .entry.late { border-left-color: var(--red-500); }
+.daycol .entry .who { font-weight: 600; white-space: nowrap; }
+.daycol .entry .chev {
+  margin-left: auto; padding: 0 var(--space-4);
+  background: none; border: 0; color: var(--slate-400); cursor: pointer;
+}
+.daycol .entry .chev:hover { color: var(--surface-foreground); }
+
 /* a week with nothing due keeps its place and says so — a different state from
    a week the SEARCH emptied, which is dropped entirely */
 .dlempty {

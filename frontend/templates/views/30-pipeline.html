@@ -126,7 +126,7 @@
                   bug Miles reported. One chevron per MC makes the affordance
                   tell the truth. A single-deliverable MC is unaffected: its
                   only row IS the first. The label says which case it is. }}
-              {{#if row.hasTasks && row.firstOfMc}}
+              {{#if row.hasTasks && pipeMcAnchor[row.mcNumber] === row.cardId}}
                 <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{#if row.sharedMc}}Work on {{row.mcLabel}}, shared by {{row.mcDeliverables}} deliverables{{else}}{{row.displayId}} work cards{{/if}}" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
               {{else}}
                 <span class="chevgap" aria-hidden="true"></span>
@@ -191,10 +191,11 @@
                    frame specs the EXPANDED state, so it renders only there,
                    where parent-vs-children is the distinction it teaches; the
                    collapsed table is not this spec's to change. Flagged to
-                   Miles as a default taken, not a ruling. firstOfMc because
-                   mc_number repeats across sibling rows (invariant 3): the
-                   SubTone marks the row the task list hangs under. -->
-              {{#if row.firstOfMc && expanded[row.mcNumber]}}<span class="subtone">Main Card</span>{{/if}}</td>
+                   Miles as a default taken, not a ruling. the anchor is derived from the
+                   VISIBLE rows because mc_number repeats across siblings
+                   (invariant 3): the SubTone marks the row the list hangs
+                   under, which a filter can change. -->
+              {{#if pipeMcAnchor[row.mcNumber] === row.cardId && expanded[row.mcNumber]}}<span class="subtone">Main Card</span>{{/if}}</td>
             <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{{hl(row.assetType)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-diff"><div class="ubadge-wrap">
               <button class="pbadge ubadge {{#if row.difficulty}}d-{{row.difficulty}}{{else}}unset{{/if}} {{#if savingDifficulty[row.cardId]}}saving{{/if}}"
@@ -259,12 +260,12 @@
               {{else}}<span class="srclink off" aria-disabled="true"><svg class="i18"><use href="#i-figma" /></svg></span>{{/if}}
             </td>
           </tr>
-          {{! firstOfMc: mc_number is NOT unique (invariant 3 — one MC can
+          {{! pipeMcAnchor: mc_number is NOT unique (invariant 3 — one MC can
               carry 99 deliverable rows) and expansion is per-MC, so the task
-              list renders under the group's FIRST row only; under every
-              sibling it would duplicate the whole list — and an open task
+              list renders under the group's first VISIBLE row only; under
+              every sibling it would duplicate the whole list — and an open task
               popover — once per row (review pass 2026-08-18). }}
-          {{#if row.firstOfMc && expanded[row.mcNumber]}}
+          {{#if pipeMcAnchor[row.mcNumber] === row.cardId && expanded[row.mcNumber]}}
             {{! owl #52 — THE SHARED CAPTION. Only when more than one
                 deliverable carries this MC number. The board records no
                 task→deliverable edge (probed 2026-08-20: 0 of 218 mains carry

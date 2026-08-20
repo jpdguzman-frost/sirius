@@ -437,11 +437,19 @@ const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, byMc: Rec
   const perMc = new Map<string, number>();
   for (const r of rows) if (r.mcNumber) perMc.set(r.mcNumber, (perMc.get(r.mcNumber) ?? 0) + 1);
   return rows.map((r) => {
-    const firstOfMc = !!r.mcNumber && !seen.has(r.mcNumber);
-    if (r.mcNumber) seen.add(r.mcNumber);
     const mcDeliverables = perMc.get(r.mcNumber) ?? 1;
-    return { ...r, warning: recipe(r), hasTasks: !!byMc[r.mcNumber], firstOfMc, mcDeliverables, sharedMc: mcDeliverables > 1 };
+    return { ...r, warning: recipe(r), hasTasks: !!byMc[r.mcNumber], mcDeliverables, sharedMc: mcDeliverables > 1 };
   });
+};
+
+/* Which row each MC's task list hangs under, derived from the rows AS PASSED —
+   the same rule the shipped `pipeMcAnchor` computed applies to the rendered
+   order. Deriving it here rather than accepting it as state is what lets a
+   fixture that hides a group's first row prove the anchor moves. */
+const mcAnchor = (rows: PipeRow[]): Record<string, string> => {
+  const first: Record<string, string> = {};
+  for (const r of rows) if (r.mcNumber && !(r.mcNumber in first)) first[r.mcNumber] = r.cardId;
+  return first;
 };
 
 /**
@@ -485,6 +493,7 @@ export function renderPipelineTable(state: PipelineTableState): string {
     partials: { dueCalendar: DUE_CALENDAR_PARTIAL },
     data: {
       pipelineRows: stampRows(state.pipelineRows, state.rowWarning, state.workCardsByMc ?? {}),
+      pipeMcAnchor: mcAnchor(state.pipelineRows),
       warnPop: state.warnPop ?? null,
       warnPopPos: state.warnPopPos ?? { left: 0, top: 0, up: false },
       expanded: state.expanded ?? {},

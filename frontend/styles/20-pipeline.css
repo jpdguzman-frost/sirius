@@ -97,6 +97,16 @@
    .warnpop, below). Nothing replaces it above the table. */
 
 /* ---- search + callout (annotations 17:2057, 70:1211) ---- */
+/* THE SEARCH FIELD'S OWN RECIPE — shared by Pipeline, Requests and Deadlines.
+   Owl #62 wrapped it in `.pipetools` and, in doing so, deleted this block: the
+   field lost `display: flex`, so its icon and input stacked vertically on every
+   tab, and Requests and Deadlines lost the padding and the hairline underneath
+   as well. `.reqsearch` and `.dlsearch` are MODIFIERS of this rule and were
+   left modifying nothing. */
+.searchbar {
+  display: flex; align-items: center; gap: var(--space-8);
+  padding: 16px 0 17px; border-bottom: 1px solid var(--slate-100);
+}
 /* owl #62, node 592:56850 — the search field and the two buttons are ONE row.
    The rule below keeps the field's own padding/border so the row reads exactly
    as it did before the buttons arrived; the border moves to the wrapper so it

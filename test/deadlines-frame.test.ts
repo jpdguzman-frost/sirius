@@ -299,6 +299,28 @@ describe('shipped capabilities the frame does not draw are kept, not deleted', (
     expect(cssRule('.dlcard.urgent::before', DEADLINES_CSS)).toContain('background: var(--red-500)');
   });
 
+  it('DRESSES the day-planner entries, late accent included', () => {
+    /* THE DEFECT: the rebuild renamed the container from `.weekcard` to
+       `.dlweek`, which orphaned the v1 `.weekcard .entry` recipe — the entries
+       rendered as unstyled runs of text and, worse, the LATE and URGENT left
+       accents went with it. BR-9a: a card-level late flag is never suppressed,
+       so that accent is load-bearing rather than decoration. */
+    const entry = cssRule('.daycol .entry', DEADLINES_CSS);
+    expect(entry).toContain('border-left');
+    expect(cssRule('.daycol .entry.late', DEADLINES_CSS)).toContain('var(--red-500)');
+    expect(cssRule('.daycol .entry.urgent', DEADLINES_CSS)).toContain('var(--amber-500)');
+  });
+
+  it('gives the alert chip its OWN class, not the deadline card’s', () => {
+    /* THE DEFECT: the chip was `class="pbadge dlcard"`, and `.dlcard` is the
+       full <article> recipe — same specificity, later stylesheet, so it won
+       every conflicting declaration and each chip drew as a padded white block
+       with a 3px accent stripe instead of a pill. */
+    const view = deadlinesView();
+    expect(view).toContain('class="pbadge dlchip"');
+    expect(view).not.toContain('pbadge dlcard');
+  });
+
   it('tints the WEEK only when it is over capacity, unchanged from v1', () => {
     expect(cssRule('.dlweek.flagged', DEADLINES_CSS)).toContain('var(--status-warning-light)');
   });

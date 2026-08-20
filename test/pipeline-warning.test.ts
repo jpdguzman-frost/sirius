@@ -873,16 +873,19 @@ describe('the document dismissers name the TRIGGER, not the wrapper', () => {
   };
 
   it('ignores clicks on the icon and inside the card', () => {
-    const body = clickListener();
-    expect(body).toContain('.warnbtn');
-    expect(body).toContain('.warnpop');
+    /* The selectors moved into `OVERLAY_SHIELDS`, keyed by overlay, after two
+       overlays joined OVERLAY_KEYS and were never added to the hand-written
+       string here — so the list is read where it now lives. The rule is
+       unchanged: every click-opened trigger, and every overlay box, is
+       shielded from the dismisser that would otherwise race its own toggle. */
+    const shields = decl(APP_JS, 'OVERLAY_SHIELDS');
+    expect(clickListener()).toContain('OVERLAY_SHIELD');
+    expect(shields).toContain('.warnpop');
     // the deleted message trigger must not linger as a dead selector
-    expect(body).not.toContain('.warnmsg');
+    expect(shields).not.toContain('.warnmsg');
     expect(jsCode).not.toContain('.warnwrap');
-    // the four click-opened triggers keep their unconditional shield: each owns
-    // an on-click that toggles its overlay, so the dismisser must not race it
     for (const sel of ['.ubadge-wrap', '.selectmenu', '.duewrap', '.duepop', '.selwrap']) {
-      expect(body, `${sel} left the ignore list`).toContain(sel);
+      expect(shields, `${sel} left the ignore list`).toContain(sel);
     }
   });
 
@@ -897,11 +900,9 @@ describe('the document dismissers name the TRIGGER, not the wrapper', () => {
        (R-warn-l). */
     const body = clickListener();
     expect(body).toMatch(/app\.get\('warnPop'\)[\s\S]{0,80}\.warnbtn/);
-    // the regression is `.warnbtn` back inside the unconditional selector list
-    // beside the four that do own a click handler
-    const unconditional = /closest\('([^']*)'\)/.exec(body)?.[1];
-    expect(unconditional, 'the unconditional ignore list moved').toBeTruthy();
-    expect(unconditional).not.toContain('.warnbtn');
+    // the regression is `.warnbtn` back inside the unconditional shield map
+    // beside the triggers that DO own a click handler
+    expect(decl(APP_JS, 'OVERLAY_SHIELDS'), 'the icon must not be shielded unconditionally').not.toContain('.warnbtn');
   });
 
   it('admits the hover card to the self-scroll exemption — Miles amended R-warn-h (owl #43 item D)', () => {
@@ -916,7 +917,12 @@ describe('the document dismissers name the TRIGGER, not the wrapper', () => {
     const at = jsCode.indexOf("addEventListener('scroll'");
     expect(at).toBeGreaterThan(-1);
     const listener = jsCode.slice(at, jsCode.indexOf('}, true)', at));
-    expect(listener).toContain("closest('.duepop, .selectmenu, .warnpop')");
+    expect(listener).toContain('OVERLAY_SELF_SCROLL');
+    /* Read as MEMBERSHIP: the filter panel joined this list because its STATUS
+       group is a deliberate internal scroller, and a fourth self-scrolling
+       overlay joining must not fail a rule about the card. */
+    const selfScroll = decl(APP_JS, 'OVERLAY_SELF_SCROLL');
+    for (const sel of ['.duepop', '.selectmenu', '.warnpop']) expect(selfScroll).toContain(sel);
   });
 
   it('caps and scrolls the card ONLY in the last-resort state — the base recipe stays uncapped', () => {

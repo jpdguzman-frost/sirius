@@ -13,6 +13,7 @@
  * or clock — those belong to the live pass.
  */
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { APP_JS, APP_JS_CODE, PIPELINE_CSS, TEMPLATE, cssRule, decl, fnBody } from './helpers/gantt-render.ts';
 
@@ -338,6 +339,88 @@ describe('absence is selectable on the three axes that can lack a value', () => 
   it('draws the label and toggles the value — they differ for exactly this item', () => {
     expect(TEMPLATE).toContain('<span class="pmval">{{v.label}}</span>');
     expect(TEMPLATE).toContain("on-click=\"['togglePipeFilter', f.key, v.value]\"");
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* F2 — the review pass, 2026-08-21: three defects the suite had not seen    */
+/* ---------------------------------------------------------------------- */
+
+describe('the panels can actually open, and stay open', () => {
+  it('SHIELDS both triggers and the panel from the outside-click dismisser', () => {
+    /* THE DEFECT: `pipeSortMenu`/`pipeFilterMenu` joined OVERLAY_KEYS but not
+       the dismisser's hand-written selector string. Ractive's own click handler
+       runs first, so by the time the document listener fired an overlay WAS
+       open, nothing in the ignore list matched, and closeMenus() shut it again
+       in the same event — neither panel could appear at all. Every checkbox
+       click closed it too, against the explicit "the panel STAYS OPEN" rule. */
+    const shields = decl(APP_JS, 'OVERLAY_SHIELDS');
+    const keys = decl(APP_JS, 'OVERLAY_KEYS');
+    for (const key of ['pipeSortMenu', 'pipeFilterMenu', 'warnPop', 'reqMenu', 'duePopover', 'urgencyMenu', 'diffMenu']) {
+      expect(keys, `${key} is an overlay`).toContain(key);
+      expect(shields, `${key} has no shield — its own click would dismiss it`).toContain(`${key}:`);
+    }
+    expect(shields).toContain('.sfbtn');
+    expect(shields).toContain('.pipemenu');
+  });
+
+  it('derives the ignore list FROM that map, so the two cannot drift again', () => {
+    // the whole failure was two lists that had to agree by hand
+    expect(APP_JS).toContain('const OVERLAY_SHIELD = ');
+    expect(fnBody('anyMenuOpen')).toContain('OVERLAY_KEYS');
+    expect(APP_JS).toContain('e.target.closest(OVERLAY_SHIELD)');
+  });
+
+  it('does not let a scroll inside the STATUS group dismiss the panel', () => {
+    /* the group is a deliberate internal scroller, so a wheel over it reached
+       the capture-phase dismisser and shut the panel — the exact failure the
+       due popover and the Requests select are already shielded from */
+    expect(decl(APP_JS, 'OVERLAY_SELF_SCROLL')).toContain('.pipemenu');
+    expect(cssRule('.pipemenu .pmscroll', PIPELINE_CSS)).toContain('overflow-y: auto');
+  });
+});
+
+describe('the search field keeps its own recipe', () => {
+  it('declares the SHARED .searchbar base — three tabs wear it', () => {
+    /* THE DEFECT: owl #62 wrapped the field in `.pipetools` and deleted this
+       block in the same hunk. Without `display: flex` the icon and the input
+       stacked vertically on Pipeline, Requests AND Deadlines, and the two
+       modifier rules (`.reqsearch`, `.dlsearch`) were left modifying nothing. */
+    const base = cssRule('.searchbar', PIPELINE_CSS);
+    expect(base).toContain('display: flex');
+    expect(base).toContain('align-items: center');
+    expect(base).toContain('gap: var(--space-8)');
+    expect(base).toContain('border-bottom');
+  });
+});
+
+describe('the default order’s index survives the next syncIndexes', () => {
+  it('is DECLARED ON THE SCHEMA, not only created by migration 008', () => {
+    /* THE DEFECT: 008 created `project_filed_desc` with a raw createIndex while
+       every other index in the codebase is declared on the schema and applied
+       through `Model.syncIndexes()` — which DROPS anything it does not find
+       there. It worked on a fresh run and would have been removed silently by
+       the next migration that followed the established pattern. The name is
+       matched so syncIndexes adopts the existing index instead of rebuilding
+       it. */
+    const models = readFileSync(new URL('../src/models/index.ts', import.meta.url), 'utf8');
+    const mig = readFileSync(new URL('../scripts/migrate/migrations.ts', import.meta.url), 'utf8');
+    expect(mig).toContain("name: 'project_filed_desc'");
+    expect(models).toContain('trello_created_at: -1');
+    expect(models).toContain("name: 'project_filed_desc'");
+  });
+});
+
+describe('a picked filter value never disappears while it is still filtering', () => {
+  it('keeps its checkbox at zero when a search eliminates every row carrying it', () => {
+    /* seeded only from the searched rows, the value vanished from the panel:
+       an empty table, a Filter button still reading "1 applied", and no way to
+       un-pick it short of Clear */
+    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: ['Icon'] };
+    const values = facet([row({ cardId: 'a', assetType: 'UI' })], 'type', sel).values;
+    const icon = values.find((v) => v.label === 'Icon');
+    expect(icon, 'the picked value left the panel').toBeTruthy();
+    expect([icon!.count, icon!.on]).toEqual([0, true]);
   });
 });
 
