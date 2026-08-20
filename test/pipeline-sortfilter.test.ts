@@ -17,7 +17,9 @@ import { describe, expect, it } from 'vitest';
 import { APP_JS, APP_JS_CODE, PIPELINE_CSS, TEMPLATE, cssRule, decl, fnBody } from './helpers/gantt-render.ts';
 
 interface Sort { key: string; group: string; label: string; dir: number; value: (r: unknown) => unknown }
-interface Axis { key: string; label: string; pick: (r: unknown) => unknown; order?: string[] }
+interface Axis { key: string; label: string; pick: (r: unknown) => unknown; order?: string[]; none?: boolean }
+interface FacetValue { value: string | null; label: string; count: number; on: boolean }
+interface Facet { key: string; label: string; values: FacetValue[] }
 
 const recipe = new Function(`
   ${decl(APP_JS, 'DIFF_RANK')}
@@ -25,18 +27,22 @@ const recipe = new Function(`
   ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
   ${decl(APP_JS, 'pipeCompare')}
   ${decl(APP_JS, 'PIPE_FILTERS')}
-  ${decl(APP_JS, 'PIPE_FILTERS_NONE')}
+  ${decl(APP_JS, 'pipeEmpty')}
+  ${decl(APP_JS, 'pipePick')}
+  ${decl(APP_JS, 'PIPE_FILTERS_EMPTY')}
   ${decl(APP_JS, 'pipeMatches')}
+  ${decl(APP_JS, 'pipeFacetList')}
   ${decl(APP_JS, 'pipeSortLabel')}
   function mcRank(mc) { return mc ? Number(String(mc).replace(/\\D/g, '')) : null; }
-  return { PIPE_SORTS, PIPE_SORT_DEFAULT, pipeCompare, PIPE_FILTERS, PIPE_FILTERS_NONE, pipeMatches, pipeSortLabel };
+  return { PIPE_SORTS, PIPE_SORT_DEFAULT, pipeCompare, PIPE_FILTERS, PIPE_FILTERS_EMPTY, pipeMatches, pipeFacetList, pipeSortLabel };
 `)() as {
   PIPE_SORTS: Sort[];
   PIPE_SORT_DEFAULT: Sort;
   pipeCompare: (s: Sort, a: unknown, b: unknown) => number;
   PIPE_FILTERS: Axis[];
-  PIPE_FILTERS_NONE: () => Record<string, string[]>;
-  pipeMatches: (r: unknown, sel: Record<string, string[]>, except: string | null) => boolean;
+  PIPE_FILTERS_EMPTY: () => Record<string, (string | null)[]>;
+  pipeMatches: (r: unknown, sel: Record<string, (string | null)[]>, except: string | null) => boolean;
+  pipeFacetList: (rows: unknown[], sel: Record<string, (string | null)[]>) => Facet[];
   pipeSortLabel: (k: string | null) => string;
 };
 
@@ -171,7 +177,7 @@ describe('filtering is OR within a category and AND across them', () => {
     row({ cardId: 'c', assetType: 'Icon', urgency: 'Non-Urgent' }),
   ];
   const pick = (sel: Record<string, string[]>) =>
-    rows.filter((r) => recipe.pipeMatches(r, { ...recipe.PIPE_FILTERS_NONE(), ...sel }, null)).map((r) => r.cardId);
+    rows.filter((r) => recipe.pipeMatches(r, { ...recipe.PIPE_FILTERS_EMPTY(), ...sel }, null)).map((r) => r.cardId);
 
   it('carries the five axes the frame names, in order', () => {
     expect(recipe.PIPE_FILTERS.map((f) => f.label)).toEqual(['TYPE', 'DIFFICULTY', 'URGENCY', 'STATUS', 'REQUESTOR']);
@@ -211,7 +217,7 @@ describe('a category counts against the OTHER categories, never its own', () => 
        including its own, picking Icon drops UI to zero and it can never be
        added without clearing first — accurate and unusable. */
     const rows = [row({ cardId: 'a', assetType: 'Icon' }), row({ cardId: 'b', assetType: 'UI' })];
-    const sel = { ...recipe.PIPE_FILTERS_NONE(), type: ['Icon'] };
+    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: ['Icon'] };
     const forType = rows.filter((r) => recipe.pipeMatches(r, sel, 'type'));
     expect(forType.map((r) => r.cardId)).toEqual(['a', 'b']); // UI still countable
     const forOthers = rows.filter((r) => recipe.pipeMatches(r, sel, 'urgency'));
@@ -220,7 +226,105 @@ describe('a category counts against the OTHER categories, never its own', () => 
 });
 
 /* ---------------------------------------------------------------------- */
-/* F — the two buttons differ on purpose                                    */
+/* F — "None" is a value (owl #63, closing R-pf-i)                          */
+/* ---------------------------------------------------------------------- */
+
+const facet = (rows: unknown[], key: string, sel: Record<string, (string | null)[]> = recipe.PIPE_FILTERS_EMPTY()) =>
+  recipe.pipeFacetList(rows, sel).find((f) => f.key === key)!;
+
+describe('absence is selectable on the three axes that can lack a value', () => {
+  it('offers None on TYPE, DIFFICULTY and REQUESTOR, and never on URGENCY or STATUS', () => {
+    /* every card sits in a list and `Non-Urgent` is a value rather than an
+       absence, so those two axes have no residue to collect */
+    const rows = [row({ cardId: 'a' }), row({ cardId: 'b', assetType: 'Icon', difficulty: 'Hard', requestor: 'Ana', currentList: 'Design' })];
+    const labels = (k: string) => facet(rows, k).values.map((v) => v.label);
+    expect(labels('type')).toContain('None');
+    expect(labels('difficulty')).toContain('None');
+    expect(labels('requestor')).toContain('None');
+    expect(labels('urgency')).not.toContain('None');
+    expect(labels('status')).not.toContain('None');
+  });
+
+  it('DERIVES None like every other value — a complete board never shows it', () => {
+    /* the axes are built from what the board carries, so None is not a fixed
+       sixth checkbox that sits there reading zero */
+    const rows = [row({ cardId: 'a', assetType: 'Icon' }), row({ cardId: 'b', assetType: 'UI' })];
+    expect(facet(rows, 'type').values.map((v) => v.label)).toEqual(['Icon', 'UI']);
+  });
+
+  it('selects exactly the rows with no value there', () => {
+    const rows = [
+      row({ cardId: 'a', difficulty: 'Hard' }),
+      row({ cardId: 'b' }),
+      row({ cardId: 'c', difficulty: '' }), // empty string is absence too
+    ];
+    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), difficulty: [null] };
+    const hit = rows.filter((r) => recipe.pipeMatches(r, sel, null)).map((r) => r.cardId);
+    expect(hit).toEqual(['b', 'c']);
+  });
+
+  it('THE POINT — every row is now reachable, which is what R-pf-i said was broken', () => {
+    /* before this, the rows carrying no type were the only rows no filter could
+       select, and they are the incomplete rows most needing attention. Stated
+       as a sum: on an axis that admits absence, the values account for the
+       whole board. (URGENCY and STATUS are NOT asserted to reconcile — owl #63
+       retracted that, and on a real board they do not.) */
+    const rows = [
+      row({ cardId: 'a', assetType: 'Icon' }),
+      row({ cardId: 'b', assetType: 'UI' }),
+      row({ cardId: 'c' }),
+      row({ cardId: 'd' }),
+    ];
+    for (const key of ['type', 'difficulty', 'requestor']) {
+      const total = facet(rows, key).values.reduce((n, v) => n + v.count, 0);
+      expect(total).toBe(rows.length);
+    }
+  });
+
+  it('stores None as null, so a board value that IS the word stays separate', () => {
+    /* a Trello label or a sheet requestor could legitimately be called None;
+       merging the two into one checkbox would silently mis-count both */
+    const rows = [
+      row({ cardId: 'a', requestor: 'None' }),
+      row({ cardId: 'b' }),
+    ];
+    const values = facet(rows, 'requestor').values;
+    expect(values.map((v) => v.label)).toEqual(['None', 'None']);
+    expect(values.map((v) => v.value)).toEqual(['None', null]);
+    expect(values.map((v) => v.count)).toEqual([1, 1]);
+
+    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), requestor: ['None'] };
+    expect(rows.filter((r) => recipe.pipeMatches(r, sel, null)).map((r) => r.cardId)).toEqual(['a']);
+  });
+
+  it('sorts None LAST, in both the ordered and the alphabetical axes', () => {
+    /* it is the residue: alphabetically None would land mid-list and push the
+       real vocabulary down, and it has no place in Easy/Medium/Hard at all */
+    const rows = [
+      row({ cardId: 'a', difficulty: 'Hard', assetType: 'Zeppelin' }),
+      row({ cardId: 'b', difficulty: 'Easy', assetType: 'Animation' }),
+      row({ cardId: 'c' }),
+    ];
+    expect(facet(rows, 'difficulty').values.map((v) => v.label)).toEqual(['Easy', 'Hard', 'None']);
+    expect(facet(rows, 'type').values.map((v) => v.label)).toEqual(['Animation', 'Zeppelin', 'None']);
+  });
+
+  it('still ignores its own axis when None is the selection', () => {
+    /* R-pf-c has to hold for None as well, or picking it would strip every
+       sibling value to zero and there would be no way back without clearing */
+    const rows = [row({ cardId: 'a' }), row({ cardId: 'b', assetType: 'Icon' })];
+    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: [null] };
+    expect(facet(rows, 'type', sel).values.map((v) => [v.label, v.count])).toEqual([['Icon', 1], ['None', 1]]);
+  });
+
+  it('draws the label and toggles the value — they differ for exactly this item', () => {
+    expect(TEMPLATE).toContain('<span class="pmval">{{v.label}}</span>');
+    expect(TEMPLATE).toContain("on-click=\"['togglePipeFilter', f.key, v.value]\"");
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* G — the two buttons differ on purpose                                    */
 /* ---------------------------------------------------------------------- */
 
 describe('the sort button names its selection; the filter button never does', () => {
@@ -256,7 +360,7 @@ describe('the sort button names its selection; the filter button never does', ()
 });
 
 /* ---------------------------------------------------------------------- */
-/* G — panel behaviour that IS provable without a browser                   */
+/* H — panel behaviour that IS provable without a browser                   */
 /* ---------------------------------------------------------------------- */
 
 describe('the panels behave like every other overlay', () => {

@@ -36,7 +36,7 @@ const app = new Ractive({
        stacks). `pipeFilters` is one array per axis (multi-select). Both are
        VIEW state, so they live here and nowhere on the server. */
     pipeSort: null,
-    pipeFilters: PIPE_FILTERS_NONE(),
+    pipeFilters: PIPE_FILTERS_EMPTY(),
     pipeSortMenu: null,
     pipeFilterMenu: null,
     pipeSortMenuPos: { left: 0, top: 0 },
@@ -230,53 +230,21 @@ const app = new Ractive({
        row, so sorting a page would order the page and not the table. `slice()`
        because Array.sort mutates and the source array is Ractive's own. */
     pipelineRows() {
-      const sel = this.get('pipeFilters') || PIPE_FILTERS_NONE();
+      const sel = this.get('pipeFilters') || PIPE_FILTERS_EMPTY();
       const rows = this.get('pipeSearched').filter((r) => pipeMatches(r, sel, null));
       const key = this.get('pipeSort');
       const sort = key ? PIPE_SORTS.find((s) => s.key === key) : PIPE_SORT_DEFAULT;
       return sort ? rows.slice().sort((a, b) => pipeCompare(sort, a, b)) : rows;
     },
-    /* THE FACET COUNTS (jp→miles #49, answering the frame's open question).
-       Each axis counts against the filters applied in the OTHER axes, ignoring
-       its own — the third option, not either of the two the frame offered.
-       Counting against ALL filters including its own would drop every sibling
-       value to zero the moment one is picked, so a second value could never be
-       added without clearing first: accurate and unusable. Ignoring its own
-       keeps the counts honest as you narrow AND usable for widening.
-       Values are derived from the board, never a fixed list. */
+    /* The facet counts live in `pipeFacetList` beside the axes and the matcher
+       they depend on (10-constants), so the panel and the table cannot disagree
+       about what a value means. Rule and reasoning are documented there. */
     pipeFacets() {
-      const sel = this.get('pipeFilters') || PIPE_FILTERS_NONE();
-      const searched = this.get('pipeSearched');
-      return PIPE_FILTERS.map((f) => {
-        const pool = searched.filter((r) => pipeMatches(r, sel, f.key));
-        const counts = {};
-        // every value PRESENT on the board, even at zero against this pool —
-        // the frame wants empty categories exposed, not hidden
-        for (const r of searched) {
-          const v = f.pick(r);
-          if (v !== null && v !== undefined && v !== '') counts[v] = 0;
-        }
-        for (const r of pool) {
-          const v = f.pick(r);
-          if (v !== null && v !== undefined && v !== '') counts[v] += 1;
-        }
-        const names = Object.keys(counts);
-        names.sort(
-          f.order
-            ? (a, b) => f.order.indexOf(a) - f.order.indexOf(b)
-            : (a, b) => a.localeCompare(b),
-        );
-        const picked = sel[f.key] || [];
-        return {
-          key: f.key,
-          label: f.label,
-          values: names.map((v) => ({ value: v, count: counts[v], on: picked.indexOf(v) > -1 })),
-        };
-      });
+      return pipeFacetList(this.get('pipeSearched'), this.get('pipeFilters') || PIPE_FILTERS_EMPTY());
     },
     /** How many filter VALUES are applied, across every axis — the accessible name's number. */
     pipeFilterCount() {
-      const sel = this.get('pipeFilters') || PIPE_FILTERS_NONE();
+      const sel = this.get('pipeFilters') || PIPE_FILTERS_EMPTY();
       return PIPE_FILTERS.reduce((n, f) => n + (sel[f.key] || []).length, 0);
     },
     /** `Group: Item` for the active sort button (node 592:56966); '' when default. */

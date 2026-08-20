@@ -318,27 +318,107 @@ const pipeCompare = (sort, a, b) => {
    (frame: "a type or status nobody uses simply does not appear"). `order` sets
    the value order inside a category: the two closed vocabularies read in their
    natural progression, the three open ones alphabetically. STATUS would ideally
-   read in Trello's own list order, but the wire carries no list position — see
+   read in Trello's own list order, but the wire carries no list position - see
    R-pf-e. NO STATE FILTERS: blocked and missing-info were considered and
-   declined; row state stays on the rows themselves. */
+   declined; row state stays on the rows themselves.
+
+   `none: true` marks an axis where ABSENCE is itself a selectable value (owl
+   #63, closing R-pf-i). Without it the rows carrying no type, no difficulty or
+   no requestor are the only rows NO filter can reach, and those are the
+   incomplete rows most needing attention - a missing difficulty label is one of
+   the three Needs Info conditions. URGENCY and STATUS are deliberately NOT
+   marked: every card sits in a list, and `Non-Urgent` is a value rather than an
+   absence, so neither axis has a residue to collect. */
 const PIPE_FILTERS = [
-  { key: 'type', label: 'TYPE', pick: (r) => r.assetType },
-  { key: 'difficulty', label: 'DIFFICULTY', pick: (r) => r.difficulty, order: ['Easy', 'Medium', 'Hard'] },
+  { key: 'type', label: 'TYPE', pick: (r) => r.assetType, none: true },
+  { key: 'difficulty', label: 'DIFFICULTY', pick: (r) => r.difficulty, order: ['Easy', 'Medium', 'Hard'], none: true },
   { key: 'urgency', label: 'URGENCY', pick: (r) => r.urgency, order: ['Non-Urgent', 'Urgent'] },
   { key: 'status', label: 'STATUS', pick: (r) => r.currentList },
-  { key: 'requestor', label: 'REQUESTOR', pick: (r) => r.requestor },
+  { key: 'requestor', label: 'REQUESTOR', pick: (r) => r.requestor, none: true },
 ];
-/** Empty selection object — one array per axis, derived so a sixth axis is one entry. */
-const PIPE_FILTERS_NONE = () => Object.fromEntries(PIPE_FILTERS.map((f) => [f.key, []]));
+
+/* "None" is stored as the VALUE null, never as the string `None`: a Trello
+   label or a sheet requestor could legitimately BE that word, and the two must
+   never collapse into one checkbox. Nothing renders it - the panel draws
+   `label`, which is where the word None lives. */
+/** Absent on this axis? `null`, `undefined` and `''` all count as absent. */
+const pipeEmpty = (v) => v === null || v === undefined || v === '';
+/** A row's value on an axis; absence becomes null, which only a `none` axis offers. */
+const pipePick = (f, row) => {
+  const v = f.pick(row);
+  return pipeEmpty(v) ? null : v;
+};
+/** Empty SELECTION object - one array per axis, derived so a sixth axis is one entry. */
+const PIPE_FILTERS_EMPTY = () => Object.fromEntries(PIPE_FILTERS.map((f) => [f.key, []]));
 /** Does a row satisfy every axis EXCEPT the one named? (`null` = every axis.) */
 const pipeMatches = (row, sel, exceptKey) => {
   return PIPE_FILTERS.every((f) => {
     if (f.key === exceptKey) return true;
     const want = sel[f.key] || [];
     if (!want.length) return true; // an empty axis constrains nothing
-    return want.indexOf(f.pick(row)) > -1; // OR within, AND across (owl #62)
+    const v = pipePick(f, row);
+    // an axis that offers no None cannot match a row that has no value there,
+    // however the selection was arrived at
+    if (v === null && !f.none) return false;
+    return want.indexOf(v) > -1; // OR within, AND across (owl #62)
   });
 };
+
+/* THE FACET COUNTS (jp->miles #49, adopted in owl #63). Each axis counts against
+   the filters applied in the OTHER axes, ignoring its own - the third option,
+   neither of the two the frame offered. Counting against ALL filters including
+   its own drops every sibling value to zero the moment one is picked, so a
+   second value could never be added without clearing first: accurate and
+   unusable. Ignoring its own keeps the counts honest as you narrow AND usable
+   for widening.
+
+   "None" is DERIVED like every other value: it appears on an axis only when some
+   row on the board actually lacks a value there, so a board where every card
+   carries a type shows no None under TYPE.
+
+   None sorts LAST in its category, ahead of neither the natural progression nor
+   the alphabet. It is the residue; reading it first would push the real
+   vocabulary down.
+
+   A Map, not an object: object keys stringify, and `null` as a key would become
+   the string "null" and merge with a board value of that name. */
+const pipeFacetList = (rows, sel) => {
+  return PIPE_FILTERS.map((f) => {
+    const pool = rows.filter((r) => pipeMatches(r, sel, f.key));
+    const counts = new Map();
+    const seen = (r) => {
+      const v = pipePick(f, r);
+      return v === null && !f.none ? undefined : v;
+    };
+    // every value PRESENT on the board, even at zero against this pool - the
+    // frame wants empty categories exposed, not hidden
+    for (const r of rows) {
+      const v = seen(r);
+      if (v !== undefined) counts.set(v, 0);
+    }
+    for (const r of pool) {
+      const v = seen(r);
+      if (v !== undefined) counts.set(v, counts.get(v) + 1);
+    }
+    const names = [...counts.keys()];
+    names.sort((a, b) => {
+      if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
+      return f.order ? f.order.indexOf(a) - f.order.indexOf(b) : a.localeCompare(b);
+    });
+    const picked = sel[f.key] || [];
+    return {
+      key: f.key,
+      label: f.label,
+      values: names.map((v) => ({
+        value: v,
+        label: v === null ? 'None' : v,
+        count: counts.get(v),
+        on: picked.indexOf(v) > -1,
+      })),
+    };
+  });
+};
+
 /** The sort button's label — `Group: Item`, the frame's format (node 592:56966). */
 const pipeSortLabel = (key) => {
   const s = PIPE_SORTS.find((x) => x.key === key);

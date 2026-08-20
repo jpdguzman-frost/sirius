@@ -80,9 +80,12 @@
           {{#each f.values as v}}
             {{! a zero count is DISABLED, not silently selectable — otherwise a
                 user filters to an empty table and cannot tell why }}
+            {{! `label` and `value` differ for exactly one item: absence is
+                stored as null and DRAWN as None (owl #63), so a board value
+                that really is the word None stays a separate checkbox }}
             <button class="pmitem pmcheck {{#if v.on}}on{{/if}}" on-click="['togglePipeFilter', f.key, v.value]"
                     disabled="{{!v.count && !v.on}}"
-                    aria-pressed="{{v.on ? 'true' : 'false'}}"><span class="pmbox" aria-hidden="true"></span><span class="pmval">{{v.value}}</span><span class="pmcount">{{v.count}}</span></button>
+                    aria-pressed="{{v.on ? 'true' : 'false'}}"><span class="pmbox" aria-hidden="true"></span><span class="pmval">{{v.label}}</span><span class="pmcount">{{v.count}}</span></button>
           {{/each}}
         </div>
       {{/each}}

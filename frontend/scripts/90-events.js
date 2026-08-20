@@ -47,7 +47,7 @@ async function resetForProjectSwitch() {
        or a Status carried into another project names values that project may
        not have, which would silently show an empty table. */
     pipeSort: null,
-    pipeFilters: PIPE_FILTERS_NONE(),
+    pipeFilters: PIPE_FILTERS_EMPTY(),
     pipeSortMenu: null,
     pipeFilterMenu: null,
     noteEditing: null,
@@ -239,7 +239,7 @@ app.on({
     pipeBackToTop();
   },
   clearPipeFilters() {
-    app.set('pipeFilters', PIPE_FILTERS_NONE());
+    app.set('pipeFilters', PIPE_FILTERS_EMPTY());
     pipeBackToTop();
     closeMenus({ restoreFocus: true });
   },
