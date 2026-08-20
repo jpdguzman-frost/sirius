@@ -12,6 +12,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 <!-- GEN:STATUS -->
 - In progress: phase 9 — Security testing + pilot → STATE.md §Phase status · history: docs/history/state-log/
 - Open blocking decision BRD §9: Amend "write impossible by permission" → STATE.md §Decisions needed from JP (blocking)
+- Open blocking decision R-row-d: Owl #59 rules the planner's three row-action icons **not keyboard-reachable** (copy/pin/unschedule become mouse-only). … → STATE.md §Decisions needed from JP (blocking)
 - ACs: 19 ✅ · 5 ⬜ (of 24) → STATE.md §Acceptance criteria scoreboard
 <!-- /GEN:STATUS -->
 
