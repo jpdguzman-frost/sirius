@@ -165,7 +165,15 @@ const rowWarning = (row) => {
     srLabel: `${WARN_LABEL} — ${miss.length} missing field${miss.length === 1 ? '' : 's'} — ${row.mcLabel} ${row.name}`,
     items: [
       { label: row.mcLabel, why: row.name },
-      ...miss.map((f) => ({ label: f, why: WARN_WHY[f] || '' })),
+      /* SENTENCE-CASED for display only (JP, 2026-08-20 — the built card read
+         'due date' where the frame reads 'Due date'). The server's tokens are
+         lowercase because `srLabel` above reads them mid-sentence, where
+         'Due date' would be wrong; the frame shows them as list headings,
+         where lowercase is. So the case is applied at the point of display and
+         the token itself is untouched — WARN_WHY is still keyed on the raw
+         `f`, and 'Figma attachment' is unharmed because upper-casing an
+         already-capital letter is a no-op. */
+      ...miss.map((f) => ({ field: f, label: f.charAt(0).toUpperCase() + f.slice(1), why: WARN_WHY[f] || '' })),
     ],
   };
 };

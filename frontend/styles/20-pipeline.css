@@ -492,8 +492,15 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    both are message copy, so they wear one rule and a tweak lands once */
 .wpwhy, .wpfix { font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
 .wpsep { height: 1px; background: var(--slate-300); }
-/* underlined per the annotation, which overrules the frame's own render */
-.wpopen { font-size: var(--text-label); font-weight: 600; color: var(--blue-700); text-decoration: underline; }
+/* NOT underlined. The annotation TEXT says "UNDERLINED" and the frame's own
+   render does not; batch 10 resolved that conflict toward the annotation, and
+   JP reversed it on 2026-08-20 after comparing the built card against the
+   frame side by side. The frame wins here because it is what Miles and JP both
+   look at. Weight and colour already mark this as the card's one action, and
+   the focus-visible ring above keeps the keyboard affordance. Raised with
+   Miles — if he confirms the annotation text was the intent, this is one
+   declaration to put back. */
+.wpopen { font-size: var(--text-label); font-weight: 600; color: var(--blue-700); text-decoration: none; }
 
 /* links (node 431:17017) — both icons always render; the absent one is a
    non-interactive span at 30% */

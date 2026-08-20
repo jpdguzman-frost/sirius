@@ -75,7 +75,7 @@ interface Warning {
   label: string;
   /** batch 10: the icon's accessible name, composed in the recipe (R-warn-m) */
   srLabel: string;
-  items: Array<{ label: string; why: string }>;
+  items: Array<{ field?: string; label: string; why: string }>;
 }
 interface Recipe {
   WARN_LABEL: string;
@@ -229,14 +229,21 @@ describe('the warning recipe, executed out of the shipped source', () => {
     // items[0] is the ROW's own identity — the frame's 'MC-821' is stale filler
     expect(w.items[0]).toEqual({ label: WARNED.mcLabel, why: WARNED.name });
     expect(w.items[0]!.label).not.toBe('MC-821');
-    expect(w.items.slice(1).map((i) => i.label)).toEqual(SERVER_TOKENS);
+    /* sentence-cased at display (JP, 2026-08-20) while the SERVER token stays
+       lowercase for `srLabel`'s mid-sentence use — derived from the tokens, so
+       a new server token cannot slip through un-cased */
+    expect(w.items.slice(1).map((i) => i.label)).toEqual(
+      SERVER_TOKENS.map((t) => t.charAt(0).toUpperCase() + t.slice(1)),
+    );
+    // the raw token survives beside it, which is what WARN_WHY is keyed on
+    expect(w.items.slice(1).map((i) => i.field)).toEqual(SERVER_TOKENS);
   });
 
   it('carries a non-empty rationale for every field, from the ONE copy map', () => {
     const w = recipe.rowWarning(WARNED)!;
     for (const item of w.items.slice(1)) {
       expect(item.why.length).toBeGreaterThan(0);
-      expect(item.why).toBe(recipe.WARN_WHY[item.label]);
+      expect(item.why).toBe(recipe.WARN_WHY[item.field!]);
     }
     // the two that predate this pass keep the deleted banner's own wording
     expect(recipe.WARN_WHY['difficulty label']).toMatch(/difficulty label the card cannot forecast/);
@@ -248,12 +255,13 @@ describe('the warning recipe, executed out of the shipped source', () => {
   it('renders an unknown token with an empty rationale rather than throwing', () => {
     const w = recipe.rowWarning(row({ missing: ['a field nobody has met'] }))!;
     expect(w.items).toHaveLength(2);
-    expect(w.items[1]).toEqual({ label: 'a field nobody has met', why: '' });
+    expect(w.items[1]).toEqual({ field: 'a field nobody has met', label: 'A field nobody has met', why: '' });
   });
 
   it('follows a single missing field, not the full set', () => {
     const w = recipe.rowWarning(row({ missing: ['due date'] }))!;
-    expect(w.items.map((i) => i.label)).toEqual(['MC-655', 'due date']);
+    expect(w.items.map((i) => i.label)).toEqual(['MC-655', 'Due date']);
+    expect(w.items[1]!.field).toBe('due date'); // the server's token is untouched
   });
 
   /* R-warn-m. With the message line deleted the icon is the ONLY textual
@@ -462,7 +470,11 @@ describe('the hover card (open on one row)', () => {
     const items = [...popover().matchAll(
       /<div class="wpitem"><span class="wplabel">([^<]*)<\/span><span class="wpwhy">([^<]*)<\/span><\/div>/g,
     )].map((m) => ({ label: m[1], why: m[2] }));
-    const expected = recipe.rowWarning(WARNED)!.items;
+    /* the markup renders the DISPLAY pair only — `field` is the recipe's own
+       key for WARN_WHY and deliberately never reaches the DOM, so the
+       comparison is narrowed to what actually ships rather than widened to
+       what the recipe happens to carry */
+    const expected = recipe.rowWarning(WARNED)!.items.map((i) => ({ label: i.label, why: i.why }));
     expect(items).toHaveLength(expected.length);
     expect(items[0]).toEqual({ label: WARNED.mcLabel, why: WARNED.name });
     expect(items).toEqual(expected);
@@ -1149,8 +1161,14 @@ describe('one recipe per visual (CSS)', () => {
     expect([...cssCode.matchAll(/\.warnbtn:focus-visible/g)]).toHaveLength(1);
   });
 
-  it('underlines Open Card in blue-700 and titles the popover amber-700/600', () => {
-    expect(cssRule('.wpopen', PIPELINE_CSS)).toMatch(/text-decoration: underline/);
+  it('leaves Open Card UNDERLESS in blue-700 and titles the popover amber-700/600', () => {
+    /* JP, 2026-08-20, comparing the built card with the frame side by side:
+       the frame's render carries no underline, so the annotation's "UNDERLINED"
+       loses. Batch 10 had resolved the same conflict the other way — asserted
+       negatively here so putting the declaration back is a deliberate act with
+       a red test behind it, not a silent drift. */
+    expect(cssRule('.wpopen', PIPELINE_CSS)).toContain('text-decoration: none');
+    expect(cssRule('.wpopen', PIPELINE_CSS)).not.toMatch(/text-decoration: underline/);
     expect(cssRule('.wpopen', PIPELINE_CSS)).toContain('var(--blue-700)');
     expect(cssRule('.wptitle', PIPELINE_CSS)).toContain('var(--amber-700)');
     expect(cssRule('.wptitle', PIPELINE_CSS)).toContain('font-weight: 600');
