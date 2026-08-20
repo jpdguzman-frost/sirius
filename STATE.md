@@ -17,9 +17,9 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 0–8a | Setup · schema · auth+audit · `lib/` port · ARES read · intake · model refresh · five tabs · urgency write · conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 gate ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 backup/restore ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸ (team UI update), T075 sweep pending, non-member 403 parked | G7 passed; write-enable on rt-837 = next JP gate |
 | 10–13k b13, ctx, t-split | Two-way sync · admin panel · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · the expanded MC row · the stale-reconcile guard (decisions/0025) · the template split | **DEPLOYED + LIVE-VERIFIED through 2026-08-19** (T077–T178, ..`b401bac`) | per-batch detail: `docs/history/phase-log.md`; batch law: `specs/001-sirius-v1/pipeline-frame-notes.md` |
-| 13k b14 | Owls #52–#53: a shared MC stops attributing its tasks (R-exp-g..k — no structural edge exists, measured) · hover-card shadow + its clamp bleed (R-warn-p/q) | **DEPLOYED + LIVE 2026-08-20** (`64dc65f`; 993 + 24 todo dual-TZ) | healthz 200 · host bundle sha256 == local ✓ · live DB matches the probe (37 MC / 19 shared / max 60) ✓ |
+| 13k b14 | Owls #52–#53: a shared MC stops attributing its tasks (R-exp-g..k — no structural edge exists, measured) · hover-card shadow + its clamp bleed (R-warn-p/q) | **DEPLOYED + LIVE 2026-08-20** (`74f95b0`; 994 + 24 todo dual-TZ) | healthz 200 · host bundle sha256 == local ✓ · live DB matches the probe (37 MC / 19 shared / max 60) ✓ |
 
-**Build health (2026-08-20):** 993/993 tests + 24 `it.todo`, 62 files — green
+**Build health (2026-08-20):** 994/994 tests + 24 `it.todo`, 62 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **007** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
@@ -55,14 +55,14 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority: twice an owl
   asserted a ruling JP had not made or later declined, so verify with JP
-  before building on one. **Thread position**: miles→jp acked through **#53**;
-  jp→miles sent through **#43** (the no-linkage measurement).
+  before building on one. **Thread position**: miles→jp acked through **#56**;
+  jp→miles sent through **#46** (batch 14 + #55's emphasis ruling).
   **Awaiting Miles**: the row-controls design pass — checkbox, grip, three-icon
   cluster and note chip together · a Smoke pass over the expanded row incl. a
-  task due set/clear · whether ARES's read path is cached · **NEW (#43)**: the
-  shared-MC caption's treatment, now that the shared state is what the PM sees
-  4 times in 5 (R-exp-h) — at N=60 the wording may not hold. Closed threads →
-  `docs/history/state-log/`.
+  task due set/clear · whether ARES's read path is cached (Miles is chasing
+  whoever owns ARES) · whether the frame or its annotation is right on the
+  `Open Card` underline (#45). The shared-caption treatment is RULED (#55,
+  R-exp-l). Closed threads → `docs/history/state-log/`.
 - **Figma reads** — Rex MCP is OFFLINE. **The official Figma MCP is the
   verified path**: `get_design_context` returns categorized annotations as
   `data-*-annotations` plus exact pixel facts (load the figma-design-to-code
@@ -108,6 +108,7 @@ archive entries as complete as ever; length there is fine. This window holds
 the newest 10 lines and older ones are deleted — `docs/history/state-log/`
 is self-indexing by date.
 
+- 2026-08-20 — **Owls #54–#56 + JP's styling pass**: #55 inverted my caption emphasis (tasks lead, count trails at every N, no threshold — R-exp-l); Miles accepted both corrections and wrote the Figma codegen trap into the annotation; JP ruled the frame beats its own annotation on the `Open Card` underline (R-warn-r) and labels are sentence-cased at display (R-warn-s). → docs/history/state-log/2026-08-20.md
 - 2026-08-20 — **Batch 14: owls #52 + #53** — a shared MC stops attributing its tasks. Probed the real board: NO structural task→deliverable edge exists (checklists 0/218, links 0, list 0/279, members 36/279, best name segment 60 unique vs 117 mis-resolving), so invariant 4 is confirmed, not broken. Correction sent to Miles: the ambiguous case is 78.4% of tasks, not the minority. Hover-card shadow + its clamp bleed. 982 → 993 + 24 todo. → docs/history/state-log/2026-08-20.md
 - 2026-08-19 — **Leftover sweep + template split DEPLOYED** (`b401bac`): the second session's worktree was already gone and merged — branch deleted, the `--dir test` workaround retired. Deploy aborted once on STATE.md's own 10KB cap, then green: healthz 200, host bundle sha256 == local. Corrected a wrong claim — `public/` is gitignored, so a `git diff` over it proves nothing. `build.js` byte count was under-reporting by 1.4KB (UTF-16 length vs bytes). → docs/history/state-log/2026-08-19.md
 - 2026-08-18 — **Template split** (ARES pattern): `00-app.html` → `layout.html` + `partials/` + `views/`; composed output = the single file byte-for-byte; new guard for the nested-`{{#partial}}` hazard it creates. 976 → 982 + 24 todo. Not deployed. → docs/history/state-log/2026-08-18.md
