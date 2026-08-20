@@ -410,28 +410,78 @@ function computeDeadlines() {
   for (const ms of inMonth) (byWeek[ms.week] = byWeek[ms.week] || []).push(ms);
   const cap = app.get('capacity').weekly || 1;
   const keys = Object.keys(byWeek).sort();
+  const active = payload.conflicts.filter((c) => keys.includes(c.week));
+  const acked = (payload.acknowledged || []).filter((c) => keys.includes(c.week));
+  /* Which cards the PM is being asked to replot, by MC number — the same list
+     the alert-group's detail rows enumerate and the same number the Breakdown
+     reports, so one word cannot mean three things across one screen (owl #64
+     asked for this to be stated rather than inferred). */
+  const replotMcs = new Set((payload.replot || []).map((r) => r.displayId));
+
   app.set({
     deadlineWeeks: keys.map((key, i) => {
       const items = byWeek[key];
       const urgent = items.filter((x) => x.urgent).length;
       const load = rowLoad(items); // BR-6c card-equivalents
+      /* THE WEEK BADGE names the rule AND the cards (owl #64): the header
+         carries the evidence, not just a count. One badge per rule broken,
+         cards de-duplicated and in the order the engine found them. */
+      const badges = [];
+      for (const rule of DL_RULES) {
+        const hits = active.filter((c) => c.week === key && c.rule === rule.rule);
+        if (!hits.length) continue;
+        const cards = [];
+        for (const c of hits) for (const it of c.items) if (!cards.includes(it.displayId)) cards.push(it.displayId);
+        badges.push({ rule: rule.rule, word: rule.word, count: hits.length, cards });
+      }
+      const replotHere = [];
+      for (const m of items) if (replotMcs.has(m.displayId) && !replotHere.includes(m.displayId)) replotHere.push(m.displayId);
+      if (replotHere.length) {
+        badges.push({ rule: 'replot', word: 'replotting', count: replotHere.length, cards: replotHere });
+      }
       return {
         key,
         label: `Week ${i + 1}`,
         sub: fmtDate(key),
+        /* the frame's own day-first range, beside the heading */
+        range: fmtWeekRange(key),
         items,
         urgent,
+        due: items.length,
         load,
+        badges,
         // §6.1: the week tints ONLY when over capacity — warnings have banners
         flagged: load > cap,
         capPct: Math.min(100, (load / cap) * 100).toFixed(1),
       };
     }),
-    deadlineConflicts: payload.conflicts.filter((c) => keys.includes(c.week)),
-    acknowledged: (payload.acknowledged || []).filter((c) => keys.includes(c.week)),
+    deadlineConflicts: active,
+    /* THE DETAIL ROWS, one per active conflict, composed where the payload
+       lives so the template stays a layout. The frame's order is ACTION, then
+       SUBJECT, then REASON — 'Raise with the PM for replotting', the cards it
+       concerns, then why. Urgency is joined from the milestone the conflict
+       names; the conflict item itself carries only identity. */
+    deadlineAlerts: active.map((c) => ({
+      key: c.key,
+      rule: c.rule,
+      word: dlRuleWord(c.rule),
+      explanation: c.explanation,
+      items: c.items.map((it) => {
+        const ms = payload.milestones.find((m) => m.cardId === it.cardId && m.phase === it.phase);
+        return { displayId: it.displayId, phase: it.phase, urgent: !!(ms && ms.urgent) };
+      }),
+    })),
+    acknowledged: acked,
     replot: payload.replot,
     dueThisMonth: inMonth.length,
     urgentThisMonth: inMonth.filter((x) => x.urgent).length,
+    /* THE SUMMARY BANNER counts CONFLICTS, not weeks in conflict — the frame's
+       own arithmetic settles it: '2 conflicts' over two weeks holding one each,
+       broken out as one badge per rule (owl #64 asked which; the frame answers
+       it). Acknowledged ones are not counted: they are not on the board. */
+    deadlineRuleTotals: DL_RULES
+      .map((r) => ({ rule: r.rule, word: r.word, count: active.filter((c) => c.rule === r.rule).length }))
+      .filter((r) => r.count > 0),
   });
 }
 

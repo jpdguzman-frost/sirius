@@ -157,10 +157,24 @@ const app = new Ractive({
     replot: [],
     dueThisMonth: 0,
     urgentThisMonth: 0,
+    /* owl #64 — one badge per rule broken, for the summary banner. */
+    deadlineRuleTotals: [],
+    deadlineAlerts: [],
+    /* the legend renders FROM the rule table, so the copy on screen and the
+       words the engine detects cannot drift apart (owl #64) */
+    DL_RULES,
+    /* the tab's own search box; the frame gives Deadlines a Search Field and
+       NOT the filter/sort pair Pipeline gained (R-dl-h) */
+    dlQ: '',
     modelProvenance: null,
     modelReview: null,
     fmt: (iso) => fmtDate(iso),
     fmtLong: fmtLongIso,
+    /* the Deadlines card's two dates, which mean different things and are
+       formatted differently on purpose (owl #64) */
+    dlDate: fmtDayMonth,
+    dlDeadline: fmtDeadlineShort,
+    dlRuleWord,
     fmtInstant,
     monthShort,
     /* the derived-status names the template compares against — the constants
@@ -260,6 +274,29 @@ const app = new Ractive({
         const last = out[out.length - 1];
         if (last && last.group === s.group) last.items.push(s);
         else out.push({ group: s.group, items: [s] });
+      }
+      return out;
+    },
+    /* ---- Deadlines (owl #64, node 630:51389) ----------------------------
+       Search filters the CARDS by MC number or deliverable name, and a week the
+       search empties is DROPPED rather than left standing empty — the frame's
+       own instruction. A week that is empty because nothing is due is a
+       different state entirely and keeps its place: the frame draws it a card
+       that says so.
+
+       The week's own summary — due, urgent, load against capacity — is NOT
+       recomputed against the search. It describes the week, and a capacity line
+       that moved when you typed would be reporting the search, not the load. */
+    dlWeeks() {
+      const q = (this.get('dlQ') || '').trim().toLowerCase();
+      const weeks = this.get('deadlineWeeks');
+      if (!q) return weeks;
+      const out = [];
+      for (const w of weeks) {
+        const items = w.items.filter(
+          (m) => (m.displayId || '').toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q),
+        );
+        if (items.length) out.push({ ...w, items });
       }
       return out;
     },

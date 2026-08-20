@@ -234,6 +234,55 @@ function fmtRange(fromIso, toIso) {
   return fy === ty ? `${left} – ${right}` : `${left}, ${fy} – ${right}`;
 }
 
+/* ---- Deadlines tab (owl #64, node 630:51389) ----------------------------
+
+   The frame writes its week range DAY-FIRST and without punctuation between
+   the days: '3-7 Aug 2026', and '31 Aug-4 Sep 2026' where the week straddles
+   two months. That is not fmtRange's shape (month-first, en dash, comma before
+   the year), so it gets its own formatter rather than a flag on that one - two
+   callers wanting two different strings is not one formatter with an option.
+   Same fixed month table and the same pure string math: no Date, no timezone,
+   so the day can never shift under a browser in another zone. */
+function fmtWeekRange(mondayIso) {
+  if (!mondayIso) return '';
+  const friday = isoAddDays(mondayIso, 4);
+  const [y1, m1, d1] = mondayIso.slice(0, 10).split('-');
+  const [y2, m2, d2] = friday.slice(0, 10).split('-');
+  const mon1 = MONTHS_SHORT[Number(m1) - 1];
+  const mon2 = MONTHS_SHORT[Number(m2) - 1];
+  if (y1 !== y2) return `${Number(d1)} ${mon1} ${y1}-${Number(d2)} ${mon2} ${y2}`;
+  if (m1 !== m2) return `${Number(d1)} ${mon1}-${Number(d2)} ${mon2} ${y1}`;
+  return `${Number(d1)}-${Number(d2)} ${mon1} ${y1}`;
+}
+/** '6 Aug' - the card caption's milestone date, day-first and year-less. */
+function fmtDayMonth(iso) {
+  if (!iso) return '';
+  const [, m, d] = iso.slice(0, 10).split('-');
+  return `${Number(d)} ${MONTHS_SHORT[Number(m) - 1]}`;
+}
+/* The CLIENT DEADLINE in the card's subtitle. The frame drops the year, which
+   reads fine while both dates sit in one year and misleads the moment they do
+   not - so the year appears only when the deadline leaves the milestone's own
+   year. The two dates on this card mean different things and the frame is
+   explicit that they must stay separately legible (owl #64). */
+function fmtDeadlineShort(iso, refIso) {
+  if (!iso) return '';
+  const short = fmtDayMonth(iso);
+  return refIso && iso.slice(0, 4) === refIso.slice(0, 4) ? short : `${short} ${iso.slice(0, 4)}`;
+}
+
+/* THE THREE ACKNOWLEDGEABLE RULES, plus replotting which is not one of them.
+   `word` is the badge voice ('1 overlap'), `label` the legend's own heading.
+   The legend TEXT is quoted verbatim from the Model Constants panel and must
+   not drift from the engine's rules - the same three the server detects. */
+const DL_RULES = [
+  { rule: 'urgent-overlap', word: 'overlap', label: 'URGENT OVERLAP', text: 'Two or more urgent milestones in one week.' },
+  { rule: 'over-capacity', word: 'over capacity', label: 'OVER CAPACITY', text: "Cards due exceed the week's capacity, taken from the project's typical week in ARES. Non-urgent items in that week are listed as displaced." },
+  { rule: 'past-deadline', word: 'past deadline', label: 'PAST DEADLINE', text: "the forecast date falls after the client's stated deadline." },
+];
+/** The badge/summary word for a rule; the rule's own key if it is not one of the three. */
+const dlRuleWord = (rule) => (DL_RULES.find((r) => r.rule === rule) || { word: rule }).word;
+
 /* The intake sheet's MONTH encoding is not known until the credential lands —
    the fixtures carry full names ('August'), the column could equally arrive as
    1-12 or already abbreviated. ONE canonical helper absorbs all three so no

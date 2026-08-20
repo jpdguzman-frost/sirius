@@ -25,6 +25,7 @@ const FRONTEND_SHARED = [
   'PIPE_FILTERS', 'PIPE_FILTERS_EMPTY', 'PIPE_SORTS', 'PIPE_SORT_DEFAULT', 'pipeCompare',
   'PIPE_MENU_W', 'PIPE_SORT_H', 'PIPE_FILTER_H', 'PIPE_SORT_LABEL_MAX', 'pipeBackToTop',
   'pipeMatches', 'pipeEmpty', 'pipePick', 'pipeFacetList', 'pipeSortLabel',
+  'DL_RULES', 'dlRuleWord', 'fmtWeekRange', 'fmtDayMonth', 'fmtDeadlineShort',
   'patchRow', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
   'REQ_MENU_H', 'REQ_MENU_W', 'REQ_PAGE_SIZE', 'reqComparator', 'reqFilterKeys', 'reqFiltersCleared',
   'REQUEST_SEGMENTS', 'requestBlob', 'resetForProjectSwitch', 'rowLoad', 'rowWarning', 'scrollerOf',

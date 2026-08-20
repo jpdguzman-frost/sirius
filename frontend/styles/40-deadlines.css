@@ -1,0 +1,177 @@
+/* Deadlines tab v2 — owl miles→jp #64, node 630:51389. Every value binds to a
+   token (05-tokens.css). Shared chrome is REUSED, not restated: `.metrics` (the
+   Breakdown), `.searchbar`, `.pbadge` and its `d-Easy/d-Medium/d-Hard` colours,
+   and the day-planner recipes still in 10-ui.css. Only the deltas live here.
+
+   ⚠️ No table recipes. The frame's component is still named 'Request Tab Table'
+   but there is no column table on this tab — it is a search field over week
+   groups holding cards, and inheriting the Requests/Pipeline table treatment
+   would be following a leftover name instead of the design. */
+
+.dltoolbar { margin-bottom: var(--space-16); }
+
+/* ---- A. Breakdown — the shared .metrics recipe; only the fourth colour is
+   new. Purple is NEEDS REPLOTTING's own: red is urgency and amber is conflict,
+   and replotting is neither — it is work handed back to the PM. ---- */
+.metrics .metric.purple .mlabel,
+.metrics .metric.purple .mvalue { color: var(--violet-500); }
+
+/* ---- B. alert-group — summary banner, then one detail row per conflict.
+   BUILT AS DRAWN. These banners are queued for conversion to the row-level
+   warning pattern Pipeline already ships; that conversion is deferred, so the
+   pattern here is deliberately the old one and is not evidence of drift. ---- */
+.dlalert {
+  display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;
+  padding: var(--space-12) var(--space-16);
+  background: var(--status-destructive-light);
+  border: 1px solid var(--red-300); border-radius: var(--radius-md);
+  color: var(--status-destructive-strong);
+}
+.dlalert svg { flex: none; }
+.dlalert .dlatitle { font-size: var(--text-body); font-weight: 600; line-height: 1.4; }
+
+.dldetails { display: flex; flex-direction: column; margin-top: var(--space-8); }
+.dldetail {
+  display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;
+  padding: var(--space-12) var(--space-16);
+  background: var(--slate-50);
+  border: 1px solid var(--border-border); border-radius: var(--radius-md);
+}
+.dldetail + .dldetail { margin-top: var(--space-4); }
+/* action first, then the subject, then the reason — the frame's order, and the
+   reason it reads well: the row opens with what to do about it */
+.dldetail .dlaction { font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
+.dldetail .dldash { color: var(--slate-400); }
+.dldetail .dlwhy { font-size: var(--text-body); font-weight: 400; line-height: 1.4; color: var(--slate-700); }
+/* the acknowledge control — NOT from this frame; see the template's note */
+.dldetail .dlack {
+  margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex: none; padding: 0;
+  background: transparent; border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
+  color: var(--slate-500); cursor: pointer;
+}
+.dldetail .dlack:hover { background: var(--white); color: var(--surface-foreground); }
+.dldetail .dlack:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+
+.dlacked {
+  display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;
+  margin-top: var(--space-8); padding: var(--space-8) var(--space-16);
+  background: var(--slate-50); border-radius: var(--radius-md);
+}
+.dlacked .dlackedhead { font-size: var(--text-label); font-weight: 600; color: var(--surface-muted-foreground); }
+.dlacked .dlrestore {
+  padding: 0 var(--space-8); height: 22px;
+  background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: var(--text-label); color: var(--slate-700); cursor: pointer;
+}
+.dlacked .dlrestore:hover { border-color: var(--slate-400); }
+.dlacked .dlrestore:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+
+.dlsearch { padding-top: var(--space-16); padding-bottom: var(--space-16); }
+
+/* ---- C. the week list. Weeks read LEFT TO RIGHT and the row of them scrolls
+   horizontally inside its own box — the frame puts a horizontal scrollbar under
+   the cards, and the page body must never scroll sideways. ---- */
+.dlscroll { overflow-x: auto; overflow-y: hidden; padding-bottom: var(--space-8); }
+.dlweeks { display: flex; align-items: flex-start; gap: var(--space-16); min-width: min-content; }
+.dlweek {
+  flex: 0 0 288px; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: var(--space-8);
+  padding: var(--space-16);
+  background: var(--slate-50); border-radius: var(--radius-md);
+}
+/* §6.1, unchanged from v1: the week tints ONLY when it is over capacity.
+   Every other warning has a banner and a badge; a second tint for those would
+   say the same thing twice in a weaker voice. */
+.dlweek.flagged { background: var(--status-warning-light); }
+/* an opened week needs the room its day columns take */
+.dlweek.expanded { flex: 0 0 640px; }
+
+.dlwhead { display: flex; align-items: center; gap: var(--space-8); }
+.dlwhead .dlwtitle { font-size: var(--text-subtitle); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
+.dlwhead .dlwrange { font-size: var(--text-body); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
+.dlwhead .dlwexpand {
+  margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex: none; padding: 0;
+  background: var(--neutral-950); border: 0; border-radius: var(--radius-full);
+  color: var(--white); cursor: pointer;
+}
+.dlwhead .dlwexpand:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
+.dlweek.expanded .dlwhead .dlwexpand svg { transform: rotate(90deg); }
+
+/* the week badge names the RULE and the CARDS — the header carries the
+   evidence, not just a count (owl #64) */
+.dlwbadge { align-self: flex-start; max-width: 100%; white-space: normal; text-align: left; }
+.dlwbadge.r-urgent-overlap { background: var(--red-50); border-color: var(--red-300); color: var(--status-destructive-strong); }
+.dlwbadge.r-over-capacity, .dlrule.r-over-capacity { background: var(--amber-50); border-color: var(--amber-500); color: var(--amber-700); }
+.dlwbadge.r-past-deadline, .dlrule.r-past-deadline { background: var(--blue-50); border-color: var(--blue-300); color: var(--blue-700); }
+.dlwbadge.r-replot { background: var(--amber-50); border-color: var(--amber-400); color: var(--amber-800); }
+.dlrule.r-urgent-overlap { background: var(--white); border-color: var(--red-300); color: var(--status-destructive-strong); }
+
+.dlwsum { margin: 0; font-size: var(--text-label); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
+.dlwsum .dlwdot { color: var(--slate-400); }
+.dlweek .capbar { height: 4px; border-radius: var(--radius-full); background: var(--slate-200); overflow: hidden; }
+.dlweek .capbar .fill { height: 100%; background: var(--green-500); }
+.dlweek.flagged .capbar .fill { background: var(--status-warning); }
+.dlwload { margin: 0; font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
+
+/* ---- D. the deadline card ---- */
+.dlcard {
+  position: relative; display: flex; flex-direction: column; gap: var(--space-8);
+  padding: var(--space-12); padding-left: var(--space-16);
+  background: var(--white); border: 1px solid var(--border-border); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+/* the left accent is URGENCY, which is why every card carries one: red where
+   the card is urgent, blue where it is not. It is not a conflict marker — the
+   week badge and the banner are where a conflict is stated. */
+.dlcard::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: var(--blue-500);
+}
+.dlcard.urgent::before { background: var(--red-500); }
+
+.dlcapt { display: flex; align-items: center; gap: var(--space-4); margin: 0; flex-wrap: wrap; }
+.dlcapt .dlmc { font-size: var(--text-subtitle); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
+.dlcapt .dldot { color: var(--slate-400); }
+/* THE FORECAST MILESTONE. The other date on this card is the client deadline;
+   they mean different things and are never collapsed into one (owl #64). */
+.dlcapt .dlmilestone { font-size: var(--text-subtitle); font-weight: 400; line-height: 1.4; color: var(--slate-700); }
+.dlcapt .dlphase { margin-left: auto; background: var(--amber-50); border-color: var(--amber-400); color: var(--amber-700); text-transform: capitalize; }
+
+.dlname { margin: 0; font-size: var(--text-subtitle); font-weight: 400; line-height: 1.4; color: var(--surface-foreground); }
+.dlbadges { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin: 0; }
+/* the urgency pill borrows the Pipeline recipe exactly — one board-wide
+   vocabulary for urgency, so a reader who learned it there reads it here */
+.dlbadges .dlurg.urgent, .dldetail .dlurg.urgent { background: var(--status-destructive-light); border-color: var(--red-300); color: var(--status-destructive-strong); }
+.dlbadges .dlurg.nonurgent, .dldetail .dlurg.nonurgent { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
+.dlbadges .dlstatus { background: var(--blue-50); border-color: var(--blue-300); color: var(--blue-600); }
+.dlbadges .dlwho { background: var(--slate-50); border-color: var(--slate-200); color: var(--slate-500); }
+
+.dlsub { display: flex; align-items: center; gap: var(--space-4); margin: 0; font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
+.dlsub .dllinks { margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-8); }
+.dlsub .dllinks a { display: inline-flex; }
+.dlsub .dllinks svg { display: block; }
+
+/* a week with nothing due keeps its place and says so — a different state from
+   a week the SEARCH emptied, which is dropped entirely */
+.dlempty {
+  margin: 0; padding: var(--space-24) var(--space-12); text-align: center;
+  background: var(--white); border: 1px dashed var(--slate-200); border-radius: var(--radius-md);
+  font-size: var(--text-body); color: var(--slate-400);
+}
+.dlnohits { margin: var(--space-16) 0 0; font-size: var(--text-body); color: var(--slate-500); }
+
+/* ---- E. alert-container: the Model Constants legend. Its wording is the
+   engine's rules quoted back — the copy here and the rules there must not
+   drift, which is why it renders FROM the rule table rather than beside it. */
+.dllegend {
+  margin-top: var(--space-24); padding: var(--space-16);
+  background: var(--slate-50); border-radius: var(--radius-md);
+}
+.dllegendhead { margin: 0 0 var(--space-12); font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
+.dlformulas { display: flex; gap: var(--space-24); flex-wrap: wrap; }
+.dlformula { flex: 1 1 240px; min-width: 0; }
+.dlformula .dlflabel { margin: 0 0 var(--space-4); font-size: var(--text-label); font-weight: 600; line-height: 1; text-transform: uppercase; letter-spacing: 0.02em; color: var(--surface-foreground); }
+.dlformula .dlftext { margin: 0; font-size: var(--text-body); font-weight: 400; line-height: 1.5; color: var(--slate-700); }

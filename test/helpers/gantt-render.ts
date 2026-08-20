@@ -61,6 +61,8 @@ export const PIPELINE_CSS = readFrontend('styles', '20-pipeline.css');
 export const REQUESTS_CSS = readFrontend('styles', '25-requests.css');
 /** The design tokens — where a CSS value has a JS twin, this is its side. */
 export const TOKENS_CSS = readFrontend('styles', '05-tokens.css');
+/** The Deadlines tab — week columns, the deadline card, the banners, the legend. */
+export const DEADLINES_CSS = readFrontend('styles', '40-deadlines.css');
 /**
  * The WHOLE shipped script set, in build.js's own order and join — see
  * test/helpers/source.ts for why guards read the bundle, never one file.

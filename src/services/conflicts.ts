@@ -26,6 +26,16 @@ export interface Milestone {
   plannedDay?: string | null; // FR-12: valid day placement, else null = follow the forecast
   trelloUrl?: string | null;
   figmaUrl?: string | null;
+  /* ---- the redesigned Deadlines card's badge row and subtitle (owl #64).
+     Carried on the milestone rather than re-fetched per card: the row they
+     come from is already loaded, and a second read could disagree with the
+     first about what the card says. */
+  difficulty?: string | null;
+  currentList?: string | null;
+  requestor?: string | null;
+  /** Work cards attached to this milestone's MC GROUP (invariant 4), not to
+      the deliverable — there is no task -> deliverable edge to count along. */
+  cards?: number;
 }
 
 /** BR-6c/§5.4 display rule: fractions to one decimal, whole numbers plain. */

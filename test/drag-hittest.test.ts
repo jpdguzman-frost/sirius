@@ -458,7 +458,7 @@ describe('the guard’s own parsers actually see the shipped files', () => {
   it('reads every stylesheet in frontend/styles, not a list that can go stale', () => {
     expect(STYLESHEETS.map((s) => s.file)).toEqual([
       '00-base.css', '05-tokens.css', '10-ui.css', '20-pipeline.css',
-      '25-requests.css', '30-planner.css', '35-gantt.css',
+      '25-requests.css', '30-planner.css', '35-gantt.css', '40-deadlines.css',
     ]);
   });
 
@@ -501,7 +501,10 @@ describe('the guard’s own parsers actually see the shipped files', () => {
     // the ancestor sweep had to learn the `auto` escape below.
     expect(chain('grun')).toContain('gbar');
     expect(chain('growr')).toEqual(expect.arrayContaining(['gantt', 'gwrap', 'gsheet', 'gblock', 'gbrows']));
-    expect(chain('entry')).toEqual(expect.arrayContaining(['weekgrid', 'weekcard', 'daygrid', 'daycol']));
+    // owl #64 rebuilt the Deadlines tab around it: the day entry now hangs off
+    // the horizontal week scroller, so its chain changed and the guard below
+    // re-derives the hit-test over the NEW ancestors rather than the old ones.
+    expect(chain('entry')).toEqual(expect.arrayContaining(['dlscroll', 'dlweeks', 'dlweek', 'daygrid', 'daycol']));
     // and the wrappers a hand-kept list had missed — this is the whole reason
     // the chain is derived rather than written down
     expect(chain('grun')).toEqual(expect.arrayContaining(['view', 'pscrollwrap', 'pscroll', 'gscroll']));

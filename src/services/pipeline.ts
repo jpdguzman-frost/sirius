@@ -378,7 +378,10 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
 }
 
 /** Deadlines view input: two entries per slotted, forecastable deliverable (FR-6.3). */
-export function toMilestones(rows: PipelineRow[]): Milestone[] {
+export function toMilestones(
+  rows: PipelineRow[],
+  workCardsByMc: PipelineResult['workCardsByMc'] = {},
+): Milestone[] {
   const out: Milestone[] = [];
   for (const r of rows) {
     if (!r.forecast || !r.slottedWeek) continue;
@@ -397,6 +400,14 @@ export function toMilestones(rows: PipelineRow[]): Milestone[] {
         weight: r.weight, // BR-6c default on Deadlines too, pending the errata answer
         trelloUrl: r.trelloUrl,
         figmaUrl: r.figmaUrl,
+        // owl #64's badge row and subtitle. `cards` counts the MC GROUP's work
+        // cards (invariant 4) — every deliverable under one MC therefore
+        // reports the same number, which is the truth: the work is attached to
+        // the group and cannot be split between its deliverables.
+        difficulty: r.difficulty,
+        currentList: r.currentList,
+        requestor: r.requestor,
+        cards: r.mcNumber ? (workCardsByMc[r.mcNumber]?.length ?? 0) : 0,
       });
     }
   }

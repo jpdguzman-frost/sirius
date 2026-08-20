@@ -85,7 +85,7 @@ export function deliverablesRouter(): Router {
     async (_req, res) => {
       const projectId = res.locals.project._id;
       const pipeline = await loadPipeline(projectId, manilaToday(), res.locals.project.weekly_capacity);
-      const milestones = toMilestones(pipeline.rows);
+      const milestones = toMilestones(pipeline.rows, pipeline.workCardsByMc);
 
       // FR-12: join day placements. A placement is valid only while the
       // milestone still lands in the week it was made for — a moved week
