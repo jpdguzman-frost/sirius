@@ -142,6 +142,13 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    voice `Main Card` already uses one row above. */
 .ptable tr.ptask.pshared td { border-bottom-color: transparent; padding-bottom: 0; }
 .ptable tr.ptask.pshared .subtone { color: var(--slate-500); font-style: italic; }
+/* Miles, owl #55: the COUNT is diagnostic, not the headline — a high N marks
+   an MC number that needs renumbering at source, which matters to whoever
+   fixes the numbering and not to the PM trying to read their tasks. So it
+   renders at every N, with no threshold rule (one treatment that degrades
+   quietly beats two that need a boundary defended) and one step quieter than
+   the sentence it trails. */
+.ptable tr.ptask.pshared .pshn { color: var(--slate-400); }
 .ptable .col-mc { width: 150px; min-width: 150px; } /* 132px in frame; 150px team fine-tune 2026-08-12 */
 .ptable .col-name { width: auto; min-width: 158px; }
 .ptable .col-type { width: 140px; min-width: 140px; }

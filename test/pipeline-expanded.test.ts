@@ -438,9 +438,31 @@ const captionRows = (html: string): string[] =>
   [...html.matchAll(/<tr class="ptask pshared">([\s\S]*?)<\/tr>/g)].map((m) => m[1]!);
 
 describe('a shared MC surfaces its tasks once, at MC level, and says so', () => {
-  it('renders the caption exactly once, naming how many deliverables share the MC', () => {
+  it('renders the caption exactly once, leading with the work and not the count', () => {
+    /* Miles, owl #55: the tasks are the content and the explanation is the
+       caption — this state is 78% of task views, so it must read as "here is
+       the work on MC-837" rather than as a failure being handled. The count
+       still appears (it is diagnostic — a high N marks an MC number needing
+       renumbering at source) but it TRAILS, in its own quieter span. */
     expect(captionRows(SHARED)).toHaveLength(1);
-    expect(captionRows(SHARED)[0]).toContain('Shared across 2 deliverables');
+    const caption = captionRows(SHARED)[0]!;
+    expect(caption).toContain('Work on MC-837');
+    expect(caption).toContain('shared by 2 deliverables');
+    // the count comes AFTER the explanation, never opens it
+    expect(caption.indexOf('Work on MC-837')).toBeLessThan(caption.indexOf('shared by 2'));
+    expect(caption).toContain('class="pshn"');
+    expect(cssRule('.ptable tr.ptask.pshared .pshn', PIPELINE_CSS)).toContain('var(--slate-400)');
+  });
+
+  it('shows the count at EVERY N — no threshold, one treatment that degrades quietly', () => {
+    /* owl #55 explicitly refuses a magic number: "one treatment that degrades
+       quietly is better than two that need a boundary defended". */
+    const many = renderPipelineTable({
+      pipelineRows: [PARENT, SHARED_SIBLING, row({ cardId: 'main-1c' }), CHILDLESS],
+      rowWarning, workCardsByMc: TASKS, expanded: { 'MC-837': true },
+    });
+    expect(captionRows(many)[0]).toContain('shared by 3 deliverables');
+    expect(captionRows(SHARED)[0]).toContain('shared by 2 deliverables');
   });
 
   it('still renders each task exactly once — the sibling does not duplicate the list', () => {
@@ -452,7 +474,7 @@ describe('a shared MC surfaces its tasks once, at MC level, and says so', () => 
 
   it('says nothing when the MC has ONE deliverable — no caption on the attributable case', () => {
     expect(captionRows(OPEN)).toHaveLength(0);
-    expect(OPEN).not.toContain('Shared across');
+    expect(OPEN).not.toContain('shared by');
   });
 
   it('keeps the caption inside the parent’s column model — every cell, no colspan', () => {
@@ -482,12 +504,13 @@ describe('the chevron belongs to the MC, not to each row that shares its number'
 
   it('names the shared case in the chevron’s accessible label', () => {
     /* the label is the only place a screen-reader user learns that expanding
-       shows MC-level tasks rather than this card's own */
-    expect(SHARED).toContain('shared across 2 deliverables');
+       shows MC-level tasks rather than this card's own — same framing as the
+       caption (owl #55), so the two cannot describe the state differently */
+    expect(SHARED).toContain('Work on MC-837, shared by 2 deliverables');
   });
 
   it('leaves the single-deliverable label alone — it attributes, so it says nothing extra', () => {
     expect(OPEN).toContain('aria-label="MC-837 work cards"');
-    expect(OPEN).not.toContain('shared across');
+    expect(OPEN).not.toContain('shared by');
   });
 });

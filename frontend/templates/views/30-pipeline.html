@@ -47,7 +47,7 @@
                   tell the truth. A single-deliverable MC is unaffected: its
                   only row IS the first. The label says which case it is. }}
               {{#if row.hasTasks && row.firstOfMc}}
-                <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{#if row.sharedMc}}{{row.mcLabel}} work cards, shared across {{row.mcDeliverables}} deliverables{{else}}{{row.displayId}} work cards{{/if}}" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+                <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{#if row.sharedMc}}Work on {{row.mcLabel}}, shared by {{row.mcDeliverables}} deliverables{{else}}{{row.displayId}} work cards{{/if}}" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
               {{else}}
                 <span class="chevgap" aria-hidden="true"></span>
               {{/if}}
@@ -201,7 +201,7 @@
             {{#if row.sharedMc}}
               <tr class="ptask pshared">
                 <td class="col-mc"></td>
-                <td class="col-name"><span class="subtone">Shared across {{row.mcDeliverables}} deliverables — these tasks carry the MC number, not a link to one card</span></td>
+                <td class="col-name"><span class="subtone">Work on {{row.mcLabel}} — these tasks carry the MC number, not a link to one card<span class="pshn"> · shared by {{row.mcDeliverables}} deliverables</span></span></td>
                 <td class="col-type"></td>
                 <td class="col-diff"></td>
                 <td class="col-urgency"></td>
