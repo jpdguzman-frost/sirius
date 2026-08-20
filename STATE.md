@@ -17,15 +17,27 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 0–8a | Setup · schema · auth+audit · `lib/` port · ARES read · intake · model refresh · five tabs · urgency write · conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 gate ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 backup/restore ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸ (team UI update), T075 sweep pending, non-member 403 parked | G7 passed; write-enable on rt-837 = next JP gate |
 | 10–13k b13, ctx, t-split | Two-way sync · admin panel · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · the expanded MC row · the stale-reconcile guard (decisions/0025) · the template split | **DEPLOYED + LIVE-VERIFIED through 2026-08-19** (T077–T178, ..`b401bac`) | per-batch detail: `docs/history/phase-log.md`; batch law: `specs/001-sirius-v1/pipeline-frame-notes.md` |
-| 14 pf · 13k b14 | **Pipeline filter + sort** (owl #62 — 8 sorts, 5 filter axes with facet counts, migration 008's filing date) · owls #52–#61 (shared-MC attribution, unattached work, hover-card, row-control reveal) | **DEPLOYED + LIVE 2026-08-20** (`97fd82a`, `7dbbb3b`) — healthz 200, host sha256 == local, 008 applied and filedAt backfilled 217/217 ✓ |
-| 15 | **owl #63** — "None" is a filter value on TYPE/DIFFICULTY/REQUESTOR (closes R-pf-i) · **owl #64** — **Deadlines tab rebuilt to node 630:51389** (R-dl-a..n): week columns, the two-date card, banners as drawn, legend from the rule table | **BUILT, NOT DEPLOYED** (`717f47a`, `43098ca`) — deploy is JP's call |
+| 14 pf · 13k b14 | **Pipeline filter + sort** (owl #62) · owls #52–#61 | **DEPLOYED 2026-08-20** (`97fd82a`, `7dbbb3b`) — ⚠️ deploy-verified only; the filter/sort panels were never clicked in a browser, see below |
+| 15 | **owl #63** — "None" joins TYPE/DIFFICULTY/REQUESTOR (closes R-pf-i) · **owl #64** — **Deadlines tab rebuilt** to node 630:51389 (R-dl-a..n) | **BUILT, NOT DEPLOYED** (`717f47a`, `43098ca`) |
+| 15r | **Review pass, batches 13–15** — /simplify (15 of 20) + /code-review high (8 defects, all confirmed) | **BUILT, NOT DEPLOYED** (`2d5a017`, `54471b5`) — ⚠️ three are LIVE, below |
 
-**Build health (2026-08-21):** 1068/1068 tests + 24 `it.todo`, 64 files — green
+**Build health (2026-08-21):** 1078/1078 tests + 24 `it.todo`, 64 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **008** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
 ~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
 rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
+
+## ⚠️ Live on the deployed site, fixed locally, NOT yet deployed
+
+Found by the 2026-08-21 review pass; all three shipped in the 2026-08-20
+deploys and are fixed in `54471b5`, which is not deployed.
+
+| What a user sees | Cause |
+|---|---|
+| The Pipeline's **filter and sort panels do not open at all** — a click opens and closes them in the same event | the two panels joined `OVERLAY_KEYS` but never joined the outside-click dismisser's selector list |
+| The **search field is mis-laid-out on all three tabs** — icon above the input, and Requests/Deadlines lost their padding and hairline | owl #62's hunk deleted the shared `.searchbar` base rule |
+| A sort or filter can make an **MC group's work cards unreachable** | the row the task list hangs under was stamped from the server's order, not the rendered one |
 
 ## Decisions needed from JP (blocking)
 
@@ -108,10 +120,8 @@ archive entries as complete as ever; length there is fine. This window holds
 the newest 10 lines and older ones are deleted — `docs/history/state-log/`
 is self-indexing by date.
 
+- 2026-08-21 — **Review pass, batches 13–15**: /simplify (15 of 20, `2d5a017`) + /code-review high (**8 defects, all confirmed**, `54471b5`) — three live on the deployed site, listed above. Both dismisser shields now derive from one keyed map, so an overlay cannot join the list without declaring what must not dismiss it. 1068 → 1078 + 24 todo. → docs/history/state-log/2026-08-21.md
 - 2026-08-21 — **Owls #63 + #64**: "None" is now a filter value on the three axes that can lack one (closes R-pf-i) and the **Deadlines tab was rebuilt to node 630:51389** (R-dl-a..n). Corrected product twice — order-of-filing had already landed, and STATUS still cannot keep Trello's order. Kept the acknowledge action and the day planner the frame omits: this tab is the only route to either. 1035 → 1068 + 24 todo. Not deployed. → docs/history/state-log/2026-08-21.md
-- 2026-08-20 — **Owls #54–#56 + JP's styling pass**: #55 inverted my caption emphasis (tasks lead, count trails at every N, no threshold — R-exp-l); Miles accepted both corrections and wrote the Figma codegen trap into the annotation; JP ruled the frame beats its own annotation on the `Open Card` underline (R-warn-r) and labels are sentence-cased at display (R-warn-s). → docs/history/state-log/2026-08-20.md
+- 2026-08-20 — **Owls #54–#56 + JP's styling pass**: #55 inverted my caption emphasis (tasks lead, count trails at every N — R-exp-l); JP ruled the frame beats its own annotation on the `Open Card` underline (R-warn-r) and labels are sentence-cased at display (R-warn-s). → docs/history/state-log/2026-08-20.md
 - 2026-08-20 — **Batch 14: owls #52 + #53** — a shared MC stops attributing its tasks. Probed the real board: NO structural task→deliverable edge exists, so invariant 4 is confirmed, not broken; the ambiguous case is 78.4% of tasks, not the minority. 982 → 993 + 24 todo. → docs/history/state-log/2026-08-20.md
-- 2026-08-19 — **Leftover sweep + template split DEPLOYED** (`b401bac`): the second session's worktree was already gone and merged — branch deleted, the `--dir test` workaround retired. Deploy aborted once on STATE.md's own 10KB cap, then green: healthz 200, host bundle sha256 == local. Corrected a wrong claim — `public/` is gitignored, so a `git diff` over it proves nothing. `build.js` byte count was under-reporting by 1.4KB (UTF-16 length vs bytes). → docs/history/state-log/2026-08-19.md
-- 2026-08-18 — **Template split** (ARES pattern): `00-app.html` → `layout.html` + `partials/` + `views/`; composed output = the single file byte-for-byte; new guard for the nested-`{{#partial}}` hazard it creates. 976 → 982 + 24 todo. Not deployed. → docs/history/state-log/2026-08-18.md
-- 2026-08-18 — **Batch 13: owls #47–#51** — the stale-reconcile guard (`decisions/0025`) stops an older ARES read reverting a registry write; product's other three cadence worries were impossible. 962 → 976 + 24 todo. → docs/history/state-log/2026-08-18.md
-- 2026-08-18 — **Review pass over batches 11+12** (/simplify 14 findings, `47c65e0`; /code-review high — 15 defects fixed, ten CONFIRMED). 947 → 962 + 24 todo. → docs/history/state-log/2026-08-18.md
+- 2026-08-19 — **Leftover sweep + template split DEPLOYED** (`b401bac`): the second session's worktree was already merged; `--dir test` retired. Corrected a wrong claim — `public/` is gitignored, so a `git diff` over it proves nothing. → docs/history/state-log/2026-08-19.md
