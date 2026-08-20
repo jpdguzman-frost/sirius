@@ -4,6 +4,18 @@
     <div class="metric"><span class="mlabel">WORK CARDS</span><span class="mvalue">{{kpi.work}}</span></div>
     <div class="metric"><span class="mlabel">OPEN WORK</span><span class="mvalue">{{kpi.open}}</span></div>
     <div class="metric red"><span class="mlabel">URGENT</span><span class="mvalue">{{kpi.urgent}}</span></div>
+    {{! owl #61 — Miles: make the orphaned work VISIBLE. Renders only when
+        there is some, because a permanent zero teaches people to stop reading
+        it. WORK CARDS beside it already counts these, so this names a subset
+        rather than adding to a total. The title carries the consequence,
+        which is the part that matters: they are absent from capacity, so the
+        forecast is quietly light and nothing else says so. Not a data fix —
+        the cards need correcting at source. }}
+    {{#if kpi.unattached}}
+    <div class="metric warn"><span class="mlabel">UNATTACHED</span><span class="mvalue"
+      title="{{kpi.unattached}} task card{{kpi.unattached === 1 ? '' : 's'}} across {{kpi.unattachedMcs}} MC number{{kpi.unattachedMcs === 1 ? '' : 's'}} carry an MC number with no main card. They appear under no row and are counted in NO week's capacity, so planned load reads lighter than the real work. Fix the card at source in Trello."
+      >{{kpi.unattached}}</span></div>
+    {{/if}}
   </div>
 
   <div class="pipestack">

@@ -80,6 +80,12 @@
 .metrics .metric .mvalue { font-size: var(--text-display); font-weight: 600; line-height: 1.2; color: var(--surface-foreground); }
 .metrics .metric.red .mlabel, .metrics .metric.red .mvalue { color: var(--status-destructive-strong); }
 .metrics .metric.green .mlabel, .metrics .metric.green .mvalue { color: var(--green-600); }
+/* owl #61 — amber, not red: unattached work is a data-hygiene gap to notice,
+   not a failure to alarm about. It borrows the warning voice the row icon and
+   the Needs Info title already use, so a reader who has learned that colour on
+   Pipeline reads this the same way. */
+.metrics .metric.warn .mlabel, .metrics .metric.warn .mvalue { color: var(--amber-700); }
+.metrics .metric.warn .mvalue { cursor: help; }
 .metrics .metric.amber .mlabel, .metrics .metric.amber .mvalue { color: var(--amber-500); }
 
 /* ---- content stack: elements carry 0 margin, the container gaps 16px

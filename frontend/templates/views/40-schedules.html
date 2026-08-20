@@ -29,6 +29,14 @@
       {{#if capBand}}<span class="cwband">{{capBand}}</span>{{/if}}
       {{#if savingCapacity}}<span class="cwband">saving…</span>{{/if}}
     </div>
+    {{! owl #61 — the capacity-side half of the same fact. Miles's property:
+        "someone looking at capacity can tell work is missing from it". This
+        control is where capacity is read and set, and these cards are counted
+        in no week, so the number belongs beside it rather than in a week cell
+        it has no place in. Hidden at zero. }}
+    {{#if unattachedWork.cards}}
+    <span class="cwunattached" title="These carry an MC number with no main card, so they belong to no row and are counted in no week. Planned load reads lighter than the real work until they are fixed at source in Trello.">{{unattachedWork.cards}} unattached card{{unattachedWork.cards === 1 ? '' : 's'}} not in any week</span>
+    {{/if}}
 
     {{! Owl #25 / node 262:34499 — while a proposal is pending the expanded bar
         takes the Suggest button's OWN slot, so Sprints and the helper note keep

@@ -30,6 +30,7 @@ const app = new Ractive({
     writesEnabled: true, // G7 observation mode: false = read-only project, W1/W2 controls disabled
     workCardsByMc: {},
     mcDeliverables: {}, // owl #52: MC number → how many deliverables share it
+    unattachedWork: { cards: 0, mcNumbers: [] }, // owl #61: work with no MC row
     /* still on the wire and still counted — OPEN WORK (kpi.open) is the
        aggregate signal now that the table banner is gone (owl #36) */
     corrections: [],
@@ -186,9 +187,16 @@ const app = new Ractive({
       const rows = this.get('rows');
       const byMc = this.get('workCardsByMc');
       const work = Object.values(byMc).reduce((a, l) => a + l.length, 0);
+      const unattached = this.get('unattachedWork') || { cards: 0, mcNumbers: [] };
       return {
         main: rows.length,
         work,
+        /* owl #61. `work` above ALREADY counts these — the server keys work
+           cards by MC and orphans get a key like any other — so the strip has
+           always reported a total that included cards no row could ever show.
+           Naming them turns a quiet inaccuracy into a stated one. */
+        unattached: unattached.cards,
+        unattachedMcs: unattached.mcNumbers.length,
         // OPEN WORK is the AGGREGATE incomplete-card signal now that the
         // table banner is gone (owl #36) — the same corrections the per-row
         // warnings render one at a time

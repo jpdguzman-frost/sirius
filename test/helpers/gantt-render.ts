@@ -459,6 +459,16 @@ const DUE_CALENDAR_PARTIAL = (() => {
 })();
 
 /**
+ * Renders the Pipeline KPI strip (`<div class="metrics">`) with a supplied
+ * `kpi`. Its own renderer because the strip sits OUTSIDE `.pscrollwrap` — the
+ * table renderer cannot reach it, and owl #61's tile is conditional, so its
+ * absence at zero has to be renderable to be provable.
+ */
+export function renderMetrics(kpi: Record<string, unknown>): string {
+  return new Ractive({ template: divFragment('<div class="metrics">'), data: { kpi } }).toHTML();
+}
+
+/**
  * Renders the Pipeline table (`<div class="pscrollwrap">`, which occurs
  * exactly once — the Requests and Gantt wrappers carry a second class).
  *

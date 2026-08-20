@@ -31,7 +31,6 @@ rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 | # | Decision | Blocks | Status |
 |---|---|---|---|
 | BRD §9 | Amend "write impossible by permission" — the write surface is now the three-entry registry (urgency + due date + difficulty) | Vendor assessment, v2 | ⬜ open (grew 2026-08-04, again 2026-08-12) — product confirmed 2026-08-12 they'll raise it across all THREE docs quoting "one write": BRD §9, pilot security readiness, vendor assessment; not done yet |
-| R-row-d | Owl #59 rules the planner's three row-action icons **not keyboard-reachable** (copy/pin/unschedule become mouse-only). What ships is the OPPOSITE — real buttons in the tab order — so building it REMOVES working keyboard access and leaves the actions announced-but-unactivatable. Held: an owl never carries JP's authority | Planner row controls | ⬜ open 2026-08-20 — with JP |
 
 ## Decisions needed later (not blocking yet)
 
@@ -56,8 +55,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority: twice an owl
   asserted a ruling JP had not made or later declined, so verify with JP
-  before building on one. **Thread position**: miles→jp acked through **#60 EXCEPT #59** — its keyboard ruling is
-  unprocessed (read ≠ processed); jp→miles sent through **#47**.
+  before building on one. **Thread position**: miles→jp acked through **#61**; jp→miles sent through **#47**.
   **Awaiting Miles**: ONLY the ARES read-path caching answer. Everything else
   they owed closed 2026-08-20 — row-controls #59, Smoke pass #60 (clean, incl.
   the task due write BY HAND), caption #55/#58, underline withdrawn #57.

@@ -26,6 +26,7 @@ import {
   type WorkCardRow,
   cssRule,
   fnBody,
+  renderMetrics,
   renderPipelineTable,
 } from './helpers/gantt-render.ts';
 
@@ -512,5 +513,51 @@ describe('the chevron belongs to the MC, not to each row that shares its number'
   it('leaves the single-deliverable label alone — it attributes, so it says nothing extra', () => {
     expect(OPEN).toContain('aria-label="MC-837 work cards"');
     expect(OPEN).not.toContain('shared by');
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* H — owl #61: work that belongs to no row and no week                     */
+/* ---------------------------------------------------------------------- */
+
+describe('the UNATTACHED metric states work that is absent from capacity', () => {
+  const kpi = (over: Record<string, unknown> = {}) => ({
+    main: 10, work: 45, open: 3, urgent: 1, unattached: 35, unattachedMcs: 11, ...over,
+  });
+
+  it('renders the tile with the count when there is unattached work', () => {
+    const html = renderMetrics(kpi());
+    expect(html).toContain('UNATTACHED');
+    expect(html).toContain('>35</span>');
+  });
+
+  it('HIDES at zero — a permanent zero teaches people to stop reading it', () => {
+    expect(renderMetrics(kpi({ unattached: 0, unattachedMcs: 0 }))).not.toContain('UNATTACHED');
+    // the four standing metrics are untouched by its absence
+    expect(renderMetrics(kpi({ unattached: 0 }))).toContain('MAIN CARDS');
+    expect(renderMetrics(kpi({ unattached: 0 }))).toContain('URGENT');
+  });
+
+  it('carries the CONSEQUENCE in its tooltip, not just the number', () => {
+    /* the count alone is trivia; "counted in NO week's capacity" is the thing
+       that tells a PM their planned load reads lighter than the real work */
+    const tip = /title="([^"]*)"/.exec(renderMetrics(kpi()))![1]!;
+    expect(tip).toContain('no main card');
+    // apostrophes come back HTML-escaped from toHTML(), so match around one
+    expect(tip).toMatch(/counted in NO week/i);
+    expect(tip).toContain('Trello'); // where it gets fixed — at source, not here
+  });
+
+  it('pluralises both counts rather than printing "1 cards across 1 MC numbers"', () => {
+    const tip = (n: number, mcs: number) =>
+      /title="([^"]*)"/.exec(renderMetrics(kpi({ unattached: n, unattachedMcs: mcs })))![1]!;
+    expect(tip(1, 1)).toContain('1 task card across 1 MC number ');
+    expect(tip(35, 11)).toContain('35 task cards across 11 MC numbers ');
+  });
+
+  it('wears the warning voice, not the destructive one — a hygiene gap, not a failure', () => {
+    expect(renderMetrics(kpi())).toContain('class="metric warn"');
+    expect(cssRule('.metrics .metric.warn .mlabel, .metrics .metric.warn .mvalue', PIPELINE_CSS))
+      .toContain('var(--amber-700)');
   });
 });

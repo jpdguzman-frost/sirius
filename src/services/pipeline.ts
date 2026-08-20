@@ -147,6 +147,16 @@ export interface PipelineResult {
    * (78.4%) sit under an ambiguous MC, so this is the COMMON case.
    */
   mcDeliverables: Record<string, number>;
+  /**
+   * Work cards whose MC number has NO deliverable row (owl #61, Miles's
+   * ruling: make them visible). They hang under nothing in the Pipeline AND
+   * weigh into nothing — the BR-6c pass below only weighs a task whose MC has
+   * a row — so today they are work that is real, invisible, and silently
+   * absent from capacity. Measured on the live board 2026-08-20: 11 MC
+   * numbers, 35 cards. This does not FIX the data (the cards need correcting
+   * at source); it stops the gap being silent.
+   */
+  unattachedWork: { cards: number; mcNumbers: string[] };
   corrections: Array<{ cardId: string; displayId: string; name: string; missing: string[]; trelloUrl: string | null }>;
   model: { provenance: unknown };
   /**
@@ -250,7 +260,16 @@ export async function loadPipeline(
     t.hardWarn = t.hardShare > HARD_MIX.ideal && t.hardShare <= HARD_MIX.ceiling;
   }
 
-  return { rows, workCardsByMc, mcDeliverables, corrections, model: { provenance }, perWeek };
+  /* Derived from the two maps already built above rather than a third query:
+     an MC with tasks and no row is exactly a `workCardsByMc` key that
+     `rowsByMc` does not know. Sorted so the wire is stable between reads. */
+  const unattachedMcs = Object.keys(workCardsByMc).filter((mc) => !rowsByMc.has(mc)).sort();
+  const unattachedWork: PipelineResult['unattachedWork'] = {
+    cards: unattachedMcs.reduce((n, mc) => n + workCardsByMc[mc]!.length, 0),
+    mcNumbers: unattachedMcs,
+  };
+
+  return { rows, workCardsByMc, mcDeliverables, unattachedWork, corrections, model: { provenance }, perWeek };
 }
 
 /**

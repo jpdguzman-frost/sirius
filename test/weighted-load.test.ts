@@ -145,3 +145,52 @@ describe('mcDeliverables — the count the expansion attributes by', () => {
     expect(mcDeliverables).toEqual({});
   });
 });
+
+/* owl #61 — Miles ruled the orphaned work must be VISIBLE. A work card whose
+   MC number has no deliverable row hangs under nothing in the Pipeline and,
+   because the BR-6c pass only weighs a task whose MC has a row, it weighs into
+   nothing either. So it is real work that is invisible AND silently absent
+   from capacity — the quiet half of the reused-MC problem (the live board
+   carried 11 such numbers and 35 cards on 2026-08-20). */
+describe('unattachedWork — work that belongs to no row and no week', () => {
+  it('counts the cards and names the MC numbers, sorted', async () => {
+    const p = await project();
+    await group(p._id, 'MC-837', 2, 3, 0); // attached: has deliverables
+    await WorkCard.insertMany([
+      { project_id: p._id, mc_number: 'MC-804', trello_card_id: 'o-1', name: 'orphan 1' },
+      { project_id: p._id, mc_number: 'MC-804', trello_card_id: 'o-2', name: 'orphan 2' },
+      { project_id: p._id, mc_number: 'MC-755', trello_card_id: 'o-3', name: 'orphan 3' },
+    ]);
+    const { unattachedWork } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
+    expect(unattachedWork).toEqual({ cards: 3, mcNumbers: ['MC-755', 'MC-804'] });
+  });
+
+  it('is EMPTY when every MC has a row — the surface hides at zero', async () => {
+    const p = await project();
+    await group(p._id, 'MC-837', 1, 4, 0);
+    const { unattachedWork } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
+    expect(unattachedWork).toEqual({ cards: 0, mcNumbers: [] });
+  });
+
+  it('proves the capacity gap it exists to report — orphans weigh NOTHING', async () => {
+    /* the whole point of the surface: without it these cards are absent from
+       every week's load and nothing on screen says so */
+    const p = await project();
+    await group(p._id, 'MC-837', 1, 2, 0); // 1 row + 2 tasks = weight 3
+    await WorkCard.insertMany([
+      { project_id: p._id, mc_number: 'MC-999', trello_card_id: 'o-1', name: 'orphan 1' },
+      { project_id: p._id, mc_number: 'MC-999', trello_card_id: 'o-2', name: 'orphan 2' },
+    ]);
+    const { rows, unattachedWork } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
+    expect(rows.reduce((s, r) => s + r.weight, 0)).toBeCloseTo(3, 9); // the orphans add nothing
+    expect(unattachedWork.cards).toBe(2); // …and this is what says so
+  });
+
+  it('scopes to the project — another project’s orphans are not this one’s', async () => {
+    const p = await project();
+    const other = await Project.create({ code: 'rt-test', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 5 });
+    await WorkCard.create({ project_id: other._id, mc_number: 'MC-804', trello_card_id: 'x-1', name: 'theirs' });
+    const { unattachedWork } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
+    expect(unattachedWork).toEqual({ cards: 0, mcNumbers: [] });
+  });
+});

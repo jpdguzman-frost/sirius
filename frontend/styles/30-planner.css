@@ -40,6 +40,12 @@
 .cardsweek.locked { opacity: 0.6; }
 .cardsweek.locked .cwrange { cursor: not-allowed; }
 .cardsweek .cwlock { font-size: var(--text-label); line-height: 1; color: var(--slate-400); }
+/* owl #61 — beside the capacity control, NOT in a week cell: these cards are in
+   no week, so a per-week home would be a lie about where they are. Amber and
+   label-sized — a standing data-hygiene note, not an alert. It is a sibling of
+   .cardsweek rather than a child, so it cannot widen the control or push the
+   slider around when the count reaches three digits. */
+.cwunattached { font-size: var(--text-label); line-height: 1; color: var(--amber-700); cursor: help; }
 .cardsweek .cwicon { color: var(--surface-muted-foreground); flex: none; }
 .cardsweek .cwlabel {
   font-size: var(--text-body); font-weight: 400; line-height: 1;

@@ -301,6 +301,7 @@ async function loadAll() {
       writesEnabled: pipeline.writesEnabled !== false,
       workCardsByMc: pipeline.workCardsByMc,
       mcDeliverables: pipeline.mcDeliverables || {},
+      unattachedWork: pipeline.unattachedWork || { cards: 0, mcNumbers: [] },
       corrections: pipeline.corrections,
       sprints: pipeline.sprints,
       // R-f-8: the ARES-canonical working-day calendar, so the sprints modal's
