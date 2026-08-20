@@ -282,10 +282,16 @@ describe('the clip lives inside the badge, not on the cell', () => {
 
   it('declares the ellipsis exactly once here, and never in the gantt sheet', () => {
     expect([...cssRule('.clipbadge .cliptext', PIPELINE_CSS).matchAll(/text-overflow:\s*ellipsis/g)]).toHaveLength(1);
-    // the file's only OTHER one is the pre-existing `.datefield .dpdate`, so
-    // two is the whole count — a third copy of the recipe fails here
-    expect([...PIPELINE_CSS.matchAll(/text-overflow:\s*ellipsis/g)]).toHaveLength(2);
-    expect(cssRule('.datefield .dpdate', PIPELINE_CSS)).toContain('text-overflow: ellipsis');
+    /* A ROSTER, not a bare count. The point of this guard is that the clip
+       recipe is never COPIED — but other things legitimately truncate, and a
+       count alone made every new one look like a violation. Naming the owners
+       keeps the guard exact: an ellipsis in a rule not on this list still
+       fails, which is what it was always for. */
+    const owners = ['.clipbadge .cliptext', '.datefield .dpdate', '.sfbtn .sflabel', '.pipemenu .pmval'];
+    for (const sel of owners) {
+      expect(cssRule(sel, PIPELINE_CSS), `${sel} should declare the ellipsis`).toContain('text-overflow: ellipsis');
+    }
+    expect([...PIPELINE_CSS.matchAll(/text-overflow:\s*ellipsis/g)]).toHaveLength(owners.length);
     expect(GANTT_CSS).not.toContain('text-overflow');
   });
 

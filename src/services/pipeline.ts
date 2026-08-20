@@ -89,6 +89,14 @@ export interface PipelineRow {
   deadlineSource: string | null;
   overdue: boolean; // deadline < today, computed where deadline lives (one 'today' in the system)
   trelloDue: string | null;
+  /**
+   * The Trello card's own creation instant — the table's NATURAL order
+   * ("by order of filing, most recently ingested first", owl #62). ISO, not a
+   * day string: two cards filed on one day still have an order. Null until the
+   * card has been re-read after migration 008, and a null sorts LAST like
+   * every other empty.
+   */
+  filedAt: string | null;
   trelloUrl: string | null;
   figmaUrl: string | null;
   slottedWeek: string | null;
@@ -344,6 +352,7 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
     lane: (d.lane as string) ?? null,
     urgency: (d.urgency as string) ?? 'Non-Urgent',
     blocker: (d.blocker as string) ?? null,
+    filedAt: d.trello_created_at instanceof Date ? d.trello_created_at.toISOString() : null,
     requestor: (d.requestor as string) ?? null,
     assetType: (d.asset_type as string) ?? null,
     workStarted: startedAt ? manilaDate(startedAt) : null,

@@ -141,6 +141,14 @@ const deliverableSchema = new Schema(
     trello_due: DATE_ONLY,
     trello_due_at: Date, // raw due instant from ARES — preserves time-of-day on W2 writes
     trello_synced_at: { type: Date, required: true, default: Date.now },
+    /* When the CARD was created in Trello — the pipeline's natural order
+       ("order of filing", owl #62). NOT `created_at` below: that is when the
+       Sirius row was created, which on the real board stamps 289 of the rows
+       with the single day the board was onboarded and would make the default
+       order a meaningless tie. ARES carries this on every card. Absent until
+       a card has been re-read after migration 008, and an absent value sorts
+       LAST like every other empty (owl #62). */
+    trello_created_at: Date,
 
     // Derived from THIS card's movements (worker/syncAres.deriveWorkSpans),
     // never the MC group's — the row's Started/Done columns (2026-08-13 spec).

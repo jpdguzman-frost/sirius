@@ -97,9 +97,37 @@
    .warnpop, below). Nothing replaces it above the table. */
 
 /* ---- search + callout (annotations 17:2057, 70:1211) ---- */
-.searchbar {
-  display: flex; align-items: center; gap: var(--space-8);
-  padding: 16px 0 17px; border-bottom: 1px solid var(--slate-100);
+/* owl #62, node 592:56850 — the search field and the two buttons are ONE row.
+   The rule below keeps the field's own padding/border so the row reads exactly
+   as it did before the buttons arrived; the border moves to the wrapper so it
+   runs under both. */
+.pipetools { display: flex; align-items: center; gap: var(--space-8); border-bottom: 1px solid var(--slate-100); }
+.pipetools .searchbar { flex: 1; border-bottom: none; min-width: 0; }
+.sortfilter { display: flex; align-items: center; gap: var(--space-8); flex: none; }
+/* 38×33 resting, white on a slate-500 hairline, the app's own --shadow-xs.
+   `width` is not fixed: the SORT button grows to name its selection and the
+   filter never does, so the box is sized by its content between a floor and a
+   cap (see .sfbtn.named). */
+.sfbtn {
+  display: inline-flex; align-items: center; gap: var(--space-4);
+  min-width: 38px; height: 33px; padding: 7px 11px; box-sizing: border-box;
+  background: var(--white); border: 1px solid var(--slate-500); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs); color: var(--slate-500); cursor: pointer;
+  font-family: var(--font-sans); font-size: var(--text-label); line-height: 1;
+}
+.sfbtn svg { display: block; flex: none; }
+.sfbtn:hover { background: var(--slate-50); }
+.sfbtn:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+/* ACTIVE — fill AND stroke slate-900, white icon. Both buttons take it; only
+   the sort one also takes a label. */
+.sfbtn.on { background: var(--slate-900); border-color: var(--slate-900); color: var(--white); }
+/* The cap that keeps the row stable (node 592:56966). At 12px the longest of
+   the eight labels measures ~235px, so nothing truncates today — the cap is
+   here so a FUTURE label cannot push the search field around. Nothing is lost:
+   the applied sort is also marked inside the popup. */
+.sfbtn .sflabel {
+  max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--text-label); line-height: 1; color: var(--white);
 }
 .searchbar svg { display: block; color: var(--slate-400); flex: none; }
 .searchbar input {
@@ -534,3 +562,58 @@ a.srclink:hover { background: var(--slate-100); }
 .hslider .hnudge svg { display: block; }
 .hslider .htrack { flex: 1; position: relative; height: 12px; background: var(--slate-100); border-radius: var(--radius-full); cursor: pointer; }
 .hslider .hthumb { position: absolute; top: 0; height: 12px; background: var(--slate-300); border-radius: var(--radius-full); min-width: 24px; }
+
+
+/* ---- owl #62: the sort and filter panels (nodes 592:56913 / 593:78434) ----
+   One shell for both, as the frames specify: 276px, white, slate-200 hairline,
+   4px radius. `position: fixed` with inline coords, the same escape-the-clip
+   recipe every other overlay on this tab uses. */
+.pipemenu {
+  position: fixed; z-index: 45; width: 276px; box-sizing: border-box;
+  display: flex; flex-direction: column; padding-top: 20px;
+  background: var(--white); border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-xs);
+  font-family: var(--font-sans);
+}
+/* group headings — 12px SemiBold uppercase slate-400. They are labels, not
+   options, and carry aria-hidden with the group named on the wrapper instead. */
+.pipemenu .pmhead {
+  margin: 0; padding: 0 var(--space-24) var(--space-8);
+  font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--slate-400);
+}
+.pipemenu .pmitems { display: flex; flex-direction: column; padding: 0 var(--space-8) var(--space-8); }
+.pipemenu .pmitems + .pmhead { padding-top: var(--space-8); border-top: 1px solid var(--slate-100); }
+/* STATUS only — it scrolls inside its own group so the four short axes keep
+   their place (jp→miles #49). Roughly six rows before it scrolls. */
+.pipemenu .pmscroll { max-height: 168px; overflow-y: auto; overscroll-behavior: contain; }
+.pipemenu .pmitem {
+  display: flex; align-items: center; gap: var(--space-8); width: 100%;
+  padding: 6px var(--space-8); border: none; background: none; border-radius: var(--radius-xs);
+  font-family: var(--font-sans); font-size: var(--text-body); line-height: 1.5;
+  color: var(--surface-foreground); text-align: left; cursor: pointer;
+}
+.pipemenu .pmitem:hover:not([disabled]) { background: var(--slate-50); }
+.pipemenu .pmitem:focus-visible { outline: 2px solid var(--blue-500); outline-offset: -2px; }
+/* the applied sort / a selected filter value — visibly marked, both frames */
+.pipemenu .pmitem.on { font-weight: 600; }
+/* a zero-count value: disabled rather than silently selectable */
+.pipemenu .pmitem[disabled] { color: var(--slate-400); cursor: not-allowed; }
+.pipemenu .pmval { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* THE COUNT BADGES — the frame calls them the most valuable part of this
+   design: they say what is worth filtering to before the click, and expose
+   empty categories instead of hiding them. */
+.pipemenu .pmcount { flex: none; font-size: var(--text-label); color: var(--slate-400); }
+.pipemenu .pmbox {
+  flex: none; width: 16px; height: 16px; box-sizing: border-box;
+  border: 2px solid var(--slate-300); border-radius: var(--radius-xs);
+}
+.pipemenu .pmitem.on .pmbox { background: var(--slate-900); border-color: var(--slate-900); }
+.pipemenu .pmfoot { border-top: 1px solid var(--slate-50); padding: var(--space-12) var(--space-8); }
+.pipemenu .pmclear {
+  border: none; background: none; cursor: pointer; padding: 7px var(--space-8) 6px;
+  border-radius: var(--radius-sm); font-family: var(--font-sans);
+  font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--slate-400);
+}
+.pipemenu .pmclear:hover:not([disabled]) { background: var(--slate-50); color: var(--slate-700); }
+.pipemenu .pmclear:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.pipemenu .pmclear[disabled] { cursor: not-allowed; opacity: 0.45; }

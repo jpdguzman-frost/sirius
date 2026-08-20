@@ -41,6 +41,15 @@ async function resetForProjectSwitch() {
     reqSortDir: '',
     reqPage: 1,
     reqMenu: null,
+    /* owl #62 — filter and sort RESET on project switch, like the planner's
+       expansion state (R-exp-f). The frame raised persistence and the owl did
+       not answer it, so this is a default, flagged in jp→miles #50: a Requestor
+       or a Status carried into another project names values that project may
+       not have, which would silently show an empty table. */
+    pipeSort: null,
+    pipeFilters: PIPE_FILTERS_NONE(),
+    pipeSortMenu: null,
+    pipeFilterMenu: null,
     noteEditing: null,
     noteDraft: { remark: '', clarify: false },
     noteError: '',
@@ -58,6 +67,19 @@ async function resetForProjectSwitch() {
 /* clicking the active segment clears it; REQUESTS is always the show-all */
 function applyRequestFilter(f) {
   app.set('requestFilter', f === app.get('requestFilter') && f !== 'all' ? 'all' : f);
+}
+
+/* owl #62 asks that any of search/filter/sort changing "reset pagination to
+   page one". The PIPELINE HAS NO PAGINATION — it renders every row inside a
+   scroller, and only Requests pages (REQ_PAGE_SIZE). So the requirement's
+   intent maps to returning the reader to the TOP: after the set changes, being
+   left halfway down a list that is no longer the list you scrolled into is the
+   same disorientation paging was protecting against. Inventing a `pipePage`
+   nobody reads would have satisfied the words and nothing else. Raised in
+   jp→miles #50. */
+function pipeBackToTop() {
+  const el = document.querySelector('.pscroll');
+  if (el) el.scrollTop = 0;
 }
 
 app.on({
@@ -174,6 +196,53 @@ app.on({
     }
   },
   toggleGroup(_ctx, mc) { app.toggle(`expanded.${mc}`); },
+
+
+  /* ---- owl #62: Pipeline sort + filter ------------------------------------
+     Both panels ride openOverlay, so mutual exclusion, the outside click, the
+     scroll dismisser and Escape-with-focus-return all come from the one door
+     every other overlay uses. "Opening one closes the other" is not written
+     here: it is what openOverlay already does to every key in OVERLAY_KEYS,
+     and re-implementing it would be a second rule that could disagree. */
+  openPipeSort(ctx) {
+    openOverlay(ctx, 'sort', { key: 'pipeSortMenu', posKey: 'pipeSortMenuPos', h: PIPE_SORT_H, gap: 4, clampW: PIPE_MENU_W });
+    const m = { key: 'pipeSortMenu', posKey: 'pipeSortMenuPos', sel: '.pipemenu.sortmenu' };
+    if (!placeMeasured(ctx.node, 'sort', m)) requestAnimationFrame(() => placeMeasured(ctx.node, 'sort', m));
+  },
+  openPipeFilter(ctx) {
+    openOverlay(ctx, 'filter', { key: 'pipeFilterMenu', posKey: 'pipeFilterMenuPos', h: PIPE_FILTER_H, gap: 4, clampW: PIPE_MENU_W });
+    const m = { key: 'pipeFilterMenu', posKey: 'pipeFilterMenuPos', sel: '.pipemenu.filtermenu' };
+    if (!placeMeasured(ctx.node, 'filter', m)) requestAnimationFrame(() => placeMeasured(ctx.node, 'filter', m));
+  },
+  /* SINGLE-select: choosing replaces, never stacks (node 592:56913). Choosing
+     the applied sort again returns to the default — the same "click it off"
+     the urgency menu uses, and it means the popup can always undo itself. */
+  pickPipeSort(_ctx, key) {
+    app.set('pipeSort', app.get('pipeSort') === key ? null : key);
+    pipeBackToTop();
+    closeMenus({ restoreFocus: true });
+  },
+  clearPipeSort() {
+    app.set('pipeSort', null);
+    pipeBackToTop();
+    closeMenus({ restoreFocus: true });
+  },
+  /* MULTI-select: OR within a category, AND across (owl #62). The panel STAYS
+     OPEN — a filter is built from several values, and closing on each toggle
+     would make the counts unreadable at the moment they matter most. */
+  togglePipeFilter(_ctx, axis, value) {
+    const cur = (app.get(`pipeFilters.${axis}`) || []).slice();
+    const at = cur.indexOf(value);
+    if (at > -1) cur.splice(at, 1);
+    else cur.push(value);
+    app.set(`pipeFilters.${axis}`, cur);
+    pipeBackToTop();
+  },
+  clearPipeFilters() {
+    app.set('pipeFilters', PIPE_FILTERS_NONE());
+    pipeBackToTop();
+    closeMenus({ restoreFocus: true });
+  },
   // annotation 70:10024: row focusable, Enter toggles the MC group's tasks
   pipeRowKey(ctx, mcNumber) {
     if (ctx.event.key !== 'Enter' || ctx.event.target !== ctx.node) return;

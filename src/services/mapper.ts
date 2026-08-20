@@ -31,6 +31,8 @@ export interface MappedDeliverable {
   blocker?: string;
   figma_url?: string;
   labels: string[];
+  /** owl #62 — the Trello card's own creation instant, the pipeline's natural order. */
+  trello_created_at: string | null;
   trello_due: string | null;
   /** Raw due instant from ARES — kept so W2 writes preserve time-of-day. */
   trello_due_at: string | null;
@@ -132,6 +134,9 @@ export function mapTrello(cards: AresCard[], projectLabel: string | null): MapRe
         blocker: blockerOf(labels),
         figma_url: figmaOf(card),
         labels,
+        // owl #62 — the pipeline's natural order. Stored as the instant ARES
+        // reports; the day-string derivation stays with whoever displays it.
+        trello_created_at: card.createdAt ?? null,
         trello_due: dateOnly(card.due),
         trello_due_at: card.due ?? null,
         urgent: labels.includes(URGENT_LABEL_NAME),

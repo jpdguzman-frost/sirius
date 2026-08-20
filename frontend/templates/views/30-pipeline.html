@@ -25,7 +25,72 @@
        `corrections`. A warned row the search hides stays hidden — no special
        case, which is exactly why the KPI keeps carrying the total. -->
 
-  <div class="searchbar">{{{icon.search}}}<input name="pipeline-search" placeholder="Search cards or MC#" value="{{searchQ}}" lazy="250" aria-label="Search cards or MC number" /></div>
+  {{! owl #62, node 592:56850 — the search bar and the two buttons share one
+      row. Filter (funnel) then Sort, 8px apart, to the RIGHT of the field. }}
+  <div class="pipetools">
+    <div class="searchbar">{{{icon.search}}}<input name="pipeline-search" placeholder="Search cards or MC#" value="{{searchQ}}" lazy="250" aria-label="Search cards or MC number" /></div>
+    <div class="sortfilter">
+      {{! FILTER — active is icon-only, no label and NO COUNT (node 593:74881:
+          a count badge was considered and DECLINED; do not add one later "for
+          consistency" with the counts inside). The applied number lives ONLY
+          in the accessible name, which is the single route to it for someone
+          who cannot see the fill change. }}
+      <button class="sfbtn {{#if pipeFilterCount}}on{{/if}}" on-click="['openPipeFilter']"
+              aria-haspopup="dialog" aria-expanded="{{pipeFilterMenu ? 'true' : 'false'}}"
+              title="Filter" aria-label="Filter{{#if pipeFilterCount}}, {{pipeFilterCount}} applied{{/if}}">{{{icon.filter}}}</button>
+      {{! SORT — expands and NAMES its one selection, `Group: Item` (node
+          592:56966). The asymmetry with Filter is deliberate: a sort is always
+          exactly one thing and can be named; a filter is several and cannot. }}
+      <button class="sfbtn {{#if pipeSort}}on named{{/if}}" on-click="['openPipeSort']"
+              aria-haspopup="dialog" aria-expanded="{{pipeSortMenu ? 'true' : 'false'}}"
+              title="Sort" aria-label="Sort{{#if pipeSort}}, {{pipeSortLabelText}}{{/if}}">{{{icon.sort}}}{{#if pipeSort}}<span class="sflabel">{{pipeSortLabelText}}</span>{{/if}}</button>
+    </div>
+  </div>
+
+  {{#if pipeSortMenu}}
+    <div class="pipemenu sortmenu" role="dialog" aria-label="Sort the pipeline" style="left:{{pipeSortMenuPos.left}}px;top:{{pipeSortMenuPos.top}}px;">
+      {{#each PIPE_SORT_GROUPS as g}}
+        {{! group headings are LABELS, not options — never focusable }}
+        <p class="pmhead" aria-hidden="true">{{g.group}}</p>
+        <div class="pmitems" role="group" aria-label="{{g.group}}">
+          {{#each g.items as it}}
+            <button class="pmitem {{#if pipeSort === it.key}}on{{/if}}" on-click="['pickPipeSort', it.key]"
+                    aria-pressed="{{pipeSort === it.key ? 'true' : 'false'}}">{{it.label}}</button>
+          {{/each}}
+        </div>
+      {{/each}}
+      <div class="pmfoot">
+        {{! disabled when there is nothing to clear — offering it invites a
+            click that does nothing (node 592:56913) }}
+        <button class="pmclear" disabled="{{!pipeSort}}" on-click="['clearPipeSort']">Clear Sort</button>
+      </div>
+    </div>
+  {{/if}}
+
+  {{#if pipeFilterMenu}}
+    <div class="pipemenu filtermenu" role="dialog" aria-label="Filter the pipeline" style="left:{{pipeFilterMenuPos.left}}px;top:{{pipeFilterMenuPos.top}}px;">
+      {{#each pipeFacets as f}}
+        <p class="pmhead" aria-hidden="true">{{f.label}}</p>
+        {{! STATUS is the only open-ended axis — Trello list names, and the real
+            board carries many more than the frame's four. It scrolls WITHIN its
+            own group so the four short categories keep their place; scrolling
+            the whole panel would let the longest axis push the others out of
+            view (jp→miles #49). }}
+        <div class="pmitems {{#if f.key === 'status'}}pmscroll{{/if}}" role="group" aria-label="{{f.label}}">
+          {{#each f.values as v}}
+            {{! a zero count is DISABLED, not silently selectable — otherwise a
+                user filters to an empty table and cannot tell why }}
+            <button class="pmitem pmcheck {{#if v.on}}on{{/if}}" on-click="['togglePipeFilter', f.key, v.value]"
+                    disabled="{{!v.count && !v.on}}"
+                    aria-pressed="{{v.on ? 'true' : 'false'}}"><span class="pmbox" aria-hidden="true"></span><span class="pmval">{{v.value}}</span><span class="pmcount">{{v.count}}</span></button>
+          {{/each}}
+        </div>
+      {{/each}}
+      <div class="pmfoot">
+        <button class="pmclear" disabled="{{!pipeFilterCount}}" on-click="['clearPipeFilters']">Clear filter</button>
+      </div>
+    </div>
+  {{/if}}
 
   <div class="pscrollwrap">
     <div class="pscroll" on-scroll="['pipeScrolled']">

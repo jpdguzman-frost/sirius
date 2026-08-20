@@ -430,11 +430,18 @@ describe('migration 007-ack-capacity', () => {
   };
   const legacyKey = '2026-08-03|urgent-overlap|c1:sketch,c2:sketch';
 
-  it('is registered after 006 and runs last', () => {
+  it('is registered after 006, and the whole set stays in numeric order', () => {
     const ids = MIGRATIONS.map((m) => m.id);
     expect(ids).toContain('007-ack-capacity');
     expect(ids.indexOf('007-ack-capacity')).toBe(ids.indexOf('006-capacity-lock-rt837') + 1);
-    expect(ids[ids.length - 1]).toBe('007-ack-capacity');
+    /* Was "007 runs last", which asserted that 007 was the NEWEST — true when
+       written and false the moment 008 arrived, so it had to be edited by the
+       next migration rather than protecting it. Ordering is the real invariant
+       (they apply in array order), so assert THAT: it needs no edit when a
+       migration is added and it catches the reordering the old form could not. */
+    const numbers = ids.map((id) => Number(id.slice(0, 3)));
+    expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
+    expect(new Set(numbers).size).toBe(numbers.length); // no duplicate prefix
   });
 
   it('lifts only 3-component keys, audits each change, and is idempotent', async () => {

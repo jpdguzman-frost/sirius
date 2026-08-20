@@ -199,6 +199,32 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    /**
+     * owl #62 — the Pipeline's default order is "by order of filing, most
+     * recently ingested first", and the field it needs did not exist.
+     *
+     * `created_at` is NOT it: that is when the SIRIUS row was created, and on
+     * the live board it stamps 289 of the rows with 2026-08-12, the day the
+     * board was onboarded — an ordering that looks plausible and is a
+     * meaningless tie for the bulk of the table. ARES carries the card's own
+     * creation instant on every card (verified 100/100 sampled, spanning 13
+     * distinct days), so the sync now stores it.
+     *
+     * This migration only creates the INDEX. There is no backfill to write:
+     * the value comes from ARES, so the next full sync populates every card
+     * as a side effect of reading it. Until then a row has no value and sorts
+     * LAST, which is the same rule every other empty follows (owl #62).
+     */
+    id: '008-trello-created-at',
+    up: async (conn) => {
+      const db = conn.db;
+      if (!db) throw new Error('no database on connection');
+      await db
+        .collection('deliverables')
+        .createIndex({ project_id: 1, trello_created_at: -1 }, { name: 'project_filed_desc' });
+    },
+  },
 ];
 
 /** Applies pending migrations in order; records each in `migrations`. */

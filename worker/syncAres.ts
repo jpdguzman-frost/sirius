@@ -116,6 +116,13 @@ export async function upsertDeliverable(
         trello_url: d.trello_url ?? null,
         active: d.active,
         trello_synced_at: new Date(),
+        /* owl #62 — the card's own creation instant. Trello-owned but NOT a
+           registry field, so it rides the unconditional write rather than the
+           stale-guarded one below: a card's creation time cannot change, so
+           there is no write of ours for a stale read to revert. Spread
+           conditionally — a payload that omits it must not null out a value we
+           already hold. */
+        ...(d.trello_created_at ? { trello_created_at: new Date(d.trello_created_at) } : {}),
         updated_at: new Date(),
       },
       $setOnInsert: { project_id: projectId, created_at: new Date() },

@@ -39,7 +39,7 @@ app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ'), noteText
    mutual exclusion all derive from this list — adding `warnPop` used to mean
    three hand-edits that had to agree, and a fourth list (the focus-held
    selectors below) that nothing tied to them. A sixth overlay is one entry. */
-const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop'];
+const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop', 'pipeSortMenu', 'pipeFilterMenu'];
 const NO_OVERLAYS = Object.fromEntries(OVERLAY_KEYS.map((k) => [k, null]));
 function anyMenuOpen() {
   return OVERLAY_KEYS.some((k) => app.get(k));

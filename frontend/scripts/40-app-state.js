@@ -31,6 +31,16 @@ const app = new Ractive({
     workCardsByMc: {},
     mcDeliverables: {}, // owl #52: MC number → how many deliverables share it
     unattachedWork: { cards: 0, mcNumbers: [] }, // owl #61: work with no MC row
+    /* owl #62 — Pipeline sort + filter. `pipeSort` is a key from PIPE_SORTS or
+       null for the default order (single-select: choosing replaces, never
+       stacks). `pipeFilters` is one array per axis (multi-select). Both are
+       VIEW state, so they live here and nowhere on the server. */
+    pipeSort: null,
+    pipeFilters: PIPE_FILTERS_NONE(),
+    pipeSortMenu: null,
+    pipeFilterMenu: null,
+    pipeSortMenuPos: { left: 0, top: 0 },
+    pipeFilterMenuPos: { left: 0, top: 0 },
     /* still on the wire and still counted — OPEN WORK (kpi.open) is the
        aggregate signal now that the table banner is gone (owl #36) */
     corrections: [],
@@ -204,13 +214,86 @@ const app = new Ractive({
         urgent: rows.filter((r) => r.urgency === 'Urgent').length,
       };
     },
-    pipelineRows() {
+    /* Search alone — the set every filter axis counts against, and the base
+       both `pipelineRows` and `pipeFacets` build on so they cannot disagree
+       about what "the table" is. */
+    pipeSearched() {
       // annotation 17:2057 — the searchable text is precomputed per row in
       // loadAll (r.blob); trimmed so the filter and highlighter agree
       const q = (this.get('searchQ') || '').trim().toLowerCase();
       const rows = this.get('rows');
       if (!q) return rows;
       return rows.filter((r) => (r.blob || '').includes(q));
+    },
+    /* owl #62: search, filter and sort all apply together (AND). Sort runs over
+       the whole filtered set, never the visible page — the client holds every
+       row, so sorting a page would order the page and not the table. `slice()`
+       because Array.sort mutates and the source array is Ractive's own. */
+    pipelineRows() {
+      const sel = this.get('pipeFilters') || PIPE_FILTERS_NONE();
+      const rows = this.get('pipeSearched').filter((r) => pipeMatches(r, sel, null));
+      const key = this.get('pipeSort');
+      const sort = key ? PIPE_SORTS.find((s) => s.key === key) : PIPE_SORT_DEFAULT;
+      return sort ? rows.slice().sort((a, b) => pipeCompare(sort, a, b)) : rows;
+    },
+    /* THE FACET COUNTS (jp→miles #49, answering the frame's open question).
+       Each axis counts against the filters applied in the OTHER axes, ignoring
+       its own — the third option, not either of the two the frame offered.
+       Counting against ALL filters including its own would drop every sibling
+       value to zero the moment one is picked, so a second value could never be
+       added without clearing first: accurate and unusable. Ignoring its own
+       keeps the counts honest as you narrow AND usable for widening.
+       Values are derived from the board, never a fixed list. */
+    pipeFacets() {
+      const sel = this.get('pipeFilters') || PIPE_FILTERS_NONE();
+      const searched = this.get('pipeSearched');
+      return PIPE_FILTERS.map((f) => {
+        const pool = searched.filter((r) => pipeMatches(r, sel, f.key));
+        const counts = {};
+        // every value PRESENT on the board, even at zero against this pool —
+        // the frame wants empty categories exposed, not hidden
+        for (const r of searched) {
+          const v = f.pick(r);
+          if (v !== null && v !== undefined && v !== '') counts[v] = 0;
+        }
+        for (const r of pool) {
+          const v = f.pick(r);
+          if (v !== null && v !== undefined && v !== '') counts[v] += 1;
+        }
+        const names = Object.keys(counts);
+        names.sort(
+          f.order
+            ? (a, b) => f.order.indexOf(a) - f.order.indexOf(b)
+            : (a, b) => a.localeCompare(b),
+        );
+        const picked = sel[f.key] || [];
+        return {
+          key: f.key,
+          label: f.label,
+          values: names.map((v) => ({ value: v, count: counts[v], on: picked.indexOf(v) > -1 })),
+        };
+      });
+    },
+    /** How many filter VALUES are applied, across every axis — the accessible name's number. */
+    pipeFilterCount() {
+      const sel = this.get('pipeFilters') || PIPE_FILTERS_NONE();
+      return PIPE_FILTERS.reduce((n, f) => n + (sel[f.key] || []).length, 0);
+    },
+    /** `Group: Item` for the active sort button (node 592:56966); '' when default. */
+    pipeSortLabelText() {
+      return pipeSortLabel(this.get('pipeSort'));
+    },
+    /* The eight sorts as their three frame groups, DERIVED from PIPE_SORTS in
+       its own order — never a second hand-written list, or the popup and the
+       comparator could disagree about what exists. */
+    PIPE_SORT_GROUPS() {
+      const out = [];
+      for (const s of PIPE_SORTS) {
+        const last = out[out.length - 1];
+        if (last && last.group === s.group) last.items.push(s);
+        else out.push({ group: s.group, items: [s] });
+      }
+      return out;
     },
     /* ---- Requests §3: segment + search + four selects, AND-combined, all
        client-side over the single unfiltered payload. The counts stay on

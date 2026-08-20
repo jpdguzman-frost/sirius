@@ -146,6 +146,22 @@ const WARN_POP_H = 390;
    long enough to cross the 4px gap and short enough not to feel sticky
    (R-warn-j, flagged to Miles as a number he may want to tune). */
 const WARN_CLOSE_MS = 150;
+/* Pipeline sort/filter panels (owl #62). 276px is the frame's panel width for
+   both. The heights are PRE-MEASURES for placeBox's first flip decision only —
+   the sort panel is eight fixed items so its height is knowable, the filter
+   panel's is not (its categories are derived from the board and STATUS is
+   open-ended), so its constant is a worst case. placeMeasured re-places both
+   against what actually rendered, exactly as the warning card does. */
+const PIPE_MENU_W = 276;
+const PIPE_SORT_H = 420;
+const PIPE_FILTER_H = 520;
+/* The active SORT button's cap (node 592:56966: "define that maximum so the
+   search-bar row is stable"). At 12px Regular the longest of the eight labels,
+   `Dates: Due dates farthest from now`, measures ~235px — so nothing truncates
+   today. The cap exists so a FUTURE label cannot push the search field around;
+   the frame is explicit that nothing is lost to truncation, since the applied
+   sort is also marked inside the popup. */
+const PIPE_SORT_LABEL_MAX = 240;
 /* ONE recipe for the warning, derived from the row the server already sends.
    Returns null for a complete card — the template's only test — or
    { label, items:[{ label, why }] }. items[0] is ALWAYS the card's OWN
@@ -250,3 +266,81 @@ const monthOrder = (raw) => {
   return i < 0 ? null : i;
 };
 
+
+/* ---- Pipeline sort + filter (owl #62; nodes 592:56850 / 592:56913 /
+   592:56966 / 593:78434 / 593:74881) ------------------------------------
+   Both are READ-ONLY VIEW operations over rows the client already holds, so
+   they live here beside the search recipe rather than behind an endpoint —
+   the same reason `reqFiltered` filters Requests client-side. Neither is
+   gated by observation mode; neither writes anything. */
+
+/* THE EIGHT SORTS, in the frame's own order and grouping. `value` returns the
+   comparable, or null for "empty" — and empty ALWAYS sorts last regardless of
+   direction (owl #62: most cards on the real board lack a due date, and a
+   nulls-first order would fill the top of the table with blanks). `dir` is the
+   direction applied to non-empty values only. Labels are plain descriptions of
+   the resulting order, never column-plus-arrow: the frame is explicit that
+   they should read rather than need decoding. */
+const DIFF_RANK = { Hard: 3, Medium: 2, Easy: 1 };
+const PIPE_SORTS = [
+  { key: 'due-near', group: 'Dates', label: 'Due dates closest to now', dir: 1, value: (r) => r.deadline || null },
+  { key: 'due-far', group: 'Dates', label: 'Due dates farthest from now', dir: -1, value: (r) => r.deadline || null },
+  { key: 'started', group: 'Dates', label: 'Recently started', dir: -1, value: (r) => r.workStartedTs || r.workStarted || null },
+  { key: 'completed', group: 'Dates', label: 'Recently completed', dir: -1, value: (r) => r.workDoneTs || r.workDone || null },
+  // Non-Urgent is a VALUE, not an absence — every row has an urgency, so this
+  // sort has no empties and nothing falls to the bottom.
+  { key: 'urgent', group: 'Priority', label: 'Urgent first', dir: -1, value: (r) => (r.urgency === 'Urgent' ? 1 : 0) },
+  { key: 'hardest', group: 'Priority', label: 'Hardest first', dir: -1, value: (r) => DIFF_RANK[r.difficulty] || null },
+  { key: 'mc', group: 'Identity', label: 'MC number, low to high', dir: 1, value: (r) => mcRank(r.mcNumber) },
+  { key: 'name', group: 'Identity', label: 'Card name A–Z', dir: 1, value: (r) => (r.name || '').toLowerCase() || null },
+];
+
+/* THE DEFAULT ORDER — by order of filing, most recently ingested first. NOT one
+   of the eight: it is the table's natural order, the eight are deviations from
+   it, and Clear Sort returns to it (owl #62). `filedAt` is the Trello card's
+   own creation instant, added in migration 008 — deliberately not the Sirius
+   row's `created_at`, which stamps 289 of the live board's rows with the single
+   day it was onboarded. A row not yet re-read has none and sorts last. */
+const PIPE_SORT_DEFAULT = { key: null, dir: -1, value: (r) => r.filedAt || null };
+
+/* Empty last, always — before direction is applied, so it holds both ways. */
+const pipeCompare = (sort, a, b) => {
+  const av = sort.value(a);
+  const bv = sort.value(b);
+  const ae = av === null || av === undefined || av === '';
+  const be = bv === null || bv === undefined || bv === '';
+  if (ae || be) return ae && be ? 0 : ae ? 1 : -1;
+  if (av === bv) return 0;
+  return (av < bv ? -1 : 1) * sort.dir;
+};
+
+/* THE FIVE FILTER AXES. Values are DERIVED FROM THE BOARD, never a fixed list
+   (frame: "a type or status nobody uses simply does not appear"). `order` sets
+   the value order inside a category: the two closed vocabularies read in their
+   natural progression, the three open ones alphabetically. STATUS would ideally
+   read in Trello's own list order, but the wire carries no list position — see
+   R-pf-e. NO STATE FILTERS: blocked and missing-info were considered and
+   declined; row state stays on the rows themselves. */
+const PIPE_FILTERS = [
+  { key: 'type', label: 'TYPE', pick: (r) => r.assetType },
+  { key: 'difficulty', label: 'DIFFICULTY', pick: (r) => r.difficulty, order: ['Easy', 'Medium', 'Hard'] },
+  { key: 'urgency', label: 'URGENCY', pick: (r) => r.urgency, order: ['Non-Urgent', 'Urgent'] },
+  { key: 'status', label: 'STATUS', pick: (r) => r.currentList },
+  { key: 'requestor', label: 'REQUESTOR', pick: (r) => r.requestor },
+];
+/** Empty selection object — one array per axis, derived so a sixth axis is one entry. */
+const PIPE_FILTERS_NONE = () => Object.fromEntries(PIPE_FILTERS.map((f) => [f.key, []]));
+/** Does a row satisfy every axis EXCEPT the one named? (`null` = every axis.) */
+const pipeMatches = (row, sel, exceptKey) => {
+  return PIPE_FILTERS.every((f) => {
+    if (f.key === exceptKey) return true;
+    const want = sel[f.key] || [];
+    if (!want.length) return true; // an empty axis constrains nothing
+    return want.indexOf(f.pick(row)) > -1; // OR within, AND across (owl #62)
+  });
+};
+/** The sort button's label — `Group: Item`, the frame's format (node 592:56966). */
+const pipeSortLabel = (key) => {
+  const s = PIPE_SORTS.find((x) => x.key === key);
+  return s ? `${s.group}: ${s.label}` : '';
+};
