@@ -19,7 +19,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 10–13k b13, ctx, t-split | Two-way sync · admin panel · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · the expanded MC row · the stale-reconcile guard (decisions/0025) · the template split | **DEPLOYED + LIVE-VERIFIED through 2026-08-19** (T077–T178, ..`b401bac`) | per-batch detail: `docs/history/phase-log.md`; batch law: `specs/001-sirius-v1/pipeline-frame-notes.md` |
 | 13k b14 | Owls #52–#53: a shared MC stops attributing its tasks (R-exp-g..k — no structural edge exists, measured) · hover-card shadow + its clamp bleed (R-warn-p/q) | **DEPLOYED + LIVE 2026-08-20** (`74f95b0`; 994 + 24 todo dual-TZ) | healthz 200 · host bundle sha256 == local ✓ · live DB matches the probe (37 MC / 19 shared / max 60) ✓ |
 
-**Build health (2026-08-20):** 994/994 tests + 24 `it.todo`, 62 files — green
+**Build health (2026-08-20):** 996/996 tests + 24 `it.todo`, 62 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **007** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
@@ -31,6 +31,7 @@ rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 | # | Decision | Blocks | Status |
 |---|---|---|---|
 | BRD §9 | Amend "write impossible by permission" — the write surface is now the three-entry registry (urgency + due date + difficulty) | Vendor assessment, v2 | ⬜ open (grew 2026-08-04, again 2026-08-12) — product confirmed 2026-08-12 they'll raise it across all THREE docs quoting "one write": BRD §9, pilot security readiness, vendor assessment; not done yet |
+| R-row-d | Owl #59 rules the planner's three row-action icons **not keyboard-reachable** (copy/pin/unschedule become mouse-only). What ships is the OPPOSITE — real buttons in the tab order — so building it REMOVES working keyboard access and leaves the actions announced-but-unactivatable. Held: an owl never carries JP's authority | Planner row controls | ⬜ open 2026-08-20 — with JP |
 
 ## Decisions needed later (not blocking yet)
 
@@ -55,14 +56,12 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority: twice an owl
   asserted a ruling JP had not made or later declined, so verify with JP
-  before building on one. **Thread position**: miles→jp acked through **#56**;
-  jp→miles sent through **#46** (batch 14 + #55's emphasis ruling).
-  **Awaiting Miles**: the row-controls design pass — checkbox, grip, three-icon
-  cluster and note chip together · a Smoke pass over the expanded row incl. a
-  task due set/clear · whether ARES's read path is cached (Miles is chasing
-  whoever owns ARES) · whether the frame or its annotation is right on the
-  `Open Card` underline (#45). The shared-caption treatment is RULED (#55,
-  R-exp-l). Closed threads → `docs/history/state-log/`.
+  before building on one. **Thread position**: miles→jp acked through **#60 EXCEPT #59** — its keyboard ruling is
+  unprocessed (read ≠ processed); jp→miles sent through **#47**.
+  **Awaiting Miles**: ONLY the ARES read-path caching answer. Everything else
+  they owed closed 2026-08-20 — row-controls #59, Smoke pass #60 (clean, incl.
+  the task due write BY HAND), caption #55/#58, underline withdrawn #57.
+  Closed threads → `docs/history/state-log/`.
 - **Figma reads** — Rex MCP is OFFLINE. **The official Figma MCP is the
   verified path**: `get_design_context` returns categorized annotations as
   `data-*-annotations` plus exact pixel facts (load the figma-design-to-code
