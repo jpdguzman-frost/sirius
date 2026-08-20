@@ -499,14 +499,17 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    both are message copy, so they wear one rule and a tweak lands once */
 .wpwhy, .wpfix { font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
 .wpsep { height: 1px; background: var(--slate-300); }
-/* NOT underlined. The annotation TEXT says "UNDERLINED" and the frame's own
-   render does not; batch 10 resolved that conflict toward the annotation, and
-   JP reversed it on 2026-08-20 after comparing the built card against the
-   frame side by side. The frame wins here because it is what Miles and JP both
-   look at. Weight and colour already mark this as the card's one action, and
-   the focus-visible ring above keeps the keyboard affordance. Raised with
-   Miles — if he confirms the annotation text was the intent, this is one
-   declaration to put back. */
+/* NOT underlined, and SETTLED — nothing in this card is underlined, at rest or
+   on hover/focus (Miles, owl #57, withdrawing the instruction outright).
+   History, so nobody re-derives it: the annotation TEXT said "UNDERLINED"
+   while the frame's own render never had it — `get_styled_text_segments`
+   returns `textDecoration: "NONE"`. The instruction was written for the
+   RETIRED design, where the warning was a text message under the card name and
+   an underline marked it as the trigger; when batch 10 moved to alert-icon +
+   hover-card the message line went away and the instruction lapsed, but nobody
+   retired it. Batch 10 resolved the contradiction toward the prose, JP reversed
+   it toward the frame on 2026-08-20, and Miles has now deleted the stale source
+   frame. Weight, colour and the focus ring carry the affordance. */
 .wpopen { font-size: var(--text-label); font-weight: 600; color: var(--blue-700); text-decoration: none; }
 
 /* links (node 431:17017) — both icons always render; the absent one is a

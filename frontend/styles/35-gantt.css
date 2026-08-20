@@ -230,10 +230,24 @@
    R-drag-b (owl #31): it now renders ONLY on unscheduled rows. With the row
    drag gone from scheduled rows the grip there would be a handle that drags
    nothing — the same trap R-f-6 deletes from the sprints table's column 1. */
+/* Miles, owl #59: the handle is HOVER-REVEALED, like the action cluster and
+   unlike the checkbox and the note chip — those two are always visible because
+   one is a control the row is selected with and the other carries content.
+   Same `opacity` reveal and the same trigger pair as `.gactions`, so the two
+   appear together rather than a beat apart. The pinned exception is the
+   CLUSTER's only (state must not hide behind a hover); a pinned row's handle
+   already refuses the drag below, so revealing it at rest would advertise
+   something that cannot happen. The COLUMN stays reserved either way —
+   `.c-mc`'s 58px left pad does not depend on the handle rendering, so
+   scheduled and unscheduled rows start their content at the same x (#59: a
+   collapsing column reads as broken, not tidy). */
 .gantt .ghandle {
   position: absolute; left: 36px; top: 18px;
   display: inline-flex; color: var(--slate-400); cursor: grab;
+  opacity: 0; transition: opacity 0.12s ease;
 }
+.gantt .growr:hover .ghandle,
+.gantt .growr:focus-within .ghandle { opacity: 1; }
 .gantt .growr.pinned .ghandle { cursor: not-allowed; }
 .gantt .ghandle svg { display: block; }
 .gantt .gmc { display: block; font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }

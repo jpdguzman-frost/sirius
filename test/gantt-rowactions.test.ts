@@ -103,6 +103,28 @@ describe('the cluster is the design’s three icons, in the frame’s order', ()
   it('states the cluster on a pinned row, because state must not hide behind a hover', () => {
     expect(GANTT_CSS).toMatch(/\.gantt \.growr\.pinned \.gactions,?\s*\{?[^}]*opacity: 1/);
   });
+
+  /* Miles, owl #59 — the reveal rules, ruled as a SET. Asserting them together
+     is the point: each is only correct relative to the others, and a later
+     change that hides the checkbox or reveals the handle at rest would pass
+     any test that looked at one rule alone. */
+  it('reveals the HANDLE on hover like the cluster, and never the checkbox or the note chip', () => {
+    expect(cssRule('.gantt .ghandle')).toMatch(/opacity: 0/);
+    expect(GANTT_CSS).toMatch(/\.gantt \.growr:hover \.ghandle,\s*\n\.gantt \.growr:focus-within \.ghandle \{[^}]*opacity: 1/);
+    // always visible: the checkbox is how a row is selected, the note chip carries content
+    expect(cssRule('.gantt .gsel')).not.toMatch(/opacity/);
+    expect(cssRule('.gantt button.pbadge')).not.toMatch(/opacity/);
+  });
+
+  it('reserves the handle column on rows that have none — same content x on both kinds', () => {
+    /* #59: if the column collapses, scheduled and unscheduled rows start their
+       content at different x, which reads as broken rather than tidy. The pad
+       lives on the CELL and the handle is absolutely positioned inside it, so
+       the reservation holds by construction and not by a second rule that
+       could be forgotten. */
+    expect(cssRule('.gantt .gdetails .c-mc')).toMatch(/padding-left: \d+px/);
+    expect(cssRule('.gantt .ghandle')).toContain('position: absolute');
+  });
 });
 
 describe('Calendar Remove refuses where it would change nothing', () => {
