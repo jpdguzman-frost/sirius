@@ -49,7 +49,12 @@ export interface Conflict {
   week: string;
   rule: 'urgent-overlap' | 'over-capacity' | 'past-deadline';
   explanation: string;
-  items: Array<{ cardId: string; displayId: string; name: string; phase: string }>;
+  /* `urgent` rides along because the alert row draws an urgency badge for each
+     item. It comes off the milestone the engine already holds while building
+     these — the client used to re-join conflicts back to milestones to recover
+     it, which is both a second definition of "which milestone this is" and a
+     linear scan per item. */
+  items: Array<{ cardId: string; displayId: string; name: string; phase: string; urgent: boolean }>;
 }
 
 const pairKey = (items: Array<{ cardId: string; phase: string }>) =>
@@ -110,7 +115,7 @@ export function detectConflicts(milestones: Milestone[], weeklyCapacity: number)
         week,
         rule: 'urgent-overlap',
         explanation: `${urgent.length} urgent milestones land in this week — they compete for the same attention.`,
-        items: urgent.map(({ cardId, displayId, name, phase }) => ({ cardId, displayId, name, phase })),
+        items: urgent.map(({ cardId, displayId, name, phase, urgent }) => ({ cardId, displayId, name, phase, urgent })),
       });
     }
 
@@ -125,7 +130,7 @@ export function detectConflicts(milestones: Milestone[], weeklyCapacity: number)
         week,
         rule: 'over-capacity',
         explanation: `${fmtLoad(load)} cards' worth of milestones against a capacity of ${weeklyCapacity} cards — the non-urgent items listed are displaced.`,
-        items: displaced.map(({ cardId, displayId, name, phase }) => ({ cardId, displayId, name, phase })),
+        items: displaced.map(({ cardId, displayId, name, phase, urgent }) => ({ cardId, displayId, name, phase, urgent })),
       });
     }
 
@@ -136,7 +141,7 @@ export function detectConflicts(milestones: Milestone[], weeklyCapacity: number)
         week,
         rule: 'past-deadline',
         explanation: 'Forecast dates fall after the client deadline for the items listed.',
-        items: breaching.map(({ cardId, displayId, name, phase }) => ({ cardId, displayId, name, phase })),
+        items: breaching.map(({ cardId, displayId, name, phase, urgent }) => ({ cardId, displayId, name, phase, urgent })),
       });
     }
   }

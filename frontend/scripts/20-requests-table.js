@@ -29,11 +29,17 @@ const reqFilterKeys = REQ_FILTERS.map((f) => f.key);
 const reqFiltersCleared = () => Object.fromEntries(reqFilterKeys.map((k) => [k, '']));
 
 /* MC # sorts NATURALLY — on the number inside the label, so MC-9 precedes
-   MC-10 where a string compare would not. mc_number is 'MC-825'; a human
+   MC-10 where a string compare would not. 'MC-825' ranks 825; a human
    display_id ('MC-655.3') keeps its fractional part rather than truncating.
-   Computed once per load (blobRequests), never inside the comparator. */
-const mcRank = (r) => {
-  const m = String(r.mc_number || '').match(/\d+(?:\.\d+)?/);
+   Computed once per load (blobRequests), never inside the comparator.
+
+   Takes the MC STRING, not the row. It used to take a request row and read
+   `mc_number` off it, and the Pipeline's own MC sort (10-constants.js) then
+   called it with the string — so every row ranked null and that sort silently
+   ordered nothing. One argument both tabs can spell is the fix; a row shape is
+   not something a shared helper should have to know. */
+const mcRank = (mc) => {
+  const m = String(mc || '').match(/\d+(?:\.\d+)?/);
   return m ? Number(m[0]) : null;
 };
 

@@ -155,13 +155,6 @@ const WARN_CLOSE_MS = 150;
 const PIPE_MENU_W = 276;
 const PIPE_SORT_H = 420;
 const PIPE_FILTER_H = 520;
-/* The active SORT button's cap (node 592:56966: "define that maximum so the
-   search-bar row is stable"). At 12px Regular the longest of the eight labels,
-   `Dates: Due dates farthest from now`, measures ~235px — so nothing truncates
-   today. The cap exists so a FUTURE label cannot push the search field around;
-   the frame is explicit that nothing is lost to truncation, since the applied
-   sort is also marked inside the popup. */
-const PIPE_SORT_LABEL_MAX = 240;
 /* ONE recipe for the warning, derived from the row the server already sends.
    Returns null for a complete card — the template's only test — or
    { label, items:[{ label, why }] }. items[0] is ALWAYS the card's OWN
@@ -245,14 +238,17 @@ function fmtRange(fromIso, toIso) {
    so the day can never shift under a browser in another zone. */
 function fmtWeekRange(mondayIso) {
   if (!mondayIso) return '';
-  const friday = isoAddDays(mondayIso, 4);
+  // the week's own Friday, by the named helper rather than a bare +4
+  const friday = fridayIso(mondayIso);
   const [y1, m1, d1] = mondayIso.slice(0, 10).split('-');
-  const [y2, m2, d2] = friday.slice(0, 10).split('-');
-  const mon1 = MONTHS_SHORT[Number(m1) - 1];
-  const mon2 = MONTHS_SHORT[Number(m2) - 1];
-  if (y1 !== y2) return `${Number(d1)} ${mon1} ${y1}-${Number(d2)} ${mon2} ${y2}`;
-  if (m1 !== m2) return `${Number(d1)} ${mon1}-${Number(d2)} ${mon2} ${y1}`;
-  return `${Number(d1)}-${Number(d2)} ${mon1} ${y1}`;
+  const [y2, m2] = friday.slice(0, 10).split('-');
+  // the right-hand end always carries the year, so it is fmtLongIso; only the
+  // left end varies, shedding first the year and then the month as the two
+  // ends converge. No third copy of the month-table lookup.
+  const right = fmtLongIso(friday);
+  if (y1 !== y2) return `${fmtLongIso(mondayIso)}-${right}`;
+  if (m1 !== m2) return `${fmtDayMonth(mondayIso)}-${right}`;
+  return `${Number(d1)}-${right}`;
 }
 /** '6 Aug' - the card caption's milestone date, day-first and year-less. */
 function fmtDayMonth(iso) {
@@ -267,8 +263,7 @@ function fmtDayMonth(iso) {
    explicit that they must stay separately legible (owl #64). */
 function fmtDeadlineShort(iso, refIso) {
   if (!iso) return '';
-  const short = fmtDayMonth(iso);
-  return refIso && iso.slice(0, 4) === refIso.slice(0, 4) ? short : `${short} ${iso.slice(0, 4)}`;
+  return refIso && iso.slice(0, 4) === refIso.slice(0, 4) ? fmtDayMonth(iso) : fmtLongIso(iso);
 }
 
 /* THE THREE ACKNOWLEDGEABLE RULES, plus replotting which is not one of them.
@@ -276,12 +271,14 @@ function fmtDeadlineShort(iso, refIso) {
    The legend TEXT is quoted verbatim from the Model Constants panel and must
    not drift from the engine's rules - the same three the server detects. */
 const DL_RULES = [
-  { rule: 'urgent-overlap', word: 'overlap', label: 'URGENT OVERLAP', text: 'Two or more urgent milestones in one week.' },
-  { rule: 'over-capacity', word: 'over capacity', label: 'OVER CAPACITY', text: "Cards due exceed the week's capacity, taken from the project's typical week in ARES. Non-urgent items in that week are listed as displaced." },
-  { rule: 'past-deadline', word: 'past deadline', label: 'PAST DEADLINE', text: "the forecast date falls after the client's stated deadline." },
+  { rule: 'urgent-overlap', word: 'overlap', chip: '⚡ Urgent overlap', label: 'URGENT OVERLAP', text: 'Two or more urgent milestones in one week.' },
+  { rule: 'over-capacity', word: 'over capacity', chip: '▤ Over capacity', label: 'OVER CAPACITY', text: "Cards due exceed the week's capacity, taken from the project's typical week in ARES. Non-urgent items in that week are listed as displaced." },
+  { rule: 'past-deadline', word: 'past deadline', chip: '🛡 Past deadline', label: 'PAST DEADLINE', text: "the forecast date falls after the client's stated deadline." },
 ];
+/** The one row for a rule, or a stub carrying the key so nothing renders blank. */
+const dlRule = (rule) => DL_RULES.find((r) => r.rule === rule) || { rule, word: rule, chip: rule, label: rule, text: '' };
 /** The badge/summary word for a rule; the rule's own key if it is not one of the three. */
-const dlRuleWord = (rule) => (DL_RULES.find((r) => r.rule === rule) || { word: rule }).word;
+const dlRuleWord = (rule) => dlRule(rule).word;
 
 /* The intake sheet's MONTH encoding is not known until the credential lands —
    the fixtures carry full names ('August'), the column could equally arrive as
@@ -352,15 +349,27 @@ const PIPE_SORTS = [
    day it was onboarded. A row not yet re-read has none and sorts last. */
 const PIPE_SORT_DEFAULT = { key: null, dir: -1, value: (r) => r.filedAt || null };
 
-/* Empty last, always — before direction is applied, so it holds both ways. */
-const pipeCompare = (sort, a, b) => {
-  const av = sort.value(a);
-  const bv = sort.value(b);
-  const ae = av === null || av === undefined || av === '';
-  const be = bv === null || bv === undefined || bv === '';
+/* Empty last, always — before direction is applied, so it holds both ways.
+   Compares two already-extracted VALUES, never two rows: see pipeSortRows. */
+const pipeCompare = (sort, av, bv) => {
+  const ae = unranked(av);
+  const be = unranked(bv);
   if (ae || be) return ae && be ? 0 : ae ? 1 : -1;
   if (av === bv) return 0;
   return (av < bv ? -1 : 1) * sort.dir;
+};
+
+/* Decorate, sort, undecorate — `value()` runs ONCE PER ROW, not once per
+   comparison. 480 rows is ~4,300 comparisons, so extracting inside the
+   comparator meant ~8,600 calls per sort: for the name sort that is 8,600
+   `toLowerCase()` allocations, and for the MC sort 8,600 regex matches, every
+   time a filter toggles or a search key lands. The Requests table already
+   states this rule at its own comparators ("computed once per load, never
+   inside the comparator") and stamps `_mcRank` for it. */
+const pipeSortRows = (rows, sort) => {
+  const decorated = rows.map((r) => ({ r, v: sort.value(r) }));
+  decorated.sort((a, b) => pipeCompare(sort, a.v, b.v));
+  return decorated.map((d) => d.r);
 };
 
 /* THE FIVE FILTER AXES. Values are DERIVED FROM THE BOARD, never a fixed list
@@ -382,7 +391,7 @@ const PIPE_FILTERS = [
   { key: 'type', label: 'TYPE', pick: (r) => r.assetType, none: true },
   { key: 'difficulty', label: 'DIFFICULTY', pick: (r) => r.difficulty, order: ['Easy', 'Medium', 'Hard'], none: true },
   { key: 'urgency', label: 'URGENCY', pick: (r) => r.urgency, order: ['Non-Urgent', 'Urgent'] },
-  { key: 'status', label: 'STATUS', pick: (r) => r.currentList },
+  { key: 'status', label: 'STATUS', pick: (r) => r.currentList, scroll: true },
   { key: 'requestor', label: 'REQUESTOR', pick: (r) => r.requestor, none: true },
 ];
 
@@ -390,12 +399,12 @@ const PIPE_FILTERS = [
    label or a sheet requestor could legitimately BE that word, and the two must
    never collapse into one checkbox. Nothing renders it - the panel draws
    `label`, which is where the word None lives. */
-/** Absent on this axis? `null`, `undefined` and `''` all count as absent. */
-const pipeEmpty = (v) => v === null || v === undefined || v === '';
-/** A row's value on an axis; absence becomes null, which only a `none` axis offers. */
+/** A row's value on an axis; absence becomes null, which only a `none` axis
+    offers. Absence is `unranked` — the same test every Requests comparator
+    routes its nulls through, rather than a second definition of "missing". */
 const pipePick = (f, row) => {
   const v = f.pick(row);
-  return pipeEmpty(v) ? null : v;
+  return unranked(v) ? null : v;
 };
 /** Empty SELECTION object - one array per axis, derived so a sixth axis is one entry. */
 const PIPE_FILTERS_EMPTY = () => Object.fromEntries(PIPE_FILTERS.map((f) => [f.key, []]));
@@ -432,32 +441,54 @@ const pipeMatches = (row, sel, exceptKey) => {
    A Map, not an object: object keys stringify, and `null` as a key would become
    the string "null" and merge with a board value of that name. */
 const pipeFacetList = (rows, sel) => {
-  return PIPE_FILTERS.map((f) => {
-    const pool = rows.filter((r) => pipeMatches(r, sel, f.key));
-    const counts = new Map();
-    const seen = (r) => {
+  /* ONE PASS over the rows for all five facets. Filtering the row set once per
+     axis meant 5 × rows × 5 axis tests; at 480 rows that is 12,000 axis
+     evaluations and five throwaway arrays, on every checkbox click — and the
+     panel deliberately stays open while you build a filter, so it fires
+     repeatedly. Counting failures instead is 480 × 5.
+
+     The arithmetic that makes it work: a row rejected by NO axis belongs to
+     every pool; a row rejected by EXACTLY ONE belongs only to that axis's pool,
+     because an axis ignores its own selection (R-pf-c); a row rejected by two
+     or more belongs to none. */
+  const facets = PIPE_FILTERS.map((f) => ({ f, counts: new Map(), picked: sel[f.key] || [] }));
+  const vals = new Array(facets.length);
+  for (const r of rows) {
+    let fails = 0;
+    let failed = -1;
+    for (let i = 0; i < facets.length; i++) {
+      const { f, picked } = facets[i];
       const v = pipePick(f, r);
-      return v === null && !f.none ? undefined : v;
-    };
-    // every value PRESENT on the board, even at zero against this pool - the
-    // frame wants empty categories exposed, not hidden
-    for (const r of rows) {
-      const v = seen(r);
-      if (v !== undefined) counts.set(v, 0);
+      vals[i] = v;
+      // every value PRESENT on the board is seeded, even at zero against this
+      // pool — the frame wants empty categories exposed, not hidden
+      if (v !== null || f.none) if (!facets[i].counts.has(v)) facets[i].counts.set(v, 0);
+      // the same test pipeMatches makes: an empty axis constrains nothing, and
+      // an axis with no None cannot match a row that has no value there
+      if (picked.length && ((v === null && !f.none) || picked.indexOf(v) < 0)) {
+        fails++;
+        failed = i;
+      }
     }
-    for (const r of pool) {
-      const v = seen(r);
-      if (v !== undefined) counts.set(v, counts.get(v) + 1);
+    if (fails > 1) continue;
+    for (let i = 0; i < facets.length; i++) {
+      if (fails === 1 && failed !== i) continue;
+      const v = vals[i];
+      if (v !== null || facets[i].f.none) facets[i].counts.set(v, facets[i].counts.get(v) + 1);
     }
+  }
+  return facets.map(({ f, counts, picked }) => {
     const names = [...counts.keys()];
     names.sort((a, b) => {
       if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
-      return f.order ? f.order.indexOf(a) - f.order.indexOf(b) : a.localeCompare(b);
+      return f.order ? f.order.indexOf(a) - f.order.indexOf(b) : alphaSort(a, b);
     });
-    const picked = sel[f.key] || [];
     return {
       key: f.key,
       label: f.label,
+      // the one open-ended axis scrolls inside its own group; the flag is on
+      // the axis so a sixth one is still a single entry (R-pf-e)
+      scroll: !!f.scroll,
       values: names.map((v) => ({
         value: v,
         label: v === null ? 'None' : v,

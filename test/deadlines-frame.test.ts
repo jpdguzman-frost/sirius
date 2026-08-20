@@ -18,45 +18,37 @@
 
 import { describe, expect, it } from 'vitest';
 import { detectConflicts } from '../src/services/conflicts.ts';
-import { APP_JS, APP_JS_CODE, DEADLINES_CSS, TEMPLATE, cssRule, decl, fnBody } from './helpers/gantt-render.ts';
+import { APP_JS, APP_JS_CODE, DEADLINES_CSS, TEMPLATE, cssRule, decl, fnBody, method } from './helpers/gantt-render.ts';
 
-/** Slice a Ractive `computed` method (`  name() { … }`) by brace matching. */
-function method(src: string, name: string): string {
-  const at = src.indexOf(`\n    ${name}() {`);
-  if (at < 0) throw new Error(`deadlines-frame: no computed \`${name}()\` in the shipped frontend source`);
-  let depth = 0;
-  for (let i = src.indexOf('{', at); i < src.length; i++) {
-    if (src[i] === '{') depth++;
-    else if (src[i] === '}' && --depth === 0) return src.slice(at, i + 1);
-  }
-  throw new Error(`deadlines-frame: unterminated computed \`${name}()\``);
-}
-
-interface Rule { rule: string; word: string; label: string; text: string }
+interface Rule { rule: string; word: string; chip: string; label: string; text: string }
 interface Week { key: string; label: string; items: Array<{ displayId: string; name: string }>; due: number; urgent: number; load: number }
 
 const recipe = new Function(`
   ${decl(APP_JS, 'isoOf')}
-  function isoAddDays(iso, n) { ${fnBody('isoAddDays')} }
+  function mondayIso(base) { ${fnBody('mondayIso')} }
+  function fridayIso(base) { ${fnBody('fridayIso')} }
   ${decl(APP_JS, 'MONTHS_SHORT')}
+  function fmtLongIso(iso) { ${fnBody('fmtLongIso')} }
   function fmtWeekRange(mondayIso) { ${fnBody('fmtWeekRange')} }
   function fmtDayMonth(iso) { ${fnBody('fmtDayMonth')} }
   function fmtDeadlineShort(iso, refIso) { ${fnBody('fmtDeadlineShort')} }
   ${decl(APP_JS, 'DL_RULES')}
+  ${decl(APP_JS, 'dlRule')}
   ${decl(APP_JS, 'dlRuleWord')}
-  return { fmtWeekRange, fmtDayMonth, fmtDeadlineShort, DL_RULES, dlRuleWord };
+  return { fmtWeekRange, fmtDayMonth, fmtDeadlineShort, DL_RULES, dlRule, dlRuleWord };
 `)() as {
   fmtWeekRange: (monday: string) => string;
   fmtDayMonth: (iso: string) => string;
   fmtDeadlineShort: (iso: string, ref: string | null) => string;
   DL_RULES: Rule[];
+  dlRule: (rule: string) => Rule;
   dlRuleWord: (rule: string) => string;
 };
 
 /* `dlWeeks` reads only `dlQ` and `deadlineWeeks`, so a two-key stand-in for
    Ractive's `this` runs the shipped body unchanged. */
 const dlWeeks = (q: string, weeks: Week[]): Week[] => {
-  const host = new Function(`return { get(k) { return this.state[k]; }, state: null, ${method(APP_JS, 'dlWeeks').trim()} };`)() as {
+  const host = new Function(`return { get(k) { return this.state[k]; }, state: null, ${method('dlWeeks').trim()} };`)() as {
     state: Record<string, unknown>;
     dlWeeks(): Week[];
   };
@@ -141,6 +133,7 @@ describe('the card carries two dates that mean different things', () => {
     // pure string math on the fixed month table — the same premise fmtLongIso
     // rests on, and the reason 'Sept' can never appear
     expect(fnBody('fmtWeekRange')).not.toContain('toLocaleDateString');
+    expect(fnBody('fmtLongIso')).not.toContain('toLocaleDateString');
     expect(fnBody('fmtDayMonth')).not.toContain('new Date');
   });
 });
@@ -185,6 +178,12 @@ describe('the Model Constants legend and the engine state the same three rules',
     expect(recipe.dlRuleWord('past-deadline')).toBe('past deadline');
     // an unknown rule falls back to its own key rather than to a blank badge
     expect(recipe.dlRuleWord('replot')).toBe('replot');
+    /* the acknowledged strip reads `chip` out of this SAME table. It used to be
+       a ternary chain whose else-branch labelled every unknown rule 'Over
+       capacity', so a fourth rule would have shipped mislabelled on the one
+       screen whose wording has to match the engine. */
+    expect(recipe.dlRule('urgent-overlap').chip).toBe('⚡ Urgent overlap');
+    expect(recipe.dlRule('nonesuch').chip).toBe('nonesuch');
   });
 });
 

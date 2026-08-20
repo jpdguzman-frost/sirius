@@ -626,6 +626,23 @@ export function decl(src: string, name: string): string {
   throw new Error(`gantt-render: unterminated declaration \`${name}\``);
 }
 
+/**
+ * One Ractive `computed` method (`  name() { … }`), sliced by brace matching.
+ * Three suites had kept byte-identical private copies of this; the convention
+ * it encodes (two-space indent, `name() {`) is a property of the shipped file,
+ * so it belongs beside `decl` and `fnBody` rather than in each caller.
+ */
+export function method(name: string, src: string = APP_JS): string {
+  const at = src.indexOf(`\n    ${name}() {`);
+  if (at < 0) throw new Error(`gantt-render: no computed \`${name}()\` in the shipped frontend source`);
+  let depth = 0;
+  for (let i = src.indexOf('{', at); i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}' && --depth === 0) return src.slice(at, i + 1);
+  }
+  throw new Error(`gantt-render: unterminated computed \`${name}()\``);
+}
+
 /** One CSS rule body, sliced by its selector line. */
 export function cssRule(selector: string, src: string = GANTT_CSS): string {
   const at = src.indexOf(`\n${selector} {`);

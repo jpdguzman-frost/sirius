@@ -19,26 +19,28 @@ import { APP_JS, APP_JS_CODE, PIPELINE_CSS, TEMPLATE, cssRule, decl, fnBody } fr
 interface Sort { key: string; group: string; label: string; dir: number; value: (r: unknown) => unknown }
 interface Axis { key: string; label: string; pick: (r: unknown) => unknown; order?: string[]; none?: boolean }
 interface FacetValue { value: string | null; label: string; count: number; on: boolean }
-interface Facet { key: string; label: string; values: FacetValue[] }
+interface Facet { key: string; label: string; scroll: boolean; values: FacetValue[] }
 
 const recipe = new Function(`
   ${decl(APP_JS, 'DIFF_RANK')}
   ${decl(APP_JS, 'PIPE_SORTS')}
   ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
   ${decl(APP_JS, 'pipeCompare')}
+  ${decl(APP_JS, 'pipeSortRows')}
   ${decl(APP_JS, 'PIPE_FILTERS')}
-  ${decl(APP_JS, 'pipeEmpty')}
+  ${decl(APP_JS, 'unranked')}
+  ${decl(APP_JS, 'alphaSort')}
   ${decl(APP_JS, 'pipePick')}
   ${decl(APP_JS, 'PIPE_FILTERS_EMPTY')}
   ${decl(APP_JS, 'pipeMatches')}
   ${decl(APP_JS, 'pipeFacetList')}
   ${decl(APP_JS, 'pipeSortLabel')}
-  function mcRank(mc) { return mc ? Number(String(mc).replace(/\\D/g, '')) : null; }
-  return { PIPE_SORTS, PIPE_SORT_DEFAULT, pipeCompare, PIPE_FILTERS, PIPE_FILTERS_EMPTY, pipeMatches, pipeFacetList, pipeSortLabel };
+  ${decl(APP_JS, 'mcRank')}
+  return { PIPE_SORTS, PIPE_SORT_DEFAULT, pipeSortRows, PIPE_FILTERS, PIPE_FILTERS_EMPTY, pipeMatches, pipeFacetList, pipeSortLabel };
 `)() as {
   PIPE_SORTS: Sort[];
   PIPE_SORT_DEFAULT: Sort;
-  pipeCompare: (s: Sort, a: unknown, b: unknown) => number;
+  pipeSortRows: (rows: unknown[], s: Sort) => unknown[];
   PIPE_FILTERS: Axis[];
   PIPE_FILTERS_EMPTY: () => Record<string, (string | null)[]>;
   pipeMatches: (r: unknown, sel: Record<string, (string | null)[]>, except: string | null) => boolean;
@@ -53,7 +55,9 @@ const row = (over: Record<string, unknown> = {}) => ({
 });
 const sortBy = (key: string | null, rows: unknown[]) => {
   const s = key ? recipe.PIPE_SORTS.find((x) => x.key === key)! : recipe.PIPE_SORT_DEFAULT;
-  return rows.slice().sort((a, b) => recipe.pipeCompare(s, a, b));
+  // the SHIPPED sort path, decorate-sort-undecorate and all — not a
+  // re-implementation of it around the bare comparator
+  return recipe.pipeSortRows(rows, s);
 };
 
 /* ---------------------------------------------------------------------- */
@@ -225,6 +229,20 @@ describe('a category counts against the OTHER categories, never its own', () => 
   });
 });
 
+describe('the MC-number sort actually orders by the MC number', () => {
+  it('puts 9 before 10, and keeps a fraction rather than truncating it', () => {
+    /* this sort shipped ordering NOTHING: `mcRank` took a request ROW and read
+       `mc_number` off it, the Pipeline handed it the STRING, and every row
+       ranked null. The suite could not see it because it carried a hand-written
+       stub of `mcRank` instead of slicing the shipped one — so the guard now
+       executes the real helper, and this case is what the stub was hiding. */
+    const rows = [row({ cardId: 'a', mcNumber: 'MC-10' }), row({ cardId: 'b', mcNumber: 'MC-9' }), row({ cardId: 'c', mcNumber: 'MC-655.3' })];
+    expect(sortBy('mc', rows).map((r) => (r as { cardId: string }).cardId)).toEqual(['b', 'a', 'c']);
+    // a row with no MC number is empty, and empty still sorts last
+    expect(sortBy('mc', [row({ cardId: 'x' }), row({ cardId: 'y', mcNumber: 'MC-1' })]).map((r) => (r as { cardId: string }).cardId)).toEqual(['y', 'x']);
+  });
+});
+
 /* ---------------------------------------------------------------------- */
 /* F — "None" is a value (owl #63, closing R-pf-i)                          */
 /* ---------------------------------------------------------------------- */
@@ -388,7 +406,11 @@ describe('the panels behave like every other overlay', () => {
   });
 
   it('scrolls STATUS inside its own group, not the whole panel', () => {
-    expect(TEMPLATE).toContain(`{{#if f.key === 'status'}}pmscroll{{/if}}`);
+    /* the axis carries the flag; the template no longer names STATUS, so a
+       sixth open-ended axis is one entry in the table rather than three edits */
+    expect(TEMPLATE).toContain('{{#if f.scroll}}pmscroll{{/if}}');
+    const scrolling = recipe.pipeFacetList([], recipe.PIPE_FILTERS_EMPTY()).filter((f) => f.scroll);
+    expect(scrolling.map((f) => f.key)).toEqual(['status']);
     expect(cssRule('.pipemenu .pmscroll', PIPELINE_CSS)).toContain('overflow-y: auto');
     expect(cssRule('.pipemenu', PIPELINE_CSS)).not.toContain('overflow-y');
   });

@@ -644,7 +644,12 @@ describe('every overlay closes through ONE path — commit as well as dismiss', 
     expect([...jsCode.matchAll(/function placeMeasured\(/g)]).toHaveLength(1);
     expect([...jsCode.matchAll(/function closeMenus\(/g)]).toHaveLength(1);
     expect([...jsCode.matchAll(/function openOverlay\(/g)]).toHaveLength(1);
-    expect(fnBody('showWarnPop')).toContain('openOverlay(');
+    expect([...jsCode.matchAll(/function openMeasured\(/g)]).toHaveLength(1);
+    // the hover card opens through the SHARED opener. `openMeasured` is
+    // `openOverlay` plus the re-place every measured overlay needs, so going
+    // through it is what "extends rather than forks" means here.
+    expect(fnBody('showWarnPop')).toContain('openMeasured(');
+    expect(fnBody('openMeasured')).toContain('openOverlay(');
   });
 
   it('PLACES THE CARD A SECOND TIME against the box that actually rendered', () => {
@@ -662,12 +667,17 @@ describe('every overlay closes through ONE path — commit as well as dismiss', 
        It is load-bearing twice: the second placement is also what settles the
        final `up`, and `up` is the only carrier of the flip that drives both the
        squared corner and the side the bridge sits on (R-warn-p). */
-    const body = fnBody('showWarnPop');
-    expect(body, 'showWarnPop never re-places against the measured box').toContain('placeMeasured(');
-    // …and it retries on the next frame when the card is not mounted yet —
+    /* The open-then-re-place pair now lives in `openMeasured`, which is where
+       all four measured overlays get it — so the rule is asserted there, on the
+       one body that owns it, and the card is asserted to go through it. */
+    const opener = fnBody('openMeasured');
+    expect(opener, 'openMeasured never re-places against the measured box').toContain('placeMeasured(');
+    // …and it retries on the next frame when the box is not mounted yet —
     // placeMeasured returns false for exactly that case and says so
-    expect(body).toContain('requestAnimationFrame(');
-    expect(body.indexOf('openOverlay(')).toBeLessThan(body.indexOf('placeMeasured('));
+    expect(opener).toContain('requestAnimationFrame(');
+    expect(opener.indexOf('openOverlay(')).toBeLessThan(opener.indexOf('placeMeasured('));
+    const body = fnBody('showWarnPop');
+    expect(body).toContain('openMeasured(');
     // it measures the CARD, not some other overlay's box
     expect(body).toContain("sel: '.warnpop'");
   });
@@ -1061,8 +1071,13 @@ describe('one recipe per visual (CSS)', () => {
       .filter(([sel, decls]) => !sel.includes('::before') && declares(decls, 'position'));
     expect(positioners.map(([sel]) => sel), 'the card is positioned in more than one place')
       .toHaveLength(1);
-    expect(positioners[0]![0].split(',').map((s) => s.trim()).sort())
-      .toEqual(['.duepop', '.selectmenu', '.warnpop']);
+    /* Asserted as MEMBERSHIP, not as a fixed roster: the rule being defended is
+       "one positioning recipe, and the card is in it". Pinning the exact set
+       makes a fourth overlay JOINING the recipe — the correct move — fail here,
+       which is the count-pin trap test/CLAUDE.md rule 1 names. */
+    const members = positioners[0]![0].split(',').map((x) => x.trim());
+    expect(members).toContain('.warnpop');
+    expect(members).toContain('.selectmenu');
     expect(positioners[0]![1]).toContain('position: fixed');
   });
 
@@ -1071,7 +1086,7 @@ describe('one recipe per visual (CSS)', () => {
        the identical rule and must not fail here. */
     const base = /\n([^{}\n]*\.warnpop[^{}\n]*)\{\s*\n\s*position: fixed/.exec(PIPELINE_CSS)?.[1];
     expect(base, 'the shared fixed-box base rule moved').toBeTruthy();
-    expect(base!.split(',').map((s) => s.trim()).sort()).toEqual(['.duepop', '.selectmenu', '.warnpop']);
+    expect(base!.split(',').map((x) => x.trim())).toContain('.warnpop');
     // the fork is the annotation's slate-100 stroke and the asymmetric radius
     const own = cssRule('.warnpop', PIPELINE_CSS);
     expect(own).toContain('width: 235px');
@@ -1081,7 +1096,10 @@ describe('one recipe per visual (CSS)', () => {
        deliberately. The base rule still carries --shadow-xs for the other two
        overlays — that is what makes this a fork and not a redefinition. */
     expect(own).toContain('box-shadow: var(--shadow-card)');
-    expect(cssRule('.selectmenu, .duepop, .warnpop', PIPELINE_CSS)).toContain('box-shadow: var(--shadow-xs)');
+    // the base rule is found by the same membership match as above, so a new
+    // member joining it cannot break this assertion about the SHADOW
+    expect(PIPELINE_CSS.slice(PIPELINE_CSS.indexOf(base!), PIPELINE_CSS.indexOf('}', PIPELINE_CSS.indexOf(base!))))
+      .toContain('box-shadow: var(--shadow-xs)');
     /* the heavier value is the annotation's own (node 537:69135 / Figma
        `Shadow/sm`), and it must NOT drift toward the light chrome it exists to
        outweigh — Miles ruled that explicitly in owl #53 */

@@ -10,6 +10,7 @@ import globals from 'globals';
 // concatenates them into one <script>). Drives both the eslint globals map
 // and the unused-vars ignore pattern below — one list, two derivations.
 const FRONTEND_SHARED = [
+  'alphaSort',
   'api', 'fmtDate', 'mondayShift', 'ICONS', 'ICON_SPRITE',
   'BASE', 'parseRoute', 'buildPath', 'ROUTE_TABS', 'ROUTE_DEFAULT_TAB',
   // The former 01-app.js, split into ten files (context restructure stage 5,
@@ -21,12 +22,12 @@ const FRONTEND_SHARED = [
   'HARD_IDEAL', 'initialRoute', 'isoAddDays', 'isoNextMonday', 'isoOf', 'itemCount',
   'loadAdmin', 'loadAll', 'loadShell', 'MANILA_TIME', 'manilaToday', 'mcRank',
   'mondayIso', 'mondaysBetween', 'monthOf', 'monthOrder', 'MONTHS_LONG', 'MONTHS_SHORT', 'OVERLAY_EDGE',
-  'monthShiftYm', 'monthShort', 'normalizeUrl', 'noteText', 'NUDGE_PX', 'openOverlay',
-  'PIPE_FILTERS', 'PIPE_FILTERS_EMPTY', 'PIPE_SORTS', 'PIPE_SORT_DEFAULT', 'pipeCompare',
-  'PIPE_MENU_W', 'PIPE_SORT_H', 'PIPE_FILTER_H', 'PIPE_SORT_LABEL_MAX', 'pipeBackToTop',
+  'monthShiftYm', 'monthShort', 'normalizeUrl', 'noteText', 'NUDGE_PX', 'openOverlay', 'openMeasured',
+  'PIPE_FILTERS', 'PIPE_FILTERS_EMPTY', 'PIPE_SORTS', 'PIPE_SORT_DEFAULT', 'pipeCompare', 'pipeSortRows',
+  'PIPE_MENU_W', 'PIPE_SORT_H', 'PIPE_FILTER_H', 'pipeBackToTop',
   'pipeMatches', 'pipeEmpty', 'pipePick', 'pipeFacetList', 'pipeSortLabel',
-  'DL_RULES', 'dlRuleWord', 'fmtWeekRange', 'fmtDayMonth', 'fmtDeadlineShort',
-  'patchRow', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
+  'DL_RULES', 'dlRule', 'dlRuleWord', 'fmtWeekRange', 'fmtDayMonth', 'fmtDeadlineShort',
+  'NO_OVERLAYS', 'patchRow', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
   'REQ_MENU_H', 'REQ_MENU_W', 'REQ_PAGE_SIZE', 'reqComparator', 'reqFilterKeys', 'reqFiltersCleared',
   'REQUEST_SEGMENTS', 'requestBlob', 'resetForProjectSwitch', 'rowLoad', 'rowWarning', 'scrollerOf',
   'selectTab', 'showWarnPop', 'sprintPayload', 'STATUS_FILED', 'thumbKeyOf', 'todayIso',

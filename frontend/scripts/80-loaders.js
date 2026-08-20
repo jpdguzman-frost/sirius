@@ -300,7 +300,6 @@ async function loadAll() {
       rows: pipeline.rows,
       writesEnabled: pipeline.writesEnabled !== false,
       workCardsByMc: pipeline.workCardsByMc,
-      mcDeliverables: pipeline.mcDeliverables || {},
       unattachedWork: pipeline.unattachedWork || { cards: 0, mcNumbers: [] },
       corrections: pipeline.corrections,
       sprints: pipeline.sprints,
@@ -351,7 +350,7 @@ function blobRequests(rows) {
   rows.forEach((r) => {
     r.blob = requestBlob(r);
     r._monthIdx = monthOrder(r.month);
-    r._mcRank = mcRank(r);
+    r._mcRank = mcRank(r.mc_number);
   });
   return rows;
 }
@@ -442,7 +441,6 @@ function computeDeadlines() {
       return {
         key,
         label: `Week ${i + 1}`,
-        sub: fmtDate(key),
         /* the frame's own day-first range, beside the heading */
         range: fmtWeekRange(key),
         items,
@@ -459,17 +457,15 @@ function computeDeadlines() {
     /* THE DETAIL ROWS, one per active conflict, composed where the payload
        lives so the template stays a layout. The frame's order is ACTION, then
        SUBJECT, then REASON — 'Raise with the PM for replotting', the cards it
-       concerns, then why. Urgency is joined from the milestone the conflict
-       names; the conflict item itself carries only identity. */
+       concerns, then why. Urgency rides on the conflict item itself, set by the
+       engine off the milestone it already held; re-joining it here was a second
+       answer to "which milestone is this" and a scan per item. */
     deadlineAlerts: active.map((c) => ({
       key: c.key,
       rule: c.rule,
       word: dlRuleWord(c.rule),
       explanation: c.explanation,
-      items: c.items.map((it) => {
-        const ms = payload.milestones.find((m) => m.cardId === it.cardId && m.phase === it.phase);
-        return { displayId: it.displayId, phase: it.phase, urgent: !!(ms && ms.urgent) };
-      }),
+      items: c.items.map((it) => ({ displayId: it.displayId, phase: it.phase, urgent: !!it.urgent })),
     })),
     acknowledged: acked,
     replot: payload.replot,

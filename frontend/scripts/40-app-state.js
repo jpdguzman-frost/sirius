@@ -29,7 +29,6 @@ const app = new Ractive({
     rows: [],
     writesEnabled: true, // G7 observation mode: false = read-only project, W1/W2 controls disabled
     workCardsByMc: {},
-    mcDeliverables: {}, // owl #52: MC number → how many deliverables share it
     unattachedWork: { cards: 0, mcNumbers: [] }, // owl #61: work with no MC row
     /* owl #62 — Pipeline sort + filter. `pipeSort` is a key from PIPE_SORTS or
        null for the default order (single-select: choosing replaces, never
@@ -174,7 +173,6 @@ const app = new Ractive({
        formatted differently on purpose (owl #64) */
     dlDate: fmtDayMonth,
     dlDeadline: fmtDeadlineShort,
-    dlRuleWord,
     fmtInstant,
     monthShort,
     /* the derived-status names the template compares against — the constants
@@ -195,8 +193,12 @@ const app = new Ractive({
       return Number.isInteger(r) ? String(r) : r.toFixed(1);
     },
     dayName: (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }),
-    ruleLabel: (r) =>
-      r === 'urgent-overlap' ? '⚡ Urgent overlap' : r === 'past-deadline' ? '🛡 Past deadline' : '▤ Over capacity',
+    /* The acknowledged strip's label, read out of the SAME rule table the
+       legend and the badges render from. It used to be a ternary chain whose
+       else-branch labelled any unknown rule 'Over capacity' — so a fourth rule
+       would have shipped mislabelled, on the one screen where the wording is
+       supposed to match the engine exactly. */
+    ruleLabel: (r) => dlRule(r).chip,
   },
   computed: {
     tabLabel() {
@@ -244,21 +246,21 @@ const app = new Ractive({
        row, so sorting a page would order the page and not the table. `slice()`
        because Array.sort mutates and the source array is Ractive's own. */
     pipelineRows() {
-      const sel = this.get('pipeFilters') || PIPE_FILTERS_EMPTY();
+      const sel = this.get('pipeFilters');
       const rows = this.get('pipeSearched').filter((r) => pipeMatches(r, sel, null));
       const key = this.get('pipeSort');
       const sort = key ? PIPE_SORTS.find((s) => s.key === key) : PIPE_SORT_DEFAULT;
-      return sort ? rows.slice().sort((a, b) => pipeCompare(sort, a, b)) : rows;
+      return sort ? pipeSortRows(rows, sort) : rows;
     },
     /* The facet counts live in `pipeFacetList` beside the axes and the matcher
        they depend on (10-constants), so the panel and the table cannot disagree
        about what a value means. Rule and reasoning are documented there. */
     pipeFacets() {
-      return pipeFacetList(this.get('pipeSearched'), this.get('pipeFilters') || PIPE_FILTERS_EMPTY());
+      return pipeFacetList(this.get('pipeSearched'), this.get('pipeFilters'));
     },
     /** How many filter VALUES are applied, across every axis — the accessible name's number. */
     pipeFilterCount() {
-      const sel = this.get('pipeFilters') || PIPE_FILTERS_EMPTY();
+      const sel = this.get('pipeFilters');
       return PIPE_FILTERS.reduce((n, f) => n + (sel[f.key] || []).length, 0);
     },
     /** `Group: Item` for the active sort button (node 592:56966); '' when default. */

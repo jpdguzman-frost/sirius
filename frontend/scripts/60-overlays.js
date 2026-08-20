@@ -236,6 +236,21 @@ function placeMeasured(trigger, id, opts) {
   return true;
 }
 
+/* OPEN, THEN PLACE AGAINST WHAT ACTUALLY RENDERED — the only piece of overlay
+   lifecycle that used to live outside `openOverlay`. Four callers each wrote
+   the same five lines and each rebuilt a second opts object restating `key` and
+   `posKey`, which the two had to keep in agreement by hand; they already drift
+   (the Pipeline panels never passed `bleed`). One opts object, one door, and a
+   change to the retry policy is one edit rather than four.
+
+   `placeMeasured` returns true when the click closed the overlay again, so a
+   toggle-off schedules no frame. */
+function openMeasured(ctx, id, opts) {
+  openOverlay(ctx, id, opts);
+  const node = ctx.node;
+  if (!placeMeasured(node, id, opts)) requestAnimationFrame(() => placeMeasured(node, id, opts));
+}
+
 /* ---- the warning hover card's opener (owl #41, node 537:69135) ----
    Hoisted on purpose: openOverlay and closeMenus above both call the canceller,
    and the pair belongs beside the placer it uses rather than beside them. */
@@ -259,11 +274,12 @@ function showWarnPop(node, cardId) {
      writes (W2) — moving the pointer across the table is not consent to
      discard it. Derived from OVERLAY_KEYS so a sixth overlay is one entry. */
   if (OVERLAY_KEYS.some((k) => k !== 'warnPop' && app.get(k))) return;
-  openOverlay({ node }, cardId, { key: 'warnPop', posKey: 'warnPopPos', h: WARN_POP_H, gap: 4, clampW: WARN_POP_W, bleed: WARN_SHADOW_BLEED });
   // the height is one list-item per missing field, each wrapping — measure the
   // rendered box and place it again, exactly as the Requests select does. The
   // second placement is also what settles the FLIP the bridge rides on.
-  const m = { key: 'warnPop', posKey: 'warnPopPos', sel: '.warnpop', bleed: WARN_SHADOW_BLEED };
-  if (!placeMeasured(node, cardId, m)) requestAnimationFrame(() => placeMeasured(node, cardId, m));
+  openMeasured({ node }, cardId, {
+    key: 'warnPop', posKey: 'warnPopPos', sel: '.warnpop',
+    h: WARN_POP_H, gap: 4, clampW: WARN_POP_W, bleed: WARN_SHADOW_BLEED,
+  });
 }
 

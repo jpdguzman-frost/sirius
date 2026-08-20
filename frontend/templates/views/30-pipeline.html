@@ -41,7 +41,7 @@
       {{! SORT — expands and NAMES its one selection, `Group: Item` (node
           592:56966). The asymmetry with Filter is deliberate: a sort is always
           exactly one thing and can be named; a filter is several and cannot. }}
-      <button class="sfbtn {{#if pipeSort}}on named{{/if}}" on-click="['openPipeSort']"
+      <button class="sfbtn {{#if pipeSort}}on{{/if}}" on-click="['openPipeSort']"
               aria-haspopup="dialog" aria-expanded="{{pipeSortMenu ? 'true' : 'false'}}"
               title="Sort" aria-label="Sort{{#if pipeSort}}, {{pipeSortLabelText}}{{/if}}">{{{icon.sort}}}{{#if pipeSort}}<span class="sflabel">{{pipeSortLabelText}}</span>{{/if}}</button>
     </div>
@@ -76,7 +76,7 @@
             own group so the four short categories keep their place; scrolling
             the whole panel would let the longest axis push the others out of
             view (jp→miles #49). }}
-        <div class="pmitems {{#if f.key === 'status'}}pmscroll{{/if}}" role="group" aria-label="{{f.label}}">
+        <div class="pmitems {{#if f.scroll}}pmscroll{{/if}}" role="group" aria-label="{{f.label}}">
           {{#each f.values as v}}
             {{! a zero count is DISABLED, not silently selectable — otherwise a
                 user filters to an empty table and cannot tell why }}

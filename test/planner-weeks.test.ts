@@ -18,6 +18,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { appScripts } from './helpers/source.ts';
+import { method } from './helpers/gantt-render.ts';
 
 // One corpus for every slice: `mondayShift` lives in 00-api.js and the rest in
 // the app scripts, but the browser runs them in one scope — so does this harness.
@@ -50,17 +51,6 @@ function decl(src: string, name: string): string {
   throw new Error(`planner-weeks: unterminated declaration \`${name}\``);
 }
 
-/** Slice a Ractive `computed` method (`  name() { … }`) by brace matching. */
-function method(src: string, name: string): string {
-  const at = src.indexOf(`\n    ${name}() {`);
-  if (at < 0) throw new Error(`planner-weeks: no computed \`${name}()\` in the shipped frontend source`);
-  let depth = 0;
-  for (let i = src.indexOf('{', at); i < src.length; i++) {
-    if (src[i] === '{') depth++;
-    else if (src[i] === '}' && --depth === 0) return src.slice(at, i + 1);
-  }
-  throw new Error(`planner-weeks: unterminated computed \`${name}()\``);
-}
 
 interface Week { key: string; fridayIso: string; wk: string; sub: string; monthKey: string; month: string }
 interface Harness {
@@ -86,7 +76,7 @@ const source = [
   decl(APP, 'mondaysBetween'),
   decl(APP, 'TOTAL_UNITS'),
   decl(APP, 'dayIndex'),
-  `const computed = { ${method(APP, 'plannerWeeks')}, ${method(APP, 'plannerMonths')} };`,
+  `const computed = { ${method('plannerWeeks')}, ${method('plannerMonths')} };`,
 ].join('\n');
 
 // `dayIndex` reads the window origin off the Ractive instance; the harness is

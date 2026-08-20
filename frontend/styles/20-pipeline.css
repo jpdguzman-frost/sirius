@@ -107,7 +107,7 @@
 /* 38×33 resting, white on a slate-500 hairline, the app's own --shadow-xs.
    `width` is not fixed: the SORT button grows to name its selection and the
    filter never does, so the box is sized by its content between a floor and a
-   cap (see .sfbtn.named). */
+   cap — the cap itself is on `.sfbtn .sflabel` below. */
 .sfbtn {
   display: inline-flex; align-items: center; gap: var(--space-4);
   min-width: 38px; height: 33px; padding: 7px 11px; box-sizing: border-box;
@@ -299,9 +299,12 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .ubadge.urgent { background: var(--status-destructive-light); border-color: var(--red-300); color: var(--status-destructive-strong); }
 .ubadge.nonurgent, .ubadge.unset { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
 .ubadge.saving { opacity: 0.5; pointer-events: none; }
-/* all three are fixed boxes that escape the .pscroll clip (review finding 3),
-   with their flipped/clamped coords set inline — one recipe, three sizes */
-.selectmenu, .duepop, .warnpop {
+/* all four are fixed boxes that escape the .pscroll clip (review finding 3),
+   with their flipped/clamped coords set inline — one recipe, four sizes. The
+   filter and sort panels JOIN it rather than restating it: their own block once
+   repeated six of these declarations verbatim under a comment claiming it used
+   this recipe, which is the drift a shared selector exists to prevent. */
+.selectmenu, .duepop, .warnpop, .pipemenu {
   position: fixed;
   background: var(--white); border: 1px solid var(--slate-200);
   box-shadow: var(--shadow-xs); display: flex; flex-direction: column;
@@ -569,11 +572,8 @@ a.srclink:hover { background: var(--slate-100); }
    4px radius. `position: fixed` with inline coords, the same escape-the-clip
    recipe every other overlay on this tab uses. */
 .pipemenu {
-  position: fixed; z-index: 45; width: 276px; box-sizing: border-box;
-  display: flex; flex-direction: column; padding-top: 20px;
-  background: var(--white); border: 1px solid var(--slate-200);
-  border-radius: var(--radius-sm); box-shadow: var(--shadow-xs);
-  font-family: var(--font-sans);
+  z-index: 45; width: 276px; box-sizing: border-box; padding-top: 20px;
+  border-radius: var(--radius-sm); font-family: var(--font-sans);
 }
 /* group headings — 12px SemiBold uppercase slate-400. They are labels, not
    options, and carry aria-hidden with the group named on the wrapper instead. */

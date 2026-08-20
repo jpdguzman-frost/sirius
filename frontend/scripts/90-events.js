@@ -40,7 +40,11 @@ async function resetForProjectSwitch() {
     reqSortKey: '',
     reqSortDir: '',
     reqPage: 1,
-    reqMenu: null,
+    /* every overlay closes, by the DERIVED list — a hand-written one here was a
+       fourth place that had to agree with OVERLAY_KEYS, which is the exact
+       three-hand-edit failure that list was introduced to end. A sixth overlay
+       now closes on a project switch without anyone remembering to add it. */
+    ...NO_OVERLAYS,
     /* owl #62 — filter and sort RESET on project switch, like the planner's
        expansion state (R-exp-f). The frame raised persistence and the owl did
        not answer it, so this is a default, flagged in jp→miles #50: a Requestor
@@ -48,8 +52,6 @@ async function resetForProjectSwitch() {
        not have, which would silently show an empty table. */
     pipeSort: null,
     pipeFilters: PIPE_FILTERS_EMPTY(),
-    pipeSortMenu: null,
-    pipeFilterMenu: null,
     noteEditing: null,
     noteDraft: { remark: '', clarify: false },
     noteError: '',
@@ -78,7 +80,10 @@ function applyRequestFilter(f) {
    nobody reads would have satisfied the words and nothing else. Raised in
    jp→miles #50. */
 function pipeBackToTop() {
-  const el = document.querySelector('.pscroll');
+  // `scrollerOf` is the codebase's single "which scroller" resolver; querying
+  // `.pscroll` here was a second way to find the same element today and a way
+  // to find a different one tomorrow.
+  const el = scrollerOf(null);
   if (el) el.scrollTop = 0;
 }
 
@@ -105,9 +110,7 @@ app.on({
   /* ---- Requests §3: stat segments, selects, pager — no round-trip ---- */
   setRequestFilter(_ctx, f) { applyRequestFilter(f); },
   openReqMenu(ctx, key) {
-    openOverlay(ctx, key, { key: 'reqMenu', posKey: 'reqMenuPos', h: REQ_MENU_H, gap: 4, clampW: REQ_MENU_W });
-    const m = { key: 'reqMenu', posKey: 'reqMenuPos', sel: '.selectmenu.reqmenu' };
-    if (!placeMeasured(ctx.node, key, m)) requestAnimationFrame(() => placeMeasured(ctx.node, key, m));
+    openMeasured(ctx, key, { key: 'reqMenu', posKey: 'reqMenuPos', sel: '.selectmenu.reqmenu', h: REQ_MENU_H, gap: 4, clampW: REQ_MENU_W });
   },
   pickReqFilter(_ctx, key, value) {
     closeMenus({ restoreFocus: true });
@@ -205,14 +208,10 @@ app.on({
      here: it is what openOverlay already does to every key in OVERLAY_KEYS,
      and re-implementing it would be a second rule that could disagree. */
   openPipeSort(ctx) {
-    openOverlay(ctx, 'sort', { key: 'pipeSortMenu', posKey: 'pipeSortMenuPos', h: PIPE_SORT_H, gap: 4, clampW: PIPE_MENU_W });
-    const m = { key: 'pipeSortMenu', posKey: 'pipeSortMenuPos', sel: '.pipemenu.sortmenu' };
-    if (!placeMeasured(ctx.node, 'sort', m)) requestAnimationFrame(() => placeMeasured(ctx.node, 'sort', m));
+    openMeasured(ctx, 'sort', { key: 'pipeSortMenu', posKey: 'pipeSortMenuPos', sel: '.pipemenu.sortmenu', h: PIPE_SORT_H, gap: 4, clampW: PIPE_MENU_W });
   },
   openPipeFilter(ctx) {
-    openOverlay(ctx, 'filter', { key: 'pipeFilterMenu', posKey: 'pipeFilterMenuPos', h: PIPE_FILTER_H, gap: 4, clampW: PIPE_MENU_W });
-    const m = { key: 'pipeFilterMenu', posKey: 'pipeFilterMenuPos', sel: '.pipemenu.filtermenu' };
-    if (!placeMeasured(ctx.node, 'filter', m)) requestAnimationFrame(() => placeMeasured(ctx.node, 'filter', m));
+    openMeasured(ctx, 'filter', { key: 'pipeFilterMenu', posKey: 'pipeFilterMenuPos', sel: '.pipemenu.filtermenu', h: PIPE_FILTER_H, gap: 4, clampW: PIPE_MENU_W });
   },
   /* SINGLE-select: choosing replaces, never stacks (node 592:56913). Choosing
      the applied sort again returns to the default — the same "click it off"

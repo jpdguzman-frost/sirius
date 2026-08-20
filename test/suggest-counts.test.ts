@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { renderSuggestBar } from './helpers/gantt-render.ts';
+import { renderSuggestBar, method } from './helpers/gantt-render.ts';
 import { appScripts } from './helpers/source.ts';
 
 const APP = appScripts();
@@ -49,17 +49,6 @@ function decl(src: string, name: string): string {
   throw new Error(`suggest-counts: unterminated declaration \`${name}\``);
 }
 
-/** Slice a Ractive `computed` method (`  name() { … }`) by brace matching. */
-function method(src: string, name: string): string {
-  const at = src.indexOf(`\n    ${name}() {`);
-  if (at < 0) throw new Error(`suggest-counts: no computed \`${name}()\` in the shipped frontend source`);
-  let depth = 0;
-  for (let i = src.indexOf('{', at); i < src.length; i++) {
-    if (src[i] === '{') depth++;
-    else if (src[i] === '}' && --depth === 0) return src.slice(at, i + 1);
-  }
-  throw new Error(`suggest-counts: unterminated computed \`${name}()\``);
-}
 
 interface Suggest {
   plan?: Record<string, string> | null;
@@ -83,7 +72,7 @@ const COMPUTEDS = ['suggestOffWeeks', 'suggestOffWeeksText', 'suggestProposed', 
 const harness = new Function(`
   ${decl(APP, 'isoOf')}
   ${decl(APP, 'mondayIso')}
-  const computed = { ${COMPUTEDS.map((n) => method(APP, n)).join(', ')} };
+  const computed = { ${COMPUTEDS.map((n) => method(n)).join(', ')} };
   const DATA = { suggest: null };
   const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k) ? computed[k].call(ctx) : DATA[k]) };
   return {
@@ -273,13 +262,13 @@ describe('drift guard — the 12.9% ceiling is never retyped for this bar', () =
     expect(ideals).toHaveLength(1);
     expect(ideals[0]).toMatch(/^const HARD_IDEAL = 0\.083;$/);
     // and the counts themselves never touch a share: strain is read whole
-    expect(method(APP, 'suggestHardHeavy')).not.toMatch(/0\.1|ceiling|Hard\s*\//i);
+    expect(method('suggestHardHeavy')).not.toMatch(/0\.1|ceiling|Hard\s*\//i);
   });
 
   it('no computed banks a count at fetch time — all three derive from `suggest`', () => {
     expect(APP).not.toMatch(/\bsuggestCount\b/); // the old data key is gone
     for (const name of ['suggestProposed', 'suggestFlagged', 'suggestHardHeavy']) {
-      expect(method(APP, name)).toContain("this.get('suggest')");
+      expect(method(name)).toContain("this.get('suggest')");
     }
   });
 });

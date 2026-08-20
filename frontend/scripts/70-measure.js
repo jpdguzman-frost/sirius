@@ -31,8 +31,12 @@ function updateThumb(el, key) {
   });
 }
 const thumbKeyOf = (node) => (node.closest('.gwrap') ? 'ganttThumb' : node.closest('.reqwrap') ? 'reqThumb' : 'pipeThumb');
+/* The ONE "which scroller" resolver. `node` is optional: a caller with no
+   element in hand (a keyboard or state-driven scroll, not a pointer one) gets
+   the document-wide fallback this already had, rather than reaching for
+   `document.querySelector('.pscroll')` itself and becoming a second answer. */
 const scrollerOf = (node) => {
-  const wrap = node.closest('.pscrollwrap');
+  const wrap = node && node.closest('.pscrollwrap');
   return wrap ? wrap.querySelector('.pscroll') : document.querySelector('.pscroll');
 };
 // only one tab is mounted at a time, but the sweep is key-driven either way
