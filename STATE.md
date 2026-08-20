@@ -17,10 +17,10 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 0–8a | Setup · schema · auth+audit · `lib/` port · ARES read · intake · model refresh · five tabs · urgency write · conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 gate ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 backup/restore ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸ (team UI update), T075 sweep pending, non-member 403 parked | G7 passed; write-enable on rt-837 = next JP gate |
 | 10–13k b13, ctx, t-split | Two-way sync · admin panel · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · the expanded MC row · the stale-reconcile guard (decisions/0025) · the template split | **DEPLOYED + LIVE-VERIFIED through 2026-08-19** (T077–T178, ..`b401bac`) | per-batch detail: `docs/history/phase-log.md`; batch law: `specs/001-sirius-v1/pipeline-frame-notes.md` |
-| 14 pf | **Pipeline filter + sort** (owl #62, five nodes): 8 sorts · 5 filter axes with facet counts · migration 008 stores the card's own filing date | **DEPLOYED + LIVE 2026-08-20** (`97fd82a`; 1035 + 24 todo dual-TZ) | healthz 200 · host sha256 == local ✓ · 008 applied, filedAt backfilled 217/217 active rows ✓ |
-| 13k b14 | Owls #52–#61: a shared MC stops attributing its tasks (R-exp-g..l) · unattached work surfaced (R-exp-m/n — 35 cards in no row and no week) · hover-card shadow + clamp bleed (R-warn-p/q) · underline withdrawn (R-warn-r/s) · row-control reveal rules (R-row-a..d) | **DEPLOYED + LIVE 2026-08-20** (`7dbbb3b`; 1005 + 24 todo dual-TZ) | healthz 200 · host bundle sha256 == local ✓ · live DB matches the probe (37 MC / 19 shared / max 60) ✓ |
+| 14 pf · 13k b14 | **Pipeline filter + sort** (owl #62 — 8 sorts, 5 filter axes with facet counts, migration 008's filing date) · owls #52–#61 (shared-MC attribution, unattached work, hover-card, row-control reveal) | **DEPLOYED + LIVE 2026-08-20** (`97fd82a`, `7dbbb3b`) — healthz 200, host sha256 == local, 008 applied and filedAt backfilled 217/217 ✓ |
+| 15 | **owl #63** — "None" is a filter value on TYPE/DIFFICULTY/REQUESTOR (closes R-pf-i) · **owl #64** — **Deadlines tab rebuilt to node 630:51389** (R-dl-a..n): week columns, the two-date card, banners as drawn, legend from the rule table | **BUILT, NOT DEPLOYED** (`717f47a`, `43098ca`) — deploy is JP's call |
 
-**Build health (2026-08-20):** 1035/1035 tests + 24 `it.todo`, 63 files — green
+**Build health (2026-08-21):** 1068/1068 tests + 24 `it.todo`, 64 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **008** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
@@ -56,10 +56,11 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority: twice an owl
   asserted a ruling JP had not made or later declined, so verify with JP
-  before building on one. **Thread position**: miles→jp acked through **#62**; jp→miles sent through **#50**.
-  **Awaiting Miles**: the ARES read-path caching answer · whether TYPE /
-  DIFFICULTY / REQUESTOR need a **"None"** filter value — without one the
-  incomplete rows are the only rows no filter can select (raised #49, #50).
+  before building on one. **Thread position**: miles→jp acked through **#64**; jp→miles sent through **#52**.
+  **Awaiting Miles**: the ARES read-path caching answer · the Deadlines
+  acknowledged-state design (R-dl-n) · whether NEEDS REPLOTTING narrows to
+  deadline breaches · whether the conflict detail rows navigate, and where ·
+  whether the round week button was meant to collapse the group (#52).
   Closed threads → `docs/history/state-log/`.
 - **Figma reads** — Rex MCP is OFFLINE. **The official Figma MCP is the
   verified path**: `get_design_context` returns categorized annotations as
@@ -84,7 +85,8 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   hardening (~21 files) · whether to draw a custom drag image so Chrome's
   translucency/shadow go away entirely (only `setDragImage` can).
 - **Live browser passes owed** (JP's browser is shared — use an isolated
-  profile): the task-due picker by hand · the sub-350px last-resort scroll ·
+  profile): **the whole Deadlines tab v2 — nothing about it has been seen in a
+  browser** · the task-due picker by hand · the sub-350px last-resort scroll ·
   the b13 note chip + clarification accent · drag a bar in the collapsed pane.
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
@@ -106,9 +108,10 @@ archive entries as complete as ever; length there is fine. This window holds
 the newest 10 lines and older ones are deleted — `docs/history/state-log/`
 is self-indexing by date.
 
+- 2026-08-21 — **Owls #63 + #64**: "None" is now a filter value on the three axes that can lack one (closes R-pf-i) and the **Deadlines tab was rebuilt to node 630:51389** (R-dl-a..n). Corrected product twice — order-of-filing had already landed, and STATUS still cannot keep Trello's order. Kept the acknowledge action and the day planner the frame omits: this tab is the only route to either. 1035 → 1068 + 24 todo. Not deployed. → docs/history/state-log/2026-08-21.md
 - 2026-08-20 — **Owls #54–#56 + JP's styling pass**: #55 inverted my caption emphasis (tasks lead, count trails at every N, no threshold — R-exp-l); Miles accepted both corrections and wrote the Figma codegen trap into the annotation; JP ruled the frame beats its own annotation on the `Open Card` underline (R-warn-r) and labels are sentence-cased at display (R-warn-s). → docs/history/state-log/2026-08-20.md
-- 2026-08-20 — **Batch 14: owls #52 + #53** — a shared MC stops attributing its tasks. Probed the real board: NO structural task→deliverable edge exists (checklists 0/218, links 0, list 0/279, members 36/279, best name segment 60 unique vs 117 mis-resolving), so invariant 4 is confirmed, not broken. Correction sent to Miles: the ambiguous case is 78.4% of tasks, not the minority. Hover-card shadow + its clamp bleed. 982 → 993 + 24 todo. → docs/history/state-log/2026-08-20.md
+- 2026-08-20 — **Batch 14: owls #52 + #53** — a shared MC stops attributing its tasks. Probed the real board: NO structural task→deliverable edge exists, so invariant 4 is confirmed, not broken; the ambiguous case is 78.4% of tasks, not the minority. 982 → 993 + 24 todo. → docs/history/state-log/2026-08-20.md
 - 2026-08-19 — **Leftover sweep + template split DEPLOYED** (`b401bac`): the second session's worktree was already gone and merged — branch deleted, the `--dir test` workaround retired. Deploy aborted once on STATE.md's own 10KB cap, then green: healthz 200, host bundle sha256 == local. Corrected a wrong claim — `public/` is gitignored, so a `git diff` over it proves nothing. `build.js` byte count was under-reporting by 1.4KB (UTF-16 length vs bytes). → docs/history/state-log/2026-08-19.md
 - 2026-08-18 — **Template split** (ARES pattern): `00-app.html` → `layout.html` + `partials/` + `views/`; composed output = the single file byte-for-byte; new guard for the nested-`{{#partial}}` hazard it creates. 976 → 982 + 24 todo. Not deployed. → docs/history/state-log/2026-08-18.md
-- 2026-08-18 — **Batch 13: owls #47–#51** — the stale-reconcile guard (`decisions/0025`) stops an older ARES read reverting a registry write; product's other three cadence worries were impossible (no client refresh loop). Note chip carries the note, neutral; clarification note → left accent. 962 → 976 + 24 todo. → docs/history/state-log/2026-08-18.md
-- 2026-08-18 — **Review pass over batches 11+12** (/simplify: 14 findings applied, `47c65e0` · /code-review high: 15 defects fixed, ten CONFIRMED — the worst: task lists rendering once per sibling row under multi-deliverable MCs, a stale-overwrite race the sweep itself introduced, one malformed ARES date aborting a project's sync). Manila-true due slice on both W2 halves is the one deliberate behaviour change; suite 947 → 962 + 24 todo. → docs/history/state-log/2026-08-18.md
+- 2026-08-18 — **Batch 13: owls #47–#51** — the stale-reconcile guard (`decisions/0025`) stops an older ARES read reverting a registry write; product's other three cadence worries were impossible. 962 → 976 + 24 todo. → docs/history/state-log/2026-08-18.md
+- 2026-08-18 — **Review pass over batches 11+12** (/simplify 14 findings, `47c65e0`; /code-review high — 15 defects fixed, ten CONFIRMED). 947 → 962 + 24 todo. → docs/history/state-log/2026-08-18.md
