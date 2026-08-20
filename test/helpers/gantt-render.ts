@@ -59,6 +59,8 @@ export const UI_CSS = readFrontend('styles', '10-ui.css');
 export const PIPELINE_CSS = readFrontend('styles', '20-pipeline.css');
 /** The Requests table — status badges and the frost-note cell. */
 export const REQUESTS_CSS = readFrontend('styles', '25-requests.css');
+/** The design tokens — where a CSS value has a JS twin, this is its side. */
+export const TOKENS_CSS = readFrontend('styles', '05-tokens.css');
 /**
  * The WHOLE shipped script set, in build.js's own order and join — see
  * test/helpers/source.ts for why guards read the bundle, never one file.
@@ -425,10 +427,18 @@ export type WorkCardRow = Pick<WorkCardWire, 'cardId' | 'name'> & Partial<WorkCa
  */
 const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, byMc: Record<string, WorkCardRow[]>) => {
   const seen = new Set<string>();
+  /* owl #52: how many deliverable rows carry each MC number. Counted from the
+     rows themselves, which is exactly what the server does (`rowsByMc` in
+     src/services/pipeline.ts) — so a fixture that lists two MC-837 rows turns
+     shared on its own, the same way the real board does, with no second
+     switch a test could set inconsistently. */
+  const perMc = new Map<string, number>();
+  for (const r of rows) if (r.mcNumber) perMc.set(r.mcNumber, (perMc.get(r.mcNumber) ?? 0) + 1);
   return rows.map((r) => {
     const firstOfMc = !!r.mcNumber && !seen.has(r.mcNumber);
     if (r.mcNumber) seen.add(r.mcNumber);
-    return { ...r, warning: recipe(r), hasTasks: !!byMc[r.mcNumber], firstOfMc };
+    const mcDeliverables = perMc.get(r.mcNumber) ?? 1;
+    return { ...r, warning: recipe(r), hasTasks: !!byMc[r.mcNumber], firstOfMc, mcDeliverables, sharedMc: mcDeliverables > 1 };
   });
 };
 

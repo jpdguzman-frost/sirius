@@ -351,7 +351,10 @@ describe('a multi-deliverable MC renders its task list ONCE (invariant 3)', () =
   });
 
   it('shows the SubTone on the first sibling only', () => {
-    expect([...multi.matchAll(/class="subtone"/g)]).toHaveLength(1);
+    /* counts the PARENT's SubTone by its text: owl #52's shared caption wears
+       the same `.subtone` voice one row below, so a bare class count would now
+       pass for the wrong reason (and would have hidden a duplicated caption). */
+    expect([...multi.matchAll(/class="subtone">Main Card</g)]).toHaveLength(1);
   });
 
   it('is stamped in loadAll beside hasTasks, never asked in the template', () => {
@@ -398,5 +401,93 @@ describe('the task due wears the parent’s FULL dress, overdue included', () =>
     expect(cell(taskRows(late)[0]!, 'col-due')).toMatch(/class="datefield readonly overdue/);
     // …and a current one stays undressed
     expect(cell(taskRows(OPEN)[0]!, 'col-due')).not.toContain('overdue');
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* G — owl #52: an MC that several deliverables share                       */
+/* ---------------------------------------------------------------------- */
+
+/* The bug Miles reported on the real board: `mc_number` is not a key
+   (invariant 3), so MC-837 carries several DIFFERENT main cards, and expanding
+   one of them showed every MC-837 task under that single row — implying an
+   attribution the board does not record.
+ *
+ * The 2026-08-20 probe of `hLL7WW2V` settled that it never will: 0 of 218 main
+ * cards carry a checklist, no description links a card to another, list
+ * position resolves 0 of 279 ambiguous tasks, members resolve 36, and the best
+ * name segment resolves 60 while silently mis-resolving 117. So there is no
+ * edge to model — invariant 4 stands — and the honest rendering is to attribute
+ * only where the MC has exactly one deliverable and to SAY "shared" otherwise.
+ * This is the common case, not the fallback: 279 of 356 task cards (78.4%).
+ */
+const SHARED_SIBLING = row({
+  cardId: 'main-1b',
+  name: 'MC-837 Main Card: GBox Nav Icons — Request Hub',
+});
+const shared = (over: Record<string, unknown> = {}) =>
+  renderPipelineTable({
+    pipelineRows: [PARENT, SHARED_SIBLING, CHILDLESS],
+    rowWarning,
+    workCardsByMc: TASKS,
+    expanded: { 'MC-837': true },
+    ...over,
+  });
+const SHARED = shared();
+const captionRows = (html: string): string[] =>
+  [...html.matchAll(/<tr class="ptask pshared">([\s\S]*?)<\/tr>/g)].map((m) => m[1]!);
+
+describe('a shared MC surfaces its tasks once, at MC level, and says so', () => {
+  it('renders the caption exactly once, naming how many deliverables share the MC', () => {
+    expect(captionRows(SHARED)).toHaveLength(1);
+    expect(captionRows(SHARED)[0]).toContain('Shared across 2 deliverables');
+  });
+
+  it('still renders each task exactly once — the sibling does not duplicate the list', () => {
+    /* the list hangs under the group's FIRST row only; with two siblings a
+       per-row render would double it, which is the 99× hazard invariant 3
+       warns about */
+    expect(taskRows(SHARED)).toHaveLength(2);
+  });
+
+  it('says nothing when the MC has ONE deliverable — no caption on the attributable case', () => {
+    expect(captionRows(OPEN)).toHaveLength(0);
+    expect(OPEN).not.toContain('Shared across');
+  });
+
+  it('keeps the caption inside the parent’s column model — every cell, no colspan', () => {
+    /* the promise made to Miles in #40 and defended at the top of this file:
+       parent and child are rows of ONE table. A colspan caption would be the
+       first row in the table that cannot drift WITH the columns. */
+    const caption = captionRows(SHARED)[0]!;
+    expect(caption).not.toContain('colspan');
+    const cells = [...caption.matchAll(/<td class="(col-[a-z]+)"/g)].map((m) => m[1]!);
+    const taskCells = [...taskRows(SHARED)[0]!.matchAll(/<td class="(col-[a-z]+)"/g)].map((m) => m[1]!);
+    expect(cells).toEqual(taskCells);
+  });
+
+  it('carries the caption in the SubTone voice already used one row above', () => {
+    expect(captionRows(SHARED)[0]).toContain('class="subtone"');
+    expect(cssRule('.ptable tr.ptask.pshared td', PIPELINE_CSS)).toContain('border-bottom-color: transparent');
+  });
+});
+
+describe('the chevron belongs to the MC, not to each row that shares its number', () => {
+  it('renders ONE chevron for a shared MC — on its first row, a spacer on the sibling', () => {
+    const chevrons = [...SHARED.matchAll(/class="chevbtn/g)].length;
+    // MC-837 (shared, one chevron) + MC-901 is childless (spacer, no chevron)
+    expect(chevrons).toBe(1);
+    expect([...SHARED.matchAll(/class="chevgap"/g)].length).toBe(2);
+  });
+
+  it('names the shared case in the chevron’s accessible label', () => {
+    /* the label is the only place a screen-reader user learns that expanding
+       shows MC-level tasks rather than this card's own */
+    expect(SHARED).toContain('shared across 2 deliverables');
+  });
+
+  it('leaves the single-deliverable label alone — it attributes, so it says nothing extra', () => {
+    expect(OPEN).toContain('aria-label="MC-837 work cards"');
+    expect(OPEN).not.toContain('shared across');
   });
 });

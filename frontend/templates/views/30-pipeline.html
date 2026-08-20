@@ -38,8 +38,16 @@
                    aligned. `hasTasks` is stamped in loadAll beside blob and
                    warning (performance law: derived per-row data is never
                    asked in the template), so no wire change either. -->
-              {{#if row.hasTasks}}
-                <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{row.displayId}} work cards" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+              {{! owl #52: the chevron belongs to the MC, so it renders on the
+                  group's FIRST row only. It always did control MC-level state
+                  (`expanded` is keyed on mcNumber) and the list always did
+                  render under the first row — so on a shared MC a sibling's
+                  chevron opened a list somewhere else on screen, which is the
+                  bug Miles reported. One chevron per MC makes the affordance
+                  tell the truth. A single-deliverable MC is unaffected: its
+                  only row IS the first. The label says which case it is. }}
+              {{#if row.hasTasks && row.firstOfMc}}
+                <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{#if row.sharedMc}}{{row.mcLabel}} work cards, shared across {{row.mcDeliverables}} deliverables{{else}}{{row.displayId}} work cards{{/if}}" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
               {{else}}
                 <span class="chevgap" aria-hidden="true"></span>
               {{/if}}
@@ -177,6 +185,34 @@
               sibling it would duplicate the whole list — and an open task
               popover — once per row (review pass 2026-08-18). }}
           {{#if row.firstOfMc && expanded[row.mcNumber]}}
+            {{! owl #52 — THE SHARED CAPTION. Only when more than one
+                deliverable carries this MC number. The board records no
+                task→deliverable edge (probed 2026-08-20: 0 of 218 mains carry
+                a checklist, 0 description card-links, list position resolves
+                0 of 279, members 36 of 279, best name segment 60 unique
+                against 117 that match several mains). So these tasks belong
+                to the MC and to no single card, and the row says exactly that
+                rather than implying the expanded card owns them. Being
+                explicitly uncertain beats being silently wrong: a
+                misattributed task looks identical to a correct one.
+                PRESENTATION IS A FLAGGED DEFAULT — Miles specced the rule,
+                not the treatment (jp→miles #43 asks; this is the caption
+                vocabulary already used for `Main Card`). }}
+            {{#if row.sharedMc}}
+              <tr class="ptask pshared">
+                <td class="col-mc"></td>
+                <td class="col-name"><span class="subtone">Shared across {{row.mcDeliverables}} deliverables — these tasks carry the MC number, not a link to one card</span></td>
+                <td class="col-type"></td>
+                <td class="col-diff"></td>
+                <td class="col-urgency"></td>
+                <td class="col-status"></td>
+                <td class="col-client"></td>
+                <td class="col-due"></td>
+                <td class="col-started"></td>
+                <td class="col-done"></td>
+                <td class="col-links"></td>
+              </tr>
+            {{/if}}
             {{#each workCardsByMc[row.mcNumber] as w}}
               <!-- owl #45, node 520:54192 — the expanded MC's task cards.
                    One <tr> in the SAME table: parent and child share one

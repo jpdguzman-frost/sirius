@@ -136,6 +136,17 @@ export interface WorkCardWire {
 export interface PipelineResult {
   rows: PipelineRow[];
   workCardsByMc: Record<string, WorkCardWire[]>;
+  /**
+   * How many deliverable rows share each MC number (owl #52). `mc_number` is
+   * NOT a key (invariant 3) — 19 of the real board's 37 MC numbers carry more
+   * than one main card, one carries 60 — so an MC's task list can only be
+   * attributed to a single deliverable when this count is exactly 1. Above 1
+   * the client must surface the tasks once, at MC level, marked as shared:
+   * a misattributed task is indistinguishable from a correct one, whereas an
+   * honestly shared one is not. Measured board-wide: 279 of 356 task cards
+   * (78.4%) sit under an ambiguous MC, so this is the COMMON case.
+   */
+  mcDeliverables: Record<string, number>;
   corrections: Array<{ cardId: string; displayId: string; name: string; missing: string[]; trelloUrl: string | null }>;
   model: { provenance: unknown };
   /**
@@ -201,6 +212,11 @@ export async function loadPipeline(
   for (const r of rows) {
     if (r.mcNumber) rowsByMc.set(r.mcNumber, (rowsByMc.get(r.mcNumber) ?? 0) + 1);
   }
+  // The same counts the weight pass below divides by, handed to the client so
+  // expansion can tell an attributable MC from a shared one (owl #52). Derived
+  // here rather than recounted there: two counts of the same thing are two
+  // things that can disagree.
+  const mcDeliverables: PipelineResult['mcDeliverables'] = Object.fromEntries(rowsByMc);
   for (const r of rows) {
     const group = r.mcNumber ? rowsByMc.get(r.mcNumber)! : 0;
     const tasks = r.mcNumber ? (workCardsByMc[r.mcNumber]?.length ?? 0) : 0;
@@ -234,7 +250,7 @@ export async function loadPipeline(
     t.hardWarn = t.hardShare > HARD_MIX.ideal && t.hardShare <= HARD_MIX.ceiling;
   }
 
-  return { rows, workCardsByMc, corrections, model: { provenance }, perWeek };
+  return { rows, workCardsByMc, mcDeliverables, corrections, model: { provenance }, perWeek };
 }
 
 /**

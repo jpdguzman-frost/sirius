@@ -66,6 +66,19 @@
   --space-24: 24px;
   --page-inset: 64px; /* horizontal content inset — defines the 1472px content width */
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  /* owl #53, node 537:69135 (Figma `Shadow/sm`: dy 4, radius 12, #00000026).
+     DELIBERATELY heavier than --shadow-xs and NOT to be normalised toward it:
+     the warning hover card overlaps the alert icons on the rows beneath it —
+     accepted behaviour — and this shadow is what makes that layering read as
+     depth rather than as a rendering fault. Figma's codegen reports the SVG
+     stdDeviation (6) where CSS wants the blur radius (12); the annotation and
+     the style token both say 12, so 12 it is. */
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.15);
+  /* The JS twin of WARN_SHADOW_BLEED: both vertical clamp margins added up —
+     (OVERLAY_EDGE 4 + top bleed 8) + (OVERLAY_EDGE 4 + bottom bleed 16). The
+     last-resort scroll cap and placeBox's `over` verdict must agree on this
+     number or the capped box reads as "fits now" and oscillates. */
+  --warn-vclamp: 32px;
 
   /* semantic aliases used by the annotations */
   --surface-background: var(--white);

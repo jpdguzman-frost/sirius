@@ -148,7 +148,16 @@ document.addEventListener('wheel', (e) => {
    the .pscroll clip, so the flip-up near the viewport bottom (review finding
    3) and the on-screen clamp are ours to do. `h`/`clampW` are the box, not
    the trigger. */
+const NO_BLEED = { x: 0, top: 0, bottom: 0 };
 function placeBox(rect, opts) {
+  /* The clamp margin is the shared edge PLUS whatever this box paints outside
+     itself (owl #53). Absent `bleed` the three collapse back to OVERLAY_EDGE
+     and every arithmetic below is byte-for-byte the behaviour the other four
+     overlays already had. */
+  const bleed = opts.bleed || NO_BLEED;
+  const edgeX = OVERLAY_EDGE + bleed.x;
+  const edgeTop = OVERLAY_EDGE + bleed.top;
+  const edgeBottom = OVERLAY_EDGE + bleed.bottom;
   const up = rect.bottom + opts.h + opts.gap > window.innerHeight;
   /* `over`: the box is taller than the viewport can hold even at the clamp's
      own margins — Miles's last-resort ruling (owl #43 item D). `>=` and not
@@ -157,12 +166,12 @@ function placeBox(rect, opts) {
      measurement as "fits now", drop the class, and oscillate. That arithmetic
      only holds while this margin IS the clamp's margin, which is why both
      read the one OVERLAY_EDGE. */
-  const over = opts.h + 2 * OVERLAY_EDGE >= window.innerHeight;
+  const over = opts.h + edgeTop + edgeBottom >= window.innerHeight;
   let left = rect.left;
   let top = up ? rect.top - opts.h - opts.gap : rect.bottom + opts.gap;
   if (opts.clampW) {
-    left = Math.max(OVERLAY_EDGE, Math.min(left, window.innerWidth - opts.clampW - OVERLAY_EDGE));
-    top = Math.max(OVERLAY_EDGE, Math.min(top, window.innerHeight - opts.h - OVERLAY_EDGE));
+    left = Math.max(edgeX, Math.min(left, window.innerWidth - opts.clampW - edgeX));
+    top = Math.max(edgeTop, Math.min(top, window.innerHeight - opts.h - edgeBottom));
   }
   /* `up` and `over` ride out with the coordinates because both are facts the
      MARKUP needs, not just the placer: the hover card's squared corner and its
@@ -218,7 +227,12 @@ function placeMeasured(trigger, id, opts) {
   if (app.get(opts.key) !== id) return true; // the click closed it — nothing to place
   const el = document.querySelector(opts.sel);
   if (!el) return false;
-  app.set(opts.posKey, placeBox(trigger.getBoundingClientRect(), { h: el.offsetHeight, gap: 4, clampW: el.offsetWidth }));
+  /* `bleed` rides along (owl #53): this SECOND placement is the one that
+     actually decides where a measured card sits, so dropping it here would
+     re-clamp the hover card to the bare edge and undo the shadow allowance
+     the first placement made. `sel` identifies the overlay, so the bleed
+     travels with the same opts object the caller already passes. */
+  app.set(opts.posKey, placeBox(trigger.getBoundingClientRect(), { h: el.offsetHeight, gap: 4, clampW: el.offsetWidth, bleed: opts.bleed }));
   return true;
 }
 
@@ -245,11 +259,11 @@ function showWarnPop(node, cardId) {
      writes (W2) — moving the pointer across the table is not consent to
      discard it. Derived from OVERLAY_KEYS so a sixth overlay is one entry. */
   if (OVERLAY_KEYS.some((k) => k !== 'warnPop' && app.get(k))) return;
-  openOverlay({ node }, cardId, { key: 'warnPop', posKey: 'warnPopPos', h: WARN_POP_H, gap: 4, clampW: WARN_POP_W });
+  openOverlay({ node }, cardId, { key: 'warnPop', posKey: 'warnPopPos', h: WARN_POP_H, gap: 4, clampW: WARN_POP_W, bleed: WARN_SHADOW_BLEED });
   // the height is one list-item per missing field, each wrapping — measure the
   // rendered box and place it again, exactly as the Requests select does. The
   // second placement is also what settles the FLIP the bridge rides on.
-  const m = { key: 'warnPop', posKey: 'warnPopPos', sel: '.warnpop' };
+  const m = { key: 'warnPop', posKey: 'warnPopPos', sel: '.warnpop', bleed: WARN_SHADOW_BLEED };
   if (!placeMeasured(node, cardId, m)) requestAnimationFrame(() => placeMeasured(node, cardId, m));
 }
 

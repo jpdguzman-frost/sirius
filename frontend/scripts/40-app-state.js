@@ -29,6 +29,7 @@ const app = new Ractive({
     rows: [],
     writesEnabled: true, // G7 observation mode: false = read-only project, W1/W2 controls disabled
     workCardsByMc: {},
+    mcDeliverables: {}, // owl #52: MC number → how many deliverables share it
     /* still on the wire and still counted — OPEN WORK (kpi.open) is the
        aggregate signal now that the table banner is gone (owl #36) */
     corrections: [],

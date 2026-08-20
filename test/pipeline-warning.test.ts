@@ -62,6 +62,7 @@ import {
   APP_JS_CODE,
   PIPELINE_CSS,
   TEMPLATE,
+  TOKENS_CSS,
   type PipeRow,
   cssRule,
   decl,
@@ -99,6 +100,15 @@ const recipe = new Function(`
  * here would have agreed with the client copy and stayed green while the app
  * explained nothing.
  */
+/* One custom property, read out of the shipped token sheet. Several values in
+   this file have a JS twin, and a test that retypes either side proves nothing
+   about the pair (test/CLAUDE.md rule 2). */
+function cssVar(name: string): string {
+  const m = new RegExp(`${name}:\\s*([^;]+);`).exec(TOKENS_CSS);
+  if (!m) throw new Error(`no ${name} in the token sheet`);
+  return m[1]!.trim();
+}
+
 const SERVER_TOKENS: string[] = (() => {
   const src = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'services', 'pipeline.ts'),
@@ -893,8 +903,23 @@ describe('the document dismissers name the TRIGGER, not the wrapper', () => {
        the base `.warnpop` would put a scrollbar on every viewport and quietly
        repeal the ruling it implements. */
     const scroll = cssRule('.warnpop.scroll', PIPELINE_CSS);
-    expect(scroll).toContain('max-height: calc(100vh - var(--space-8))');
+    expect(scroll).toContain('max-height: calc(100vh - var(--warn-vclamp))');
     expect(scroll).toContain('overflow-y: auto');
+    /* THE TWIN (owl #53). The cap and placeBox's `over` verdict must agree on
+       one number or the capped box measures as "fits now" and oscillates. So
+       the CSS side is DERIVED from the JS side here rather than retyped: both
+       vertical clamp margins, each the shared edge plus the shadow's bleed in
+       that direction. If anyone changes the shadow and forgets the token, this
+       is what goes red. */
+    const edge = Number(/=\s*(\d+)/.exec(decl(APP_JS_CODE, 'OVERLAY_EDGE'))?.[1]);
+    const bleed = new Function(`${decl(APP_JS_CODE, 'WARN_SHADOW_BLEED')} return WARN_SHADOW_BLEED;`)() as {
+      x: number; top: number; bottom: number;
+    };
+    expect(edge).toBeGreaterThan(0);
+    expect(cssVar('--warn-vclamp')).toBe(`${edge + bleed.top + edge + bleed.bottom}px`);
+    /* the horizontal bleed has no CSS twin — it only ever reaches the clamp —
+       but it must actually be spent there, or the card's sides clip */
+    expect(fnBody('placeBox')).toContain('OVERLAY_EDGE + bleed.x');
     // a wheel at the card's own end must not chain to the page and trip the
     // scroll dismisser while the user is scrolling the card itself
     expect(scroll).toContain('overscroll-behavior: contain');
@@ -1040,7 +1065,16 @@ describe('one recipe per visual (CSS)', () => {
     expect(own).toContain('width: 235px');
     expect(own).toContain('border-color: var(--slate-100)');
     expect(own).not.toContain('position:');
-    expect(own).not.toContain('box-shadow');
+    /* owl #53 REVISES this: the card now forks the shadow too, and does it
+       deliberately. The base rule still carries --shadow-xs for the other two
+       overlays — that is what makes this a fork and not a redefinition. */
+    expect(own).toContain('box-shadow: var(--shadow-card)');
+    expect(cssRule('.selectmenu, .duepop, .warnpop', PIPELINE_CSS)).toContain('box-shadow: var(--shadow-xs)');
+    /* the heavier value is the annotation's own (node 537:69135 / Figma
+       `Shadow/sm`), and it must NOT drift toward the light chrome it exists to
+       outweigh — Miles ruled that explicitly in owl #53 */
+    expect(cssVar('--shadow-card')).toBe('0 4px 12px rgba(0, 0, 0, 0.15)');
+    expect(cssVar('--shadow-card')).not.toBe(cssVar('--shadow-xs'));
   });
 
   it('squares the corner the card grows out of — top-left anchored, bottom-left flipped', () => {

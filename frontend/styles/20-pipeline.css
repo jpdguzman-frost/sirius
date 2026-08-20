@@ -134,6 +134,14 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    of the single-line child, never a target. */
 .ptable tr.ptask td { background: var(--slate-50); border-bottom-color: var(--slate-200); }
 .ptable tr.ptask td.col-mc { border-bottom-color: transparent; }
+/* owl #52 — the shared-MC caption. It is a .ptask so it inherits the tint,
+   the indent and the border recipe rather than forking a second child-row
+   look; the only fork is that it carries no data, so its bottom border goes
+   transparent and the caption reads as a heading over the tasks beneath it
+   instead of as a task with every field empty. The text is .subtone, the same
+   voice `Main Card` already uses one row above. */
+.ptable tr.ptask.pshared td { border-bottom-color: transparent; padding-bottom: 0; }
+.ptable tr.ptask.pshared .subtone { color: var(--slate-500); font-style: italic; }
 .ptable .col-mc { width: 150px; min-width: 150px; } /* 132px in frame; 150px team fine-tune 2026-08-12 */
 .ptable .col-name { width: auto; min-width: 158px; }
 .ptable .col-type { width: 140px; min-width: 140px; }
@@ -423,6 +431,9 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
   border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
   padding: var(--space-16); gap: var(--space-12); font-family: var(--font-sans);
   border-color: var(--slate-100);
+  /* owl #53: the ONE value that forks from the shared overlay recipe besides
+     the stroke. Heavier on purpose — see --shadow-card. */
+  box-shadow: var(--shadow-card);
 }
 /* flipped ABOVE the icon — placeBox decided `up` and now says so in
    warnPopPos, which is the only carrier of that fact. Mirror the square corner
@@ -441,7 +452,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    the user is scrolling the card itself. In this one state the hover bridge
    is clipped by the overflow — accepted: the card fills the viewport, so
    there is no gap left for the bridge to span. */
-.warnpop.scroll { max-height: calc(100vh - var(--space-8)); overflow-y: auto; overscroll-behavior: contain; }
+.warnpop.scroll { max-height: calc(100vh - var(--warn-vclamp)); overflow-y: auto; overscroll-behavior: contain; }
 /* THE HOVER BRIDGE. The card sits one --space-4 clear of the icon, so without
    this the pointer crosses dead space, mouseleave fires, and the close timer
    can run out before the pointer reaches `Open Card` — which is the whole

@@ -285,12 +285,22 @@ async function loadAll() {
          would duplicate 99× (review pass 2026-08-18). */
       r.firstOfMc = !!r.mcNumber && !seenMc.has(r.mcNumber);
       if (r.mcNumber) seenMc.add(r.mcNumber);
+      /* owl #52: how many deliverables share this MC. 1 → the task list is
+         genuinely this card's and is attributed to it. >1 → the board does
+         not record which main a task belongs to (probed 2026-08-20: no
+         checklists, no card links, no list or member signal, and the best
+         name segment resolves 1 task in 5 while silently mis-resolving 117),
+         so the list stays MC-level and SAYS it is shared. Stamped, not asked
+         in the template — the same performance law as hasTasks above. */
+      r.mcDeliverables = (pipeline.mcDeliverables || {})[r.mcNumber] || 1;
+      r.sharedMc = r.mcDeliverables > 1;
     });
     capServer = pipeline.capacity.weekly; // server truth — the capacity rollback target
     app.set({
       rows: pipeline.rows,
       writesEnabled: pipeline.writesEnabled !== false,
       workCardsByMc: pipeline.workCardsByMc,
+      mcDeliverables: pipeline.mcDeliverables || {},
       corrections: pipeline.corrections,
       sprints: pipeline.sprints,
       // R-f-8: the ARES-canonical working-day calendar, so the sprints modal's

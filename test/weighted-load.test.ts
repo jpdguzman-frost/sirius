@@ -114,3 +114,34 @@ describe('BR-6c row weight', () => {
     expect(detectConflicts(unweighted, 5).filter((c) => c.rule === 'over-capacity')).toHaveLength(0);
   });
 });
+
+/* owl #52 — the wire fact the expansion needs. `mc_number` is not a key
+   (invariant 3), so the client cannot tell an attributable MC from a shared
+   one without being told; and it must not recount, because the SAME counts
+   already divide the weight above. Board-measured 2026-08-20: 19 of 37 MC
+   numbers carry more than one main card, so this is the common case. */
+describe('mcDeliverables — the count the expansion attributes by', () => {
+  it('reports one entry per MC number, holding its deliverable count', async () => {
+    const p = await project();
+    await group(p._id, 'MC-837', 3, 5, 0); // shared: three mains, five tasks
+    await group(p._id, 'MC-901', 1, 2, 1); // attributable: one main
+    const { mcDeliverables } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
+    expect(mcDeliverables).toEqual({ 'MC-837': 3, 'MC-901': 1 });
+  });
+
+  it('is the SAME count the weight divides by — one source, so they cannot disagree', async () => {
+    const p = await project();
+    await group(p._id, 'MC-825', 99, 30, 0);
+    const { rows, mcDeliverables } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
+    const n = mcDeliverables['MC-825']!;
+    expect(n).toBe(99);
+    for (const r of rows) expect(r.weight).toBeCloseTo(1 + 30 / n, 10);
+  });
+
+  it('omits a deliverable with no MC number — it groups with nothing', async () => {
+    const p = await project();
+    await Deliverable.create({ project_id: p._id, display_id: 'loose', trello_card_id: 'loose-1', name: 'No MC' });
+    const { mcDeliverables } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
+    expect(mcDeliverables).toEqual({});
+  });
+});

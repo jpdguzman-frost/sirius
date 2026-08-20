@@ -117,9 +117,22 @@ const WARN_WHY = {
    clamp holds this much clear on each side, and the last-resort scroll
    verdict asks whether a box fits inside BOTH margins — the same number, so
    the anti-oscillation `>=` in placeBox can never disagree with the clamp.
-   Its CSS twin is the `--space-8` (= both margins) in `.warnpop.scroll`'s
-   max-height; change one and change the other. */
+   An overlay that casts a shadow adds its BLEED on top of this (see
+   WARN_SHADOW_BLEED) — the box lands on screen but its shadow must too.
+   Its CSS twin is the `--warn-vclamp` (= both vertical margins, bleed
+   included) in `.warnpop.scroll`'s max-height; change one and change the
+   other. */
 const OVERLAY_EDGE = 4;
+/* owl #53 — how far the hover card's shadow paints OUTSIDE its own box.
+   Derived from `--shadow-card: 0 4px 12px`: a 12px blur reaches 12px in every
+   direction, and the 4px downward offset takes 4 off the top and adds 4 to
+   the bottom. So 12 / 8 / 16, and the annotation's "~12px each side and ~8px
+   above" agrees — it simply does not mention the bottom, which is the biggest
+   of the three. Without this the geometry is right and the card still looks
+   broken: the box sits fully on screen with its shadow sliced off at the
+   viewport edge. Only the warning card passes it; the other overlays wear
+   --shadow-xs, whose 2px blur rounds to nothing. */
+const WARN_SHADOW_BLEED = { x: 12, top: 8, bottom: 16 };
 /* warning popover box (node 537:69135) — the pre-measure placeBox needs to
    decide flip-up and the horizontal clamp before the element exists. The
    HEIGHT hugs its content (one wrapping list-item per missing field, plus the
