@@ -14,14 +14,15 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 
 | # | Phase | Status | Gate |
 |---|---|---|---|
-| 0–8a | Setup · schema · auth+audit · `lib/` port · ARES read · intake · model refresh · five tabs · urgency write · conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 gate ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
+| 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 backup/restore ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸ (team UI update), T075 sweep pending, non-member 403 parked | G7 passed; write-enable on rt-837 = next JP gate |
-| 10–13k b13, ctx, t-split | Two-way sync · admin panel · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · the expanded MC row · the stale-reconcile guard (decisions/0025) · the template split | **DEPLOYED + LIVE-VERIFIED through 2026-08-19** (T077–T178, ..`b401bac`) | per-batch detail: `docs/history/phase-log.md`; batch law: `specs/001-sirius-v1/pipeline-frame-notes.md` |
-| 14 pf · 13k b14 | **Pipeline filter + sort** (owl #62) · owls #52–#61 | **DEPLOYED 2026-08-20** — shipped three defects, all fixed and redeployed 2026-08-21 |
+| 10–13k | Two-way sync · admin · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · expanded MC row · stale-reconcile guard · template split | **DEPLOYED + LIVE through 2026-08-19** (T077–T178, ..`b401bac`) | detail: `docs/history/phase-log.md`; law: `specs/001-sirius-v1/pipeline-frame-notes.md` |
+| 14 pf · 13k b14 | **Pipeline filter + sort** (owl #62) · owls #52–#61 | **DEPLOYED 2026-08-20** — shipped three defects, all fixed 2026-08-21 |
 | 15 | **owl #63** — "None" joins TYPE/DIFFICULTY/REQUESTOR (closes R-pf-i) · **owl #64** — **Deadlines tab rebuilt** to node 630:51389 (R-dl-a..n) | **DEPLOYED 2026-08-21** (`897c3dd`) — ⚠️ never seen in a browser |
 | 15r | **Review pass, batches 13–15** — /simplify (15 of 20) + /code-review high (8 defects, all confirmed) | **DEPLOYED 2026-08-21** — healthz 200, host sha256 == local ✓ |
+| 16 | **Filter + sort panels measured to the frames** (R-pf-k) · **panels anchor to their container** (R-pf-j) · **the Filter Indicator** — chips + clickable hover panel (R-pf-l/m) · reviewed twice | **DEPLOYED + LIVE 2026-08-21** (`a3e4c88`) — clicked through on rt-test |
 
-**Build health (2026-08-21):** 1078/1078 tests + 24 `it.todo`, 64 files — green
+**Build health (2026-08-21):** 1115/1115 tests + 24 `it.todo`, 64 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **008** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
@@ -30,19 +31,19 @@ rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 
 ## Live-verified 2026-08-21
 
-Batches 15 + 15r deployed and **clicked through on rt-test** — every fix
-confirmed, zero console errors (`docs/history/state-log/2026-08-21.md`).
+Batches 15, 15r and 16 deployed and **clicked through on rt-test**
+(`docs/history/state-log/2026-08-21.md`).
 
-⚠️ The lesson: those panels were inert on the live site for a day with the whole
-suite green — nothing in the suite can open an overlay. **"Deployed" is not
-"works".**
+⚠️ The lesson: the filter panels were inert on the live site for a day with the
+whole suite green — nothing in the suite can open an overlay. **"Deployed" is
+not "works".**
 
 ## Decisions needed from JP (blocking)
 
 | # | Decision | Blocks | Status |
 |---|---|---|---|
 | BRD §9 | Amend "write impossible by permission" — the write surface is now the three-entry registry (urgency + due date + difficulty) | Vendor assessment, v2 | ⬜ open (grew 2026-08-04, again 2026-08-12) — product confirmed 2026-08-12 they'll raise it across all THREE docs quoting "one write": BRD §9, pilot security readiness, vendor assessment; not done yet |
-| DL-scope | **The Deadlines Breakdown mixes two scopes.** DUE THIS MONTH / URGENT / CONFLICTS are month-scoped, NEEDS REPLOTTING is board-wide — the test board reads `CONFLICTS 0` beside `NEEDS REPLOTTING 4` (its conflicts are all Sep–Nov), so the number disagrees with the rows beneath it, which R-dl-f says cannot happen. Found in the live pass; answer with Miles's open "does it narrow to deadline breaches" (#52) — same number, two questions. | Deadlines reading honestly | ⬜ **pending (JP, 2026-08-21)** — I'd scope it to the month |
+| DL-scope | **The Deadlines Breakdown mixes two scopes** — three cards are month-scoped, NEEDS REPLOTTING is board-wide, so the test board reads `CONFLICTS 0` beside `NEEDS REPLOTTING 4` and the number disagrees with the rows beneath it (R-dl-f says it cannot). Answer with Miles's open "does it narrow to deadline breaches" (#52) — same number, two questions. | Deadlines reading honestly | ⬜ **pending (JP)** — I'd scope it to the month |
 
 ## Decisions needed later (not blocking yet)
 
@@ -67,20 +68,19 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority: twice an owl
   asserted a ruling JP had not made or later declined, so verify with JP
-  before building on one. **Thread position**: miles→jp acked through **#64**; jp→miles sent through **#52**.
-  **Awaiting Miles**: the ARES read-path caching answer · the Deadlines
-  acknowledged-state design (R-dl-n) · NEEDS REPLOTTING's meaning (see DL-scope) · whether the conflict detail rows navigate, and where ·
-  whether the round week button was meant to collapse the group (#52).
+  before building on one. **Thread position**: miles→jp acked through **#64**; jp→miles sent through **#54**.
+  **Awaiting Miles**: ARES read-path caching · the Deadlines acknowledged-state
+  design (R-dl-n) · NEEDS REPLOTTING's meaning (DL-scope) · **CLIENT or
+  REQUESTOR** — his fifth filter group is CLIENT, ours says REQUESTOR, and our
+  table header already says CLIENT (#53/#54) · do the conflict rows navigate,
+  and where · was the round week button meant to collapse (#52).
   Closed threads → `docs/history/state-log/`.
-- **Figma reads** — **the official Figma MCP is the verified path**:
-  `get_design_context` for annotations + pixel facts, `get_metadata` for
-  geometry (load the figma-design-to-code skill first). File
-  `abDRsIVDs1XjJKeR8xYOoF`. Verify annotation count and content against the owl
-  BEFORE building. Rex is needed only for plugin-API introspection or writing
-  into the file. ⚠️ **Never write Rex's channel down** — it takes a free port at
-  start, so any number here goes stale on the next restart (7782 was recorded
-  and was 7780 on 2026-08-21, which cost JP a failed connect). Run
-  `mcp__rex__get_status`; it returns the number to type into the plugin.
+- **Figma reads** — the official Figma MCP is the verified path
+  (`get_design_context` for annotations, `get_metadata` for geometry; load the
+  figma-design-to-code skill first). File `abDRsIVDs1XjJKeR8xYOoF`. **Rex adds
+  the component's own auto-layout and its VARIANT names** — how the 2026-08-21
+  panel work found states a screenshot cannot show; run `mcp__rex__get_status`
+  for the channel, never write the number down (it takes a free port at start).
 - **File drop `../owl/` (ARES agent)** — **CLOSED 2026-08-19** (JP: don't
   chase, wait for new status). `hLL7WW2V` push subscription: #07/#08/#09, no
   reply file, zero events in 7 days. No fourth note; rt-837 rides the poll.
@@ -121,5 +121,6 @@ archive entries as complete as ever; length there is fine. This window holds
 the newest 10 lines and older ones are deleted — `docs/history/state-log/`
 is self-indexing by date.
 
-- 2026-08-21 — **Review pass, batches 13–15 + DEPLOY + live pass**: /simplify (15 of 20, `2d5a017`) + /code-review high (**8 defects, all confirmed**, `54471b5`), deployed `897c3dd` and clicked through on rt-test. Both dismisser shields now derive from one keyed map. The live pass found the Breakdown scope mismatch (DL-scope, above). 1068 → 1078 + 24 todo. → docs/history/state-log/2026-08-21.md
+- 2026-08-21 — **Filter/sort panels + the Filter Indicator** (`a3e4c88`): both measured through **Rex** against the component's own auto-layout, not screenshots — which caught a selected sort rendering as bold where the frame has a filled pill, a checked box with no tick, and Clear with one colour for two states. Panels re-anchored to their container; the Indicator built (one chip per filtered AXIS, clickable hover panel). Reviewed twice: /simplify 8 findings, /code-review high **6 defects all confirmed**, three user-visible. ⚠️ **Two cascade traps in one file in one day** — a single-class override loses to a shared rule declared later, and both times the CSS read right while the browser disagreed. 1078 → 1115 + 24 todo. → docs/history/state-log/2026-08-21.md
+- 2026-08-21 — **Review pass, batches 13–15 + DEPLOY + live pass**: /simplify (15 of 20) + /code-review high (**8 defects, all confirmed**), deployed and clicked through on rt-test. The live pass found the Breakdown scope mismatch (DL-scope, above). 1068 → 1078 + 24 todo. → docs/history/state-log/2026-08-21.md
 - 2026-08-21 — **Owls #63 + #64**: "None" is now a filter value on the three axes that can lack one (closes R-pf-i) and the **Deadlines tab was rebuilt to node 630:51389** (R-dl-a..n). Corrected product twice — order-of-filing had already landed, and STATUS still cannot keep Trello's order. Kept the acknowledge action and the day planner the frame omits: this tab is the only route to either. 1035 → 1068 + 24 todo. Not deployed. → docs/history/state-log/2026-08-21.md
