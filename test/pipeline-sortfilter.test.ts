@@ -495,14 +495,17 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
        400, slate-900, and the row keeps its `Default` variant. Bolding is the
        intuitive move and it is not what the component does. */
     expect(PIPELINE_CSS).not.toContain('.filtermenu .pmitem.on { font-weight');
-    expect(cssRule('.pipemenu .pmval', PIPELINE_CSS)).toContain('max-width: 160px');
   });
 
   it('wraps a sort label at 160px, where a filter value ellipsises', () => {
     /* what makes `Due dates closest to now` the two-line 53px row the frame
        draws rather than a one-line 32px one */
+    /* the cap earns its keep only in the sort panel, where it drives the wrap.
+       On a filter value it truncated long Trello list names with empty space
+       still to their right, so JP had it removed there. */
     expect(cssRule('.pipemenu .pmwrap', PIPELINE_CSS)).toContain('max-width: 160px');
     expect(cssRule('.pipemenu .pmval', PIPELINE_CSS)).toContain('text-overflow: ellipsis');
+    expect(cssRule('.pipemenu .pmval', PIPELINE_CSS)).not.toContain('max-width');
     expect(TEMPLATE).toContain('<span class="pmwrap">{{it.label}}</span>');
   });
 
@@ -516,8 +519,12 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
        One shared component, two different numbers. */
     expect(cssRule('.sortmenu .pmfoot', PIPELINE_CSS)).toContain('margin-top: var(--space-8)');
     expect(cssRule('.pipemenu .pmfoot', PIPELINE_CSS)).not.toContain('margin-top');
-    // 6 above the text, 5 below — the frame's own asymmetry, giving a 32px row
-    expect(cssRule('.pipemenu .pmitem', PIPELINE_CSS)).toContain('padding: 6px var(--space-8) 5px var(--space-16)');
+    /* 6 above the text and 5 below is the frame's vertical asymmetry (a 32px
+       row). The SIDES are symmetric at 16px and the frame's are not — JP ruled
+       against the lopsided version, which stranded the count in a gap at the
+       right edge; at 16/16 the content sits 25px inside both edges, level with
+       the group heading. */
+    expect(cssRule('.pipemenu .pmitem', PIPELINE_CSS)).toContain('padding: 6px var(--space-16) 5px var(--space-16)');
   });
 
   it('wears the CARD-ISSUE popover’s shadow, not the light chrome one', () => {

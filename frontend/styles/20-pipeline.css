@@ -646,10 +646,16 @@ a.srclink:hover { background: var(--slate-100); }
      checkbox on a filter row, the label on a sort row, and the heading above
      them all land on 25px from the panel's edge. At 8px they sat at 17 and
      every row read as hanging off the heading. */
-  /* 6 above the text and 5 below, which is the frame's own asymmetry once its
+  /* 6 above the text and 5 below: the frame's own vertical asymmetry once its
      three nested paddings are added up (item 4/2 + label-offset 2/2 + label's
-     1px bottom). Gives the 32px row it draws; an even 6/6 gave 33. */
-  padding: 6px var(--space-8) 5px var(--space-16);
+     1px bottom), giving the 32px row it draws where an even 6/6 gave 33.
+
+     The SIDES are deliberately symmetric at 16px, which the frame is not (it
+     insets 16 left and 8 right). JP, 2026-08-21: the lopsided version left the
+     count stranded in an awkward gap at the right edge. At 16/16 the row's
+     content sits 25px inside both edges — the same 25px the group heading
+     above it sits at — so the panel reads as one column instead of three. */
+  padding: 6px var(--space-16) 5px var(--space-16);
   border: none; background: none; border-radius: var(--radius-xs);
   font-family: var(--font-sans); font-size: var(--text-body); line-height: 1.5;
   color: var(--surface-foreground); text-align: left; cursor: pointer;
@@ -673,7 +679,11 @@ a.srclink:hover { background: var(--slate-100); }
    what the component does. */
 /* a zero-count value: disabled rather than silently selectable */
 .pipemenu .pmitem[disabled] { color: var(--slate-400); cursor: not-allowed; }
-.pipemenu .pmval { flex: 1; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* No max-width: a filter value takes the width the row gives it and ellipsises
+   at the end of it (JP, 2026-08-21). The frame caps the text at 160px, which
+   truncated the longer Trello list names while empty space sat to their right —
+   the cap is doing real work only in the sort panel, where it drives the wrap. */
+.pipemenu .pmval { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A SORT LABEL WRAPS; A FILTER VALUE ELLIPSISES. Both frames are explicit: the
    label text is capped at 160px, and in the sort panel that turns `Due dates
    closest to now` into the two-line, 53px row it draws (32px + one more 21px
