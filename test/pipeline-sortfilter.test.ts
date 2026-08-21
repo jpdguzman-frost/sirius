@@ -684,6 +684,20 @@ describe('the filter indicator says what is filtered, in words', () => {
     expect(cssRule('.fchip', PIPELINE_CSS)).toContain('position: relative');
   });
 
+  it('insets the chip panel 16px, and wins the cascade to do it', () => {
+    /* One group and no footer, so the shared 20px reads as slack. Asserted on
+       `.fchip .pipemenu` because a single-class `.chipmenu` override loses to
+       the shared rules declared later in the file — that had already silently
+       cost the list's zeroed bottom padding, under a comment claiming
+       otherwise. Two classes cannot lose, whatever the order. */
+    const rule = cssRule('.fchip .pipemenu', PIPELINE_CSS);
+    expect(rule).toContain('padding-top: var(--space-16)');
+    expect(rule).toContain('padding-bottom: var(--space-16)');
+    expect(cssRule('.fchip .pipemenu .pmitems', PIPELINE_CSS)).toContain('padding-bottom: 0');
+    // the shared panel keeps its own, larger inset
+    expect(cssRule('.pipemenu', PIPELINE_CSS)).toContain('padding-top: 20px');
+  });
+
   it('lets the pointer REACH the panel — a bridge and a shared close delay', () => {
     /* the panel sits 4px clear of the chip, so without a bridge the pointer
        crosses dead space, mouseleave fires, and the close can run out before it

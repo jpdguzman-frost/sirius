@@ -159,17 +159,23 @@
 /* Anchored to the CHIP, left-aligned. `-1px` because `left` resolves against
    the chip's padding box, inside its 1px border, so 0 would sit the panel one
    pixel in from the edge it lines up with. */
-.fchip .pipemenu { top: 100%; left: -1px; margin-top: var(--space-4); }
+.fchip .pipemenu {
+  top: 100%; left: -1px; margin-top: var(--space-4);
+  /* 16px top and bottom, overriding the shared 20 (JP, 2026-08-21): one group
+     and no footer, so the room the five-group panel needs reads as slack around
+     three rows. Lives here rather than on `.chipmenu` because the shared
+     `.pipemenu` rules are declared 500 lines LATER — a single-class override
+     loses on equal specificity, which is exactly what had been happening to
+     `.chipmenu .pmitems` under a comment claiming its padding was zeroed. */
+  padding-top: var(--space-16); padding-bottom: var(--space-16);
+}
 /* …unless the chip sits far enough right that a left-anchored panel would run
    off screen. The chips row wraps, so that is a real position, not a corner
    case — and off screen means unreachable rows plus a page scrollbar. */
 .fchip .pipemenu.flip { left: auto; right: -1px; }
-/* SYMMETRIC INSET (JP, 2026-08-21): this panel has no footer, so its last row
-   sat on 8px of list padding against 20px above the heading and read as cut
-   off. The panel owns both edges — the list's own bottom padding is zeroed
-   rather than added to, so the number is 20 and not 20-plus-8. */
-.chipmenu { padding-bottom: 20px; }
-.chipmenu .pmitems { padding-bottom: 0; }
+/* the list's own bottom padding is zeroed rather than added to, so the panel's
+   inset is 16 and not 16-plus-8 */
+.fchip .pipemenu .pmitems { padding-bottom: 0; }
 /* THE HOVER BRIDGE. The panel sits 4px clear of the chip; without this the
    pointer crosses dead space on its way down, `mouseleave` fires, and the close
    can run out before it arrives — the same hazard the warning card's bridge
