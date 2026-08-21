@@ -35,20 +35,27 @@
           consistency" with the counts inside). The applied number lives ONLY
           in the accessible name, which is the single route to it for someone
           who cannot see the fill change. }}
-    {{! ANCHORED IN CSS, NOT MEASURED (JP, 2026-08-21). Each panel lives inside
-        its own trigger's relative wrapper and hangs off it with `top: 100%;
-        right: 0` — which IS the frame's rule: correcting for the 64px between
-        the two coordinate spaces, each panel's right edge sits exactly on its
-        button's right edge (nodes 592:56850 · 592:56913 · 593:78434).
-
-        Anchoring to the WINDOW instead would have needed a fixed offset, and no
-        single value works: the sort button grows from 38px to as much as 240px
-        when it names its selection, which shoves the filter button up to 196px
-        left. Anchored to the button, that movement costs nothing. }}
-    <div class="sfwrap">
       <button class="sfbtn {{#if pipeFilterCount}}on{{/if}}" on-click="['openPipeFilter']"
               aria-haspopup="dialog" aria-expanded="{{pipeFilterMenu ? 'true' : 'false'}}"
               title="Filter" aria-label="Filter{{#if pipeFilterCount}}, {{pipeFilterCount}} applied{{/if}}">{{{icon.filter}}}</button>
+      {{! SORT — expands and NAMES its one selection, `Group: Item` (node
+          592:56966). The asymmetry with Filter is deliberate: a sort is always
+          exactly one thing and can be named; a filter is several and cannot. }}
+      <button class="sfbtn {{#if pipeSort}}on{{/if}}" on-click="['openPipeSort']"
+              aria-haspopup="dialog" aria-expanded="{{pipeSortMenu ? 'true' : 'false'}}"
+              title="Sort" aria-label="Sort{{#if pipeSort}}, {{pipeSortLabelText}}{{/if}}">{{{icon.sort}}}{{#if pipeSort}}<span class="sflabel">{{pipeSortLabelText}}</span>{{/if}}</button>
+
+      {{! ANCHORED TO THE CONTAINER, NOT TO EITHER BUTTON (JP, 2026-08-21).
+          Both panels hang off `.sortfilter` itself with `top: 100%; right: 0`,
+          so they open in ONE place whichever button was pressed.
+
+          The frame draws each panel under its own trigger, and that is what
+          this was first built to do — but a static mockup cannot show the
+          consequence: the sort button grows to as much as 240px when it names
+          its selection, which drags the filter button (and, anchored to it,
+          the filter panel) up to 196px sideways. JP saw that movement live and
+          ruled against it. The container's right edge is the row's own, pinned
+          at the page inset, so neither panel moves for any reason. }}
       {{#if pipeFilterMenu}}
         <div class="pipemenu filtermenu" role="dialog" aria-label="Filter the pipeline">
           {{#each pipeFacets as f}}
@@ -76,14 +83,6 @@
           </div>
         </div>
       {{/if}}
-    </div>
-      {{! SORT — expands and NAMES its one selection, `Group: Item` (node
-          592:56966). The asymmetry with Filter is deliberate: a sort is always
-          exactly one thing and can be named; a filter is several and cannot. }}
-    <div class="sfwrap">
-      <button class="sfbtn {{#if pipeSort}}on{{/if}}" on-click="['openPipeSort']"
-              aria-haspopup="dialog" aria-expanded="{{pipeSortMenu ? 'true' : 'false'}}"
-              title="Sort" aria-label="Sort{{#if pipeSort}}, {{pipeSortLabelText}}{{/if}}">{{{icon.sort}}}{{#if pipeSort}}<span class="sflabel">{{pipeSortLabelText}}</span>{{/if}}</button>
       {{#if pipeSortMenu}}
         <div class="pipemenu sortmenu" role="dialog" aria-label="Sort the pipeline">
           {{#each PIPE_SORT_GROUPS as g}}
@@ -103,7 +102,6 @@
           </div>
         </div>
       {{/if}}
-    </div>
     </div>
   </div>
 

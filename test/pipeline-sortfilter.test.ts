@@ -381,30 +381,31 @@ describe('the panels can actually open, and stay open', () => {
 });
 
 describe('the panels are ANCHORED to their trigger, never measured (JP, 2026-08-21)', () => {
-  it('nests each panel inside its own trigger’s wrapper', () => {
-    /* this is what makes the anchor track the button. The sort button GROWS
-       from 38px to as much as 240px when it names its selection, which shoves
-       the filter button up to 196px left — so a panel pinned to the window
-       needs a different offset in each state, and a panel pinned to its button
-       needs none. Measured live: the filter panel's gap from the window edge is
-       4px with no sort applied and 72px with one. */
-    const view = TEMPLATE.slice(TEMPLATE.indexOf('class="sortfilter"'));
-    const filterWrap = view.slice(view.indexOf('openPipeFilter'), view.indexOf('openPipeSort'));
-    expect(filterWrap, 'the filter panel left its trigger’s wrapper').toContain('pipemenu filtermenu');
-    const sortWrap = view.slice(view.indexOf('openPipeSort'));
-    expect(sortWrap, 'the sort panel left its trigger’s wrapper').toContain('pipemenu sortmenu');
-    expect([...TEMPLATE.matchAll(/class="sfwrap"/g)]).toHaveLength(2);
+  it('hangs BOTH panels off the container, not off either button', () => {
+    /* THE RULE: one opening position, whichever button was pressed. Anchored to
+       its own trigger instead, the filter panel travels up to 196px sideways —
+       the sort button grows from 38px to as much as 240px when it names its
+       selection, and drags the filter button along with it. Measured live
+       before the change: the filter panel sat 4px from the window edge with no
+       sort applied and 72px with one. A per-button wrapper is what would
+       reintroduce that, so its absence is the assertion. */
+    expect(TEMPLATE).not.toContain('sfwrap');
+    const row = TEMPLATE.slice(TEMPLATE.indexOf('class="sortfilter"'));
+    const rowEnd = row.indexOf('pscrollwrap');
+    const inside = row.slice(0, rowEnd);
+    expect(inside, 'the filter panel left the container').toContain('pipemenu filtermenu');
+    expect(inside, 'the sort panel left the container').toContain('pipemenu sortmenu');
   });
 
-  it('positions in CSS — right: 0 IS the frame’s rule', () => {
-    /* correcting for the 64px between the two coordinate spaces, each panel's
-       right edge sits exactly on its button's right edge (nodes 592:56850 ·
-       592:56913 · 593:78434) */
+  it('positions in CSS off the row whose right edge cannot move', () => {
+    /* `.sortfilter` ends at the page inset, so `right: 0` on it is a fixed
+       point — which is the whole reason this anchor was chosen over the two
+       that were built first */
     const rule = cssRule('.pipemenu', PIPELINE_CSS);
     expect(rule).toContain('position: absolute');
     expect(rule).toContain('right: 0');
     expect(rule).toContain('top: 100%');
-    expect(cssRule('.sfwrap', PIPELINE_CSS)).toContain('position: relative');
+    expect(cssRule('.sortfilter', PIPELINE_CSS)).toContain('position: relative');
   });
 
   it('carries NO inline coordinates and asks for no placement', () => {
