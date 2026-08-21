@@ -622,12 +622,19 @@ a.srclink:hover { background: var(--slate-100); }
    Transforming at display keeps one rule for both and leaves the sort groups
    readable where they are declared. */
 .pipemenu .pmhead {
-  margin: 0; padding: 0 var(--space-24) var(--space-8);
+  /* 2px above / 8px below are the sort-group's own `pt-2` and `gap-8`; the
+     24px sides are the offset-text frame's. Measured, not eyeballed. */
+  margin: 0; padding: 2px var(--space-24) var(--space-8);
   font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--slate-400);
   text-transform: uppercase;
 }
 .pipemenu .pmitems { display: flex; flex-direction: column; padding: 0 var(--space-8) var(--space-8); }
-.pipemenu .pmitems + .pmhead { padding-top: var(--space-8); border-top: 1px solid var(--slate-100); }
+/* BETWEEN GROUPS the frame leaves 16px (Content's gap) plus the next group's
+   own 2px — 18px from the separator to the next heading, where this had 8 and
+   ran the groups together. The line itself is the item list's bottom border in
+   the frame and this rule's top border here: same line, same place, and the
+   last group still gets none because there is no heading after it. */
+.pipemenu .pmitems + .pmhead { padding-top: 18px; border-top: 1px solid var(--slate-100); }
 /* STATUS only — it scrolls inside its own group so the four short axes keep
    their place (jp→miles #49). Roughly six rows before it scrolls. */
 .pipemenu .pmscroll { max-height: 168px; overflow-y: auto; overscroll-behavior: contain; }
@@ -639,18 +646,37 @@ a.srclink:hover { background: var(--slate-100); }
      checkbox on a filter row, the label on a sort row, and the heading above
      them all land on 25px from the panel's edge. At 8px they sat at 17 and
      every row read as hanging off the heading. */
-  padding: 6px var(--space-8) 6px var(--space-16);
+  /* 6 above the text and 5 below, which is the frame's own asymmetry once its
+     three nested paddings are added up (item 4/2 + label-offset 2/2 + label's
+     1px bottom). Gives the 32px row it draws; an even 6/6 gave 33. */
+  padding: 6px var(--space-8) 5px var(--space-16);
   border: none; background: none; border-radius: var(--radius-xs);
   font-family: var(--font-sans); font-size: var(--text-body); line-height: 1.5;
   color: var(--surface-foreground); text-align: left; cursor: pointer;
 }
 .pipemenu .pmitem:hover:not([disabled]) { background: var(--slate-50); }
 .pipemenu .pmitem:focus-visible { outline: 2px solid var(--blue-500); outline-offset: -2px; }
-/* the applied sort / a selected filter value — visibly marked, both frames */
-.pipemenu .pmitem.on { font-weight: 600; }
+/* THE SELECTED SORT is a FILLED PILL, not bold text (node 592:56954, State
+   variant `Selected`): slate-900 ground, white label, 6px radius — and the
+   weight stays Regular, which is easy to get wrong because bold is the obvious
+   way to mark a choice. Scoped to the sort panel: the filter panel marks its
+   selection with the checkbox, and its own selected frame has not been read
+   yet. */
+.sortmenu .pmitem.on {
+  background: var(--slate-900); color: var(--white); border-radius: var(--radius-input);
+}
+.sortmenu .pmitem.on:hover { background: var(--slate-900); }
+/* the filter's selection is the box; the row itself stays quiet */
+.filtermenu .pmitem.on { font-weight: 600; }
 /* a zero-count value: disabled rather than silently selectable */
 .pipemenu .pmitem[disabled] { color: var(--slate-400); cursor: not-allowed; }
 .pipemenu .pmval { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A SORT LABEL WRAPS; A FILTER VALUE ELLIPSISES. Both frames are explicit: the
+   label text is capped at 160px, and in the sort panel that turns `Due dates
+   closest to now` into the two-line, 53px row it draws (32px + one more 21px
+   line). The filter keeps `.pmval`'s single line and ellipsis, because its rows
+   also carry a checkbox and a count. */
+.pipemenu .pmwrap { max-width: 160px; }
 /* THE COUNT BADGES — the frame calls them the most valuable part of this
    design: they say what is worth filtering to before the click, and expose
    empty categories instead of hiding them. */
@@ -660,12 +686,16 @@ a.srclink:hover { background: var(--slate-100); }
   border: 2px solid var(--slate-300); border-radius: var(--radius-xs);
 }
 .pipemenu .pmitem.on .pmbox { background: var(--slate-900); border-color: var(--slate-900); }
-.pipemenu .pmfoot { border-top: 1px solid var(--slate-50); padding: var(--space-12) var(--space-8); }
+/* 8px of the gap is the item list's bottom padding; this adds the 8px the
+   frame leaves between the content and the button row. */
+.pipemenu .pmfoot { margin-top: var(--space-8); border-top: 1px solid var(--slate-50); padding: var(--space-12) var(--space-8); }
 .pipemenu .pmclear {
   border: none; background: none; cursor: pointer; padding: 7px var(--space-8) 6px;
   border-radius: var(--radius-sm); font-family: var(--font-sans);
-  font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--slate-400);
+  /* the Button-Small's two Color variants: `Blue` #1d4ed8 while there is
+     something to clear, `Disabled` #94a3b8 when there is not. */
+  font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--blue-700);
 }
-.pipemenu .pmclear:hover:not([disabled]) { background: var(--slate-50); color: var(--slate-700); }
+.pipemenu .pmclear:hover:not([disabled]) { background: var(--blue-50); }
 .pipemenu .pmclear:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
-.pipemenu .pmclear[disabled] { cursor: not-allowed; opacity: 0.45; }
+.pipemenu .pmclear[disabled] { cursor: not-allowed; color: var(--slate-400); }

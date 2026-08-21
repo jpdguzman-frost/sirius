@@ -91,7 +91,7 @@
             <div class="pmitems" role="group" aria-label="{{g.group}}">
               {{#each g.items as it}}
                 <button class="pmitem {{#if pipeSort === it.key}}on{{/if}}" on-click="['pickPipeSort', it.key]"
-                        aria-pressed="{{pipeSort === it.key ? 'true' : 'false'}}">{{it.label}}</button>
+                        aria-pressed="{{pipeSort === it.key ? 'true' : 'false'}}"><span class="pmwrap">{{it.label}}</span></button>
               {{/each}}
             </div>
           {{/each}}

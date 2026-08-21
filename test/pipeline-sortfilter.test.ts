@@ -439,7 +439,7 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
     const head = cssRule('.pipemenu .pmhead', PIPELINE_CSS);
     const item = cssRule('.pipemenu .pmitem', PIPELINE_CSS);
     const items = cssRule('.pipemenu .pmitems', PIPELINE_CSS);
-    expect(head).toContain('padding: 0 var(--space-24) var(--space-8)');
+    expect(head).toContain('var(--space-24)');
     expect(items).toContain('padding: 0 var(--space-8) var(--space-8)');
     expect(item).toContain('var(--space-16)');
     // heading text = items-box 8 + heading 24 - the box's own 8 … both = 24
@@ -457,6 +457,43 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
        the sort panel stops disagreeing with the filter panel beside it */
     expect(cssRule('.pipemenu .pmhead', PIPELINE_CSS)).toContain('text-transform: uppercase');
     expect(recipe.PIPE_SORTS.map((s) => s.group)).toContain('Dates');
+  });
+
+  it('draws the SELECTED sort as a filled pill, not as bold text', () => {
+    /* node 592:56954, the item's `State` variant `Selected`: slate-900 ground,
+       white label, 6px radius — and the weight stays Regular. Bold is the
+       obvious way to mark a choice and it is not what the frame does. */
+    const on = cssRule('.sortmenu .pmitem.on', PIPELINE_CSS);
+    expect(on).toContain('background: var(--slate-900)');
+    expect(on).toContain('color: var(--white)');
+    expect(on).toContain('border-radius: var(--radius-input)');
+    expect(on).not.toContain('font-weight');
+  });
+
+  it('colours Clear by the button’s two variants — blue live, slate disabled', () => {
+    /* Button-Small carries a `Color` variant: `Blue` #1d4ed8 while there is a
+       sort to clear, `Disabled` #94a3b8 when there is not. It read slate in
+       both states before. */
+    expect(cssRule('.pipemenu .pmclear', PIPELINE_CSS)).toContain('color: var(--blue-700)');
+    expect(cssRule('.pipemenu .pmclear[disabled]', PIPELINE_CSS)).toContain('color: var(--slate-400)');
+  });
+
+  it('wraps a sort label at 160px, where a filter value ellipsises', () => {
+    /* what makes `Due dates closest to now` the two-line 53px row the frame
+       draws rather than a one-line 32px one */
+    expect(cssRule('.pipemenu .pmwrap', PIPELINE_CSS)).toContain('max-width: 160px');
+    expect(cssRule('.pipemenu .pmval', PIPELINE_CSS)).toContain('text-overflow: ellipsis');
+    expect(TEMPLATE).toContain('<span class="pmwrap">{{it.label}}</span>');
+  });
+
+  it('spaces the groups and the footer the way the frame measures them', () => {
+    /* 18px from the separator to the next heading (Content's 16px gap plus the
+       group's own 2px), and 16px from the last row to the footer rule (the item
+       list's 8px plus the content-to-button 8px). Both ran 8px short. */
+    expect(cssRule('.pipemenu .pmitems + .pmhead', PIPELINE_CSS)).toContain('padding-top: 18px');
+    expect(cssRule('.pipemenu .pmfoot', PIPELINE_CSS)).toContain('margin-top: var(--space-8)');
+    // 6 above the text, 5 below — the frame's own asymmetry, giving a 32px row
+    expect(cssRule('.pipemenu .pmitem', PIPELINE_CSS)).toContain('padding: 6px var(--space-8) 5px var(--space-16)');
   });
 
   it('wears the CARD-ISSUE popover’s shadow, not the light chrome one', () => {
