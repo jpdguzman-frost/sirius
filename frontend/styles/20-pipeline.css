@@ -105,7 +105,6 @@
    removable instead of collapsing them into a summary. */
 .fchips {
   display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;
-  margin: var(--space-16) 0;
 }
 .fchip {
   display: inline-flex; align-items: stretch; height: 30px; box-sizing: border-box;
@@ -134,8 +133,16 @@
   color: var(--slate-900); cursor: pointer;
 }
 .fchip .fchipx svg { display: block; }
-.fchip .fchipx:hover { background: var(--slate-50); }
 .fchip .fchipx:focus-visible { outline: 2px solid var(--blue-500); outline-offset: -2px; }
+/* HOVER INVERTS THE WHOLE CHIP (JP, 2026-08-21). The quiet/loud contrast is
+   kept, not flattened: the axis stays the dimmer half against the dark ground
+   and the values stay the bright one, so the chip still reads as a sentence
+   rather than becoming a solid block of text. */
+.fchip:hover { background: var(--slate-900); border-color: var(--slate-900); }
+.fchip:hover .fcaxis { color: var(--slate-400); }
+.fchip:hover .fcvals { color: var(--white); }
+.fchip:hover .fchipx { color: var(--white); border-left-color: var(--slate-700); }
+.fchip:hover .fchipx:hover { background: var(--slate-700); }
 .fclearall {
   flex: none; padding: 7px var(--space-8) 6px;
   background: none; border: 0; border-radius: var(--radius-sm); cursor: pointer;

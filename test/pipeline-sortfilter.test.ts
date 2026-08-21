@@ -636,6 +636,19 @@ describe('the filter indicator says what is filtered, in words', () => {
     expect(TEMPLATE).toContain('title="{{c.text}}"'); // the full text stays reachable
   });
 
+  it('INVERTS the chip on hover, keeping the quiet/loud contrast', () => {
+    /* JP, 2026-08-21. The axis stays the dimmer half against the dark ground
+       and the values stay the bright one — flattening both to white would turn
+       the chip into a block of text instead of a sentence. */
+    expect(cssRule('.fchip:hover', PIPELINE_CSS)).toContain('background: var(--slate-900)');
+    expect(cssRule('.fchip:hover .fcvals', PIPELINE_CSS)).toContain('var(--white)');
+    expect(cssRule('.fchip:hover .fcaxis', PIPELINE_CSS)).toContain('var(--slate-400)');
+  });
+
+  it('keeps the row COMPACT — no margin of its own', () => {
+    expect(cssRule('.fchips', PIPELINE_CSS)).not.toContain('margin');
+  });
+
   it('clears ONE AXIS from the ✕ and everything from Clear all', () => {
     /* the chip names an axis and lists its values, so its ✕ removes what it
        names; Clear all goes through the SAME handler the panel's own Clear
