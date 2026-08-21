@@ -40,6 +40,9 @@ const app = new Ractive({
     pipeFilterMenu: null,
     /* which chip's panel is open on hover — an overlay key like the rest */
     chipPop: null,
+    /* the chip panel hangs off the chip's right edge instead, when its left
+       edge would put it off screen (the chips row wraps) */
+    chipPopFlip: false,
     /* still on the wire and still counted — OPEN WORK (kpi.open) is the
        aggregate signal now that the table banner is gone (owl #36) */
     corrections: [],

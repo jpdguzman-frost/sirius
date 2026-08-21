@@ -69,6 +69,12 @@ const OVERLAY_SHIELD = [...new Set(OVERLAY_KEYS.flatMap((k) => OVERLAY_SHIELDS[k
    filter panel is here because its STATUS group is a deliberate internal
    scroller (R-pf-e), so a wheel over it would otherwise shut the panel. */
 const OVERLAY_SELF_SCROLL = '.duepop, .selectmenu, .warnpop, .pipemenu';
+/* ANCHORED overlays move WITH the page — they hang off an element in the flow
+   rather than being pinned to the viewport, so a scroll cannot detach them from
+   their trigger and there is nothing for the scroll dismisser to protect
+   against. Dismissing them anyway made their lower half unreachable on a short
+   viewport: the only way to reach it is to scroll, and scrolling closed it. */
+const OVERLAY_ANCHORED = ['pipeSortMenu', 'pipeFilterMenu', 'chipPop'];
 function anyMenuOpen() {
   return OVERLAY_KEYS.some((k) => app.get(k));
 }
@@ -159,6 +165,8 @@ document.addEventListener('scroll', (e) => {
   // document, including the horizontal .pscroll drag, and the DOM walk is
   // pointless when nothing is open
   if (!anyMenuOpen()) return;
+  // every open overlay is anchored to the page — nothing detached, nothing to dismiss
+  if (OVERLAY_KEYS.every((k) => !app.get(k) || OVERLAY_ANCHORED.indexOf(k) > -1)) return;
   if (e.target.closest && e.target.closest(OVERLAY_SELF_SCROLL)) return;
   closeMenus();
 }, true);
@@ -302,6 +310,22 @@ function openHoverOverlay(key, id) {
   if (OVERLAY_KEYS.some((k) => k !== key && app.get(k))) return false;
   warnPopCancelClose();
   if (app.get(key) === id) return false; // already open; its close is now cancelled
+  return true;
+}
+
+/* THE HOVER-LEAVE POLICY, the mirror of the opener above.
+
+   ⚠️ THE CANCEL COMES AFTER THE OWNERSHIP CHECK, for the same reason it comes
+   after the refusal on the way in: the close timer is SHARED, so cancelling
+   before knowing whether the overlay being left is OURS cancels somebody
+   else's pending close and never reschedules it. Both leave-handlers had the
+   cancel first — harmless while one overlay owned the timer, a stranded-open
+   overlay the moment a second one joined it, reachable from either direction.
+
+   Returns false when nothing of ours is open, so the caller schedules nothing. */
+function leaveHoverOverlay(key) {
+  if (!app.get(key)) return false;
+  warnPopCancelClose();
   return true;
 }
 

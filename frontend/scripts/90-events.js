@@ -250,12 +250,21 @@ app.on({
     // the shared hover-open policy: refuse over an active edit, cancel any
     // pending close, and treat re-entry as a no-op rather than a toggle
     if (!openHoverOverlay('chipPop', key)) return;
+    /* The chips row WRAPS, so a chip can sit anywhere along it — and the panel
+       is a known 276px hanging off the chip's LEFT edge. Far enough right and
+       it runs past the viewport, where its rows are unreachable and the page
+       grows a horizontal scrollbar. Flip it onto the chip's right edge instead.
+       The width is a constant, so this reads the chip's own box and needs
+       nothing measured after render. */
+    const box = ctx.node.getBoundingClientRect();
+    app.set('chipPopFlip', box.left + PIPE_MENU_W > document.documentElement.clientWidth - OVERLAY_EDGE);
     openOverlay(ctx, key, { key: 'chipPop' });
   },
   chipPopOut(ctx) {
-    warnPopCancelClose();
-    if (!app.get('chipPop')) return;
-    // where the pointer actually went; still inside this chip means nothing left
+    if (!leaveHoverOverlay('chipPop')) return;
+    /* where the pointer (or focus) actually went; still inside this chip means
+       nothing left. The panel is a DOM child of the chip, so this covers the
+       whole journey down into it — including tabbing from the ✕ into a row. */
     const to = ctx.event.relatedTarget;
     if (to && ctx.node.contains(to)) return;
     scheduleHoverClose(() => closeMenus());
@@ -431,14 +440,13 @@ app.on({
      gap, so there is no separate "hold" handler. */
   warnPopIn(ctx, cardId) { showWarnPop(ctx.node, cardId); },
   warnPopOut(ctx) {
-    warnPopCancelClose();
     /* Nothing of OURS is open, so nothing of ours is leaving. showWarnPop
        REFUSES to open over another overlay (R-warn-r) — without the same rule
        on this side, a pointer that merely grazed a warning icon while a due
        popover was up would schedule a close that discards a staged date only
        Apply writes (W2). The refusal to open has to be matched by a refusal to
        close, or the guard only holds one way. */
-    if (!app.get('warnPop')) return;
+    if (!leaveHoverOverlay('warnPop')) return;
     /* Ractive delegates an each-block's events from the <tbody> with a CAPTURE
        listener and then simulates bubbling by walking up from `ev.target` — so
        a child's mouseleave is re-dispatched to this ancestor's handler even

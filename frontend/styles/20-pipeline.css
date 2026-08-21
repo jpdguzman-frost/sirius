@@ -160,6 +160,10 @@
    the chip's padding box, inside its 1px border, so 0 would sit the panel one
    pixel in from the edge it lines up with. */
 .fchip .pipemenu { top: 100%; left: -1px; margin-top: var(--space-4); }
+/* …unless the chip sits far enough right that a left-anchored panel would run
+   off screen. The chips row wraps, so that is a real position, not a corner
+   case — and off screen means unreachable rows plus a page scrollbar. */
+.fchip .pipemenu.flip { left: auto; right: -1px; }
 /* SYMMETRIC INSET (JP, 2026-08-21): this panel has no footer, so its last row
    sat on 8px of list padding against 20px above the heading and read as cut
    off. The panel owns both edges — the list's own bottom padding is zeroed

@@ -146,12 +146,18 @@ const WARN_POP_H = 390;
    long enough to cross the 4px gap and short enough not to feel sticky
    (R-warn-j, flagged to Miles as a number he may want to tune). */
 const WARN_CLOSE_MS = 150;
-/* The filter and sort panels carry NO pre-measured geometry: they are anchored
-   in CSS to their own trigger (JP, 2026-08-21), so there is no height to guess
-   and no width to clamp. The three constants that used to live here — a menu
+/* THE PANEL WIDTH — the one geometric fact the CSS-anchored panels still need in
+   JS, and only for the chip panel's edge flip: the row wraps, so a chip can sit
+   far enough right that a left-anchored 276px panel runs off screen. Everything
+   else about their placement is CSS.
+
+   The filter and sort panels carry no pre-measured HEIGHT: they are anchored to
+   their container (JP, 2026-08-21), so there is nothing to guess and nothing to
+   clamp. The three constants that used to live here — a menu
    width and two panel heights — were inputs to a placement that no longer
    happens. The overlays that DO float free of a wrapper still pre-measure; see
    placeBox in 60-overlays.js. */
+const PIPE_MENU_W = 276;
 /* ONE recipe for the warning, derived from the row the server already sends.
    Returns null for a complete card — the template's only test — or
    { label, items:[{ label, why }] }. items[0] is ALWAYS the card's OWN

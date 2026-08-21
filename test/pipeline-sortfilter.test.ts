@@ -15,7 +15,7 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { APP_JS, APP_JS_CODE, PIPELINE_CSS, TEMPLATE, cssRule, decl, fnBody, method } from './helpers/gantt-render.ts';
+import { APP_JS, APP_JS_CODE, PIPELINE_CSS, TEMPLATE, cssRule, decl, fnBody, handlerBody, method } from './helpers/gantt-render.ts';
 
 interface Sort { key: string; group: string; label: string; dir: number; value: (r: unknown) => unknown }
 interface Axis { key: string; label: string; pick: (r: unknown) => unknown; order?: string[]; none?: boolean }
@@ -675,7 +675,7 @@ describe('the filter indicator says what is filtered, in words', () => {
     const view = TEMPLATE.slice(TEMPLATE.indexOf('class="fchips"'));
     const chip = view.slice(0, view.indexOf('fclearall'));
     expect(chip).toContain('{{#if chipPop === c.key}}');
-    expect(chip).toContain('class="pipemenu chipmenu"');
+    expect(chip).toContain('class="pipemenu chipmenu {{#if chipPopFlip}}flip{{/if}}"');
     expect(chip).not.toContain('pmfoot');
     // it anchors LEFT, to the chip — the shared rule anchors right, to the row
     /* two classes, because `.pipemenu` anchors right and is declared later —
@@ -693,12 +693,53 @@ describe('the filter indicator says what is filtered, in words', () => {
        the containment guard cover the whole journey. */
     // one bridge recipe, shared with the warning card's, in the gap's own token
     expect(cssRule('.warnpop::before, .chipmenu::before', PIPELINE_CSS)).toContain('height: var(--space-4)');
-    const at = APP_JS.indexOf('chipPopOut(ctx)');
-    const body = APP_JS.slice(at, at + 420);
+    const body = handlerBody('chipPopOut');
     expect(body).toContain('relatedTarget');
     expect(body).toContain('ctx.node.contains(to)');
     expect(body).toContain('scheduleHoverClose(');
     expect(body.indexOf('relatedTarget')).toBeLessThan(body.indexOf('scheduleHoverClose('));
+  });
+
+  it('CLOSES ITSELF when the axis it names goes empty', () => {
+    /* Clearing the last value unmounts the chip, but `chipPop` kept naming it —
+       `anyMenuOpen()` then stayed true against a panel nobody could see, and
+       every hover overlay refused to open until an unshielded click. Neither
+       route out fires on its own: the ✕ and the panel are both inside
+       OVERLAY_SHIELD. Stated once, as an observer, rather than in each handler
+       that can empty an axis. */
+    expect(APP_JS).toContain("app.observe('pipeFilters'");
+    const at = APP_JS.indexOf("app.observe('pipeFilters'");
+    const body = APP_JS.slice(at, at + 300);
+    expect(body).toContain("app.get('chipPop')");
+    expect(body).toContain("app.set('chipPop', null)");
+  });
+
+  it('does NOT let a page scroll dismiss an anchored panel', () => {
+    /* An anchored panel moves WITH the page, so a scroll cannot detach it from
+       its trigger — and dismissing anyway made its lower half unreachable on a
+       short viewport, because the only way to reach it is to scroll. */
+    const anchored = decl(APP_JS, 'OVERLAY_ANCHORED');
+    for (const k of ['pipeSortMenu', 'pipeFilterMenu', 'chipPop']) expect(anchored).toContain(k);
+    expect(APP_JS).toContain('OVERLAY_ANCHORED.indexOf(k) > -1');
+  });
+
+  it('FLIPS the chip panel rather than running it off the right edge', () => {
+    /* the chips row wraps, so a chip can sit far enough right that a
+       left-anchored 276px panel leaves the viewport — unreachable rows and a
+       page scrollbar. The width is a constant, so the decision needs the chip's
+       own box and nothing measured after render. */
+    const body = handlerBody('chipPopIn');
+    expect(body).toContain('PIPE_MENU_W');
+    expect(body).toContain("app.set('chipPopFlip'");
+    expect(cssRule('.fchip .pipemenu.flip', PIPELINE_CSS)).toContain('right: -1px');
+  });
+
+  it('opens on FOCUS as well as hover — the panel holds real controls', () => {
+    // the warning card's own rule: a pointer-only overlay puts its contents out
+    // of a keyboard user's reach
+    const view = TEMPLATE.slice(TEMPLATE.indexOf('class="fchips"'));
+    expect(view).toContain("on-focusin=\"['chipPopIn', c.key]\"");
+    expect(view).toContain("on-focusout=\"['chipPopOut']\"");
   });
 
   it('joins the overlay list, so Escape and an outside click dismiss it', () => {
@@ -742,10 +783,7 @@ describe('the filter indicator says what is filtered, in words', () => {
     /* the chip names an axis and lists its values, so its ✕ removes what it
        names; Clear all goes through the SAME handler the panel's own Clear
        uses, so there is one way to clear rather than two */
-    // an object method, not a top-level function — read the shipped handler
-    const at = APP_JS.indexOf('removePipeAxis(');
-    expect(at, 'removePipeAxis is gone').toBeGreaterThan(-1);
-    const body = APP_JS.slice(at, at + 200);
+    const body = handlerBody('removePipeAxis');
     expect(body).toContain('pipeFilters.${axis}');
     expect(body).toContain('[]');
     expect(body).toContain('pipeBackToTop()');

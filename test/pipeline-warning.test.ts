@@ -67,6 +67,7 @@ import {
   cssRule,
   decl,
   fnBody,
+  handlerBody,
   leakedMustacheText,
   renderPipelineTable,
 } from './helpers/gantt-render.ts';
@@ -186,17 +187,6 @@ const tplCode = TEMPLATE.replace(/<!--[\s\S]*?-->/g, ' ');
 const jsCode = APP_JS_CODE;
 
 /** The body of an `on:` object member `NAME(…) { … }`, same contract. */
-function handlerBody(name: string): string {
-  const at = new RegExp(`\\n  ${name}\\(`).exec(jsCode)?.index;
-  expect(at, `no \`${name}\` handler in the shipped client`).toBeGreaterThan(-1);
-  const open = jsCode.indexOf('{', jsCode.indexOf(')', at!));
-  let depth = 0;
-  for (let j = open; j < jsCode.length; j++) {
-    if (jsCode[j] === '{') depth++;
-    else if (jsCode[j] === '}' && --depth === 0) return jsCode.slice(open, j + 1);
-  }
-  throw new Error(`pipeline-warning: \`${name}\` never closes`);
-}
 
 describe('the copy map and the server speak the same vocabulary', () => {
   it('keys WARN_WHY on EXACTLY the tokens the server pushes — no more, no fewer', () => {
@@ -816,10 +806,16 @@ describe('the pointer path cannot close what it did not open', () => {
   const body = () => handlerBody('warnPopOut');
 
   it('arms no close when no hover card is open — R-warn-r, from the leave side', () => {
-    expect(body()).toMatch(/if \(!app\.get\('warnPop'\)\) return;/);
-    // the close is ARMED through the shared scheduler; the guard still has to
-    // come first, which is the property this pins
-    expect(body().indexOf("app.get('warnPop')")).toBeLessThan(body().indexOf('scheduleHoverClose('));
+    /* The ownership check moved into `leaveHoverOverlay`, the shared
+       hover-LEAVE policy — which now also owns the cancel, and that cancel must
+       come AFTER it: the close timer is shared, so cancelling before knowing
+       whether the overlay leaving is ours cancels somebody else's pending close
+       and never reschedules it, stranding their overlay open. */
+    expect(body()).toContain("leaveHoverOverlay('warnPop')");
+    const policy = fnBody('leaveHoverOverlay');
+    expect(policy).toMatch(/if \(!app\.get\(key\)\) return false;/);
+    expect(policy.indexOf('app.get(key)')).toBeLessThan(policy.indexOf('warnPopCancelClose()'));
+    expect(body().indexOf("leaveHoverOverlay('warnPop')")).toBeLessThan(body().indexOf('scheduleHoverClose('));
   });
 
   it('arms no close when the pointer never left the node the directive sits on', () => {

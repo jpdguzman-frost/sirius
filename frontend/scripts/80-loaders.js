@@ -385,6 +385,18 @@ app.observe(
   },
   { init: false },
 );
+/* AN OVERLAY WHOSE SUBJECT IS GONE MUST CLOSE. Clearing the last value of an
+   axis unmounts its chip, but `chipPop` kept naming it — `anyMenuOpen()` then
+   stayed true against a panel nobody could see, and every hover overlay refused
+   to open until an unshielded click happened to clear it. Neither route out
+   fires on its own: the chip's ✕ and the panel are both inside OVERLAY_SHIELD,
+   so the outside-click dismisser never sees them. Stated once, here, rather
+   than in each handler that can empty an axis. */
+app.observe('pipeFilters', () => {
+  const open = app.get('chipPop');
+  if (open && !(app.get(`pipeFilters.${open}`) || []).length) app.set('chipPop', null);
+}, { init: false });
+
 app.observe('requests', () => {
   const last = app.get('reqPageCount');
   if (app.get('reqPage') > last) app.set('reqPage', last);

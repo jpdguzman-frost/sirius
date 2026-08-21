@@ -652,6 +652,25 @@ export function method(name: string, src: string = APP_JS): string {
   throw new Error(`gantt-render: unterminated computed \`${name}()\``);
 }
 
+/**
+ * The body of a Ractive EVENT HANDLER (`  name(ctx…) { … }`), braces balanced.
+ * Handlers are object methods, not top-level functions, so `fnBody` cannot see
+ * them — and the alternative every caller reached for was `indexOf` plus a
+ * magic slice length, which silently changes what it reads the moment a handler
+ * grows past the number.
+ */
+export function handlerBody(name: string, src: string = APP_JS_CODE): string {
+  const at = new RegExp(`\\n  ${name}\\(`).exec(src)?.index;
+  if (at === undefined) throw new Error(`gantt-render: no \`${name}\` handler in the shipped client`);
+  const open = src.indexOf('{', src.indexOf(')', at));
+  let depth = 0;
+  for (let j = open; j < src.length; j++) {
+    if (src[j] === '{') depth++;
+    else if (src[j] === '}' && --depth === 0) return src.slice(open, j + 1);
+  }
+  throw new Error(`gantt-render: \`${name}\` never closes`);
+}
+
 /** One CSS rule body, sliced by its selector line. */
 export function cssRule(selector: string, src: string = GANTT_CSS): string {
   const at = src.indexOf(`\n${selector} {`);

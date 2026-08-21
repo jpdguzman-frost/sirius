@@ -100,11 +100,18 @@
   {{#if pipeChips.length}}
     <div class="fchips" role="group" aria-label="Filters applied">
       {{#each pipeChips as c}}
-        {{! mouseenter/mouseleave do not bubble, but Ractive re-dispatches an
-            each-block's events by walking up from the target — so these fire
-            for the ✕ and for everything inside the panel as well, which is
-            exactly what the containment guard in chipPopOut relies on. }}
-        <span class="fchip" on-mouseenter="['chipPopIn', c.key]" on-mouseleave="['chipPopOut']">
+        {{! mouseenter/mouseleave do not fire again for moves BETWEEN descendants
+            — that is precisely why the panel is a DOM child of the chip: the
+            whole subtree is part of this element's hit region, so travelling
+            from the chip down into a checkbox never leaves it and no close is
+            ever armed. The relatedTarget guard covers the 4px gap crossing. }}
+        {{! focusin/focusout as well as the pointer: the warning card opens on
+            both for the same reason — the panel holds real controls, and a
+            keyboard user tabbing to the chip's ✕ should be able to reach them.
+            Both bubble, and focusout's relatedTarget is where focus went, so
+            chipPopOut's containment guard covers tabbing INTO the panel. }}
+        <span class="fchip" on-mouseenter="['chipPopIn', c.key]" on-mouseleave="['chipPopOut']"
+              on-focusin="['chipPopIn', c.key]" on-focusout="['chipPopOut']">
           <span class="fchiplabel">
             <span class="fcaxis">{{c.label}} is</span>
             <span class="fcvals" title="{{c.text}}">{{c.text}}</span>
@@ -123,7 +130,7 @@
               it never leaves `.fchip`, so the close guard covers the whole
               journey and the 4px gap is spanned by the bridge below. }}
           {{#if chipPop === c.key}}
-            <div class="pipemenu chipmenu" role="dialog" aria-label="{{c.label}} filter">
+            <div class="pipemenu chipmenu {{#if chipPopFlip}}flip{{/if}}" role="dialog" aria-label="{{c.label}} filter">
               {{>filterGroup c}}
             </div>
           {{/if}}
