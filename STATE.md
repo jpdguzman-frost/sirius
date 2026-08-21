@@ -104,11 +104,6 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
-- **Queued by JP (2026-08-21), NOT applied** — panel padding so the checkbox and
-  the heading sit level at 17px: `.pmhead` → `2px var(--space-16)
-  var(--space-8)`; `.pmitem` → `6px var(--space-16) 5px var(--space-8)`. Revises
-  his own symmetric-16 ruling; three guards in `pipeline-sortfilter.test.ts`
-  and R-pf-k's spacing line pin the old numbers and move with it.
 - **Agent backlog**: T075 AC sweep · non-member 403 check · `Last Synced`
   browser-TZ + col-done width leftovers · schedules-tab full tokenization
   beyond the planner · per-tab URL sub-state (filters/week/sort as query

@@ -442,17 +442,15 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
        item box that is itself 8px inside the panel — so both land on the same
        left edge. At 8px the rows hung 8px left of every heading above them. */
     const head = cssRule('.pipemenu .pmhead', PIPELINE_CSS);
-    const item = cssRule('.pipemenu .pmitem', PIPELINE_CSS);
     const items = cssRule('.pipemenu .pmitems', PIPELINE_CSS);
-    expect(head).toContain('var(--space-24)');
+    expect(head).toContain('padding: 2px var(--space-16) var(--space-8)');
     expect(items).toContain('padding: 0 var(--space-8) var(--space-8)');
-    expect(item).toContain('var(--space-16)');
-    // heading text = items-box 8 + heading 24 - the box's own 8 … both = 24
-    // inside the group, which is the property this pins in one line
+    /* THE PROPERTY: the checkbox and the heading share a left edge. The heading
+       is inset once, by its own padding; the checkbox twice, by the list's and
+       the row's. JP revised both on 2026-08-21 so the two sums agree at 16 —
+       17px from the panel edge once the border is counted. */
     const px = (v: string) => ({ '--space-8': 8, '--space-16': 16, '--space-24': 24 })[v]!;
-    const headInset = px('--space-24');
-    const itemInset = px('--space-8') + px('--space-16');
-    expect(itemInset, 'the item content left the heading’s edge').toBe(headInset);
+    expect(px('--space-8') + px('--space-8'), 'the item content left the heading’s edge').toBe(px('--space-16'));
   });
 
   it('renders BOTH panels’ group headings in capitals, as the frame draws them', () => {
@@ -528,11 +526,11 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
     expect(cssRule('.sortmenu .pmfoot', PIPELINE_CSS)).toContain('margin-top: var(--space-8)');
     expect(cssRule('.pipemenu .pmfoot', PIPELINE_CSS)).not.toContain('margin-top');
     /* 6 above the text and 5 below is the frame's vertical asymmetry (a 32px
-       row). The SIDES are symmetric at 16px and the frame's are not — JP ruled
-       against the lopsided version, which stranded the count in a gap at the
-       right edge; at 16/16 the content sits 25px inside both edges, level with
-       the group heading. */
-    expect(cssRule('.pipemenu .pmitem', PIPELINE_CSS)).toContain('padding: 6px var(--space-16) 5px var(--space-16)');
+       row). The SIDES are 16 right / 8 left — with the list's own 8, that lands
+       the checkbox on 17px, level with the heading above it. Deliberately not
+       symmetric: aligning the checkbox to the heading and evening the two
+       insets cannot both hold with these two rules. */
+    expect(cssRule('.pipemenu .pmitem', PIPELINE_CSS)).toContain('padding: 6px var(--space-16) 5px var(--space-8)');
   });
 
   it('wears the CARD-ISSUE popover’s shadow, not the light chrome one', () => {

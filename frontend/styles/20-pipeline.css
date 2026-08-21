@@ -701,9 +701,11 @@ a.srclink:hover { background: var(--slate-100); }
    Transforming at display keeps one rule for both and leaves the sort groups
    readable where they are declared. */
 .pipemenu .pmhead {
-  /* 2px above / 8px below are the sort-group's own `pt-2` and `gap-8`; the
-     24px sides are the offset-text frame's. Measured, not eyeballed. */
-  margin: 0; padding: 2px var(--space-24) var(--space-8);
+  /* 2px above / 8px below are the sort-group's own `pt-2` and `gap-8`. The
+     SIDES are 16, not the frame's 24 (JP, 2026-08-21): what the reader lines up
+     on is the checkbox, and at 24 the heading sat 8px right of it. Both now
+     land on 17px from the panel's edge. */
+  margin: 0; padding: 2px var(--space-16) var(--space-8);
   font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--slate-400);
   text-transform: uppercase;
 }
@@ -729,12 +731,13 @@ a.srclink:hover { background: var(--slate-100); }
      three nested paddings are added up (item 4/2 + label-offset 2/2 + label's
      1px bottom), giving the 32px row it draws where an even 6/6 gave 33.
 
-     The SIDES are deliberately symmetric at 16px, which the frame is not (it
-     insets 16 left and 8 right). JP, 2026-08-21: the lopsided version left the
-     count stranded in an awkward gap at the right edge. At 16/16 the row's
-     content sits 25px inside both edges — the same 25px the group heading
-     above it sits at — so the panel reads as one column instead of three. */
-  padding: 6px var(--space-16) 5px var(--space-16);
+     The SIDES are 16 right / 8 left (JP, 2026-08-21, revising his own symmetric
+     16 from earlier the same day). With `.pmitems` contributing 8, the checkbox
+     lands on 17px — level with the group heading above it, which is the edge
+     the eye actually follows down the panel. The count sits 25px from the other
+     side; the row is deliberately not symmetric, because aligning the checkbox
+     to the heading and evening the two insets cannot both hold here. */
+  padding: 6px var(--space-16) 5px var(--space-8);
   border: none; background: none; border-radius: var(--radius-xs);
   font-family: var(--font-sans); font-size: var(--text-body); line-height: 1.5;
   color: var(--surface-foreground); text-align: left; cursor: pointer;
