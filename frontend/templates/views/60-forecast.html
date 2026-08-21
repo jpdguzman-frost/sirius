@@ -1,45 +1,179 @@
 {{#if activeTab === 'forecast'}}
+  {{! Forecast tab — build-spec v1.2 §7.2/§7.3, nodes 279:22602 / 279:16649.
+      Law: specs/001-sirius-v1/forecast-frame-notes.md (R-fc-a … R-fc-w).
+
+      ⚠️ NO OWL AND NO FIGMA ANNOTATIONS EXIST for this tab — the only tab in
+      the project with neither. The written requirement is the build spec; the
+      drawn requirement is the two frames; every place they disagree is ruled
+      in the frame notes and none of it is silent.
+
+      Structure top→bottom: the measured-delivery banner · search · the
+      two-tier table in its own scroller · Model Constants. }}
+
+  {{! ---- The green banner. NOT in §7, and kept: it is the visible half of
+       FR-7.7 / AC-11 and the only place in the product where BR-3's 2.6-4.6×
+       overstatement is stated to a reader. The frame independently draws it,
+       which settles it (R-fc-s). }}
   {{#if modelProvenance}}
-    <div class="greenpanel">
-      <div class="gtitle">✦ Forecast from measured delivery — {{modelProvenance.source}}{{#if modelProvenance.fallback}} · <span class="badge warn">snapshot fallback</span>{{/if}}</div>
-      <div class="gstats">
-        <span class="gstat"><span class="glabel">Median review wait</span><br /><span class="gvalue">{{modelReview.median}} d</span></span>
-        <span class="gstat"><span class="glabel">70th percentile</span><br /><span class="gvalue">{{modelReview['0.7']}} d</span></span>
-        <span class="gstat"><span class="glabel">85th percentile</span><br /><span class="gvalue">{{modelReview['0.85']}} d</span></span>
-        <span class="gstat"><span class="glabel">95th percentile</span><br /><span class="gvalue">{{modelReview['0.95']}} d</span></span>
+    <section class="fcmodel" aria-label="Forecast model provenance">
+      <p class="fcmtitle">Forecast from measured delivery</p>
+      <p class="fcmsrc">{{modelProvenance.source}}{{#if modelProvenance.fallback}} · <span class="pbadge fcfallback">snapshot fallback</span>{{/if}}</p>
+      <div class="fcmstats">
+        <span class="fcmstat"><span class="fcmlabel">Median review wait</span><span class="fcmvalue">{{modelReview.median}} d</span></span>
+        <span class="fcmstat"><span class="fcmlabel">70th percentile</span><span class="fcmvalue">{{modelReview['0.7']}} d</span></span>
+        <span class="fcmstat"><span class="fcmlabel">85th percentile</span><span class="fcmvalue">{{modelReview['0.85']}} d</span></span>
+        <span class="fcmstat"><span class="fcmlabel">95th percentile</span><span class="fcmvalue">{{modelReview['0.95']}} d</span></span>
       </div>
-      <div class="gnote">Design time is keyed on difficulty <em>and</em> lane. Review n={{modelReview.n}}. The retired spreadsheet model put review waits at 12.5–22 days against these measured values.</div>
+      <p class="fcmnote">Design time is keyed on difficulty <em>and</em> lane — an Easy asset card and an Easy design card behave nothing alike. Review n={{modelReview.n}}. The retired spreadsheet model put review waits at 12.5–22 days against these measured values.</p>
+      {{! The frame draws this link in both target frames with nowhere to go —
+          its drawer is designed only in a non-target frame. It points at the
+          one destination that exists and answers the question (R-fc-r). }}
+      <a class="fcmhow" href="#fc-constants">How this forecast works</a>
+    </section>
+  {{/if}}
+
+  <p class="fcexplain">Same column names as the Delivery Forecast sheet, so the team reads it unchanged. Difficulty comes from the Trello card label and can’t be edited here; Confidence is the platform’s own lever. <strong>Review SLA</strong> is the manual override — enter actual review days and it replaces the modelled review time for that card, which drives Forecasted Review Time and every date to its right.</p>
+
+  <div class="searchbar fcsearch">{{{icon.search}}}<input name="forecast-search" placeholder="Search cards or MC#" value="{{fcQ}}" lazy="250" aria-label="Search forecast rows by card or MC number" /></div>
+
+  {{#if forecastEmpty}}
+    {{! §8. The empty state REPLACES the table — a header-only table over its
+        own scroll slider is not an empty state — and the two causes get two
+        states, because they have two different next actions (R-fc-q). }}
+    {{#if forecastEmpty === 'search'}}
+      <div class="rempty"><strong>No forecast rows match</strong><span>Clear the search to see the rest of the board.</span></div>
+    {{else}}
+      <div class="rempty"><strong>Nothing to forecast</strong><span>Every deliverable on this board is done, or the sync has not read one yet. Rows appear here as soon as an active card lands.</span></div>
+    {{/if}}
+  {{else}}
+    <div class="pscrollwrap fcwrap">
+      <div class="pscroll" on-scroll="['forecastScrolled']">
+        <table class="ptable fctable">
+          {{! BOTH TIERS AND EVERY BODY ROW RENDER FROM `FC_COLS`. The spans
+              are folded out of that same list by `forecastGroups`, so tier one
+              cannot cover a different number of columns than tier two has —
+              the shear §7.2 warns about is impossible here rather than caught
+              by a number (R-fc-a). }}
+          <thead>
+            <tr class="fctier1">
+              {{#each forecastGroups as g}}
+                {{! The first cell is a blank spacer over the identity columns.
+                    The frame's own first cell holds hidden text and renders as
+                    bare grey — a label there would claim those columns are a
+                    group, and they are not (R-fc-c). }}
+                <th colspan="{{g.span}}" class="fcgroup {{#if !g.label}}fcspacer{{/if}} {{#if g.label === 'REVIEW SLA'}}fcslagroup{{/if}}" scope="colgroup">{{g.label}}</th>
+              {{/each}}
+            </tr>
+            <tr class="fctier2">
+              {{#each FC_COLS as c}}
+                <th class="{{c.cls}} {{#if c.num}}fcnum{{/if}}" scope="col">{{c.label}}</th>
+              {{/each}}
+            </tr>
+          </thead>
+          <tbody>
+          {{#each forecastRows as row}}
+            <tr class="prow fcrow">
+              <td class="fc-mc">
+                <span class="mcnum">{{row.displayId}}</span>
+                {{#if row.trelloUrl}}<a class="fcrowlink" href="{{row.trelloUrl}}" target="_blank" rel="noopener" aria-label="Open {{row.displayId}} in Trello">{{{icon.trello}}}</a>{{/if}}
+              </td>
+              <td class="fc-name"><span class="cardname">{{row.name}}</span></td>
+              {{! DIFFICULTY IS READ-ONLY HERE. The frame draws a chevron; §7.2
+                  says read-only and this tab's own copy above has always said
+                  it cannot be edited here. Whether a second write surface for a
+                  Trello-owned field opens on this tab is product's call, not a
+                  styling one — raised, not taken (R-fc-h). }}
+              <td class="fc-diff"><span class="pbadge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span></td>
+              <td class="fc-conf">
+                <select class="fcselect" value="{{row.confidence}}" on-change="['setConfidence', row.cardId]" aria-label="Confidence for {{row.displayId}}">
+                  <option value="Average">Average</option><option value="0.7">70th pct</option><option value="0.85">85th pct</option><option value="0.95">95th pct</option>
+                </select>
+              </td>
+              {{#if row.fcCells}}
+                {{! START DATE is the day the forecast was actually keyed on —
+                    the slotted week where there is one, else today. The server
+                    stamps which, so an unslotted row says what its numbers rest
+                    on instead of leaving the reader to guess (R-fc-u). }}
+                <td class="fc-start {{#if !row.slottedWeek}}fcassumed{{/if}}" title="{{#if row.slottedWeek}}The slotted week this forecast starts from{{else}}Not slotted — this forecast is keyed on today{{/if}}">{{fmtLong(row.fcCells.startDate)}}</td>
+                <td class="fc-w">{{row.fcCells.startWeek}}</td>
+                <td class="fc-cards">{{row.fcCells.cards}}</td>
+                <td class="fc-slas"><input class="fcsla" type="number" min="0" max="60" step="0.5" value="{{row.slaSketch}}" on-change="['setSla', row.cardId, 'sla_sketch']" aria-label="Sketch review SLA override for {{row.displayId}}, in days" /></td>
+                <td class="fc-slar"><input class="fcsla" type="number" min="0" max="60" step="0.5" value="{{row.slaRender}}" on-change="['setSla', row.cardId, 'sla_render']" aria-label="Render review SLA override for {{row.displayId}}, in days" /></td>
+                <td class="fc-sd">{{fmtLong(row.fcCells.sketchDelivery)}}</td>
+                <td class="fc-sa">{{fmtLong(row.fcCells.sketchApproved)}}</td>
+                {{! AC-18, demoed live on real data: a render that lands past
+                    the client deadline says so. §7.2 does not mention it; §6
+                    protects it in principle — "the alert is dismissible; the
+                    fact is not" (R-fc-s). }}
+                <td class="fc-rd {{#if row.forecast.late}}fclate{{/if}}">{{fmtLong(row.fcCells.renderDelivery)}}</td>
+                <td class="fc-ra">{{fmtLong(row.fcCells.renderApproved)}}</td>
+                <td class="fc-total fcnum">{{row.fcCells.totalCycleTime}}</td>
+                <td class="fc-scyc fcnum">{{row.fcCells.sketchCycle}}</td>
+                <td class="fc-slead fcnum">{{row.fcCells.sketchLead}}</td>
+                <td class="fc-sdes fcnum">{{row.fcCells.sketchDesign}}</td>
+                <td class="fc-srev fcnum">{{row.fcCells.sketchReview}}</td>
+                {{! The render block reads its OWN four fields. They equal the
+                    sketch block's today, by construction in the engine — eight
+                    columns where four are duplicates looks like a bug and is
+                    not, because §7.1's whole point is parity with the Delivery
+                    Forecast sheet's own columns. Reading them separately means
+                    the day the engine distinguishes them, the table shows it
+                    without an edit (R-fc-v). }}
+                <td class="fc-rcyc fcnum">{{row.fcCells.renderCycle}}</td>
+                <td class="fc-rlead fcnum">{{row.fcCells.renderLead}}</td>
+                <td class="fc-rdes fcnum">{{row.fcCells.renderDesign}}</td>
+                <td class="fc-rrev fcnum">{{row.fcCells.renderReview}}</td>
+                <td class="fc-base fcnum">{{row.fcCells.baselineReview}}</td>
+                <td class="fc-frt fcnum">{{row.fcCells.forecastedReviewTime}}</td>
+                {{! AC-11 / FR-7.7 in their own words: the per-row sample size
+                    is visible. The frame draws no such column because it
+                    answers §7.2's table and nothing about provenance. }}
+                <td class="fc-n fcnum">{{row.fcCells.sampleSize}}</td>
+              {{else}}
+                {{! The per-row case §8 has no rule for: no difficulty label, so
+                    the engine cannot key a design cell and there is nothing to
+                    forecast. Its span is every column the row does NOT render
+                    regardless, derived from the column table's own flag — so it
+                    can never fall out of step with the columns it covers. }}
+                <td class="fcnorow" colspan="{{forecastFallbackSpan}}">No difficulty label on the Trello card — nothing to forecast until one is set.</td>
+              {{/if}}
+            </tr>
+          {{/each}}
+          </tbody>
+        </table>
+      </div>
+      {{#if fcThumb.needed}}
+        <div class="hslider">
+          <button class="hnudge" on-click="['nudgeScroll', -1]" aria-label="Scroll the forecast table left">{{{icon.sliderLeft}}}</button>
+          <div class="htrack" on-click="['trackJump']"><div class="hthumb" style="left:{{fcThumb.left}}%;width:{{fcThumb.width}}%;"></div></div>
+          <button class="hnudge" on-click="['nudgeScroll', 1]" aria-label="Scroll the forecast table right">{{{icon.sliderRight}}}</button>
+        </div>
+      {{/if}}
     </div>
   {{/if}}
-  <p class="explain">Same column names as the Delivery Forecast sheet, so the team reads it unchanged. Difficulty comes from the Trello card label and can’t be edited here; Confidence is the platform’s own lever. <strong>Review SLA</strong> is the manual override — enter actual review days and it replaces the modelled review time for that card, which drives Forecasted Review Time and every date to its right.</p>
 
-  <div class="scroll"><table class="grid">
-    <thead><tr><th>Request</th><th>Difficulty</th><th>Confidence</th><th class="slahead">Sketch SLA</th><th class="slahead">Render SLA</th>
-      <th>Sketch Delivery Date</th><th>Sketch Approved</th><th>Render Delivery Date</th><th>Render Approved</th>
-      <th>Baseline Review</th><th>Forecasted Review Time</th><th>Total Cycle Time</th><th>n</th></tr></thead>
-    <tbody>
-    {{#each forecastRows as row}}
-      <tr>
-        <td class="clip"><span class="mono">{{row.displayId}}</span> / {{row.name}}</td>
-        <td><span class="badge d-{{row.difficulty}}">{{row.difficulty || '—'}}</span></td>
-        <td><select value="{{row.confidence}}" on-change="['setConfidence', row.cardId]">
-          <option value="Average">Average</option><option value="0.7">70th pct</option><option value="0.85">85th pct</option><option value="0.95">95th pct</option>
-        </select></td>
-        <td><input class="sla" type="number" min="0" step="0.5" value="{{row.slaSketch}}" on-change="['setSla', row.cardId, 'sla_sketch']" /></td>
-        <td><input class="sla" type="number" min="0" step="0.5" value="{{row.slaRender}}" on-change="['setSla', row.cardId, 'sla_render']" /></td>
-        {{#if row.forecast}}
-          <td class="nowrap"><strong>{{fmt(row.forecast.sketchDelivery)}}</strong></td><td class="nowrap">{{fmt(row.forecast.sketchApproved)}}</td>
-          <td class="nowrap {{#if row.forecast.late}}redtext{{/if}}"><strong>{{fmt(row.forecast.renderDelivery)}}</strong></td><td class="nowrap">{{fmt(row.forecast.renderApproved)}}</td>
-          <td class="dim">{{(row.forecast.sketchReview * 2).toFixed(2)}}</td>
-          <td>{{row.forecast.forecastedReviewTime.toFixed(2)}}</td>
-          <td><strong>{{row.forecast.totalCycleTime.toFixed(2)}}</strong></td>
-          <td class="dim">{{row.forecast.sampleSize}}</td>
-        {{else}}<td colspan="8" class="dim">no difficulty — cannot forecast</td>{{/if}}
-      </tr>
-    {{/each}}
-    </tbody>
-  </table></div>
+  {{! ---- Model Constants. Renders FROM the rule table, so the words on screen
+       and the engine cannot drift — the construction the Deadlines legend uses.
+
+       ⚠️ THE FRAME'S FIRST ENTRY QUOTES THE RETIRED WORKBOOK REGRESSION
+       (coefficient and constant both). Invariant six confines that formula to
+       migration tests and forbids UI code from showing it, and it is not what
+       the shipped engine computes. The entry rendered here states what the
+       engine actually does; the other three are quoted from the frame and are
+       correct (R-fc-d). }}
+  <section class="fcconstants" id="fc-constants" aria-label="Model constants">
+    <p class="fcchead">Model Constants</p>
+    <div class="fcclist">
+      {{#each FC_CONSTANTS as k}}
+        <div class="fccitem">
+          <p class="fcclabel">{{k.label}}</p>
+          <p class="fcctext">{{k.text}}</p>
+        </div>
+      {{/each}}
+    </div>
+  </section>
+
   {{#if modelProvenance}}
-    <div class="provenance">Model cells {{modelProvenance.cells}} · sample sizes shown per row (n) · recomputed nightly from a rolling window (FR-7.6)</div>
+    <p class="fcprov">Model cells {{modelProvenance.cells}} · sample sizes shown per row (n) · recomputed nightly from a rolling window (FR-7.6)</p>
   {{/if}}
 {{/if}}

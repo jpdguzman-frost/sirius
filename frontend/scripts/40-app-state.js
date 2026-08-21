@@ -202,6 +202,17 @@ const app = new Ractive({
        would have shipped mislabelled, on the one screen where the wording is
        supposed to match the engine exactly. */
     ruleLabel: (r) => dlRule(r).chip,
+    /* FORECAST (§7.2). The column table is data so the template can render the
+       two header tiers and the body from the one list; the Model Constants
+       panel renders from its own table for the same reason (R-fc-a, R-fc-d). */
+    FC_COLS,
+    FC_CONSTANTS,
+    /* the tab's own search box — the frame draws a Search Field above the
+       table and no filter/sort pair */
+    fcQ: '',
+    /* the horizontal slider's state for THIS scroller; a fourth wide table
+       needs its own key or it fights the Pipeline's (R-fc-p) */
+    fcThumb: { needed: false, left: 0, width: 0 },
   },
   computed: {
     tabLabel() {
@@ -625,8 +636,35 @@ const app = new Ractive({
       const typical = Number.isFinite(c.typical) ? c.typical : '—';
       return `capacity ${c.weekly} · typical ${typical} · hard ceiling ${Math.round(this.get('capHardCeiling') * 100)}%`;
     },
+    /* §7.2's row set: everything not done, narrowed by the tab's own search.
+       An unslotted row is INCLUDED — the server forecasts it off today and
+       stamps the day it used as `forecast.startDate`, so the START DATE column
+       shows what the numbers to its right were actually keyed on rather than
+       leaving the reader to guess (R-fc-u). */
     forecastRows() {
-      return this.get('rows').filter((r) => r.status !== 'done');
+      const q = this.get('fcQ');
+      return this.get('rows').filter((r) => r.status !== 'done' && fcMatch(r, q));
+    },
+    /* Tier one, folded out of the SAME column table tier two and the body
+       render from — never a second list, so the spans cannot shear off the
+       columns they cover (R-fc-a). */
+    forecastGroups() {
+      return fcGroupCells(this.get('FC_COLS'));
+    },
+    /* The no-forecast row's span: every column that does NOT render regardless
+       of whether there is a forecast. Derived from the column table's own
+       `always` flag rather than counted in the markup, because a span typed
+       into a template goes stale the moment a column moves and nothing says
+       so — which is precisely the shear §7.2 warns about, one row down. */
+    forecastFallbackSpan() {
+      return this.get('FC_COLS').filter((c) => !c.always).length;
+    },
+    /* The two empty states §8 requires, kept apart because they have different
+       causes and different next actions: a search that hid every row, and a
+       board with nothing left to forecast (R-fc-q). */
+    forecastEmpty() {
+      if (this.get('forecastRows').length) return null;
+      return this.get('fcQ') ? 'search' : 'none';
     },
 
     /* ---- sprints modal validation (owls #28–#30, #37) ----

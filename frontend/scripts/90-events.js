@@ -5,7 +5,7 @@ function selectTab(id) {
   closeMenus();
   app.set('activeTab', id);
   if (id === 'admin' && app.get('isAdmin')) loadAdmin();
-  if (id === 'pipeline' || id === 'requests' || id === 'schedules') {
+  if (id === 'pipeline' || id === 'requests' || id === 'schedules' || id === 'forecast') {
     // returning to the tab remounts .pscroll at scrollLeft 0 — recompute the
     // slider so the affordance is never stale (review finding 5). The tab
     // remounts the whole sheet, so the requestor badges are new nodes too.
@@ -840,15 +840,71 @@ app.on({
     }
   },
 
+  /* ---- Forecast planning writes (§7.3, R-fc-t) ----
+
+     Both of these used to be two unguarded lines: send whatever the control
+     holds, then reload. The server refuses a review SLA outside 0..60 with a
+     400, `api.send` throws, neither handler caught it, and there is no
+     unhandled-rejection handler anywhere in this app — so a refused number sat
+     on screen indefinitely with no banner, no revert and no reload. They now
+     do what the four neighbouring writes have always done.
+
+     These are Sirius-owned planning fields, not registry writes, so they are
+     not gated on `writesEnabled` — an observation-mode project still plans. */
   async setConfidence(ctx, cardId) {
-    await api.send('PATCH', patchUrl(cardId), { confidence: ctx.node.value });
-    await loadAll();
+    const row = app.get('rows').find((r) => r.cardId === cardId);
+    if (!row) return;
+    const next = ctx.node.value;
+    const prev = row.confidence;
+    if (next === prev) return; // no-op guard — no call, no audit row
+    patchRow(cardId, { confidence: next });
+    try {
+      await api.send('PATCH', patchUrl(cardId), { confidence: next });
+      await loadAll(); // every date and duration to the right of it re-derives server-side
+    } catch (err) {
+      patchRow(cardId, { confidence: prev });
+      flashBanner(`Confidence write failed — reverted. ${errText(err)}`);
+    }
   },
+  /* §7.3: "Decimals accepted; negative and non-numeric rejected without
+     clearing the field."
+
+     A `type="number"` input reports non-numeric text as the empty string, and
+     the empty string is ALSO how a reader clears an override — so the two
+     cases are indistinguishable at the node and the old code resolved the
+     ambiguity the destructive way, deleting the override on a typo. `validity
+     .badInput` is the one signal that separates them: it is true only when the
+     control holds something it could not parse. That case snaps the model back
+     to the last committed value, which re-renders the field with the good
+     number instead of an empty one — the house's snap-back pattern, the same
+     one the capacity slider uses.
+
+     A negative or out-of-range number is refused the same way, locally, so the
+     reader never has to learn the 0..60 bound from a red banner. */
   async setSla(ctx, cardId, field) {
-    const v = ctx.node.value === '' ? null : Number(ctx.node.value);
-    await api.send('PATCH', patchUrl(cardId), { [field]: v });
-    await loadAll();
+    const row = app.get('rows').find((r) => r.cardId === cardId);
+    if (!row) return;
+    const key = field === 'sla_sketch' ? 'slaSketch' : 'slaRender';
+    const prev = row[key] ?? null;
+    const raw = ctx.node.value;
+    const bad = ctx.node.validity && ctx.node.validity.badInput;
+    const next = raw === '' ? null : Number(raw);
+    if (bad || (next !== null && (!Number.isFinite(next) || next < 0 || next > SLA_MAX))) {
+      patchRow(cardId, { [key]: prev }); // snap the field back to what the server holds
+      flashBanner(bad ? 'Review SLA must be a number — kept the last value.' : `Review SLA must be between 0 and ${SLA_MAX} days — kept the last value.`);
+      return;
+    }
+    if (next === prev) return; // no-op guard — no call, no audit row
+    patchRow(cardId, { [key]: next });
+    try {
+      await api.send('PATCH', patchUrl(cardId), { [field]: next });
+      await loadAll();
+    } catch (err) {
+      patchRow(cardId, { [key]: prev });
+      flashBanner(`Review SLA write failed — reverted. ${errText(err)}`);
+    }
   },
+  forecastScrolled(ctx) { updateThumb(ctx.node, 'fcThumb'); },
 });
 
 function patchUrl(cardId) {

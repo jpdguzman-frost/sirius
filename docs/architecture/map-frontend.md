@@ -27,6 +27,7 @@ _last-verified: 2026-08-18_
 - `frontend/styles/30-planner.css` — schedules toolbar.
 - `frontend/styles/35-gantt.css` — planner body (pinned left block, --gw columns).
 - `frontend/styles/40-deadlines.css` — Deadlines tab v2 (owl #64): the week columns and their horizontal scroller, the deadline card and its two dates, the alert-group banners (built as drawn, conversion to the row-warning pattern deferred) and the Model Constants legend. No table recipes — this tab has no column table.
+- `frontend/styles/45-forecast.css` — Forecast tab: the two-tier 25-column table, the measured-delivery banner, the review-SLA field, Model Constants. Numbered after 20-pipeline.css so its `.fctable` overrides beat the shared `.ptable` recipe honestly.
 - `frontend/templates/layout.html` — the tpl-app script wrapper, icon sprite, shell nav + tabbar, banner, the `<main>` panel; carries the partials and views markers build.js fills.
 - `frontend/templates/partials/00-req-sync-strip.html` — reqSyncStrip: the read-only-from-Trello sentence, used by the Requests populated view and its empty state.
 - `frontend/templates/partials/10-due-calendar.html` — dueCalendar: month nav, day-of-week strip, day grid, shortcuts; shared by both due popovers (root state only).

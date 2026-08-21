@@ -30,7 +30,17 @@ function updateThumb(el, key) {
     app.set(key, { needed, left: Math.round(left * 100) / 100, width: Math.round(width * 100) / 100 });
   });
 }
-const thumbKeyOf = (node) => (node.closest('.gwrap') ? 'ganttThumb' : node.closest('.reqwrap') ? 'reqThumb' : 'pipeThumb');
+const thumbKeyOf = (node) =>
+  node.closest('.gwrap')
+    ? 'ganttThumb'
+    : node.closest('.reqwrap')
+      ? 'reqThumb'
+      : /* R-fc-p: the Forecast table is the fourth wide scroller. Without a
+           branch of its own it falls through to the Pipeline's key and the two
+           sliders overwrite each other's thumb. */
+        node.closest('.fcwrap')
+        ? 'fcThumb'
+        : 'pipeThumb';
 /* The ONE "which scroller" resolver. `node` is optional: a caller with no
    element in hand (a keyboard or state-driven scroll, not a pointer one) gets
    the document-wide fallback this already had, rather than reaching for

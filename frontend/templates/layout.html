@@ -35,7 +35,12 @@
 
 {{#if banner}}<div class="banner">{{banner}}</div>{{/if}}
 
-<main class="view {{activeTab === 'pipeline' || activeTab === 'requests' ? '' : 'legacybg'}}" id="view-panel" role="tabpanel" aria-labelledby="tab-{{activeTab}}">
+{{! The grey wash is what a tab looked like before it was rebuilt to its
+    frames. Forecast joins the exemption because it now is (R-fc-q); Schedules
+    and Deadlines were rebuilt without this ternary being updated and still
+    carry it — flagged, not fixed here, because changing how two other tabs
+    look is not this build's business. }}
+<main class="view {{activeTab === 'pipeline' || activeTab === 'requests' || activeTab === 'forecast' ? '' : 'legacybg'}}" id="view-panel" role="tabpanel" aria-labelledby="tab-{{activeTab}}">
 
 <!-- inject:views -->
 </main>

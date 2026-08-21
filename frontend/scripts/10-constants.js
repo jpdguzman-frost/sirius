@@ -551,3 +551,129 @@ const pipeSortLabel = (key) => {
   const s = PIPE_SORTS.find((x) => x.key === key);
   return s ? `${s.group}: ${s.label}` : '';
 };
+
+/* ============================================================================
+   FORECAST TAB — build-spec v1.2 §7.2/§7.3, nodes 279:22602 / 279:16649.
+   Law: specs/001-sirius-v1/forecast-frame-notes.md (R-fc-a … R-fc-w).
+
+   ONE column table. Both header tiers and every body row render from it, in
+   this order, so a column cannot reach the body without reaching the header —
+   which is the shear §7.2 warns about, made impossible rather than caught by a
+   number (R-fc-a).
+
+   `group` is the tier-one cell a column belongs to; `forecastGroups` folds
+   consecutive equal groups into the top row and counts the span. An empty
+   group name is the blank spacer over the identity columns — the frame's own
+   first cell holds hidden text and renders as bare grey (R-fc-c).
+
+   `num` marks the right-aligned tabular block and `muted` the secondary
+   figures — alignment is a property of the COLUMN, read once here, never a
+   class typed twice in the markup.
+
+   `fmt` says which formatter the stamp loop runs the value through: `num` for
+   a duration in days, `count` for a whole number, absent for a value that is
+   already a string. The loop reads THAT rather than switching on key names,
+   so the sample size stays a count while sitting in the right-aligned block.
+
+   `always` marks the cells that render even when there is no forecast at all —
+   which is also what the no-forecast row's span is derived from, so the two
+   cannot fall out of step. */
+const FC_COLS = [
+  /* Every `key` here is a REAL field name — on the engine's own result where
+     the column is a forecast figure, on the row where it is not. Nothing is a
+     display alias, so a guard can run the shipped engine and prove all
+     twenty-five columns actually resolve to data. */
+  { key: 'displayId', group: '', label: 'MC #', cls: 'fc-mc', always: true },
+  { key: 'name', group: '', label: 'DELIVERABLE', cls: 'fc-name', always: true },
+  { key: 'difficulty', group: '', label: 'DIFFICULTY', cls: 'fc-diff', always: true },
+  /* CONFIDENCE, not the frame's TYPE — TYPE already means asset type one tab
+     away, and these values are percentiles (R-fc-g). */
+  { key: 'confidence', group: '', label: 'CONFIDENCE', cls: 'fc-conf', always: true },
+  { key: 'startDate', group: '', label: 'START DATE', cls: 'fc-start' },
+  { key: 'startWeek', group: '', label: 'W', cls: 'fc-w', fmt: 'count' },
+  { key: 'cards', group: '', label: 'CARDS', cls: 'fc-cards', fmt: 'count' },
+  { key: 'slaSketch', group: 'REVIEW SLA', label: 'SKETCH', cls: 'fc-slas' },
+  { key: 'slaRender', group: 'REVIEW SLA', label: 'RENDER', cls: 'fc-slar' },
+  { key: 'sketchDelivery', group: 'FORECASTED DATES', label: 'SKETCH DELIVERY DATE', cls: 'fc-sd' },
+  { key: 'sketchApproved', group: 'FORECASTED DATES', label: 'SKETCH APPROVED', cls: 'fc-sa', muted: true },
+  { key: 'renderDelivery', group: 'FORECASTED DATES', label: 'RENDER DELIVERY DATE', cls: 'fc-rd' },
+  { key: 'renderApproved', group: 'FORECASTED DATES', label: 'RENDER APPROVED', cls: 'fc-ra', muted: true },
+  { key: 'totalCycleTime', group: 'DELIVERY FORECAST', label: 'TOTAL CYCLE TIME', cls: 'fc-total', num: true, fmt: 'num' },
+  { key: 'sketchCycle', group: 'SKETCH', label: 'CYCLE TIME', cls: 'fc-scyc', num: true, fmt: 'num' },
+  { key: 'sketchLead', group: 'SKETCH', label: 'LEAD TIME', cls: 'fc-slead', num: true, muted: true, fmt: 'num' },
+  { key: 'sketchDesign', group: 'SKETCH', label: 'DESIGN TIME', cls: 'fc-sdes', num: true, muted: true, fmt: 'num' },
+  { key: 'sketchReview', group: 'SKETCH', label: 'REVIEW TIME', cls: 'fc-srev', num: true, muted: true, fmt: 'num' },
+  /* RENDER, not the frame's second SKETCH (R-fc-e). Each of these four reads
+     its OWN field and never the sketch one, so the day the engine stops making
+     them equal the table says so without an edit (R-fc-v). */
+  { key: 'renderCycle', group: 'RENDER', label: 'CYCLE TIME', cls: 'fc-rcyc', num: true, fmt: 'num' },
+  { key: 'renderLead', group: 'RENDER', label: 'LEAD TIME', cls: 'fc-rlead', num: true, muted: true, fmt: 'num' },
+  { key: 'renderDesign', group: 'RENDER', label: 'DESIGN TIME', cls: 'fc-rdes', num: true, muted: true, fmt: 'num' },
+  { key: 'renderReview', group: 'RENDER', label: 'REVIEW TIME', cls: 'fc-rrev', num: true, muted: true, fmt: 'num' },
+  { key: 'baselineReview', group: 'DEADLINE', label: 'BASELINE REVIEW', cls: 'fc-base', num: true, muted: true, fmt: 'num' },
+  { key: 'forecastedReviewTime', group: 'DEADLINE', label: 'FORECASTED REVIEW TIME', cls: 'fc-frt', num: true, fmt: 'num' },
+  /* A 25th column the frame does not draw. AC-11 and FR-7.7 require the
+     per-row SAMPLE SIZE to be visible, in those words — the frame answers
+     §7.2's table and says nothing about provenance, so this is an acceptance
+     criterion the design simply does not cover, not a disagreement with it
+     (R-fc-s). */
+  { key: 'sampleSize', group: 'MODEL', label: 'n', cls: 'fc-n', num: true, muted: true, fmt: 'count' },
+];
+
+/* Tier one, folded out of the column table. Consecutive columns sharing a group
+   become one cell whose span is how many they were — so the spans and the leaf
+   count are two readings of ONE list and cannot disagree (R-fc-a). */
+const fcGroupCells = (cols) => {
+  const out = [];
+  for (const c of cols) {
+    const last = out[out.length - 1];
+    if (last && last.label === c.group) last.span += 1;
+    else out.push({ label: c.group, span: 1, key: `${c.group}-${c.key}` });
+  }
+  return out;
+};
+
+/* The upper bound the planning route already enforces on a review SLA. Said
+   here so the field can refuse an out-of-range number BEFORE the round trip
+   and name the bound in the message, rather than the reader learning it from a
+   four-hundred. The server stays the authority (invariant 12's shape): this is
+   the same rule said early, and a guard asserts the two numbers agree. */
+const SLA_MAX = 60;
+
+/* The two decimals every figure in this table carries. `.toFixed` in a template
+   expression is arithmetic in markup and re-runs per row on every re-render;
+   the stamp loop calls this once per load (frontend/CLAUDE.md). */
+const fcNum = (n) => (typeof n === 'number' && Number.isFinite(n) ? n.toFixed(2) : '—');
+/** W and CARDS are counts, not durations - no decimals. */
+const fcCount = (n) => (typeof n === 'number' && Number.isFinite(n) ? String(n) : '—');
+
+/* MODEL CONSTANTS — the footer panel, rendered FROM this table so the words on
+   screen and the engine cannot drift, the same construction the Deadlines
+   legend uses (R-dl-d).
+
+   ⚠️ THE FRAME'S FIRST ENTRY READS `1.28 × Forecasted Review Time + 2.96`.
+   Those are the RETIRED workbook regression's coefficients, which invariant six
+   confines to migration tests and forbids UI code from showing. The entry below
+   states what the shipped engine actually does instead (R-fc-d). The other
+   three are quoted from the frame, and are correct. */
+const FC_CONSTANTS = [
+  {
+    key: 'total',
+    label: 'Total Cycle Time',
+    text: 'Lead + design + review, once for sketch and once for render. A Review SLA replaces the modelled review here, so this can differ from the two cycle columns.',
+  },
+  { key: 'render', label: 'Render Delivery Date', text: 'From the Friday of the Sketch Approved week' },
+  { key: 'calendar', label: 'Calendar', text: 'WORKDAY, PH holidays excluded' },
+  { key: 'week', label: 'W', text: 'WEEKNUM of Start Date' },
+];
+
+/* Search over the Forecast table. Same two fields the other three tabs search
+   on and the same blob the Pipeline stamps, so "MC-825" and a card name both
+   land. A row the search hides is hidden — the table's own empty state names
+   the search as the cause, which is the rule Requests states (R-fc-q). */
+const fcMatch = (row, q) => {
+  if (!q) return true;
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  return `${row.displayId || ''} ${row.name || ''}`.toLowerCase().includes(needle);
+};

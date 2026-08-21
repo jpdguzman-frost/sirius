@@ -455,11 +455,26 @@ const WEEK_CELL_TARGETS = [
  * ====================================================================== */
 
 describe('the guard’s own parsers actually see the shipped files', () => {
+  /* THE DEFECT THIS REWRITE FIXES: the assertion under this exact title WAS a
+     hardcoded list of eight filenames, so adding a ninth stylesheet failed a
+     guard whose whole subject is that the enumeration cannot go stale. It went
+     red on 45-forecast.css for no reason except that it had been retyped.
+
+     What it is actually for is non-vacuity and attribution — that `readAll`
+     really walked the directory rather than returning nothing, and that every
+     sheet arrives with its filename and some text. So it reads the directory
+     again, independently, and compares. A sheet added, renamed or deleted needs
+     no edit here; a `readAll` that silently stopped seeing files still fails. */
   it('reads every stylesheet in frontend/styles, not a list that can go stale', () => {
-    expect(STYLESHEETS.map((s) => s.file)).toEqual([
-      '00-base.css', '05-tokens.css', '10-ui.css', '20-pipeline.css',
-      '25-requests.css', '30-planner.css', '35-gantt.css', '40-deadlines.css',
-    ]);
+    const onDisk = fs
+      .readdirSync(path.join(fileURLToPath(new URL('../frontend/styles', import.meta.url))))
+      .filter((f) => f.endsWith('.css'))
+      .sort();
+    expect(onDisk.length, 'no stylesheets found — the enumeration is reading the wrong place').toBeGreaterThan(4);
+    expect(STYLESHEETS.map((s) => s.file)).toEqual(onDisk);
+    // filename order IS cascade order, and every sheet must carry real text
+    expect(STYLESHEETS.map((s) => s.file)).toEqual([...STYLESHEETS.map((s) => s.file)].sort());
+    expect(STYLESHEETS.every((s) => s.css.length > 0)).toBe(true);
   });
 
   it('flattens rules well enough to find known ones in two different sheets', () => {

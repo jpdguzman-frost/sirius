@@ -1,0 +1,188 @@
+/* ---------------------------------------------------------------------------
+   45-forecast.css — the Forecast tab, build-spec v1.2 §7.2/§7.3, nodes
+   279:22602 / 279:16649. Law: specs/001-sirius-v1/forecast-frame-notes.md.
+
+   Numbered FORTY-FIVE deliberately. The cascade is filename order, and this
+   sheet overrides the shared `.ptable` recipe that lives in 20-pipeline.css —
+   a single-class override in a LOWER-numbered file loses on equal specificity,
+   which is exactly the trap that bit twice in one day on the twenty-first
+   (see the state log). Sitting after it, `.fctable th` beats `.ptable th`
+   honestly rather than by accident.
+
+   This tab ran on the pre-token legacy sheet until now: raw hex, rem units and
+   one important-flagged header rule, all of which moved out of 10-ui.css when
+   this file arrived. Everything below binds to a token.
+   --------------------------------------------------------------------------- */
+
+/* ---- A. the measured-delivery banner (node 279:22606) ----
+   FR-7.7 / AC-11's visible half, and the only place in the product that states
+   BR-3's overstatement to a reader. */
+
+.fcmodel {
+  background: var(--green-50); border: 1px solid var(--green-300); border-radius: var(--radius-input);
+  padding: var(--space-16); display: flex; flex-direction: column; gap: var(--space-8);
+}
+.fcmodel .fcmtitle { margin: 0; font-size: var(--text-subtitle); font-weight: 600; color: var(--green-700); }
+.fcmodel .fcmsrc { margin: 0; font-size: var(--text-label); color: var(--surface-muted-foreground); }
+.fcmodel .fcmstats { display: flex; flex-wrap: wrap; gap: var(--space-24) 48px; margin: var(--space-8) 0; }
+.fcmodel .fcmstat { display: flex; flex-direction: column; gap: var(--space-4); }
+.fcmodel .fcmlabel { font-size: var(--text-label); color: var(--surface-muted-foreground); }
+.fcmodel .fcmvalue { font-size: var(--text-body); font-weight: 600; color: var(--surface-foreground); }
+.fcmodel .fcmnote { margin: 0; font-size: var(--text-body); line-height: 1.5; color: var(--green-700); }
+.fcmodel .fcmhow {
+  align-self: flex-start; font-size: var(--text-body); color: var(--green-700);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.fcmodel .fcfallback { background: var(--status-warning-light); color: var(--amber-800); border-color: var(--amber-500); }
+
+.fcexplain {
+  max-width: 720px; margin: var(--space-16) 0 0;
+  font-size: var(--text-body); line-height: 1.55; color: var(--surface-foreground);
+}
+.fcsearch { margin-top: var(--space-12); }
+
+/* ---- B. the two-tier header ----
+
+   Tier one is a solid band, not the frame's ragged one: the frame's grey comes
+   from individual cells of four different heights, so white shows below every
+   cell shorter than its row. That is an artifact of hug-sizing, not a
+   treatment, and a striped header would read as a defect (R-fc-m).
+
+   Both tiers own their own background here and nowhere else, so a second
+   height or a second fill cannot be introduced without deleting one of these. */
+
+.fctable { min-width: 2704px; }
+.fctable .fctier1 th {
+  height: 44px; background: var(--surface-secondary); border-bottom: 1px solid var(--slate-200);
+  text-align: left; vertical-align: middle;
+}
+.fctable .fctier2 th {
+  height: 52px; background: var(--surface-secondary); vertical-align: bottom;
+  white-space: normal; line-height: 1.2;
+}
+/* The blank cell over the identity columns. It carries the band and no glyphs;
+   the frame's own first cell holds hidden text and renders as bare grey. */
+.fctable .fcspacer { color: transparent; }
+/* The Review SLA group is tinted, and the two tiers tint it DIFFERENTLY —
+   the amber the build spec names for the inputs is spent on the group cell,
+   exactly where the frame spends it (R-fc-l). */
+.fctable .fcslagroup { background: var(--status-warning-light); color: var(--amber-800); }
+.fctable .fctier2 th.fc-slas,
+.fctable .fctier2 th.fc-slar { background: var(--slate-50); color: var(--amber-700); }
+
+/* ---- C. the numeric block ----
+
+   Right-alignment starts at TOTAL CYCLE TIME and runs to the end. W, CARDS and
+   the four dates stay left: the dates are read as words and the numeric block
+   reads as one slab against the right edge (R-fc-k). The tabular figures are
+   the build spec supplying what the design omitted — nothing in the frame sets
+   a numeral feature at all. One owner, here. */
+
+.fctable .fcnum { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- D. body cells ----
+
+   No vertical rules anywhere: the frame draws none and no table in this app
+   has ever had one (R-fc-i). The ONE per-row rule the frame does draw is the
+   underline beneath Total Cycle Time, on every row including the last — how it
+   marks the pivot column in a table with no other vertical structure (R-fc-j). */
+
+.fctable td { padding: var(--space-16); vertical-align: top; }
+.fctable .fc-total { font-weight: 600; color: var(--surface-foreground); }
+.fctable tr.fcrow td.fc-total { border-bottom: 1px solid var(--slate-200); }
+/* The secondary figures — approvals, leads, designs, reviews, baseline and the
+   sample size — read one step back from the numbers they explain. */
+.fctable .fc-sa,
+.fctable .fc-ra,
+.fctable .fc-slead,
+.fctable .fc-sdes,
+.fctable .fc-srev,
+.fctable .fc-rlead,
+.fctable .fc-rdes,
+.fctable .fc-rrev,
+.fctable .fc-base,
+.fctable .fc-n { color: var(--surface-muted-foreground); }
+/* AC-18: a render landing past the client deadline says so. */
+.fctable .fclate { color: var(--status-destructive-strong); font-weight: 600; }
+/* A row nobody has slotted is forecast from today; the date says so rather
+   than passing itself off as a plan. */
+.fctable .fcassumed { color: var(--surface-muted-foreground); font-style: italic; }
+.fctable .fcrowlink { display: inline-flex; margin-left: var(--space-4); color: var(--slate-400); vertical-align: middle; }
+.fctable .fcrowlink:hover { color: var(--blue-700); }
+.fctable .fcnorow { color: var(--surface-muted-foreground); font-size: var(--text-body); }
+
+/* Column measures — one declaration, three consumers (both header tiers and
+   the body), the same construction the other tables use. They sum to the
+   frame's own 2704px, which is what `min-width` above restates. */
+.fctable .fc-mc { width: 120px; white-space: nowrap; }
+.fctable .fc-name { width: 200px; }
+.fctable .fc-diff { width: 120px; }
+.fctable .fc-conf { width: 160px; }
+.fctable .fc-start { width: 128px; }
+.fctable .fc-w,
+.fctable .fc-cards { width: 80px; }
+.fctable .fc-slas,
+.fctable .fc-slar { width: 120px; }
+.fctable .fc-sd,
+.fctable .fc-sa,
+.fctable .fc-rd,
+.fctable .fc-ra { width: 128px; }
+.fctable .fc-total { width: 120px; }
+.fctable .fc-scyc,
+.fctable .fc-slead,
+.fctable .fc-sdes,
+.fctable .fc-srev,
+.fctable .fc-rcyc,
+.fctable .fc-rlead,
+.fctable .fc-rdes,
+.fctable .fc-rrev { width: 88px; }
+.fctable .fc-base,
+.fctable .fc-frt { width: 120px; }
+.fctable .fc-n { width: 64px; }
+
+/* ---- E. the two controls ----
+
+   Confidence keeps a native select here rather than the button-plus-listbox
+   the other tabs use: those exist because a badge had to stay a badge while
+   gaining a menu, and this is a plain field in a plain cell. Geometry is the
+   frame's (node 279:22602). */
+
+.fctable .fcselect {
+  width: 120px; height: 32px; box-sizing: border-box;
+  font-family: var(--font-sans); font-size: var(--text-label); color: var(--surface-foreground);
+  background: var(--slate-50); border: 1px solid var(--surface-secondary); border-radius: var(--radius-sm);
+  padding: 0 var(--space-8);
+}
+.fctable .fcselect:hover { border-color: var(--slate-300); }
+/* The review SLA override. Amber says "this replaces a modelled value" — the
+   build spec asks for the tint and the frame places it. */
+.fctable .fcsla {
+  width: 72px; box-sizing: border-box;
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 600; text-align: center;
+  color: var(--amber-700); background: var(--amber-50);
+  border: 1px solid var(--amber-200); border-radius: var(--radius-sm);
+  padding: 6px var(--space-8);
+}
+.fctable .fcselect:focus-visible,
+.fctable .fcsla:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+
+/* ---- F. Model Constants (node 279:25783) ----
+   Renders from the rule table, so the words here and the engine cannot drift. */
+
+.fcconstants {
+  margin-top: var(--space-24); background: var(--slate-50);
+  border: 1px solid var(--slate-200); border-radius: var(--radius-input); padding: var(--space-16);
+}
+.fcconstants .fcchead {
+  margin: 0 0 var(--space-12); font-size: var(--text-label); font-weight: 600;
+  letter-spacing: 0.02em; text-transform: uppercase; color: var(--surface-muted-foreground);
+}
+.fcconstants .fcclist { display: flex; flex-wrap: wrap; gap: var(--space-16) var(--space-24); }
+.fcconstants .fccitem { flex: 1 1 240px; min-width: 240px; }
+.fcconstants .fcclabel {
+  margin: 0 0 var(--space-4); font-size: var(--text-label); font-weight: 600;
+  letter-spacing: 0.02em; text-transform: uppercase; color: var(--surface-foreground);
+}
+.fcconstants .fcctext { margin: 0; font-size: var(--text-body); line-height: 1.5; color: var(--surface-muted-foreground); }
+
+.fcprov { margin-top: var(--space-12); font-size: var(--text-label); color: var(--surface-muted-foreground); }

@@ -292,6 +292,28 @@ async function loadAll() {
          in the template — the same performance law as hasTasks above. */
       r.mcDeliverables = (pipeline.mcDeliverables || {})[r.mcNumber] || 1;
       r.sharedMc = r.mcDeliverables > 1;
+      /* §7.2's twenty-four cells, formatted ONCE here rather than per row on
+         every re-render. `.toFixed` in a template expression is arithmetic in
+         markup and re-runs on every keystroke of the search field; the same
+         law that stamped `r.warning`. Keyed by the column table's own `key`,
+         so a column added there needs no edit in this loop.
+
+         The four dates and the two counts have their own shapes; everything
+         else is the two-decimal duration figure. Absent means '—', never a
+         blank cell — an empty numeric cell in a 24-column table reads as a
+         missing column rather than a missing value. */
+      r.fcCells = null;
+      if (r.forecast) {
+        const f = r.forecast;
+        const cells = {};
+        for (const col of FC_COLS) {
+          const v = col.key in f ? f[col.key] : r[col.key];
+          if (col.fmt === 'count') cells[col.key] = fcCount(v);
+          else if (col.fmt === 'num') cells[col.key] = fcNum(v);
+          else cells[col.key] = v;
+        }
+        r.fcCells = cells;
+      }
     });
     capServer = pipeline.capacity.weekly; // server truth — the capacity rollback target
     app.set({

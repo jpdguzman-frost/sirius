@@ -6,7 +6,7 @@
  */
 
 import mongoose, { Types } from 'mongoose';
-import { forecast } from '../../lib/forecast.ts';
+import { forecast, type Forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
 import { loadProjectModel } from './model-grid.ts';
@@ -108,18 +108,27 @@ export interface PipelineRow {
   weight: number;
   /** Gantt bar segments, absolute dates. [] when the row is unslotted or unforecastable. */
   phases: PlannerPhase[];
-  forecast: {
+  /**
+   * The WHOLE `Forecast` the engine returns, four dates flattened to local
+   * calendar days, plus `startDate` (the day the forecast was actually keyed
+   * on — `slotted_week` where there is one, else today, and the caller cannot
+   * tell which without being told) and `late` (BR-9, not an engine field).
+   *
+   * Carrying all of it is R-fc-u: eleven fields used to be dropped here, which
+   * is why six of build-spec §7.2's columns had no data and why the Forecast
+   * template retyped `sketchReview * 2` — `lib/forecast.ts`'s own
+   * `baselineReview` formula — into markup. Nothing is recomputed in the
+   * browser (invariants 5-7); the engine is the only place forecast arithmetic
+   * happens, so every column it feeds must come off this projection.
+   */
+  forecast: (Omit<Forecast, 'sketchDelivery' | 'sketchApproved' | 'renderDelivery' | 'renderApproved'> & {
     sketchDelivery: string;
     sketchApproved: string;
     renderDelivery: string;
     renderApproved: string;
-    sketchDesign: number;
-    sketchReview: number;
-    forecastedReviewTime: number;
-    totalCycleTime: number;
-    sampleSize: number;
+    startDate: string;
     late: boolean;
-  } | null;
+  }) | null;
   missing: string[];
 }
 
@@ -322,15 +331,12 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
     );
     const deadline = (d.deadline as string) ?? null;
     fc = {
+      ...f,
       sketchDelivery: localDate(f.sketchDelivery),
       sketchApproved: localDate(f.sketchApproved),
       renderDelivery: localDate(f.renderDelivery),
       renderApproved: localDate(f.renderApproved),
-      sketchDesign: f.sketchDesign,
-      sketchReview: f.sketchReview,
-      forecastedReviewTime: f.forecastedReviewTime,
-      totalCycleTime: f.totalCycleTime,
-      sampleSize: f.sampleSize,
+      startDate,
       late: deadline ? localDate(f.renderDelivery) > deadline : false, // BR-9: no deadline → no conflict
     };
   }

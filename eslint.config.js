@@ -34,6 +34,8 @@ const FRONTEND_SHARED = [
   'unranked', 'updateThumb', 'WARN_CLOSE_MS', 'WARN_POP_H', 'WARN_POP_W', 'WARN_SHADOW_BLEED', 'warnPopCancelClose',
   'WEEK_COUNT', 'WEEK_PX', 'weekAtX', 'withRouterSuppressed', 'WORKDAYS_PER_WEEK', 'workingDaysBetween',
   'writeCapacity', 'writeDayPlan', 'writeDeadline',
+  // Forecast tab (build-spec §7.2/§7.3)
+  'FC_COLS', 'FC_CONSTANTS', 'fcGroupCells', 'fcNum', 'fcCount', 'fcMatch', 'SLA_MAX',
 ];
 
 // Shared names ASSIGNED outside their defining file (60-overlays.js declares

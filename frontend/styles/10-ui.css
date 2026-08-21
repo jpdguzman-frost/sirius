@@ -15,15 +15,6 @@
 }
 .note .dim { font-size: 0.8rem; }
 .note.soft { background: #f8fafc; border-style: dashed; color: var(--muted); }
-.greenpanel {
-  border: 1.5px solid #6ee7b7; background: #ecfdf5; border-radius: 12px;
-  padding: 1rem 1.3rem; margin: 0.4rem 0 1rem; font-size: 0.88rem;
-}
-.greenpanel .gtitle { color: var(--green-ink); font-weight: 600; }
-.greenpanel .gstats { display: flex; gap: 3rem; margin: 0.7rem 0; flex-wrap: wrap; }
-.greenpanel .gstat .glabel { color: var(--muted); font-size: 0.8rem; }
-.greenpanel .gstat .gvalue { font-weight: 700; font-size: 1.05rem; }
-.greenpanel .gnote { color: var(--green-ink); font-size: 0.82rem; }
 
 /* ---- conflict banners (Deadlines) ---- */
 .conflict {
@@ -56,23 +47,13 @@
    so a retune cannot leave the key disagreeing with the chart. */
 
 /* ---- tables ---- */
-.scroll { overflow-x: auto; background: #fff; border: 1px solid var(--border); border-radius: 14px; }
-.grid { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
-.grid th {
-  text-align: left; padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--border); white-space: nowrap;
-  position: sticky; top: 0; background: #f8fafc; z-index: 2;
-  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted);
-}
-.grid td { padding: 0.6rem 0.8rem; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-.grid.slim { background: #fff; }
-.grid.slim td { padding: 0.4rem 0.6rem; }
-.grid tr:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
+/* The Forecast tab ran on this sheet's legacy recipes until 2026-08-21 — the
+   green panel, the .grid/.scroll table, the SLA field, the bare `select` rule
+   and an important-flagged header tint. All of it moved to 45-forecast.css and
+   binds to tokens there; nothing else in the app used any of it. */
 
-.mono { font-family: ui-monospace, monospace; font-size: 0.8rem; white-space: nowrap; }
 .dim { color: var(--muted); }
-.clip { max-width: 24rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nowrap { white-space: nowrap; }
-.redtext { color: var(--red); font-weight: 700; }
 
 .badge {
   display: inline-block; border-radius: 999px; padding: 0.12rem 0.6rem; font-size: 0.75rem; font-weight: 600;
@@ -259,11 +240,6 @@
 .sprintmodal .strm:focus-visible,
 .sprintmodal .stadd:focus-visible,
 .sprintmodal .smbtn:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
-.sla { width: 4.2rem; font: inherit; padding: 0.25rem 0.4rem; border: 1.5px solid #fcd34d; background: #fffbeb; border-radius: 8px; }
-select { font: inherit; padding: 0.3rem; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
-.provenance { margin-top: 0.9rem; color: var(--muted); font-size: 0.8rem; }
-.explain { max-width: 46rem; color: var(--ink); font-size: 0.9rem; line-height: 1.55; margin: 0.6rem 0 1rem; }
-th.slahead { background: #fef3c7 !important; color: #b45309 !important; }
 
 .badge.togglable { cursor: pointer; font: inherit; font-size: 0.75rem; font-weight: 600; }
 

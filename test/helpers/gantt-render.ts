@@ -63,6 +63,8 @@ export const REQUESTS_CSS = readFrontend('styles', '25-requests.css');
 export const TOKENS_CSS = readFrontend('styles', '05-tokens.css');
 /** The Deadlines tab — week columns, the deadline card, the banners, the legend. */
 export const DEADLINES_CSS = readFrontend('styles', '40-deadlines.css');
+/** The Forecast tab — the two-tier table, the model banner, Model Constants. */
+export const FORECAST_CSS = readFrontend('styles', '45-forecast.css');
 /**
  * The WHOLE shipped script set, in build.js's own order and join — see
  * test/helpers/source.ts for why guards read the bundle, never one file.
@@ -658,9 +660,14 @@ export function method(name: string, src: string = APP_JS): string {
  * them — and the alternative every caller reached for was `indexOf` plus a
  * magic slice length, which silently changes what it reads the moment a handler
  * grows past the number.
+ *
+ * `async` is optional in the match, and that is load-bearing rather than
+ * tidiness: every handler that WRITES is async, so without it this helper could
+ * only read the handlers that never leave the browser — it threw on the whole
+ * class of handler whose failure path is worth guarding.
  */
 export function handlerBody(name: string, src: string = APP_JS_CODE): string {
-  const at = new RegExp(`\\n  ${name}\\(`).exec(src)?.index;
+  const at = new RegExp(`\\n  (?:async )?${name}\\(`).exec(src)?.index;
   if (at === undefined) throw new Error(`gantt-render: no \`${name}\` handler in the shipped client`);
   const open = src.indexOf('{', src.indexOf(')', at));
   let depth = 0;
@@ -705,4 +712,104 @@ export function leakedMustacheText(template: string = TEMPLATE): string[] {
   };
   walk(Ractive.parse(template));
   return leaks;
+}
+
+/** One deliverable as the Forecast tab consumes it, post-stamp. */
+export interface ForecastRow {
+  cardId: string;
+  displayId: string;
+  name: string;
+  difficulty: string | null;
+  confidence: string;
+  slaSketch: number | null;
+  slaRender: number | null;
+  slottedWeek: string | null;
+  trelloUrl?: string | null;
+  forecast: Record<string, unknown> | null;
+  fcCells: Record<string, string> | null;
+}
+
+export interface ForecastState {
+  rows?: ForecastRow[];
+  fcQ?: string;
+  thumbNeeded?: boolean;
+}
+
+/**
+ * The Forecast tab's table, rendered out of the SHIPPED template with the
+ * SHIPPED column table and the SHIPPED computeds — `forecastGroups` folds tier
+ * one out of `FC_COLS`, so the header this returns is the one the browser
+ * builds, not a second construction of it.
+ *
+ * `fcCells` is supplied by the caller because stamping it is `loadAll`'s job
+ * and `loadAll` needs a network; `forecastCells()` below runs the shipped stamp
+ * loop so callers do not hand-write the map either.
+ */
+export function renderForecastTable(state: ForecastState = {}): string {
+  const rows = state.rows ?? [];
+  const instance = new Ractive({
+    template: divFragment('<div class="pscrollwrap fcwrap">'),
+    data: {
+      FC_COLS: FC_COLS(),
+      forecastGroups: FC_GROUPS(),
+      forecastFallbackSpan: FC_COLS().filter((c) => !c.always).length,
+      forecastRows: rows,
+      fcThumb: { needed: state.thumbNeeded ?? false, left: 0, width: 0 },
+      icon: {},
+      fmtLong: (s: unknown) => String(s ?? ''),
+    },
+  });
+  return instance.toHTML();
+}
+
+/** The shipped column table, executed rather than retyped. */
+export function FC_COLS(): Array<Record<string, unknown>> {
+  return new Function(`${decl(APP_JS, 'FC_COLS')} return FC_COLS;`)() as Array<Record<string, unknown>>;
+}
+
+/** Tier one, folded by the shipped helper out of the shipped column table. */
+export function FC_GROUPS(): Array<{ label: string; span: number; key: string }> {
+  return new Function(
+    `${decl(APP_JS, 'FC_COLS')} ${decl(APP_JS, 'fcGroupCells')} return fcGroupCells(FC_COLS);`,
+  )() as Array<{ label: string; span: number; key: string }>;
+}
+
+/**
+ * `loadAll`'s Forecast stamp loop, sliced out of the shipped loader and run
+ * against one row — so a test reads the same twenty-five strings the browser
+ * would, including which formatter each column went through.
+ */
+export function forecastCells(row: { forecast: Record<string, unknown> | null } & Record<string, unknown>): Record<string, string> | null {
+  const stamp = new Function(
+    'r',
+    `${decl(APP_JS, 'FC_COLS')} ${decl(APP_JS, 'fcNum')} ${decl(APP_JS, 'fcCount')}
+     ${forecastStampBody()}
+     return r.fcCells;`,
+  ) as (r: unknown) => Record<string, string> | null;
+  return stamp(row);
+}
+
+/**
+ * The stamp loop's own text, cut out of `loadAll` between its two landmarks so
+ * the harness executes the shipped statements rather than a copy of them. A
+ * rewrite that renames either landmark fails loudly here instead of silently
+ * proving nothing.
+ */
+function forecastStampBody(): string {
+  const from = APP_JS_CODE.indexOf('r.fcCells = null;');
+  if (from < 0) throw new Error('gantt-render: loadAll no longer stamps `r.fcCells`');
+  const guard = APP_JS_CODE.indexOf('if (r.forecast) {', from);
+  if (guard < 0 || guard - from > 200) {
+    throw new Error('gantt-render: the Forecast stamp loop no longer guards on `r.forecast`');
+  }
+  // brace-match the guard so the slice is a COMPLETE statement — ending it on
+  // the `cells` assignment instead would cut inside the block and hand
+  // `new Function` an unbalanced body, which fails as a syntax error rather
+  // than as the thing the caller was trying to prove
+  let depth = 0;
+  for (let i = APP_JS_CODE.indexOf('{', guard); i < APP_JS_CODE.length; i++) {
+    if (APP_JS_CODE[i] === '{') depth++;
+    else if (APP_JS_CODE[i] === '}' && --depth === 0) return APP_JS_CODE.slice(from, i + 1);
+  }
+  throw new Error('gantt-render: the Forecast stamp loop never closes');
 }
