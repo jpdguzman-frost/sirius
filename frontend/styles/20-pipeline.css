@@ -114,6 +114,9 @@
 .pipetools { display: flex; align-items: center; gap: var(--space-8); border-bottom: 1px solid var(--slate-100); }
 .pipetools .searchbar { flex: 1; border-bottom: none; min-width: 0; }
 .sortfilter { display: flex; align-items: center; gap: var(--space-8); flex: none; }
+/* each trigger owns the box its panel hangs in — the same wrapper pattern the
+   urgency pill and the Requests selects already use */
+.sfwrap { position: relative; display: inline-flex; }
 /* 38×33 resting, white on a slate-500 hairline, the app's own --shadow-xs.
    `width` is not fixed: the SORT button grows to name its selection and the
    filter never does, so the box is sized by its content between a floor and a
@@ -585,6 +588,21 @@ a.srclink:hover { background: var(--slate-100); }
    4px radius. `position: fixed` with inline coords, the same escape-the-clip
    recipe every other overlay on this tab uses. */
 .pipemenu {
+  /* ANCHORED TO ITS TRIGGER, not measured and not pinned to the window (JP,
+     2026-08-21). `right: 0` is the frame's own rule: correcting for the 64px
+     between the two coordinate spaces, each panel's right edge sits exactly on
+     its button's right edge. `top: 100%` + the frame's 4px gap places it.
+
+     Why not a fixed offset from the window: the sort button GROWS from 38px to
+     as much as 240px when it names its selection, which moves the filter button
+     up to 196px left — so no single `right` value is correct in both states.
+     Anchored to the button, that movement costs nothing.
+
+     `absolute` overrides the shared fixed-box recipe above; it keeps that
+     rule's surface (background, stroke, flex) and only stops being pinned to
+     the viewport. Nothing between the toolbar and the page root clips or
+     positions, so it still escapes the table freely. */
+  position: absolute; top: 100%; right: 0; margin-top: 4px;
   z-index: 45; width: 276px; box-sizing: border-box; padding-top: 20px;
   border-radius: var(--radius-sm); font-family: var(--font-sans);
   /* JP, 2026-08-21: the panels lift off the table with the CARD-ISSUE popover's

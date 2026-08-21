@@ -38,8 +38,6 @@ const app = new Ractive({
     pipeFilters: PIPE_FILTERS_EMPTY(),
     pipeSortMenu: null,
     pipeFilterMenu: null,
-    pipeSortMenuPos: { left: 0, top: 0 },
-    pipeFilterMenuPos: { left: 0, top: 0 },
     /* still on the wire and still counted — OPEN WORK (kpi.open) is the
        aggregate signal now that the table banner is gone (owl #36) */
     corrections: [],

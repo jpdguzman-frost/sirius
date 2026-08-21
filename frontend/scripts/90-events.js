@@ -208,10 +208,10 @@ app.on({
      here: it is what openOverlay already does to every key in OVERLAY_KEYS,
      and re-implementing it would be a second rule that could disagree. */
   openPipeSort(ctx) {
-    openMeasured(ctx, 'sort', { key: 'pipeSortMenu', posKey: 'pipeSortMenuPos', sel: '.pipemenu.sortmenu', h: PIPE_SORT_H, gap: 4, clampW: PIPE_MENU_W });
+    openOverlay(ctx, 'sort', { key: 'pipeSortMenu' });
   },
   openPipeFilter(ctx) {
-    openMeasured(ctx, 'filter', { key: 'pipeFilterMenu', posKey: 'pipeFilterMenuPos', sel: '.pipemenu.filtermenu', h: PIPE_FILTER_H, gap: 4, clampW: PIPE_MENU_W });
+    openOverlay(ctx, 'filter', { key: 'pipeFilterMenu' });
   },
   /* SINGLE-select: choosing replaces, never stacks (node 592:56913). Choosing
      the applied sort again returns to the default — the same "click it off"

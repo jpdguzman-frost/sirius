@@ -146,15 +146,12 @@ const WARN_POP_H = 390;
    long enough to cross the 4px gap and short enough not to feel sticky
    (R-warn-j, flagged to Miles as a number he may want to tune). */
 const WARN_CLOSE_MS = 150;
-/* Pipeline sort/filter panels (owl #62). 276px is the frame's panel width for
-   both. The heights are PRE-MEASURES for placeBox's first flip decision only —
-   the sort panel is eight fixed items so its height is knowable, the filter
-   panel's is not (its categories are derived from the board and STATUS is
-   open-ended), so its constant is a worst case. placeMeasured re-places both
-   against what actually rendered, exactly as the warning card does. */
-const PIPE_MENU_W = 276;
-const PIPE_SORT_H = 420;
-const PIPE_FILTER_H = 520;
+/* The filter and sort panels carry NO pre-measured geometry: they are anchored
+   in CSS to their own trigger (JP, 2026-08-21), so there is no height to guess
+   and no width to clamp. The three constants that used to live here — a menu
+   width and two panel heights — were inputs to a placement that no longer
+   happens. The overlays that DO float free of a wrapper still pre-measure; see
+   placeBox in 60-overlays.js. */
 /* ONE recipe for the warning, derived from the row the server already sends.
    Returns null for a complete card — the template's only test — or
    { label, items:[{ label, why }] }. items[0] is ALWAYS the card's OWN

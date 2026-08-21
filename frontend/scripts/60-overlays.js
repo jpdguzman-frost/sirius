@@ -228,11 +228,15 @@ function openOverlay(ctx, cardId, opts) {
     return;
   }
   overlayTrigger = ctx.node;
+  /* `posKey` is OPTIONAL: an overlay anchored in CSS to its own trigger has no
+     coordinates to carry, and asking placeBox for some would compute a position
+     nothing reads. The Pipeline's filter and sort panels are anchored that way
+     (JP, 2026-08-21); the three that float free of any wrapper still measure. */
   app.set({
     ...NO_OVERLAYS,
     ...opts.extra,
     [opts.key]: cardId,
-    [opts.posKey]: placeBox(ctx.node.getBoundingClientRect(), opts),
+    ...(opts.posKey ? { [opts.posKey]: placeBox(ctx.node.getBoundingClientRect(), opts) } : {}),
   });
 }
 

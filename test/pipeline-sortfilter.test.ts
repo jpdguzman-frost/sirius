@@ -380,6 +380,55 @@ describe('the panels can actually open, and stay open', () => {
   });
 });
 
+describe('the panels are ANCHORED to their trigger, never measured (JP, 2026-08-21)', () => {
+  it('nests each panel inside its own trigger’s wrapper', () => {
+    /* this is what makes the anchor track the button. The sort button GROWS
+       from 38px to as much as 240px when it names its selection, which shoves
+       the filter button up to 196px left — so a panel pinned to the window
+       needs a different offset in each state, and a panel pinned to its button
+       needs none. Measured live: the filter panel's gap from the window edge is
+       4px with no sort applied and 72px with one. */
+    const view = TEMPLATE.slice(TEMPLATE.indexOf('class="sortfilter"'));
+    const filterWrap = view.slice(view.indexOf('openPipeFilter'), view.indexOf('openPipeSort'));
+    expect(filterWrap, 'the filter panel left its trigger’s wrapper').toContain('pipemenu filtermenu');
+    const sortWrap = view.slice(view.indexOf('openPipeSort'));
+    expect(sortWrap, 'the sort panel left its trigger’s wrapper').toContain('pipemenu sortmenu');
+    expect([...TEMPLATE.matchAll(/class="sfwrap"/g)]).toHaveLength(2);
+  });
+
+  it('positions in CSS — right: 0 IS the frame’s rule', () => {
+    /* correcting for the 64px between the two coordinate spaces, each panel's
+       right edge sits exactly on its button's right edge (nodes 592:56850 ·
+       592:56913 · 593:78434) */
+    const rule = cssRule('.pipemenu', PIPELINE_CSS);
+    expect(rule).toContain('position: absolute');
+    expect(rule).toContain('right: 0');
+    expect(rule).toContain('top: 100%');
+    expect(cssRule('.sfwrap', PIPELINE_CSS)).toContain('position: relative');
+  });
+
+  it('carries NO inline coordinates and asks for no placement', () => {
+    // the whole point: nothing computes a left or a top for these two
+    expect(TEMPLATE).not.toContain('pipeSortMenuPos');
+    expect(TEMPLATE).not.toContain('pipeFilterMenuPos');
+    expect(APP_JS).not.toContain('pipeSortMenuPos');
+    expect(APP_JS).not.toContain('PIPE_FILTER_H');
+    // the handlers are object methods, not top-level functions — read the
+    // shipped call itself
+    expect(APP_JS).toContain("openOverlay(ctx, 'filter', { key: 'pipeFilterMenu' })");
+    expect(APP_JS).toContain("openOverlay(ctx, 'sort', { key: 'pipeSortMenu' })");
+  });
+
+  it('keeps placement OPTIONAL in the shared opener, not deleted from it', () => {
+    /* the three overlays that float free of any wrapper still measure — the
+       door stays one door, and `posKey` is what says "this one needs coords" */
+    const opener = fnBody('openOverlay');
+    expect(opener).toContain('opts.posKey');
+    expect(opener).toContain('placeBox(');
+    expect(fnBody('showWarnPop')).toContain('posKey');
+  });
+});
+
 describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => {
   it('lands the item content FLUSH with its group heading', () => {
     /* Measured off nodes 592:56913 (sort) and 593:78434 (filter): the heading
