@@ -313,7 +313,10 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    with their flipped/clamped coords set inline — one recipe, four sizes. The
    filter and sort panels JOIN it rather than restating it: their own block once
    repeated six of these declarations verbatim under a comment claiming it used
-   this recipe, which is the drift a shared selector exists to prevent. */
+   this recipe, which is the drift a shared selector exists to prevent.
+
+   The base shadow is the light chrome one; two members override it with the
+   heavier card shadow — see `.warnpop` and `.pipemenu` below. */
 .selectmenu, .duepop, .warnpop, .pipemenu {
   position: fixed;
   background: var(--white); border: 1px solid var(--slate-200);
@@ -584,6 +587,11 @@ a.srclink:hover { background: var(--slate-100); }
 .pipemenu {
   z-index: 45; width: 276px; box-sizing: border-box; padding-top: 20px;
   border-radius: var(--radius-sm); font-family: var(--font-sans);
+  /* JP, 2026-08-21: the panels lift off the table with the CARD-ISSUE popover's
+     shadow, not the light chrome one the shared base carries. These float over
+     a dense table and the 1px stroke alone did not separate them from it — the
+     same reason the card-issue popover was given the heavier value in owl #53. */
+  box-shadow: var(--shadow-card);
 }
 /* group headings — 12px SemiBold uppercase slate-400. They are labels, not
    options, and carry aria-hidden with the group named on the wrapper instead. */
@@ -598,7 +606,14 @@ a.srclink:hover { background: var(--slate-100); }
 .pipemenu .pmscroll { max-height: 168px; overflow-y: auto; overscroll-behavior: contain; }
 .pipemenu .pmitem {
   display: flex; align-items: center; gap: var(--space-8); width: 100%;
-  padding: 6px var(--space-8); border: none; background: none; border-radius: var(--radius-xs);
+  /* THE LEFT EDGE IS SHARED WITH THE GROUP HEADING (JP, 2026-08-21; measured
+     off nodes 592:56913 and 593:78434). The frame insets the item's content
+     16px inside its own box, and the box sits 8px inside the panel — so the
+     checkbox on a filter row, the label on a sort row, and the heading above
+     them all land on 25px from the panel's edge. At 8px they sat at 17 and
+     every row read as hanging off the heading. */
+  padding: 6px var(--space-8) 6px var(--space-16);
+  border: none; background: none; border-radius: var(--radius-xs);
   font-family: var(--font-sans); font-size: var(--text-body); line-height: 1.5;
   color: var(--surface-foreground); text-align: left; cursor: pointer;
 }

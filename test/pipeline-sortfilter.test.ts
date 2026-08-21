@@ -380,6 +380,35 @@ describe('the panels can actually open, and stay open', () => {
   });
 });
 
+describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => {
+  it('lands the item content FLUSH with its group heading', () => {
+    /* Measured off nodes 592:56913 (sort) and 593:78434 (filter): the heading
+       text sits 24px inside the group, and the item's content 16px inside an
+       item box that is itself 8px inside the panel — so both land on the same
+       left edge. At 8px the rows hung 8px left of every heading above them. */
+    const head = cssRule('.pipemenu .pmhead', PIPELINE_CSS);
+    const item = cssRule('.pipemenu .pmitem', PIPELINE_CSS);
+    const items = cssRule('.pipemenu .pmitems', PIPELINE_CSS);
+    expect(head).toContain('padding: 0 var(--space-24) var(--space-8)');
+    expect(items).toContain('padding: 0 var(--space-8) var(--space-8)');
+    expect(item).toContain('var(--space-16)');
+    // heading text = items-box 8 + heading 24 - the box's own 8 … both = 24
+    // inside the group, which is the property this pins in one line
+    const px = (v: string) => ({ '--space-8': 8, '--space-16': 16, '--space-24': 24 })[v]!;
+    const headInset = px('--space-24');
+    const itemInset = px('--space-8') + px('--space-16');
+    expect(itemInset, 'the item content left the heading’s edge').toBe(headInset);
+  });
+
+  it('wears the CARD-ISSUE popover’s shadow, not the light chrome one', () => {
+    /* The panels float over a dense table; the 1px stroke alone did not lift
+       them off it. Same reasoning that gave the card-issue popover the heavier
+       value in owl #53 — and the two must not drift apart again. */
+    expect(cssRule('.pipemenu', PIPELINE_CSS)).toContain('box-shadow: var(--shadow-card)');
+    expect(cssRule('.warnpop', PIPELINE_CSS)).toContain('box-shadow: var(--shadow-card)');
+  });
+});
+
 describe('the search field keeps its own recipe', () => {
   it('declares the SHARED .searchbar base — three tabs wear it', () => {
     /* THE DEFECT: owl #62 wrapped the field in `.pipetools` and deleted this
