@@ -90,6 +90,18 @@ exist *somewhere in the bundle* rather than to be spent by the handler, the
 scroller resolver was two independent substring matches, and nothing at all
 executed the code that picks between the two empty states.
 
+## Verification status
+
+**JP ruled on 2026-08-21 that this build is accepted without a browser pass for
+now.** That is a deferral, not a clearance: the eight `it.todo` at the foot of
+`test/forecast-frame.test.ts` are the questions still open, and every one of
+them is about layout, pointer or paint — things `toHTML()` is structurally
+blind to. The precedent that makes this worth stating in the law rather than a
+commit message: the Pipeline filter panels were **inert on the live site for a
+day** with the whole suite green, because nothing in the suite can open an
+overlay. A green run on this tab is evidence about its column model and its
+handlers, and about nothing else.
+
 ## Raised to product (owl)
 
 1. **The Model Constants panel quotes the retired spreadsheet formula** (R-fc-d) — the one item here that would have shipped a number the constitution retired.

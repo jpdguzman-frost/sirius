@@ -67,11 +67,9 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   design (R-dl-n) · NEEDS REPLOTTING's meaning (DL-scope) · **CLIENT or
   REQUESTOR** — his fifth filter group is CLIENT, ours says REQUESTOR, and our
   table header already says CLIENT (#53/#54) · do the conflict rows navigate,
-  and where · was the round week button meant to collapse (#52) · **the whole
-  Forecast set (#55)**: the Model Constants panel quotes the RETIRED formula ·
-  three corrected labels (SKETCH→RENDER, CYLCE→CYCLE, TYPE→CONFIDENCE) ·
-  difficulty drawn editable against a read-only spec · no empty state and no
-  destination for *How this forecast works* drawn anywhere.
+  and where · was the round week button meant to collapse (#52) · **the five
+  Forecast items in #55**, the first being that the Model Constants panel
+  quotes the RETIRED formula.
   Closed threads → `docs/history/state-log/`.
 - **Figma reads** — the official Figma MCP is the verified path
   (`get_design_context` for annotations, `get_metadata` for geometry; load the
@@ -94,12 +92,14 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   hardening (~21 files) · whether to draw a custom drag image so Chrome's
   translucency/shadow go away entirely (only `setDragImage` can).
 - **Live browser passes owed** (JP's browser is shared — use an isolated
-  profile): **the whole Forecast tab — never deployed, never seen; the 8
-  `it.todo` in `test/forecast-frame.test.ts` are the list** · **the Pipeline
-  filter + sort panels — a day inert on the live site
-  under a green suite; opening them is the first thing to check** · **the whole
-  Deadlines tab v2, never seen in a browser** · the task-due picker by hand · the sub-350px last-resort scroll ·
-  the b13 note chip + clarification accent · drag a bar in the collapsed pane.
+  profile). **JP 2026-08-21: the Forecast build is accepted WITHOUT browser
+  validation for now — deferred deliberately, not skipped.** Do not read its
+  green suite as "it works"; the 8 `it.todo` in `test/forecast-frame.test.ts`
+  are the unanswered list, and this project has already shipped a screen that
+  was inert for a day under a green suite. Queue, in order: **Forecast (never
+  deployed, never seen)** · **the Pipeline filter + sort panels** · **Deadlines
+  v2, never seen** · the task-due picker by hand · the sub-350px last-resort
+  scroll · the b13 note chip + clarification accent · drag a bar collapsed.
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
