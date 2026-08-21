@@ -492,14 +492,27 @@ const pipeFacetList = (rows, sel) => {
       // the one open-ended axis scrolls inside its own group; the flag is on
       // the axis so a sixth one is still a single entry (R-pf-e)
       scroll: !!f.scroll,
-      values: names.map((v) => ({
-        value: v,
-        label: v === null ? 'None' : v,
-        count: counts.get(v),
-        on: picked.indexOf(v) > -1,
-      })),
+      values: names
+        .map((v) => ({
+          value: v,
+          label: v === null ? 'None' : v,
+          count: counts.get(v),
+          on: picked.indexOf(v) > -1,
+        }))
+        /* A ZERO IS HIDDEN, NOT GREYED (JP, 2026-08-21) — it used to render
+           disabled, which the frame asked for ("expose empty categories instead
+           of hiding them"), and on a real board that filled STATUS with rows
+           nobody could ever pick. ⚠️ UNLESS IT IS TICKED: a value already
+           applied can fall to zero as other axes narrow, and hiding it would
+           strand the reader with a filter they cannot see or un-tick — the
+           table empty, the button still counting it. That case is the whole
+           reason this is not a bare `count > 0`. */
+        .filter((v) => v.count > 0 || v.on),
     };
-  });
+  })
+  /* …and an axis with nothing left to offer goes with them. A heading standing
+     alone over no rows reads as a rendering fault, not as an empty category. */
+  .filter((f) => f.values.length > 0);
 };
 
 /* THE FILTER INDICATOR (node 593:79380). One chip per FILTERED AXIS, reading

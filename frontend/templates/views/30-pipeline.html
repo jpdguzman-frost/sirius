@@ -67,13 +67,14 @@
                 view (jp→miles #49). }}
             <div class="pmitems {{#if f.scroll}}pmscroll{{/if}}" role="group" aria-label="{{f.label}}">
               {{#each f.values as v}}
-                {{! a zero count is DISABLED, not silently selectable — otherwise a
-                    user filters to an empty table and cannot tell why }}
+                {{! No disabled state: a zero-count value is HIDDEN by the facet
+                    list, so every row rendered here can be picked. The one that
+                    survives at zero is one already ticked, and that one has to
+                    stay clickable — it is the only way back off it. }}
                 {{! `label` and `value` differ for exactly one item: absence is
                     stored as null and DRAWN as None (owl #63), so a board value
                     that really is the word None stays a separate checkbox }}
                 <button class="pmitem pmcheck {{#if v.on}}on{{/if}}" on-click="['togglePipeFilter', f.key, v.value]"
-                        disabled="{{!v.count && !v.on}}"
                         aria-pressed="{{v.on ? 'true' : 'false'}}"><span class="pmbox" aria-hidden="true"></span><span class="pmval">{{v.label}}</span><span class="pmcount">{{v.count}}</span></button>
               {{/each}}
             </div>
@@ -147,7 +148,6 @@
               <div class="pmitems {{#if c.scroll}}pmscroll{{/if}}" role="group" aria-label="{{c.name}}">
                 {{#each c.values as v}}
                   <button class="pmitem pmcheck {{#if v.on}}on{{/if}}" on-click="['togglePipeFilter', c.key, v.value]"
-                          disabled="{{!v.count && !v.on}}"
                           aria-pressed="{{v.on ? 'true' : 'false'}}"><span class="pmbox" aria-hidden="true"></span><span class="pmval">{{v.label}}</span><span class="pmcount">{{v.count}}</span></button>
                 {{/each}}
               </div>

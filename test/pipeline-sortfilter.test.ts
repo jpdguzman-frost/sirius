@@ -788,8 +788,28 @@ describe('the panels behave like every other overlay', () => {
     expect(TEMPLATE).toContain('disabled="{{!pipeFilterCount}}"');
   });
 
-  it('disables a zero-count value rather than leaving it silently selectable', () => {
-    expect(TEMPLATE).toContain('disabled="{{!v.count && !v.on}}"');
+  it('HIDES a zero-count value rather than greying it (JP, 2026-08-21)', () => {
+    /* It used to render disabled, which is what the frame asked for ("expose
+       empty categories instead of hiding them") — and on a real board that
+       filled STATUS with rows nobody could ever pick. Nothing is disabled now,
+       because nothing unpickable is drawn. */
+    expect(TEMPLATE).not.toContain('disabled="{{!v.count');
+    const rows = [row({ cardId: 'a', difficulty: 'Easy' }), row({ cardId: 'b', difficulty: 'Hard' })];
+    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: ['Icon'] }; // matches nothing
+    const diff = recipe.pipeFacetList(rows, sel).find((f) => f.key === 'difficulty');
+    expect(diff, 'an axis with nothing left to offer is dropped whole').toBeUndefined();
+  });
+
+  it('KEEPS a ticked value that has fallen to zero — the only way back off it', () => {
+    /* the case that makes this not a bare `count > 0`: a value already applied
+       can fall to zero as other axes narrow, and hiding it would strand the
+       reader with a filter they can neither see nor un-tick */
+    const rows = [row({ cardId: 'a', assetType: 'UI', difficulty: 'Easy' })];
+    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: ['Icon'] };
+    const type = recipe.pipeFacetList(rows, sel).find((f) => f.key === 'type')!;
+    const icon = type.values.find((v) => v.label === 'Icon');
+    expect(icon, 'the ticked value vanished').toBeTruthy();
+    expect([icon!.count, icon!.on]).toEqual([0, true]);
   });
 
   it('keeps group headings out of the tab order — they are labels, not options', () => {
@@ -802,7 +822,9 @@ describe('the panels behave like every other overlay', () => {
     /* the axis carries the flag; the template no longer names STATUS, so a
        sixth open-ended axis is one entry in the table rather than three edits */
     expect(TEMPLATE).toContain('{{#if f.scroll}}pmscroll{{/if}}');
-    const scrolling = recipe.pipeFacetList([], recipe.PIPE_FILTERS_EMPTY()).filter((f) => f.scroll);
+    // rows, not an empty board: an axis with nothing to offer is dropped now
+    const rows = [row({ currentList: 'Sketch: With Revision', assetType: 'Icon' })];
+    const scrolling = recipe.pipeFacetList(rows, recipe.PIPE_FILTERS_EMPTY()).filter((f) => f.scroll);
     expect(scrolling.map((f) => f.key)).toEqual(['status']);
     expect(cssRule('.pipemenu .pmscroll', PIPELINE_CSS)).toContain('overflow-y: auto');
     expect(cssRule('.pipemenu', PIPELINE_CSS)).not.toContain('overflow-y');

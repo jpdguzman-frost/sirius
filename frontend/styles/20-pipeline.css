@@ -168,7 +168,15 @@
    `-1px` rather than 0: `left` resolves against the chip's PADDING box, and the
    chip has a 1px border, so 0 sits the panel one pixel inside the edge it is
    supposed to line up with. */
-.pipemenu.chipmenu { left: -1px; right: auto; }
+.pipemenu.chipmenu {
+  left: -1px; right: auto;
+  /* SYMMETRIC INSET (JP, 2026-08-21): this panel has no footer, so its last row
+     sat on 8px of list padding against 20px above the heading and read as cut
+     off. The panel owns both edges here — the list's own bottom padding is
+     zeroed rather than added to, so the number is 20 and not 20-plus-8. */
+  padding-bottom: 20px;
+}
+.pipemenu.chipmenu .pmitems { padding-bottom: 0; }
 /* THE HOVER BRIDGE. The panel sits 4px clear of the chip; without this the
    pointer crosses dead space on its way down, `mouseleave` fires, and the close
    can run out before it arrives — the same hazard the warning card's bridge
