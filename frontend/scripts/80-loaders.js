@@ -427,7 +427,12 @@ app.observe('requests', () => {
 function computeDeadlines() {
   const payload = app.get('deadlinePayload');
   const offset = app.get('monthOffset');
-  const base = new Date();
+  /* Invariant 11: the month this tab is scoped to is a MANILA month. `new
+     Date()` would read the viewer's own clock, which lands on the wrong month
+     for anyone whose calendar date differs from Manila's at the moment they
+     look — the same host-local `today` that used to seed the planner's week. */
+  const [my, mm] = manilaToday().split('-').map(Number);
+  const base = new Date(my, mm - 1, 1);
   base.setMonth(base.getMonth() + offset, 1);
   const y = base.getFullYear();
   const m = base.getMonth();

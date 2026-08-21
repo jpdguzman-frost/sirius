@@ -82,14 +82,13 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 
 ## Still open
 
-- **JP gates**: flip `writes_enabled` on rt-837 (+ the pre-pilot security
-  review) · `GOOGLE_SHEETS_CREDENTIALS` — lights up Requests plus
+- **JP gates**: **`writes_enabled` on rt-837 stays OFF — JP 2026-08-21, "don't
+  switch live write yet"**; the pre-pilot security review comes first · `GOOGLE_SHEETS_CREDENTIALS` — lights up Requests plus
   requestor/type on real data · ALT-9 sheet-row link (expose
   `intake_sheet_id` or drop the sub-label) · ALT-1 (dead server `?filter=`
   param) · OD-4's non-capacity remainder — the capacity slice was ruled
   2026-08-17, the broader expiry question stays OPEN (`decisions/0019`) ·
-  two pre-existing host-local `todayIso()` sites · loopback-listen test
-  hardening (~21 files) · whether to draw a custom drag image so Chrome's
+  loopback-listen test hardening (~21 files) · whether to draw a custom drag image so Chrome's
   translucency/shadow go away entirely (only `setDragImage` can).
 - **Live browser passes owed** (JP's browser is shared — use an isolated
   profile). **JP 2026-08-21: the Forecast build is accepted WITHOUT browser

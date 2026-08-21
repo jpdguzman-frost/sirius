@@ -75,7 +75,7 @@ const app = new Ractive({
     dowNames: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
     pipeThumb: { needed: false, left: 0, width: 100 },
     iconSprite: ICON_SPRITE,
-    weekStart: mondayIso(todayIso()),
+    weekStart: mondayIso(manilaToday()),
     suggest: null,
     /* owl #24: block id → true = collapsed. VIEW state only, no persistence —
        keyed on plannerGroups' `id` (a sprint's _id, or 'outside'/'unscheduled'),

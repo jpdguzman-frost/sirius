@@ -717,7 +717,7 @@ app.on({
   addSprint() {
     const draft = app.get('sprintDraft');
     const lastEnd = draft.reduce((a, s) => (s && s.end && s.end > a ? s.end : a), '');
-    const start = lastEnd ? mondayShift(mondayIso(lastEnd), 1) : mondayIso(todayIso());
+    const start = lastEnd ? mondayShift(mondayIso(lastEnd), 1) : mondayIso(manilaToday());
     app.push('sprintDraft', { name: `Sprint ${draft.length + 1}`, start, end: fridayIso(start) });
     app.set({ sprintDeleteConfirm: null, sprintError: '' });
   },

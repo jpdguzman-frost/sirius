@@ -30,7 +30,7 @@ const FRONTEND_SHARED = [
   'NO_OVERLAYS', 'OVERLAY_KEYS', 'patchRow', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
   'REQ_MENU_H', 'REQ_MENU_W', 'REQ_PAGE_SIZE', 'reqComparator', 'reqFilterKeys', 'reqFiltersCleared',
   'REQUEST_SEGMENTS', 'requestBlob', 'resetForProjectSwitch', 'rowLoad', 'rowWarning', 'scrollerOf',
-  'selectTab', 'showWarnPop', 'sprintPayload', 'STATUS_FILED', 'thumbKeyOf', 'todayIso',
+  'selectTab', 'showWarnPop', 'sprintPayload', 'STATUS_FILED', 'thumbKeyOf',
   'unranked', 'updateThumb', 'WARN_CLOSE_MS', 'WARN_POP_H', 'WARN_POP_W', 'WARN_SHADOW_BLEED', 'warnPopCancelClose',
   'WEEK_COUNT', 'WEEK_PX', 'weekAtX', 'withRouterSuppressed', 'WORKDAYS_PER_WEEK', 'workingDaysBetween',
   'writeCapacity', 'writeDayPlan', 'writeDeadline',

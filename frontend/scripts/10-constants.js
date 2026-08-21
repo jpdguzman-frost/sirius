@@ -193,10 +193,6 @@ const rowWarning = (row) => {
 const isoOf = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-function todayIso() {
-  return isoOf(new Date());
-}
-
 /* frame date format: '4 Aug 2026' (annotation 251:23859). A fixed month table,
    NOT Intl: en-GB — the one English locale with the frame's day-first order —
    renders September as 'Sept', which the frame forbids. Pure string math, so
