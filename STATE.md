@@ -72,13 +72,15 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   acknowledged-state design (R-dl-n) · NEEDS REPLOTTING's meaning (see DL-scope) · whether the conflict detail rows navigate, and where ·
   whether the round week button was meant to collapse the group (#52).
   Closed threads → `docs/history/state-log/`.
-- **Figma reads** — Rex MCP is OFFLINE. **The official Figma MCP is the
-  verified path**: `get_design_context` returns categorized annotations as
-  `data-*-annotations` plus exact pixel facts (load the figma-design-to-code
-  skill first). File `abDRsIVDs1XjJKeR8xYOoF`. Verify annotation count and
-  content against the owl BEFORE building — delegable to a recon agent with a
-  halt-on-mismatch rule. Rex (channel 7782) is needed only for plugin-API
-  introspection (component-set walks) or writing into the file.
+- **Figma reads** — **the official Figma MCP is the verified path**:
+  `get_design_context` for annotations + pixel facts, `get_metadata` for
+  geometry (load the figma-design-to-code skill first). File
+  `abDRsIVDs1XjJKeR8xYOoF`. Verify annotation count and content against the owl
+  BEFORE building. Rex is needed only for plugin-API introspection or writing
+  into the file. ⚠️ **Never write Rex's channel down** — it takes a free port at
+  start, so any number here goes stale on the next restart (7782 was recorded
+  and was 7780 on 2026-08-21, which cost JP a failed connect). Run
+  `mcp__rex__get_status`; it returns the number to type into the plugin.
 - **File drop `../owl/` (ARES agent)** — **CLOSED 2026-08-19** (JP: don't
   chase, wait for new status). `hLL7WW2V` push subscription: #07/#08/#09, no
   reply file, zero events in 7 days. No fourth note; rt-837 rides the poll.
