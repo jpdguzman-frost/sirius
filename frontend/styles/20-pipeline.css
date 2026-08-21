@@ -594,10 +594,18 @@ a.srclink:hover { background: var(--slate-100); }
   box-shadow: var(--shadow-card);
 }
 /* group headings — 12px SemiBold uppercase slate-400. They are labels, not
-   options, and carry aria-hidden with the group named on the wrapper instead. */
+   options, and carry aria-hidden with the group named on the wrapper instead.
+
+   The CASE is applied here, not carried in the data. The filter axes spell
+   their labels in capitals already, but the sort groups are `Dates`/`Priority`/
+   `Identity` — a group name the comparator table owns — so the sort panel
+   rendered sentence-case against a frame that shows both panels in capitals.
+   Transforming at display keeps one rule for both and leaves the sort groups
+   readable where they are declared. */
 .pipemenu .pmhead {
   margin: 0; padding: 0 var(--space-24) var(--space-8);
   font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--slate-400);
+  text-transform: uppercase;
 }
 .pipemenu .pmitems { display: flex; flex-direction: column; padding: 0 var(--space-8) var(--space-8); }
 .pipemenu .pmitems + .pmhead { padding-top: var(--space-8); border-top: 1px solid var(--slate-100); }

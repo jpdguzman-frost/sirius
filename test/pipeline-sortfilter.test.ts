@@ -400,6 +400,15 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
     expect(itemInset, 'the item content left the heading’s edge').toBe(headInset);
   });
 
+  it('renders BOTH panels’ group headings in capitals, as the frame draws them', () => {
+    /* the filter axes spell their labels in capitals in the data; the sort
+       groups are `Dates`/`Priority`/`Identity`, which is what the comparator
+       table wants to be read as — so the case is applied at display, once, and
+       the sort panel stops disagreeing with the filter panel beside it */
+    expect(cssRule('.pipemenu .pmhead', PIPELINE_CSS)).toContain('text-transform: uppercase');
+    expect(recipe.PIPE_SORTS.map((s) => s.group)).toContain('Dates');
+  });
+
   it('wears the CARD-ISSUE popover’s shadow, not the light chrome one', () => {
     /* The panels float over a dense table; the 1px stroke alone did not lift
        them off it. Same reasoning that gave the card-issue popover the heavier
