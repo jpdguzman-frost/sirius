@@ -577,7 +577,11 @@ const pipeSortLabel = (key) => {
 
    `always` marks the cells that render even when there is no forecast at all —
    which is also what the no-forecast row's span is derived from, so the two
-   cannot fall out of step. */
+   cannot fall out of step.
+
+   `control` marks a cell that is a FORM FIELD rather than a printed figure. It
+   binds the raw value, never the formatted one: a field holding the string
+   `4.80` is not a number the browser can step or validate. */
 const FC_COLS = [
   /* Every `key` here is a REAL field name — on the engine's own result where
      the column is a forecast figure, on the row where it is not. Nothing is a
@@ -588,12 +592,12 @@ const FC_COLS = [
   { key: 'difficulty', group: '', label: 'DIFFICULTY', cls: 'fc-diff', always: true },
   /* CONFIDENCE, not the frame's TYPE — TYPE already means asset type one tab
      away, and these values are percentiles (R-fc-g). */
-  { key: 'confidence', group: '', label: 'CONFIDENCE', cls: 'fc-conf', always: true },
+  { key: 'confidence', group: '', label: 'CONFIDENCE', cls: 'fc-conf', always: true, control: true },
   { key: 'startDate', group: '', label: 'START DATE', cls: 'fc-start' },
   { key: 'startWeek', group: '', label: 'W', cls: 'fc-w', fmt: 'count' },
   { key: 'cards', group: '', label: 'CARDS', cls: 'fc-cards', fmt: 'count' },
-  { key: 'slaSketch', group: 'REVIEW SLA', label: 'SKETCH', cls: 'fc-slas' },
-  { key: 'slaRender', group: 'REVIEW SLA', label: 'RENDER', cls: 'fc-slar' },
+  { key: 'slaSketch', group: 'REVIEW SLA', label: 'SKETCH', cls: 'fc-slas', control: true },
+  { key: 'slaRender', group: 'REVIEW SLA', label: 'RENDER', cls: 'fc-slar', control: true },
   { key: 'sketchDelivery', group: 'FORECASTED DATES', label: 'SKETCH DELIVERY DATE', cls: 'fc-sd' },
   { key: 'sketchApproved', group: 'FORECASTED DATES', label: 'SKETCH APPROVED', cls: 'fc-sa', muted: true },
   { key: 'renderDelivery', group: 'FORECASTED DATES', label: 'RENDER DELIVERY DATE', cls: 'fc-rd' },

@@ -3,7 +3,7 @@
  * `279:22602` / `279:16649` — the last of the six tabs still on its
  * pre-redesign markup.
  *
- * Law: `specs/001-sirius-v1/forecast-frame-notes.md` (R-fc-a … R-fc-w).
+ * Law: `specs/001-sirius-v1/forecast-frame-notes.md` (R-fc-a … R-fc-y).
  *
  * This tab is the only one in the project with NO owl and NO Figma
  * annotations, so several rules here are the build spec and the frames
@@ -38,6 +38,7 @@ import {
   UI_CSS,
   decl,
   forecastCells,
+  method,
   handlerBody,
   leakedMustacheText,
   renderForecastTable,
@@ -149,12 +150,49 @@ describe('R-fc-a — the header is derived from the column table, so it cannot s
     expect(fold(cases[3]!).map((g) => g.label)).toEqual(['A', 'B', 'A']);
   });
 
+  /* The two header tiers fold from FC_COLS; the twenty-five BODY cells are
+     hand-typed, so this is the seam where the body can drift off the header.
+     Class order alone is not enough — a cell can sit in the right position
+     carrying the wrong alignment or reading the wrong field. */
   it('the body row carries one cell per column, in the column table’s order', () => {
     const html = renderForecastTable({ rows: [row()] });
     const body = html.slice(html.indexOf('<tbody'), html.indexOf('</tbody>'));
     const cells = [...body.matchAll(/<td\b[^>]*class="([^"]*)"/g)].map((m) => m[1]!.trim().split(/\s+/)[0]!);
     expect(cells).toEqual(COLS.map((c) => c.cls));
     expect(body, 'a forecastable row must not span cells').not.toContain('colspan');
+  });
+
+  it('each body cell carries the alignment its column declares', () => {
+    const html = renderForecastTable({ rows: [row()] });
+    const body = html.slice(html.indexOf('<tbody'), html.indexOf('</tbody>'));
+    const classes = [...body.matchAll(/<td\b[^>]*class="([^"]*)"/g)].map((m) => m[1]!.split(/\s+/));
+    expect(classes).toHaveLength(COLS.length);
+    COLS.forEach((col, i) => {
+      expect(classes[i]!.includes('fcnum'), `${col.cls} disagrees with its column’s alignment`).toBe(Boolean(col.num));
+    });
+  });
+
+  /* Read the TEMPLATE for this one: the render stubs fmtLong to identity, so a
+     cell wired to the wrong field would still print a plausible string. */
+  it('each figure cell reads its own column’s stamped value', () => {
+    const tds = [...VIEW.matchAll(/<td class="(fc-[a-z]+)[^"]*"[^>]*>([\s\S]*?)<\/td>/g)];
+    expect(tds.length, 'the body cells are not where this guard looks').toBeGreaterThan(15);
+    const byCls = new Map(tds.map((m) => [m[1]!, m[2]!]));
+    for (const col of COLS) {
+      const cell = byCls.get(col.cls as string);
+      if (cell === undefined) continue; // the four `always` cells read the row directly
+      if (!cell.includes('fcCells')) continue;
+      expect(cell, `${col.cls} renders a value from another column`).toContain(`fcCells.${col.key}`);
+    }
+    /* Every printed column IS read somewhere in the row. A `control` column is
+       exempt because a form field must bind the RAW value — an input holding
+       the string `4.80` is not a number the browser can step or validate. */
+    for (const col of COLS.filter((c) => !c.always && !c.control)) {
+      expect(VIEW, `${col.key} is stamped but never rendered`).toContain(`fcCells.${col.key}`);
+    }
+    for (const col of COLS.filter((c) => c.control)) {
+      expect(VIEW, `${col.key} is a control and must bind the raw value`).toContain(`value="{{row.${col.key}}}"`);
+    }
   });
 
   it('the leaf headers are the column table’s classes and labels, in order', () => {
@@ -339,6 +377,63 @@ describe('R-fc-i / R-fc-j / R-fc-k — what the table draws around its numbers',
  * ========================================================================== */
 
 describe('R-fc-m / R-fc-o / R-fc-p — one band per tier, and a real scroll container', () => {
+  /* THE DEFECT THIS GUARD ENCODES, and the reason it computes rather than
+     greps: `.fctable .fcslagroup { background }` was written to tint the Review
+     SLA group and never rendered, because the band rule above it is
+     `.fctable .fctier1 th` — two classes AND a type, which out-specifies two
+     classes no matter where either sits in the file. That is the third time in
+     this project an override read correctly and lost in the browser, and the
+     first two were caught only by measuring a live page.
+
+     So: for every rule in this sheet that paints a HEADER cell, compare its
+     specificity against the tier band it is trying to beat. A tie loses, and a
+     tie is what a reader's eye reports as a win. */
+  it('every header override out-specifies the tier band it means to beat', () => {
+    const spec = (sel: string): [number, number, number] => [
+      (sel.match(/#[\w-]+/g) ?? []).length,
+      (sel.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) ?? []).length,
+      (sel.replace(/::?[\w-]+/g, ' ').match(/(^|[\s>+~])[a-z][\w-]*/g) ?? []).length,
+    ];
+    const beats = (a: [number, number, number], b: [number, number, number]) =>
+      a[0] !== b[0] ? a[0] > b[0] : a[1] !== b[1] ? a[1] > b[1] : a[2] > b[2];
+
+    // the classes that actually appear on a header cell, read off the render
+    const head = HEAD(renderForecastTable({ rows: [row()] }));
+    const [t1 = '', t2 = ''] = head.split('</tr>');
+    const headerClasses = new Map<string, string>();
+    for (const [tier, tr] of [['.fctable .fctier1 th', t1], ['.fctable .fctier2 th', t2]] as const) {
+      for (const m of tr.matchAll(/<th\b[^>]*class="([^"]*)"/g)) {
+        for (const c of m[1]!.split(/\s+/).filter(Boolean)) headerClasses.set(c, tier);
+      }
+    }
+    expect(headerClasses.size, 'no header classes found — the render moved').toBeGreaterThan(5);
+
+    let checked = 0;
+    for (const [sel, body] of rules()) {
+      for (const one of sel.split(',').map((x) => x.trim())) {
+        const last = one.split(/[\s>+~]+/).pop() ?? '';
+        // a rule whose final compound names a NON-th element cannot reach a
+        // header cell at all — `.fctable td.fc-total` shares its class with a
+        // header cell and is nonetheless a body rule
+        const type = /^[a-z][\w-]*/.exec(last)?.[0];
+        if (type && type !== 'th') continue;
+        const cls = (last.match(/\.[\w-]+/g) ?? []).map((c) => c.slice(1)).find((c) => headerClasses.has(c));
+        if (!cls) continue;
+        const band = headerClasses.get(cls)!;
+        if (one === band) continue; // the band rule itself
+        for (const prop of ['background', 'color']) {
+          if (!new RegExp(`(^|;|\\s)${prop}\\s*:`).test(body)) continue;
+          checked++;
+          expect(
+            beats(spec(one), spec(band)),
+            `\`${one}\` sets ${prop} on a header cell but does not out-specify \`${band}\` — it will not render`,
+          ).toBe(true);
+        }
+      }
+    }
+    expect(checked, 'the walker found no header overrides to check').toBeGreaterThan(0);
+  });
+
   it('each header tier declares its background exactly once', () => {
     for (const tier of ['.fctable .fctier1 th', '.fctable .fctier2 th']) {
       const owners = rules().filter(([sel, body]) => sel === tier && /(^|;|\s)background\s*:/.test(body));
@@ -362,8 +457,17 @@ describe('R-fc-m / R-fc-o / R-fc-p — one band per tier, and a real scroll cont
   /* Without a branch of its own the Forecast scroller falls through to the
      Pipeline's thumb key and the two sliders overwrite each other. */
   it('the scroller resolver knows this wrapper, and the tab remeasures on arrival', () => {
-    expect(APP_JS_CODE).toMatch(/closest\('\.fcwrap'\)/);
-    expect(APP_JS_CODE).toMatch(/'fcThumb'/);
+    /* EXECUTED, not grepped: two independent substrings anywhere in the bundle
+       would also be satisfied by an `.fcwrap` branch wired to the wrong key. */
+    const thumbKeyOf = new Function(`${decl(APP_JS, 'thumbKeyOf')} return thumbKeyOf;`)() as (
+      node: { closest(sel: string): unknown },
+    ) => string;
+    const node = (match: string | null) => ({ closest: (sel: string) => (sel === match ? {} : null) });
+    expect(thumbKeyOf(node('.fcwrap'))).toBe('fcThumb');
+    // …and the three that were already there still resolve to themselves
+    expect(thumbKeyOf(node('.gwrap'))).toBe('ganttThumb');
+    expect(thumbKeyOf(node('.reqwrap'))).toBe('reqThumb');
+    expect(thumbKeyOf(node(null))).toBe('pipeThumb');
     const selectTab = APP_JS_CODE.slice(APP_JS_CODE.indexOf('function selectTab('));
     expect(selectTab.slice(0, selectTab.indexOf('}\n'))).toContain("id === 'forecast'");
   });
@@ -387,6 +491,45 @@ describe('R-fc-q — §8’s empty state, which no frame draws', () => {
       expect(body!.length, 'an empty state must name the next action').toBeGreaterThan(20);
     }
     expect(empties.map(([, h]) => h)).toEqual(['No forecast rows match', 'Nothing to forecast']);
+  });
+
+  /* The two states are only worth two blocks of markup if the code that PICKS
+     between them is right. Nothing else in this file runs it. */
+  it('the cause is chosen by running the shipped computeds, not by reading them', () => {
+    const host = new Function(`
+      ${decl(APP_JS, 'fcMatch')}
+      const DATA = { rows: [], fcQ: '' };
+      const self = {
+        get: (k) => (k === 'forecastRows' ? computed.forecastRows.call(self) : DATA[k]),
+      };
+      const computed = { ${method('forecastRows').trim()}, ${method('forecastEmpty').trim()} };
+      return {
+        set: (rows, q) => { DATA.rows = rows; DATA.fcQ = q; },
+        rows: () => computed.forecastRows.call(self),
+        empty: () => computed.forecastEmpty.call(self),
+      };
+    `)() as { set(rows: unknown[], q: string): void; rows(): unknown[]; empty(): string | null };
+
+    const live = { displayId: 'MC-328', name: 'Hero render', status: 'ongoing' };
+    const done = { displayId: 'MC-900', name: 'Old thing', status: 'done' };
+
+    host.set([live, done], '');
+    expect(host.rows()).toHaveLength(1); // done rows never reach this tab
+    expect(host.empty()).toBeNull();
+
+    host.set([live], 'hero');
+    expect(host.rows(), 'the search does not match on card name').toHaveLength(1);
+    host.set([live], 'MC-328');
+    expect(host.rows(), 'the search does not match on MC number').toHaveLength(1);
+    host.set([live], 'mc-328');
+    expect(host.rows(), 'the search is case-sensitive').toHaveLength(1);
+
+    host.set([live], 'nothing-matches-this');
+    expect(host.empty(), 'a search that hid every row must name the search').toBe('search');
+    host.set([done], '');
+    expect(host.empty(), 'a board with nothing to forecast must not blame the search').toBe('none');
+    host.set([], '');
+    expect(host.empty()).toBe('none');
   });
 
   it('the empty state REPLACES the table — a header over an empty body is not one', () => {
@@ -440,18 +583,31 @@ describe('R-fc-t — the SLA and confidence writes reject, revert and say so', (
   const sla = handlerBody('setSla');
   const conf = handlerBody('setConfidence');
 
-  it('a value the control could not parse snaps back BEFORE anything is sent', () => {
+  /* THE DEFECT THIS GUARD ENCODES: the reject branch used to write the model
+     back to the value it already held. `{{#each forecastRows}}` iterates a
+     COMPUTED, so the input's keypath is a read-only computation child — the
+     typing never reached the model, the write was a no-op, Ractive dropped it
+     on an equality check, and the refused number stayed on screen under a
+     banner saying it had been kept. Only setting the control itself can undo
+     it, and a `badInput` field cannot be reached by any model write at all
+     because it reports its own value as the empty string. */
+  it('a value the control could not parse restores the CONTROL, before anything is sent', () => {
     expect(sla).toContain('badInput');
-    const reject = sla.indexOf('patchRow(cardId, { [key]: prev })');
+    const restore = sla.indexOf('ctx.node.value =');
     const send = sla.indexOf('api.send');
-    expect(reject, 'the bad-input branch is gone').toBeGreaterThan(-1);
-    expect(reject, 'a refused value would reach the server before being refused').toBeLessThan(send);
+    expect(restore, 'the reject branch no longer restores the field itself').toBeGreaterThan(-1);
+    expect(restore, 'a refused value would reach the server before being refused').toBeLessThan(send);
+    expect(sla, 'the restore must put back the last committed value, not blank the field').toMatch(
+      /ctx\.node\.value = prev/,
+    );
   });
 
   it('an out-of-range number is refused locally, against the server’s own bound', () => {
     const max = new Function(`${decl(APP_JS, 'SLA_MAX')} return SLA_MAX;`)() as number;
-    const route = APP_JS_CODE; // client side
-    expect(route).toContain('SLA_MAX');
+    // the HANDLER must spend the constant — asserting it exists somewhere in
+    // the bundle would pass with the bound wired nowhere
+    expect(sla, 'setSla does not check the upper bound').toMatch(/next > SLA_MAX/);
+    expect(sla, 'setSla does not refuse a negative').toMatch(/next < 0/);
     // derive the server's bound rather than retyping it
     const schedule = readServerRoute();
     const bound = /sla_sketch:\s*z\.number\(\)\.min\((\d+)\)\.max\((\d+)\)/.exec(schedule);

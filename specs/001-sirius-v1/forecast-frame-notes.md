@@ -68,6 +68,28 @@ Each of these reverses drawn content. Each is one line to put back.
 | **R-fc-v** | **The render breakdown is byte-identical to the sketch breakdown, today, by construction** — `renderDesign` and `sketchDesign` are both `l`, `renderReview` and `sketchReview` are both `o`, and the two cycles differ only in a lead constant that is `0.5` on both sides. Eight columns where four are duplicates looks like a bug and is not: **§7.1's whole point is parity with the Delivery Forecast sheet's own columns** so the team reads it unchanged. Each block renders its OWN four fields and never copies the other's, so the day the engine distinguishes them the table shows it without an edit. | Yes — the two blocks asserted to read disjoint field sets |
 | **R-fc-w** | ⚠️ **STALE SAMPLE VALUES, not data.** The frame's five body rows are not self-consistent: row 1 shows a sketch cycle of 7.39 against lead 0.50 + design 4.80 + review 4.80, which sums to 10.10, and shows different design times in the two breakdown blocks that the engine makes equal. Nothing in the build is calibrated against those numbers. Same class as R-dl-m. | n/a — deliberately not asserted |
 
+## What the review pass changed
+
+Five lenses, every finding attacked by an independent skeptic; nine survived.
+Three were defects in this build and are fixed here; the rest hardened the
+guards. Two are worth carrying:
+
+| # | Rule | Asserted |
+|---|---|---|
+| **R-fc-x** | 🚨 **THE CASCADE TRAP, A THIRD TIME — AND NOW A TEST CATCHES IT.** `.fctable .fcslagroup { background }` was written to tint the Review SLA group and **never rendered**: the band rule above it is `.fctable .fctier1 th`, two classes **and a type**, which out-specifies two classes wherever either sits in the file. The amber-800 label text won (only `.ptable th` contested it) so the cell drew dark-orange lettering on the same grey as every other group — a stray coloured word instead of a tinted block. The previous two instances of this class were caught only by measuring a live page; this one is caught by a guard that **computes specificity** — for every rule in the sheet that paints a header cell, it compares against the tier band that rule means to beat, and a tie fails. It immediately found a second instance (`.fcspacer`) and one accident (the muted-figure block, body-only in intent but matching headers too, now scoped to `td`). **A tie is not a win, and a reader's eye reports it as one.** | Yes — the specificity comparator, with a non-vacuity floor |
+| **R-fc-y** | 🚨 **THE SLA FIELD CANNOT BE CORRECTED THROUGH THE MODEL.** `{{#each forecastRows}}` iterates a **computed**, so `forecastRows.N.slaSketch` is a read-only computation child: the two-way binding never attaches and typing never reaches the model at all. The reject branch therefore wrote `prev` back to a keypath that already held `prev`, Ractive dropped it on an equality check, nothing re-rendered — and the refused number sat on screen under a banner saying it had been kept. A `badInput` field is worse still: it reports its own value as the empty string, so **no model write of any kind can reach it**. The branch now sets the control itself, which is the only thing that puts the last committed value back and the only thing that makes the banner true. | Yes — the guard asserts the node write exists and precedes the send, and carries the defect in its own comment |
+
+Also fixed: `.fctable .fc-total`'s emphasis had no `td` in it, so the dark ink
+landed on that column's tier-two **header** as well — one header cell reading
+slate-900 beside twenty-four reading slate-500.
+
+Five guards were rewritten because a mutation proved them empty: the body cells
+were unguarded on alignment and on which field they read, the fallback span was
+recomputed by the harness instead of executed, the SLA bound was asserted to
+exist *somewhere in the bundle* rather than to be spent by the handler, the
+scroller resolver was two independent substring matches, and nothing at all
+executed the code that picks between the two empty states.
+
 ## Raised to product (owl)
 
 1. **The Model Constants panel quotes the retired spreadsheet formula** (R-fc-d) — the one item here that would have shipped a number the constitution retired.

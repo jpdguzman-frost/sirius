@@ -890,7 +890,17 @@ app.on({
     const bad = ctx.node.validity && ctx.node.validity.badInput;
     const next = raw === '' ? null : Number(raw);
     if (bad || (next !== null && (!Number.isFinite(next) || next < 0 || next > SLA_MAX))) {
-      patchRow(cardId, { [key]: prev }); // snap the field back to what the server holds
+      /* THE NODE, not the model. `{{#each forecastRows}}` iterates a COMPUTED,
+         so `forecastRows.N.slaSketch` is a read-only computation child: the
+         typing never reached the model in the first place, and writing `prev`
+         back is a write of the value the model already holds — which Ractive
+         drops on an equality check, so nothing re-renders and the refused
+         number stays on screen under a banner claiming it was kept.
+         A `badInput` field cannot be fixed by any model write at all, because
+         it reports its own value as the empty string. Setting the control is
+         the only thing that puts the last good number back in front of the
+         reader, which is what §7.3's "without clearing the field" asks for. */
+      ctx.node.value = prev === null ? '' : prev;
       flashBanner(bad ? 'Review SLA must be a number — kept the last value.' : `Review SLA must be between 0 and ${SLA_MAX} days — kept the last value.`);
       return;
     }

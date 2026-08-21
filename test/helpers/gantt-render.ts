@@ -752,7 +752,7 @@ export function renderForecastTable(state: ForecastState = {}): string {
     data: {
       FC_COLS: FC_COLS(),
       forecastGroups: FC_GROUPS(),
-      forecastFallbackSpan: FC_COLS().filter((c) => !c.always).length,
+      forecastFallbackSpan: FC_FALLBACK_SPAN(),
       forecastRows: rows,
       fcThumb: { needed: state.thumbNeeded ?? false, left: 0, width: 0 },
       icon: {},
@@ -765,6 +765,20 @@ export function renderForecastTable(state: ForecastState = {}): string {
 /** The shipped column table, executed rather than retyped. */
 export function FC_COLS(): Array<Record<string, unknown>> {
   return new Function(`${decl(APP_JS, 'FC_COLS')} return FC_COLS;`)() as Array<Record<string, unknown>>;
+}
+
+/**
+ * The shipped `forecastFallbackSpan` computed, EXECUTED — not recomputed here.
+ * A harness that re-derives a number the app also derives proves only that two
+ * copies agree; this runs the app's own body against the app's own column
+ * table, so a wrong literal in either place fails.
+ */
+export function FC_FALLBACK_SPAN(): number {
+  const host = new Function(
+    `${decl(APP_JS, 'FC_COLS')}
+     return { get: (k) => (k === 'FC_COLS' ? FC_COLS : undefined), ${method('forecastFallbackSpan').trim()} };`,
+  )() as { forecastFallbackSpan(): number };
+  return host.forecastFallbackSpan();
 }
 
 /** Tier one, folded by the shipped helper out of the shipped column table. */

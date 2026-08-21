@@ -62,11 +62,17 @@
 }
 /* The blank cell over the identity columns. It carries the band and no glyphs;
    the frame's own first cell holds hidden text and renders as bare grey. */
-.fctable .fcspacer { color: transparent; }
+.fctable .fctier1 th.fcspacer { color: transparent; }
 /* The Review SLA group is tinted, and the two tiers tint it DIFFERENTLY —
    the amber the build spec names for the inputs is spent on the group cell,
    exactly where the frame spends it (R-fc-l). */
-.fctable .fcslagroup { background: var(--status-warning-light); color: var(--amber-800); }
+/* `th.fcslagroup`, not `.fcslagroup`: the tier band above is `.fctable
+   .fctier1 th`, which carries a type selector and therefore OUT-SPECIFIES a
+   two-class override no matter where it sits in the file. A tie on the class
+   count is not a tie — this is the third time in this project that an override
+   read correctly and lost in the browser. The tier-two rule below was already
+   written this way, which is why its half of the tint works. */
+.fctable .fctier1 th.fcslagroup { background: var(--status-warning-light); color: var(--amber-800); }
 .fctable .fctier2 th.fc-slas,
 .fctable .fctier2 th.fc-slar { background: var(--slate-50); color: var(--amber-700); }
 
@@ -88,25 +94,29 @@
    marks the pivot column in a table with no other vertical structure (R-fc-j). */
 
 .fctable td { padding: var(--space-16); vertical-align: top; }
-.fctable .fc-total { font-weight: 600; color: var(--surface-foreground); }
+/* `td`, or the emphasis also lands on the tier-two HEADER cell of the same
+   column — one header reading slate-900 beside twenty-four reading slate-500.
+   The column measure below stays unscoped on purpose: that one is meant for
+   both tiers and the body. */
+.fctable td.fc-total { font-weight: 600; color: var(--surface-foreground); }
 .fctable tr.fcrow td.fc-total { border-bottom: 1px solid var(--slate-200); }
 /* The secondary figures — approvals, leads, designs, reviews, baseline and the
    sample size — read one step back from the numbers they explain. */
-.fctable .fc-sa,
-.fctable .fc-ra,
-.fctable .fc-slead,
-.fctable .fc-sdes,
-.fctable .fc-srev,
-.fctable .fc-rlead,
-.fctable .fc-rdes,
-.fctable .fc-rrev,
-.fctable .fc-base,
-.fctable .fc-n { color: var(--surface-muted-foreground); }
+.fctable td.fc-sa,
+.fctable td.fc-ra,
+.fctable td.fc-slead,
+.fctable td.fc-sdes,
+.fctable td.fc-srev,
+.fctable td.fc-rlead,
+.fctable td.fc-rdes,
+.fctable td.fc-rrev,
+.fctable td.fc-base,
+.fctable td.fc-n { color: var(--surface-muted-foreground); }
 /* AC-18: a render landing past the client deadline says so. */
-.fctable .fclate { color: var(--status-destructive-strong); font-weight: 600; }
+.fctable td.fclate { color: var(--status-destructive-strong); font-weight: 600; }
 /* A row nobody has slotted is forecast from today; the date says so rather
    than passing itself off as a plan. */
-.fctable .fcassumed { color: var(--surface-muted-foreground); font-style: italic; }
+.fctable td.fcassumed { color: var(--surface-muted-foreground); font-style: italic; }
 .fctable .fcrowlink { display: inline-flex; margin-left: var(--space-4); color: var(--slate-400); vertical-align: middle; }
 .fctable .fcrowlink:hover { color: var(--blue-700); }
 .fctable .fcnorow { color: var(--surface-muted-foreground); font-size: var(--text-body); }
