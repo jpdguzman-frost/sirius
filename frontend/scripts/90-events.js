@@ -237,6 +237,13 @@ app.on({
     app.set(`pipeFilters.${axis}`, cur);
     pipeBackToTop();
   },
+  /* The indicator's ✕ clears ONE AXIS, not one value: the chip names an axis
+     and lists its values, so removing it removes what it names. Returning to
+     the top is the same rule every other narrowing follows (R-pf-h). */
+  removePipeAxis(_ctx, axis) {
+    app.set(`pipeFilters.${axis}`, []);
+    pipeBackToTop();
+  },
   clearPipeFilters() {
     app.set('pipeFilters', PIPE_FILTERS_EMPTY());
     pipeBackToTop();

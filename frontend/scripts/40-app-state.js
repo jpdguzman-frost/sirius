@@ -256,6 +256,12 @@ const app = new Ractive({
     pipeFacets() {
       return pipeFacetList(this.get('pipeSearched'), this.get('pipeFilters'));
     },
+    /* The filter indicator's chips — one per filtered axis. Derived where the
+       axes live (10-constants) so the chip and the panel cannot disagree about
+       what an axis is called or which values are on. */
+    pipeChips() {
+      return pipeChipList(this.get('pipeFilters'));
+    },
     /** How many filter VALUES are applied, across every axis — the accessible name's number. */
     pipeFilterCount() {
       const sel = this.get('pipeFilters');

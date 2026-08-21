@@ -35,9 +35,10 @@ const recipe = new Function(`
   ${decl(APP_JS, 'PIPE_FILTERS_EMPTY')}
   ${decl(APP_JS, 'pipeMatches')}
   ${decl(APP_JS, 'pipeFacetList')}
+  ${decl(APP_JS, 'pipeChipList')}
   ${decl(APP_JS, 'pipeSortLabel')}
   ${decl(APP_JS, 'mcRank')}
-  return { PIPE_SORTS, PIPE_SORT_DEFAULT, pipeSortRows, PIPE_FILTERS, PIPE_FILTERS_EMPTY, pipeMatches, pipeFacetList, pipeSortLabel };
+  return { pipeChipList, PIPE_SORTS, PIPE_SORT_DEFAULT, pipeSortRows, PIPE_FILTERS, PIPE_FILTERS_EMPTY, pipeMatches, pipeFacetList, pipeSortLabel };
 `)() as {
   PIPE_SORTS: Sort[];
   PIPE_SORT_DEFAULT: Sort;
@@ -46,6 +47,7 @@ const recipe = new Function(`
   PIPE_FILTERS_EMPTY: () => Record<string, (string | null)[]>;
   pipeMatches: (r: unknown, sel: Record<string, (string | null)[]>, except: string | null) => boolean;
   pipeFacetList: (rows: unknown[], sel: Record<string, (string | null)[]>) => Facet[];
+  pipeChipList: (sel: Record<string, (string | null)[]>) => Array<{ key: string; name: string; text: string; count: number }>;
   pipeSortLabel: (k: string | null) => string;
 };
 
@@ -577,6 +579,80 @@ describe('a picked filter value never disappears while it is still filtering', (
     const icon = values.find((v) => v.label === 'Icon');
     expect(icon, 'the picked value left the panel').toBeTruthy();
     expect([icon!.count, icon!.on]).toEqual([0, true]);
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* F3 — the filter indicator (node 593:79380)                               */
+/* ---------------------------------------------------------------------- */
+
+describe('the filter indicator says what is filtered, in words', () => {
+  const chips = (sel: Record<string, (string | null)[]>) =>
+    recipe.pipeChipList({ ...recipe.PIPE_FILTERS_EMPTY(), ...sel });
+
+  it('makes ONE CHIP PER AXIS, listing that axis’s values', () => {
+    /* not one chip per value: the frame's `Number` variant counts the values
+       INSIDE a chip, and its `2` variant is a single chip listing two of them
+       under one axis name and one ✕ (node 566:52332). */
+    expect(chips({ type: ['Icon', 'Asset'] })).toEqual([
+      { key: 'type', name: 'Type', text: 'Icon, Asset', count: 2 },
+    ]);
+  });
+
+  it('names the axis from the panel’s own heading, not a second list', () => {
+    /* every axis label is one word, so the chip name is derived — a sixth axis
+       needs no entry anywhere for its chip to read correctly */
+    expect(chips({ difficulty: ['Hard'] })[0]!.name).toBe('Difficulty');
+    expect(chips({ requestor: ['ana@frostdesigngroup.com'] })[0]!.name).toBe('Requestor');
+    expect(recipe.PIPE_FILTERS.map((f) => f.label)).toContain('DIFFICULTY');
+  });
+
+  it('shows the absence value as the word the panel draws it with', () => {
+    expect(chips({ requestor: [null] })[0]!.text).toBe('None');
+  });
+
+  it('shows a chip for EVERY filtered axis, and none for the rest', () => {
+    const out = chips({ type: ['Icon'], urgency: ['Urgent'], status: [] });
+    expect(out.map((c) => c.key)).toEqual(['type', 'urgency']);
+    expect(chips({})).toEqual([]);
+  });
+
+  it('renders nothing at all when nothing is filtered', () => {
+    expect(TEMPLATE).toContain('{{#if pipeChips.length}}');
+  });
+
+  it('WRAPS the row rather than collapsing or scrolling it (JP)', () => {
+    /* the frame only ever draws one chip; five axes can be filtered at once,
+       and wrapping is what keeps each one separately removable */
+    expect(cssRule('.fchips', PIPELINE_CSS)).toContain('flex-wrap: wrap');
+  });
+
+  it('TRIMS a long value instead of letting one chip take the row', () => {
+    /* a real status value such as `Render: Ready for Client Review` would
+       otherwise push every other chip onto its own line */
+    const vals = cssRule('.fchip .fcvals', PIPELINE_CSS);
+    expect(vals).toContain('max-width');
+    expect(vals).toContain('text-overflow: ellipsis');
+    expect(TEMPLATE).toContain('title="{{c.text}}"'); // the full text stays reachable
+  });
+
+  it('clears ONE AXIS from the ✕ and everything from Clear all', () => {
+    /* the chip names an axis and lists its values, so its ✕ removes what it
+       names; Clear all goes through the SAME handler the panel's own Clear
+       uses, so there is one way to clear rather than two */
+    // an object method, not a top-level function — read the shipped handler
+    const at = APP_JS.indexOf('removePipeAxis(');
+    expect(at, 'removePipeAxis is gone').toBeGreaterThan(-1);
+    const body = APP_JS.slice(at, at + 200);
+    expect(body).toContain('pipeFilters.${axis}');
+    expect(body).toContain('[]');
+    expect(body).toContain('pipeBackToTop()');
+    expect(TEMPLATE).toContain("on-click=\"['clearPipeFilters']\">Clear all");
+  });
+
+  it('names the axis in each ✕’s accessible name', () => {
+    // the icon carries no text, so this is the only route to which filter goes
+    expect(TEMPLATE).toContain('aria-label="Remove the {{c.name}} filter"');
   });
 });
 

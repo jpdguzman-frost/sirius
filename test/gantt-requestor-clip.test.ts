@@ -287,7 +287,7 @@ describe('the clip lives inside the badge, not on the cell', () => {
        count alone made every new one look like a violation. Naming the owners
        keeps the guard exact: an ellipsis in a rule not on this list still
        fails, which is what it was always for. */
-    const owners = ['.clipbadge .cliptext', '.datefield .dpdate', '.sfbtn .sflabel', '.pipemenu .pmval'];
+    const owners = ['.clipbadge .cliptext', '.datefield .dpdate', '.sfbtn .sflabel', '.pipemenu .pmval', '.fchip .fcvals'];
     for (const sel of owners) {
       expect(cssRule(sel, PIPELINE_CSS), `${sel} should declare the ellipsis`).toContain('text-overflow: ellipsis');
     }

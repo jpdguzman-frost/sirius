@@ -96,6 +96,55 @@
    #36 — the state moved onto the row it describes (.prow.warn / .warnbtn /
    .warnpop, below). Nothing replaces it above the table. */
 
+/* ---- THE FILTER INDICATOR (node 593:79380) --------------------------------
+   One chip per filtered AXIS, then a blue Clear all. Sits between the toolbar
+   and the table, 16px from each — the Content frame's own gap.
+
+   A WRAPPING ROW rather than the single chip the frame draws (JP, 2026-08-21):
+   five axes can be filtered at once, and wrapping keeps each one separately
+   removable instead of collapsing them into a summary. */
+.fchips {
+  display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;
+  margin: var(--space-16) 0;
+}
+.fchip {
+  display: inline-flex; align-items: stretch; height: 30px; box-sizing: border-box;
+  background: var(--white); border: 1px solid var(--slate-900); border-radius: var(--radius-sm);
+}
+.fchip .fchiplabel {
+  display: inline-flex; align-items: center; gap: var(--space-4);
+  padding: 0 var(--space-8); min-width: 0;
+  font-size: var(--text-label); line-height: 1;
+}
+/* the axis is the quiet half and the values are the loud one — that contrast
+   is what makes the chip readable as a sentence rather than a label */
+.fchip .fcaxis { color: var(--slate-500); font-weight: 400; white-space: nowrap; }
+/* TRIMMED, not allowed to grow (JP, 2026-08-21): a real status value such as
+   `Render: Ready for Client Review` would otherwise make one chip half the row
+   and push the others onto their own line. The full text is on the title. */
+.fchip .fcvals {
+  color: var(--slate-900); font-weight: 600;
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* the ✕ is its own segment behind a 1px rule, as the frame splits it */
+.fchip .fchipx {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; flex: none; padding: 0;
+  background: none; border: 0; border-left: 1px solid var(--slate-900);
+  color: var(--slate-900); cursor: pointer;
+}
+.fchip .fchipx svg { display: block; }
+.fchip .fchipx:hover { background: var(--slate-50); }
+.fchip .fchipx:focus-visible { outline: 2px solid var(--blue-500); outline-offset: -2px; }
+.fclearall {
+  flex: none; padding: 7px var(--space-8) 6px;
+  background: none; border: 0; border-radius: var(--radius-sm); cursor: pointer;
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 600;
+  line-height: 1; color: var(--blue-700);
+}
+.fclearall:hover { background: var(--blue-50); }
+.fclearall:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+
 /* ---- search + callout (annotations 17:2057, 70:1211) ---- */
 /* THE SEARCH FIELD'S OWN RECIPE — shared by Pipeline, Requests and Deadlines.
    Owl #62 wrapped it in `.pipetools` and, in doing so, deleted this block: the

@@ -106,6 +106,33 @@
   </div>
 
 
+  {{! THE FILTER INDICATOR (node 593:79380) — what is filtered, stated in words
+      between the toolbar and the table. One chip per FILTERED AXIS, not per
+      value: the frame's `Number` variant counts the values INSIDE a chip, so
+      two values on one axis is one chip reading `Type is Icon, Asset` with one
+      ✕ that clears the axis.
+
+      A WRAPPING ROW (JP, 2026-08-21): the frame only ever draws one chip, but
+      five axes can be filtered at once. Wrapping keeps every filter separately
+      removable, which is what the ✕ is for — collapsing them into a summary
+      would take that away. }}
+  {{#if pipeChips.length}}
+    <div class="fchips" role="group" aria-label="Filters applied">
+      {{#each pipeChips as c}}
+        <span class="fchip">
+          <span class="fchiplabel">
+            <span class="fcaxis">{{c.name}} is</span>
+            <span class="fcvals" title="{{c.text}}">{{c.text}}</span>
+          </span>
+          <button class="fchipx" on-click="['removePipeAxis', c.key]"
+                  aria-label="Remove the {{c.name}} filter">{{{icon.close}}}</button>
+        </span>
+      {{/each}}
+      {{! the same handler the panel's own Clear uses — one way to clear }}
+      <button class="fclearall" on-click="['clearPipeFilters']">Clear all</button>
+    </div>
+  {{/if}}
+
   <div class="pscrollwrap">
     <div class="pscroll" on-scroll="['pipeScrolled']">
       <table class="ptable">

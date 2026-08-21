@@ -502,6 +502,30 @@ const pipeFacetList = (rows, sel) => {
   });
 };
 
+/* THE FILTER INDICATOR (node 593:79380). One chip per FILTERED AXIS, reading
+   `Type is Icon, Asset` — the axis in slate-500 regular, its values in
+   slate-900 semibold, comma-separated. Not one chip per value: the frame's
+   `Number` variant counts the VALUES INSIDE a chip, and its `2` variant is a
+   single chip listing two of them under one axis name and one ✕.
+
+   The axis name is derived from the panel's own heading rather than kept in a
+   second list — every axis label is one word, so lower-casing all but the first
+   letter gives `TYPE` -> `Type`. A sixth axis needs no entry here.
+
+   Values keep the order they were ticked in, which is the order the reader
+   built them in. `null` is the absence value and reads as the word it is drawn
+   with in the panel. */
+const pipeChipList = (sel) =>
+  PIPE_FILTERS.map((f) => {
+    const picked = (sel && sel[f.key]) || [];
+    return {
+      key: f.key,
+      name: f.label.charAt(0) + f.label.slice(1).toLowerCase(),
+      text: picked.map((v) => (v === null ? 'None' : v)).join(', '),
+      count: picked.length,
+    };
+  }).filter((c) => c.count > 0);
+
 /** The sort button's label — `Group: Item`, the frame's format (node 592:56966). */
 const pipeSortLabel = (key) => {
   const s = PIPE_SORTS.find((x) => x.key === key);
