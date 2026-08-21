@@ -478,6 +478,26 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
     expect(cssRule('.pipemenu .pmclear[disabled]', PIPELINE_CSS)).toContain('color: var(--slate-400)');
   });
 
+  it('TICKS the checked box instead of just filling it', () => {
+    /* the checked box was a plain dark square. The Checkbox component fills the
+       box AND shows a white check inside it — without the tick the two states
+       differ only by colour, which reads as a swatch rather than a checkbox. */
+    const box = cssRule('.pipemenu .pmbox', PIPELINE_CSS);
+    expect(box).toContain('border-radius: var(--radius-sm)'); // 4px, was 2
+    expect(box).toContain('position: relative');
+    const tick = cssRule('.pipemenu .pmitem.on .pmbox::after', PIPELINE_CSS);
+    expect(tick).toContain('border-left: 2px solid var(--white)');
+    expect(tick).toContain('rotate(-45deg)');
+  });
+
+  it('does NOT bold a checked filter value — the box is the whole signal', () => {
+    /* checked and unchecked labels are identical in the frame: 14px, weight
+       400, slate-900, and the row keeps its `Default` variant. Bolding is the
+       intuitive move and it is not what the component does. */
+    expect(PIPELINE_CSS).not.toContain('.filtermenu .pmitem.on { font-weight');
+    expect(cssRule('.pipemenu .pmval', PIPELINE_CSS)).toContain('max-width: 160px');
+  });
+
   it('wraps a sort label at 160px, where a filter value ellipsises', () => {
     /* what makes `Due dates closest to now` the two-line 53px row the frame
        draws rather than a one-line 32px one */
@@ -491,7 +511,11 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
        group's own 2px), and 16px from the last row to the footer rule (the item
        list's 8px plus the content-to-button 8px). Both ran 8px short. */
     expect(cssRule('.pipemenu .pmitems + .pmhead', PIPELINE_CSS)).toContain('padding-top: 18px');
-    expect(cssRule('.pipemenu .pmfoot', PIPELINE_CSS)).toContain('margin-top: var(--space-8)');
+    /* the gap before the footer belongs to the SORT panel alone: its dropdown's
+       auto-layout carries `spacing: 8` and the filter's carries `spacing: 0`.
+       One shared component, two different numbers. */
+    expect(cssRule('.sortmenu .pmfoot', PIPELINE_CSS)).toContain('margin-top: var(--space-8)');
+    expect(cssRule('.pipemenu .pmfoot', PIPELINE_CSS)).not.toContain('margin-top');
     // 6 above the text, 5 below — the frame's own asymmetry, giving a 32px row
     expect(cssRule('.pipemenu .pmitem', PIPELINE_CSS)).toContain('padding: 6px var(--space-8) 5px var(--space-16)');
   });

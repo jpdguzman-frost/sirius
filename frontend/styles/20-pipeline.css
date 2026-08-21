@@ -666,11 +666,14 @@ a.srclink:hover { background: var(--slate-100); }
   background: var(--slate-900); color: var(--white); border-radius: var(--radius-input);
 }
 .sortmenu .pmitem.on:hover { background: var(--slate-900); }
-/* the filter's selection is the box; the row itself stays quiet */
-.filtermenu .pmitem.on { font-weight: 600; }
+/* THE FILTER'S SELECTION IS THE BOX, AND ONLY THE BOX. Checked and unchecked
+   labels are byte-for-byte the same in the frame — 14px, weight 400, slate-900
+   (nodes I593:78692;593:80356 vs …80357) — and the row keeps its `Default`
+   variant. This bolded the label, which is the intuitive thing to do and is not
+   what the component does. */
 /* a zero-count value: disabled rather than silently selectable */
 .pipemenu .pmitem[disabled] { color: var(--slate-400); cursor: not-allowed; }
-.pipemenu .pmval { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pipemenu .pmval { flex: 1; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A SORT LABEL WRAPS; A FILTER VALUE ELLIPSISES. Both frames are explicit: the
    label text is capped at 160px, and in the sort panel that turns `Due dates
    closest to now` into the two-line, 53px row it draws (32px + one more 21px
@@ -682,13 +685,27 @@ a.srclink:hover { background: var(--slate-100); }
    empty categories instead of hiding them. */
 .pipemenu .pmcount { flex: none; font-size: var(--text-label); color: var(--slate-400); }
 .pipemenu .pmbox {
+  position: relative;
   flex: none; width: 16px; height: 16px; box-sizing: border-box;
-  border: 2px solid var(--slate-300); border-radius: var(--radius-xs);
+  /* 16px box, 2px slate-300 stroke, 4px radius — the Checkbox component's own
+     numbers (node 593:78692). The radius was 2px here. */
+  border: 2px solid var(--slate-300); border-radius: var(--radius-sm);
 }
 .pipemenu .pmitem.on .pmbox { background: var(--slate-900); border-color: var(--slate-900); }
-/* 8px of the gap is the item list's bottom padding; this adds the 8px the
-   frame leaves between the content and the button row. */
-.pipemenu .pmfoot { margin-top: var(--space-8); border-top: 1px solid var(--slate-50); padding: var(--space-12) var(--space-8); }
+/* THE TICK. The checked box was a plain dark square — the component fills the
+   box AND shows a white check inside it (a 6×4 vector at 2px). Without it the
+   two states differ only by fill, which reads as a colour swatch rather than
+   as a checkbox that has been ticked. */
+.pipemenu .pmitem.on .pmbox::after {
+  content: ''; position: absolute; left: 2px; top: 3px; width: 7px; height: 3px;
+  border-left: 2px solid var(--white); border-bottom: 2px solid var(--white);
+  transform: rotate(-45deg);
+}
+.pipemenu .pmfoot { border-top: 1px solid var(--slate-50); padding: var(--space-12) var(--space-8); }
+/* ONLY THE SORT PANEL leaves a gap before its footer: its dropdown's auto-layout
+   carries `spacing: 8`, the filter's carries `spacing: 0`. The two panels share
+   one component and still differ here, so it is scoped rather than shared. */
+.sortmenu .pmfoot { margin-top: var(--space-8); }
 .pipemenu .pmclear {
   border: none; background: none; cursor: pointer; padding: 7px var(--space-8) 6px;
   border-radius: var(--radius-sm); font-family: var(--font-sans);
