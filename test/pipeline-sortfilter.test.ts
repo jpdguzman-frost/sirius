@@ -649,6 +649,67 @@ describe('the filter indicator says what is filtered, in words', () => {
     expect(cssRule('.fchips', PIPELINE_CSS)).not.toContain('margin');
   });
 
+  it('opens the chip’s OWN group on hover, cut down as the frame sets it', () => {
+    /* node 593:80073 is the same dropdown component with the footer button and
+       the scrollbar switched OFF and the box clipped to one group — so the
+       panel wears `.pipemenu` for its chrome and renders a single heading and
+       one item list, with no `.pmfoot`. */
+    const view = TEMPLATE.slice(TEMPLATE.indexOf('class="fchips"'));
+    const chip = view.slice(0, view.indexOf('fclearall'));
+    expect(chip).toContain('{{#if chipPop === c.key}}');
+    expect(chip).toContain('class="pipemenu chipmenu"');
+    expect(chip).not.toContain('pmfoot');
+    // it anchors LEFT, to the chip — the shared rule anchors right, to the row
+    expect(cssRule('.chipmenu', PIPELINE_CSS)).toContain('left: 0');
+    expect(cssRule('.chipmenu', PIPELINE_CSS)).toContain('right: auto');
+    expect(cssRule('.fchip', PIPELINE_CSS)).toContain('position: relative');
+  });
+
+  it('lets the pointer REACH the panel — a bridge and a shared close delay', () => {
+    /* the panel sits 4px clear of the chip, so without a bridge the pointer
+       crosses dead space, mouseleave fires, and the close can run out before it
+       arrives. The panel is also a DOM child of the chip, which is what makes
+       the containment guard cover the whole journey. */
+    expect(cssRule('.chipmenu::before', PIPELINE_CSS)).toContain('height: 4px');
+    const at = APP_JS.indexOf('chipPopOut(ctx)');
+    const body = APP_JS.slice(at, at + 420);
+    expect(body).toContain('relatedTarget');
+    expect(body).toContain('ctx.node.contains(to)');
+    expect(body).toContain('scheduleHoverClose(');
+    expect(body.indexOf('relatedTarget')).toBeLessThan(body.indexOf('scheduleHoverClose('));
+  });
+
+  it('joins the overlay list, so Escape and an outside click dismiss it', () => {
+    const keys = decl(APP_JS, 'OVERLAY_KEYS');
+    const shields = decl(APP_JS, 'OVERLAY_SHIELDS');
+    expect(keys).toContain('chipPop');
+    expect(shields, 'chipPop has no shield — its own hover would dismiss it').toContain('chipPop:');
+    expect(shields).toContain('.fchip');
+  });
+
+  it('REFUSES to open over another overlay, and is not a toggle on re-entry', () => {
+    /* a chip merely grazed while the Filter panel is up must not replace it
+       (R-warn-r's rule, from the other side), and re-entering the same chip is
+       not a second click */
+    const at = APP_JS.indexOf('chipPopIn(ctx, key)');
+    const body = APP_JS.slice(at, at + 520);
+    expect(body).toContain("app.get('chipPop') === key");
+    expect(body).toContain("k !== 'chipPop' && app.get(k)");
+  });
+
+  it('ticks through the SAME handler the main panel uses', () => {
+    // one way to change a filter, so the two panels cannot diverge
+    const view = TEMPLATE.slice(TEMPLATE.indexOf('class="fchips"'));
+    expect(view).toContain("['togglePipeFilter', c.key, v.value]");
+  });
+
+  it('shares ONE hover-close scheduler with the warning card', () => {
+    // two timers is the shape that leaks: the older fires against state it was
+    // never scheduled for
+    expect([...APP_JS.matchAll(/warnCloseTimer\s*=\s*setTimeout\(/g)]).toHaveLength(1);
+    expect(fnBody('scheduleHoverClose')).toContain('WARN_CLOSE_MS');
+  });
+
   it('clears ONE AXIS from the ✕ and everything from Clear all', () => {
     /* the chip names an axis and lists its values, so its ✕ removes what it
        names; Clear all goes through the SAME handler the panel's own Clear

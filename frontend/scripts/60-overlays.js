@@ -39,7 +39,7 @@ app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ'), noteText
    mutual exclusion all derive from this list — adding `warnPop` used to mean
    three hand-edits that had to agree, and a fourth list (the focus-held
    selectors below) that nothing tied to them. A sixth overlay is one entry. */
-const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop', 'pipeSortMenu', 'pipeFilterMenu'];
+const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop', 'pipeSortMenu', 'pipeFilterMenu', 'chipPop'];
 const NO_OVERLAYS = Object.fromEntries(OVERLAY_KEYS.map((k) => [k, null]));
 /* WHAT MUST NOT DISMISS EACH OVERLAY — its own trigger and its own box, keyed
    by the state key so the two lists cannot drift apart. They already had:
@@ -57,6 +57,10 @@ const OVERLAY_SHIELDS = {
   warnPop: '.warnpop',
   pipeSortMenu: '.sfbtn, .pipemenu',
   pipeFilterMenu: '.sfbtn, .pipemenu',
+  /* the chip AND the panel it opens: the panel is a DOM child of the chip, so
+     `.fchip` alone would cover it — naming both keeps the entry honest about
+     what the reader can point at. */
+  chipPop: '.fchip, .pipemenu',
 };
 /** One selector string, derived — the click dismisser's ignore list. */
 const OVERLAY_SHIELD = [...new Set(OVERLAY_KEYS.flatMap((k) => OVERLAY_SHIELDS[k].split(',').map((x) => x.trim())))].join(', ');
@@ -284,6 +288,22 @@ function openMeasured(ctx, id, opts) {
    and the pair belongs beside the placer it uses rather than beside them. */
 function warnPopCancelClose() {
   if (warnCloseTimer) { clearTimeout(warnCloseTimer); warnCloseTimer = null; }
+}
+
+/* THE ONE SCHEDULER for every hover-dismissed overlay — the warning card and
+   the filter chip's panel both leave through here. A second `setTimeout` beside
+   this one is the shape that leaks: two handles, and the older one fires
+   against state it was never scheduled for. The delay is named once
+   (WARN_CLOSE_MS) so it stays tunable in one place, and the caller supplies
+   only what to do when it runs out.
+
+   Naming debt, flagged not fixed: the handle and the canceller still carry the
+   `warn` prefix from the day only one overlay used them. */
+function scheduleHoverClose(onFire) {
+  warnCloseTimer = setTimeout(() => {
+    warnCloseTimer = null;
+    onFire();
+  }, WARN_CLOSE_MS);
 }
 
 /* The hover card opens on pointer-enter AND on keyboard focus, so opening has

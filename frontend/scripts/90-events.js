@@ -237,6 +237,33 @@ app.on({
     app.set(`pipeFilters.${axis}`, cur);
     pipeBackToTop();
   },
+  /* THE CHIP'S HOVER PANEL (node 593:80073) — the chip's own filter group,
+     opened under it so a reader can see and change what the chip names without
+     going back to the Filter button.
+
+     It opens on POINTER, like the warning card, and leaves through the same
+     scheduler: the panel sits 4px clear of the chip, so without a delay the
+     pointer crossing that gap would close what it is reaching for. It is a DOM
+     CHILD of the chip, which is what makes the containment guard below cover
+     the panel too — moving onto a checkbox never leaves `.fchip`. */
+  chipPopIn(ctx, key) {
+    warnPopCancelClose();
+    if (app.get('chipPop') === key) return; // re-entering the same chip is not a toggle
+    /* Refuses to open over another overlay, the same rule the warning card
+       keeps (R-warn-r): a chip grazed while the Filter panel is up must not
+       replace it, or a pointer crossing the row would swap the reader's panel
+       out from under them. */
+    if (OVERLAY_KEYS.some((k) => k !== 'chipPop' && app.get(k))) return;
+    openOverlay(ctx, key, { key: 'chipPop' });
+  },
+  chipPopOut(ctx) {
+    warnPopCancelClose();
+    if (!app.get('chipPop')) return;
+    // where the pointer actually went; still inside this chip means nothing left
+    const to = ctx.event.relatedTarget;
+    if (to && ctx.node.contains(to)) return;
+    scheduleHoverClose(() => closeMenus());
+  },
   /* The indicator's ✕ clears ONE AXIS, not one value: the chip names an axis
      and lists its values, so removing it removes what it names. Returning to
      the top is the same rule every other narrowing follows (R-pf-h). */
@@ -427,8 +454,7 @@ app.on({
        warnPopFocusOut's guard, for the same reason. */
     const to = ctx.event.relatedTarget;
     if (to && ctx.node.contains(to)) return;
-    warnCloseTimer = setTimeout(() => {
-      warnCloseTimer = null;
+    scheduleHoverClose(() => {
       /* A card the KEYBOARD opened is not the pointer's to close: the icon can
          be focused with the mouse resting on it, and a nudge off the glyph
          would otherwise strand a focused trigger with nothing open and no key
@@ -442,7 +468,7 @@ app.on({
       const host = ae && ae.closest && ae.closest('.warnhost');
       if (host && overlayTrigger && host.contains(overlayTrigger)) return;
       closeMenus();
-    }, WARN_CLOSE_MS);
+    });
   },
   /* Dismiss only when focus leaves the icon AND the card — focus moving from
      the icon INTO `Open Card` is a Tab we exist to allow, and `.warnhost`

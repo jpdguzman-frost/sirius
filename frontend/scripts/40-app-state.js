@@ -38,6 +38,8 @@ const app = new Ractive({
     pipeFilters: PIPE_FILTERS_EMPTY(),
     pipeSortMenu: null,
     pipeFilterMenu: null,
+    /* which chip's panel is open on hover — an overlay key like the rest */
+    chipPop: null,
     /* still on the wire and still counted — OPEN WORK (kpi.open) is the
        aggregate signal now that the table banner is gone (owl #36) */
     corrections: [],
@@ -260,7 +262,14 @@ const app = new Ractive({
        axes live (10-constants) so the chip and the panel cannot disagree about
        what an axis is called or which values are on. */
     pipeChips() {
-      return pipeChipList(this.get('pipeFilters'));
+      /* Each chip carries its axis's FULL value list, taken from the same
+         facets the main panel renders — so the hover panel and the panel behind
+         the Filter button cannot disagree about a count or a tick. */
+      const facets = this.get('pipeFacets');
+      return pipeChipList(this.get('pipeFilters')).map((c) => {
+        const facet = facets.find((f) => f.key === c.key);
+        return { ...c, values: facet ? facet.values : [], scroll: !!(facet && facet.scroll) };
+      });
     },
     /** How many filter VALUES are applied, across every axis — the accessible name's number. */
     pipeFilterCount() {

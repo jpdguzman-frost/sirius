@@ -716,10 +716,14 @@ describe('the close timer cannot leak across rows (structure, not behaviour)', (
 
   it('names the delay instead of spelling a number at the call site', () => {
     expect(jsCode).toMatch(/const WARN_CLOSE_MS = \d+/);
-    // R-warn-j: 150ms is a default flagged to Miles as tunable, so it has to be
-    // tunable in one place
-    expect(handlerBody('warnPopOut')).toContain('WARN_CLOSE_MS');
-    expect(handlerBody('warnPopOut')).not.toMatch(/setTimeout\([\s\S]*?,\s*\d+\s*\)/);
+    /* R-warn-j: 150ms is a default flagged to Miles as tunable, so it has to be
+       tunable in ONE place. That place is now `scheduleHoverClose`, the single
+       scheduler both hover-dismissed overlays leave through — the delay moved
+       one level in when the filter chip's panel joined, and the rule is
+       unchanged: no caller spells a number. */
+    expect(fnBody('scheduleHoverClose')).toContain('WARN_CLOSE_MS');
+    expect(handlerBody('warnPopOut')).not.toMatch(/setTimeout\(/);
+    expect(handlerBody('warnPopOut')).not.toMatch(/,\s*\d+\s*\)/);
   });
 
   it('cancels a pending close at BOTH doors — every open and every close', () => {
@@ -805,7 +809,9 @@ describe('the pointer path cannot close what it did not open', () => {
 
   it('arms no close when no hover card is open — R-warn-r, from the leave side', () => {
     expect(body()).toMatch(/if \(!app\.get\('warnPop'\)\) return;/);
-    expect(body().indexOf("app.get('warnPop')")).toBeLessThan(body().indexOf('setTimeout('));
+    // the close is ARMED through the shared scheduler; the guard still has to
+    // come first, which is the property this pins
+    expect(body().indexOf("app.get('warnPop')")).toBeLessThan(body().indexOf('scheduleHoverClose('));
   });
 
   it('arms no close when the pointer never left the node the directive sits on', () => {
@@ -813,7 +819,7 @@ describe('the pointer path cannot close what it did not open', () => {
     // focus-out guard uses, for the same reason
     expect(body()).toContain('relatedTarget');
     expect(body()).toContain('ctx.node.contains(to)');
-    expect(body().indexOf('relatedTarget')).toBeLessThan(body().indexOf('setTimeout('));
+    expect(body().indexOf('relatedTarget')).toBeLessThan(body().indexOf('scheduleHoverClose('));
   });
 
   it('does not re-open the card on the shared close path’s own focus return', () => {

@@ -119,13 +119,40 @@
   {{#if pipeChips.length}}
     <div class="fchips" role="group" aria-label="Filters applied">
       {{#each pipeChips as c}}
-        <span class="fchip">
+        {{! mouseenter/mouseleave do not bubble, but Ractive re-dispatches an
+            each-block's events by walking up from the target — so these fire
+            for the ✕ and for everything inside the panel as well, which is
+            exactly what the containment guard in chipPopOut relies on. }}
+        <span class="fchip" on-mouseenter="['chipPopIn', c.key]" on-mouseleave="['chipPopOut']">
           <span class="fchiplabel">
             <span class="fcaxis">{{c.name}} is</span>
             <span class="fcvals" title="{{c.text}}">{{c.text}}</span>
           </span>
           <button class="fchipx" on-click="['removePipeAxis', c.key]"
                   aria-label="Remove the {{c.name}} filter">{{{icon.close}}}</button>
+
+          {{! THE CHIP'S OWN PANEL (node 593:80073) — the same dropdown chrome
+              as the Filter button's, cut down to ONE group and with the footer
+              button and the scrollbar switched off, exactly as the frame sets
+              them. Anchored under the chip and LEFT-aligned to it, which is
+              where the frame places it and what makes it read as belonging to
+              the chip rather than to the toolbar.
+
+              It is a DOM child of the chip on purpose: the pointer moving into
+              it never leaves `.fchip`, so the close guard covers the whole
+              journey and the 4px gap is spanned by the bridge below. }}
+          {{#if chipPop === c.key}}
+            <div class="pipemenu chipmenu" role="dialog" aria-label="{{c.name}} filter">
+              <p class="pmhead" aria-hidden="true">{{c.name}}</p>
+              <div class="pmitems {{#if c.scroll}}pmscroll{{/if}}" role="group" aria-label="{{c.name}}">
+                {{#each c.values as v}}
+                  <button class="pmitem pmcheck {{#if v.on}}on{{/if}}" on-click="['togglePipeFilter', c.key, v.value]"
+                          disabled="{{!v.count && !v.on}}"
+                          aria-pressed="{{v.on ? 'true' : 'false'}}"><span class="pmbox" aria-hidden="true"></span><span class="pmval">{{v.label}}</span><span class="pmcount">{{v.count}}</span></button>
+                {{/each}}
+              </div>
+            </div>
+          {{/if}}
         </span>
       {{/each}}
       {{! the same handler the panel's own Clear uses — one way to clear }}

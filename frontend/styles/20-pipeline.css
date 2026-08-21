@@ -107,6 +107,9 @@
   display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;
 }
 .fchip {
+  /* the chip is its panel's anchor, so the panel hangs off the thing it
+     describes rather than off the toolbar */
+  position: relative;
   display: inline-flex; align-items: stretch; height: 30px; box-sizing: border-box;
   background: var(--white); border: 1px solid var(--slate-900); border-radius: var(--radius-sm);
 }
@@ -151,6 +154,22 @@
 }
 .fclearall:hover { background: var(--blue-50); }
 .fclearall:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+
+/* THE CHIP'S HOVER PANEL (node 593:80073). Same dropdown chrome as the Filter
+   button's — it wears `.pipemenu` — cut down to one group, with no footer and
+   no scrollbar, which is exactly how the frame switches those two off. Anchored
+   under the chip and LEFT-aligned: `.pipemenu`'s shared rule anchors right, to
+   the toolbar, so both edges are restated here rather than inherited by luck. */
+.chipmenu { left: 0; right: auto; }
+/* THE HOVER BRIDGE. The panel sits 4px clear of the chip; without this the
+   pointer crosses dead space on its way down, `mouseleave` fires, and the close
+   can run out before it arrives — the same hazard the warning card's bridge
+   exists for, and the reason this is a hover PANEL and not a tooltip. It is
+   transparent, paints nothing, and is exactly the gap tall. It cannot outlive
+   the panel because the panel is not rendered while closed. */
+.chipmenu::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -4px; height: 4px;
+}
 
 /* ---- search + callout (annotations 17:2057, 70:1211) ---- */
 /* THE SEARCH FIELD'S OWN RECIPE — shared by Pipeline, Requests and Deadlines.
