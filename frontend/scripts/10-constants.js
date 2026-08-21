@@ -384,13 +384,19 @@ const pipeSortRows = (rows, sort) => {
    the three Needs Info conditions. URGENCY and STATUS are deliberately NOT
    marked: every card sits in a list, and `Non-Urgent` is a value rather than an
    absence, so neither axis has a residue to collect. */
+/* Labels in HUMAN case. The panel heading shouts them in CSS (`.pmhead` carries
+   `text-transform: uppercase`) and the chip needs them unshouted — storing them
+   shouted meant carrying a second, opposite case rule in JS to un-shout them. */
 const PIPE_FILTERS = [
-  { key: 'type', label: 'TYPE', pick: (r) => r.assetType, none: true },
-  { key: 'difficulty', label: 'DIFFICULTY', pick: (r) => r.difficulty, order: ['Easy', 'Medium', 'Hard'], none: true },
-  { key: 'urgency', label: 'URGENCY', pick: (r) => r.urgency, order: ['Non-Urgent', 'Urgent'] },
-  { key: 'status', label: 'STATUS', pick: (r) => r.currentList, scroll: true },
-  { key: 'requestor', label: 'REQUESTOR', pick: (r) => r.requestor, none: true },
+  { key: 'type', label: 'Type', pick: (r) => r.assetType, none: true },
+  { key: 'difficulty', label: 'Difficulty', pick: (r) => r.difficulty, order: ['Easy', 'Medium', 'Hard'], none: true },
+  { key: 'urgency', label: 'Urgency', pick: (r) => r.urgency, order: ['Non-Urgent', 'Urgent'] },
+  { key: 'status', label: 'Status', pick: (r) => r.currentList, scroll: true },
+  { key: 'requestor', label: 'Requestor', pick: (r) => r.requestor, none: true },
 ];
+/** Absence is DRAWN as the word None — one rule, so the chip and the panel
+    cannot disagree about it (owl #63). */
+const pipeValueLabel = (v) => (v === null ? 'None' : v);
 
 /* "None" is stored as the VALUE null, never as the string `None`: a Trello
    label or a sheet requestor could legitimately BE that word, and the two must
@@ -495,7 +501,7 @@ const pipeFacetList = (rows, sel) => {
       values: names
         .map((v) => ({
           value: v,
-          label: v === null ? 'None' : v,
+          label: pipeValueLabel(v),
           count: counts.get(v),
           on: picked.indexOf(v) > -1,
         }))
@@ -521,23 +527,18 @@ const pipeFacetList = (rows, sel) => {
    `Number` variant counts the VALUES INSIDE a chip, and its `2` variant is a
    single chip listing two of them under one axis name and one ✕.
 
-   The axis name is derived from the panel's own heading rather than kept in a
-   second list — every axis label is one word, so lower-casing all but the first
-   letter gives `TYPE` -> `Type`. A sixth axis needs no entry here.
+   The axis name is the axis's OWN label, which is why those are stored in human
+   case: the panel heading shouts them in CSS and the chip does not. A sixth axis
+   needs no entry here.
 
-   Values keep the order they were ticked in, which is the order the reader
-   built them in. `null` is the absence value and reads as the word it is drawn
-   with in the panel. */
+   Values keep the order they were ticked in, which is the order the reader built
+   them in, and `null` reads as None through the one helper both this and the
+   facet list use. */
 const pipeChipList = (sel) =>
   PIPE_FILTERS.map((f) => {
     const picked = (sel && sel[f.key]) || [];
-    return {
-      key: f.key,
-      name: f.label.charAt(0) + f.label.slice(1).toLowerCase(),
-      text: picked.map((v) => (v === null ? 'None' : v)).join(', '),
-      count: picked.length,
-    };
-  }).filter((c) => c.count > 0);
+    return { key: f.key, label: f.label, text: picked.map(pipeValueLabel).join(', '), on: picked.length > 0 };
+  }).filter((c) => c.on);
 
 /** The sort button's label — `Group: Item`, the frame's format (node 592:56966). */
 const pipeSortLabel = (key) => {

@@ -262,14 +262,20 @@ const app = new Ractive({
        axes live (10-constants) so the chip and the panel cannot disagree about
        what an axis is called or which values are on. */
     pipeChips() {
-      /* Each chip carries its axis's FULL value list, taken from the same
-         facets the main panel renders — so the hover panel and the panel behind
-         the Filter button cannot disagree about a count or a tick. */
-      const facets = this.get('pipeFacets');
-      return pipeChipList(this.get('pipeFilters')).map((c) => {
-        const facet = facets.find((f) => f.key === c.key);
-        return { ...c, values: facet ? facet.values : [], scroll: !!(facet && facet.scroll) };
-      });
+      /* The chips themselves cost a walk of the SELECTION and nothing else.
+         Values are joined on only for the ONE chip whose panel is open, from
+         the same facets the main panel renders — so the two cannot disagree
+         about a count or a tick, and a closed row costs no recount.
+
+         Reading `pipeFacets` unconditionally put the whole facet pass back on
+         the search-keystroke path: this computed is always live (the row's
+         `{{#if}}` binds it), so every keystroke recounted every axis even with
+         no panel open and, in the common case, no chips at all. */
+      const chips = pipeChipList(this.get('pipeFilters'));
+      const open = this.get('chipPop');
+      if (!open) return chips;
+      const facet = this.get('pipeFacets').find((f) => f.key === open);
+      return chips.map((c) => (c.key === open && facet ? { ...c, values: facet.values, scroll: facet.scroll } : c));
     },
     /** How many filter VALUES are applied, across every axis — the accessible name's number. */
     pipeFilterCount() {

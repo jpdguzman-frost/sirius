@@ -755,11 +755,19 @@ describe('opening the hover card is idempotent, and never destroys an edit', () 
     // openOverlay toggles by contract — the other four overlays depend on that
     // — so re-entering an already-open icon would shut it. Guarded in the
     // opener, not by changing the toggle.
-    expect(fnBody('showWarnPop')).toMatch(/app\.get\('warnPop'\) === cardId/);
+    /* the idempotence and refuse-over-an-edit rules moved into
+       `openHoverOverlay`, the ONE hover-open policy both pointer-opened
+       overlays now go through — same rules, one copy. */
+    expect(fnBody('showWarnPop')).toContain("openHoverOverlay('warnPop', cardId)");
+    expect(fnBody('openHoverOverlay')).toMatch(/app\.get\(key\) === id/);
   });
 
   it('refuses to open over an ACTIVE edit, from the ONE overlay list (R-warn-r)', () => {
-    const body = fnBody('showWarnPop');
+    /* The rule now lives in `openHoverOverlay`, the ONE policy both
+       pointer-opened overlays go through — the card reaches it by going
+       through that door rather than by keeping its own copy. */
+    const body = fnBody('openHoverOverlay');
+    expect(fnBody('showWarnPop')).toContain('openHoverOverlay(');
     // a passive mouse path across the table is not consent to discard a staged
     // due date that only Apply writes (W2)
     expect(body).toContain('OVERLAY_KEYS');
@@ -1139,7 +1147,7 @@ describe('one recipe per visual (CSS)', () => {
        pointer crosses dead space and the close timer fires before it can reach
        `Open Card`. It paints nothing, and it cannot exist while the card is
        closed because the card is not rendered then. */
-    const before = cssRule('.warnpop::before', PIPELINE_CSS);
+    const before = cssRule('.warnpop::before, .chipmenu::before', PIPELINE_CSS);
     expect(before).toMatch(/content: ''/);
     expect(before).toContain('position: absolute');
     expect(before).not.toContain('background');
@@ -1263,7 +1271,7 @@ describe('one recipe per visual (CSS)', () => {
   it('spends no raw hex and no raw px on the new rules — tokens only', () => {
     // the ONE exception the constitution allows is an icon glyph box, which is
     // exactly the shape .i13/.i15/.i16/.i18 already have
-    for (const sel of ['.warnbtn', '.warnhost', '.ptable .mcid', '.warnpop.flip', '.warnpop.scroll', '.wpwhy, .wpfix', '.warnpop::before', '.warnpop.flip::before']) {
+    for (const sel of ['.warnbtn', '.warnhost', '.ptable .mcid', '.warnpop.flip', '.warnpop.scroll', '.wpwhy, .wpfix', '.warnpop::before, .chipmenu::before', '.warnpop.flip::before']) {
       const rule = cssRule(sel, PIPELINE_CSS).replace(/\/\*[\s\S]*?\*\//g, ' ');
       expect(rule, `${sel} carries a raw hex`).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
       expect(rule, `${sel} carries a raw px`).not.toMatch(/\d+px/);

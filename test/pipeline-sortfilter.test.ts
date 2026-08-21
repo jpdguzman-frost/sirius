@@ -15,7 +15,7 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { APP_JS, APP_JS_CODE, PIPELINE_CSS, TEMPLATE, cssRule, decl, fnBody } from './helpers/gantt-render.ts';
+import { APP_JS, APP_JS_CODE, PIPELINE_CSS, TEMPLATE, cssRule, decl, fnBody, method } from './helpers/gantt-render.ts';
 
 interface Sort { key: string; group: string; label: string; dir: number; value: (r: unknown) => unknown }
 interface Axis { key: string; label: string; pick: (r: unknown) => unknown; order?: string[]; none?: boolean }
@@ -32,6 +32,7 @@ const recipe = new Function(`
   ${decl(APP_JS, 'unranked')}
   ${decl(APP_JS, 'alphaSort')}
   ${decl(APP_JS, 'pipePick')}
+  ${decl(APP_JS, 'pipeValueLabel')}
   ${decl(APP_JS, 'PIPE_FILTERS_EMPTY')}
   ${decl(APP_JS, 'pipeMatches')}
   ${decl(APP_JS, 'pipeFacetList')}
@@ -47,7 +48,7 @@ const recipe = new Function(`
   PIPE_FILTERS_EMPTY: () => Record<string, (string | null)[]>;
   pipeMatches: (r: unknown, sel: Record<string, (string | null)[]>, except: string | null) => boolean;
   pipeFacetList: (rows: unknown[], sel: Record<string, (string | null)[]>) => Facet[];
-  pipeChipList: (sel: Record<string, (string | null)[]>) => Array<{ key: string; name: string; text: string; count: number }>;
+  pipeChipList: (sel: Record<string, (string | null)[]>) => Array<{ key: string; label: string; text: string; on: boolean }>;
   pipeSortLabel: (k: string | null) => string;
 };
 
@@ -187,7 +188,7 @@ describe('filtering is OR within a category and AND across them', () => {
     rows.filter((r) => recipe.pipeMatches(r, { ...recipe.PIPE_FILTERS_EMPTY(), ...sel }, null)).map((r) => r.cardId);
 
   it('carries the five axes the frame names, in order', () => {
-    expect(recipe.PIPE_FILTERS.map((f) => f.label)).toEqual(['TYPE', 'DIFFICULTY', 'URGENCY', 'STATUS', 'REQUESTOR']);
+    expect(recipe.PIPE_FILTERS.map((f) => f.label)).toEqual(['Type', 'Difficulty', 'Urgency', 'Status', 'Requestor']);
   });
 
   it('REQUESTOR, not CLIENT — every row on a board shares one client', () => {
@@ -340,7 +341,8 @@ describe('absence is selectable on the three axes that can lack a value', () => 
 
   it('draws the label and toggles the value — they differ for exactly this item', () => {
     expect(TEMPLATE).toContain('<span class="pmval">{{v.label}}</span>');
-    expect(TEMPLATE).toContain("on-click=\"['togglePipeFilter', f.key, v.value]\"");
+    // one partial serves both panels now — the row is written once
+    expect(TEMPLATE).toContain("on-click=\"['togglePipeFilter', key, v.value]\"");
   });
 });
 
@@ -403,10 +405,11 @@ describe('the panels are ANCHORED to their trigger, never measured (JP, 2026-08-
     /* `.sortfilter` ends at the page inset, so `right: 0` on it is a fixed
        point — which is the whole reason this anchor was chosen over the two
        that were built first */
-    const rule = cssRule('.pipemenu', PIPELINE_CSS);
-    expect(rule).toContain('position: absolute');
-    expect(rule).toContain('right: 0');
-    expect(rule).toContain('top: 100%');
+    /* `.pipemenu` is the SURFACE only — three panels wear it and they do not
+       hang off the same thing, so each anchor is named by its own container. */
+    expect(cssRule('.pipemenu', PIPELINE_CSS)).toContain('position: absolute');
+    expect(cssRule('.sortfilter .pipemenu', PIPELINE_CSS)).toContain('right: 0');
+    expect(cssRule('.sortfilter .pipemenu', PIPELINE_CSS)).toContain('top: 100%');
     expect(cssRule('.sortfilter', PIPELINE_CSS)).toContain('position: relative');
   });
 
@@ -476,8 +479,11 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
     /* Button-Small carries a `Color` variant: `Blue` #1d4ed8 while there is a
        sort to clear, `Disabled` #94a3b8 when there is not. It read slate in
        both states before. */
-    expect(cssRule('.pipemenu .pmclear', PIPELINE_CSS)).toContain('color: var(--blue-700)');
-    expect(cssRule('.pipemenu .pmclear[disabled]', PIPELINE_CSS)).toContain('color: var(--slate-400)');
+    /* de-scoped from `.pipemenu`: the chip row's Clear all wears the same
+       recipe rather than a copy of it */
+    expect(cssRule('.pmclear', PIPELINE_CSS)).toContain('color: var(--blue-700)');
+    expect(cssRule('.pmclear[disabled]', PIPELINE_CSS)).toContain('color: var(--slate-400)');
+    expect(TEMPLATE).toContain('class="pmclear fclearall"');
   });
 
   it('TICKS the checked box instead of just filling it', () => {
@@ -595,16 +601,16 @@ describe('the filter indicator says what is filtered, in words', () => {
        INSIDE a chip, and its `2` variant is a single chip listing two of them
        under one axis name and one ✕ (node 566:52332). */
     expect(chips({ type: ['Icon', 'Asset'] })).toEqual([
-      { key: 'type', name: 'Type', text: 'Icon, Asset', count: 2 },
+      { key: 'type', label: 'Type', text: 'Icon, Asset', on: true },
     ]);
   });
 
   it('names the axis from the panel’s own heading, not a second list', () => {
     /* every axis label is one word, so the chip name is derived — a sixth axis
        needs no entry anywhere for its chip to read correctly */
-    expect(chips({ difficulty: ['Hard'] })[0]!.name).toBe('Difficulty');
-    expect(chips({ requestor: ['ana@frostdesigngroup.com'] })[0]!.name).toBe('Requestor');
-    expect(recipe.PIPE_FILTERS.map((f) => f.label)).toContain('DIFFICULTY');
+    expect(chips({ difficulty: ['Hard'] })[0]!.label).toBe('Difficulty');
+    expect(chips({ requestor: ['ana@frostdesigngroup.com'] })[0]!.label).toBe('Requestor');
+    expect(recipe.PIPE_FILTERS.map((f) => f.label)).toContain('Difficulty');
   });
 
   it('shows the absence value as the word the panel draws it with', () => {
@@ -636,6 +642,18 @@ describe('the filter indicator says what is filtered, in words', () => {
     expect(TEMPLATE).toContain('title="{{c.text}}"'); // the full text stays reachable
   });
 
+  it('costs a walk of the SELECTION only, until a panel is actually open', () => {
+    /* `pipeChips` is always live — the row's `{{#if}}` binds it — so reading
+       `pipeFacets` unconditionally put the whole facet recount back on the
+       search-keystroke path, even with no filter applied and no panel open.
+       Values are joined on for the ONE open chip and no other. */
+    const body = method('pipeChips');
+    expect(body).toContain("this.get('pipeFilters')");
+    expect(body).toContain("this.get('chipPop')");
+    expect(body.indexOf("this.get('chipPop')")).toBeLessThan(body.indexOf("this.get('pipeFacets')"));
+    expect(body).toMatch(/if \(!open\) return chips;/);
+  });
+
   it('INVERTS the chip on hover, keeping the quiet/loud contrast', () => {
     /* JP, 2026-08-21. The axis stays the dimmer half against the dark ground
        and the values stay the bright one — flattening both to white would turn
@@ -664,8 +682,7 @@ describe('the filter indicator says what is filtered, in words', () => {
        a single-class rule lost the cascade and only looked right because a box
        with left, right and width is over-constrained. `-1px` because `left`
        resolves against the chip's padding box, inside its 1px border. */
-    expect(cssRule('.pipemenu.chipmenu', PIPELINE_CSS)).toContain('left: -1px');
-    expect(cssRule('.pipemenu.chipmenu', PIPELINE_CSS)).toContain('right: auto');
+    expect(cssRule('.fchip .pipemenu', PIPELINE_CSS)).toContain('left: -1px');
     expect(cssRule('.fchip', PIPELINE_CSS)).toContain('position: relative');
   });
 
@@ -674,7 +691,8 @@ describe('the filter indicator says what is filtered, in words', () => {
        crosses dead space, mouseleave fires, and the close can run out before it
        arrives. The panel is also a DOM child of the chip, which is what makes
        the containment guard cover the whole journey. */
-    expect(cssRule('.chipmenu::before', PIPELINE_CSS)).toContain('height: 4px');
+    // one bridge recipe, shared with the warning card's, in the gap's own token
+    expect(cssRule('.warnpop::before, .chipmenu::before', PIPELINE_CSS)).toContain('height: var(--space-4)');
     const at = APP_JS.indexOf('chipPopOut(ctx)');
     const body = APP_JS.slice(at, at + 420);
     expect(body).toContain('relatedTarget');
@@ -695,16 +713,22 @@ describe('the filter indicator says what is filtered, in words', () => {
     /* a chip merely grazed while the Filter panel is up must not replace it
        (R-warn-r's rule, from the other side), and re-entering the same chip is
        not a second click */
-    const at = APP_JS.indexOf('chipPopIn(ctx, key)');
-    const body = APP_JS.slice(at, at + 520);
-    expect(body).toContain("app.get('chipPop') === key");
-    expect(body).toContain("k !== 'chipPop' && app.get(k)");
+    /* both rules now live in ONE hover-open policy, and the cancel deliberately
+       comes AFTER the refusal — cancelling first cancels somebody else's pending
+       close and never reschedules it, stranding their overlay open. */
+    const policy = fnBody('openHoverOverlay');
+    expect(policy).toContain('k !== key && app.get(k)');
+    expect(policy).toContain('app.get(key) === id');
+    expect(policy.indexOf('app.get(k)')).toBeLessThan(policy.indexOf('warnPopCancelClose()'));
+    expect(APP_JS).toContain("openHoverOverlay('chipPop', key)");
+    expect(fnBody('showWarnPop')).toContain("openHoverOverlay('warnPop', cardId)");
   });
 
   it('ticks through the SAME handler the main panel uses', () => {
     // one way to change a filter, so the two panels cannot diverge
-    const view = TEMPLATE.slice(TEMPLATE.indexOf('class="fchips"'));
-    expect(view).toContain("['togglePipeFilter', c.key, v.value]");
+    // both panels render the same partial, so there is one row and one handler
+    expect(TEMPLATE).toContain('{{>filterGroup f}}');
+    expect(TEMPLATE).toContain('{{>filterGroup c}}');
   });
 
   it('shares ONE hover-close scheduler with the warning card', () => {
@@ -730,7 +754,7 @@ describe('the filter indicator says what is filtered, in words', () => {
 
   it('names the axis in each ✕’s accessible name', () => {
     // the icon carries no text, so this is the only route to which filter goes
-    expect(TEMPLATE).toContain('aria-label="Remove the {{c.name}} filter"');
+    expect(TEMPLATE).toContain('aria-label="Remove the {{c.label}} filter"');
   });
 });
 
@@ -821,7 +845,7 @@ describe('the panels behave like every other overlay', () => {
   it('scrolls STATUS inside its own group, not the whole panel', () => {
     /* the axis carries the flag; the template no longer names STATUS, so a
        sixth open-ended axis is one entry in the table rather than three edits */
-    expect(TEMPLATE).toContain('{{#if f.scroll}}pmscroll{{/if}}');
+    expect(TEMPLATE).toContain('{{#if scroll}}pmscroll{{/if}}');
     // rows, not an empty board: an axis with nothing to offer is dropped now
     const rows = [row({ currentList: 'Sketch: With Revision', assetType: 'Icon' })];
     const scrolling = recipe.pipeFacetList(rows, recipe.PIPE_FILTERS_EMPTY()).filter((f) => f.scroll);

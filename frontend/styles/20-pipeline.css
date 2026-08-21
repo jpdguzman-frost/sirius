@@ -146,46 +146,33 @@
 .fchip:hover .fcvals { color: var(--white); }
 .fchip:hover .fchipx { color: var(--white); border-left-color: var(--slate-700); }
 .fchip:hover .fchipx:hover { background: var(--slate-700); }
-.fclearall {
-  flex: none; padding: 7px var(--space-8) 6px;
-  background: none; border: 0; border-radius: var(--radius-sm); cursor: pointer;
-  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 600;
-  line-height: 1; color: var(--blue-700);
-}
-.fclearall:hover { background: var(--blue-50); }
-.fclearall:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+/* Clear all IS the panel's Clear — same Figma Button-Small/Blue, same handler.
+   It wears `.pmclear` and adds only what differs, the way `.reqsearch` and
+   `.dlsearch` modify `.searchbar` rather than restating it. */
+.fclearall { flex: none; }
 
 /* THE CHIP'S HOVER PANEL (node 593:80073). Same dropdown chrome as the Filter
    button's — it wears `.pipemenu` — cut down to one group, with no footer and
    no scrollbar, which is exactly how the frame switches those two off. Anchored
    under the chip and LEFT-aligned: `.pipemenu`'s shared rule anchors right, to
    the toolbar, so both edges are restated here rather than inherited by luck. */
-/* Two classes on purpose: `.pipemenu` anchors right and is declared later in
-   this file, so a single-class `.chipmenu` lost the cascade and only landed
-   correctly because a box with left, right AND width is over-constrained —
-   which would have snapped it to the right edge the day the width changed.
-
-   `-1px` rather than 0: `left` resolves against the chip's PADDING box, and the
-   chip has a 1px border, so 0 sits the panel one pixel inside the edge it is
-   supposed to line up with. */
-.pipemenu.chipmenu {
-  left: -1px; right: auto;
-  /* SYMMETRIC INSET (JP, 2026-08-21): this panel has no footer, so its last row
-     sat on 8px of list padding against 20px above the heading and read as cut
-     off. The panel owns both edges here — the list's own bottom padding is
-     zeroed rather than added to, so the number is 20 and not 20-plus-8. */
-  padding-bottom: 20px;
-}
-.pipemenu.chipmenu .pmitems { padding-bottom: 0; }
+/* Anchored to the CHIP, left-aligned. `-1px` because `left` resolves against
+   the chip's padding box, inside its 1px border, so 0 would sit the panel one
+   pixel in from the edge it lines up with. */
+.fchip .pipemenu { top: 100%; left: -1px; margin-top: var(--space-4); }
+/* SYMMETRIC INSET (JP, 2026-08-21): this panel has no footer, so its last row
+   sat on 8px of list padding against 20px above the heading and read as cut
+   off. The panel owns both edges — the list's own bottom padding is zeroed
+   rather than added to, so the number is 20 and not 20-plus-8. */
+.chipmenu { padding-bottom: 20px; }
+.chipmenu .pmitems { padding-bottom: 0; }
 /* THE HOVER BRIDGE. The panel sits 4px clear of the chip; without this the
    pointer crosses dead space on its way down, `mouseleave` fires, and the close
    can run out before it arrives — the same hazard the warning card's bridge
    exists for, and the reason this is a hover PANEL and not a tooltip. It is
    transparent, paints nothing, and is exactly the gap tall. It cannot outlive
    the panel because the panel is not rendered while closed. */
-.chipmenu::before {
-  content: ''; position: absolute; left: 0; right: 0; top: -4px; height: 4px;
-}
+
 
 /* ---- search + callout (annotations 17:2057, 70:1211) ---- */
 /* THE SEARCH FIELD'S OWN RECIPE — shared by Pipeline, Requests and Deadlines.
@@ -209,6 +196,7 @@
    up to 196px sideways. This row's right edge is the page inset, so it does not
    move for any reason. */
 .sortfilter { position: relative; display: flex; align-items: center; gap: var(--space-8); flex: none; }
+.sortfilter .pipemenu { top: 100%; right: 0; margin-top: var(--space-4); }
 /* 38×33 resting, white on a slate-500 hairline, the app's own --shadow-xs.
    `width` is not fixed: the SORT button grows to name its selection and the
    filter never does, so the box is sized by its content between a floor and a
@@ -627,7 +615,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    in that one case the strip is not over a gap at all. Neither is compensable
    without a raw px here, which is a defect; the delay is what carries the
    pointer across. */
-.warnpop::before {
+.warnpop::before, .chipmenu::before {
   content: ''; position: absolute; left: 0; right: 0;
   top: calc(var(--space-4) * -1); height: var(--space-4);
 }
@@ -680,21 +668,17 @@ a.srclink:hover { background: var(--slate-100); }
    4px radius. `position: fixed` with inline coords, the same escape-the-clip
    recipe every other overlay on this tab uses. */
 .pipemenu {
-  /* ANCHORED TO `.sortfilter`, not measured, not pinned to the window, and not
-     tied to either button (JP, 2026-08-21). `top: 100%` plus the frame's 4px
-     gap places it; `right: 0` puts it on the row's right edge, which is the
-     page inset and therefore never moves.
+  /* SURFACE ONLY. `.pipemenu` is worn by three panels now — the Filter
+     button's, the Sort button's and a chip's — and they do not hang off the
+     same thing, so the ANCHOR lives on the container that owns it rather than
+     here. Baking the toolbar's anchor into the shared rule is what forced the
+     chip's panel to undo it with a doubled selector.
 
-     Both other candidates were built and rejected against real behaviour: a
-     window offset needs a different number depending on whether a sort is
-     applied, and a per-button anchor makes the filter panel travel up to 196px
-     sideways when the sort button grows to name its selection.
-
-     `absolute` overrides the shared fixed-box recipe above; it keeps that
-     rule's surface (background, stroke, flex) and only stops being pinned to
-     the viewport. Nothing between the toolbar and the page root clips or
-     positions, so it still escapes the table freely. */
-  position: absolute; top: 100%; right: 0; margin-top: 4px;
+     `absolute` overrides the shared fixed-box recipe above: it keeps that
+     rule's surface and only stops being pinned to the viewport. Nothing between
+     the toolbar and the page root clips or positions, so it still escapes the
+     table freely. */
+  position: absolute;
   z-index: 45; width: 276px; box-sizing: border-box; padding-top: 20px;
   border-radius: var(--radius-sm); font-family: var(--font-sans);
   /* JP, 2026-08-21: the panels lift off the table with the CARD-ISSUE popover's
@@ -751,7 +735,7 @@ a.srclink:hover { background: var(--slate-100); }
   font-family: var(--font-sans); font-size: var(--text-body); line-height: 1.5;
   color: var(--surface-foreground); text-align: left; cursor: pointer;
 }
-.pipemenu .pmitem:hover:not([disabled]) { background: var(--slate-50); }
+.pipemenu .pmitem:hover { background: var(--slate-50); }
 .pipemenu .pmitem:focus-visible { outline: 2px solid var(--blue-500); outline-offset: -2px; }
 /* THE SELECTED SORT is a FILLED PILL, not bold text (node 592:56954, State
    variant `Selected`): slate-900 ground, white label, 6px radius — and the
@@ -768,8 +752,6 @@ a.srclink:hover { background: var(--slate-100); }
    (nodes I593:78692;593:80356 vs …80357) — and the row keeps its `Default`
    variant. This bolded the label, which is the intuitive thing to do and is not
    what the component does. */
-/* a zero-count value: disabled rather than silently selectable */
-.pipemenu .pmitem[disabled] { color: var(--slate-400); cursor: not-allowed; }
 /* No max-width: a filter value takes the width the row gives it and ellipsises
    at the end of it (JP, 2026-08-21). The frame caps the text at 160px, which
    truncated the longer Trello list names while empty space sat to their right —
@@ -807,13 +789,13 @@ a.srclink:hover { background: var(--slate-100); }
    carries `spacing: 8`, the filter's carries `spacing: 0`. The two panels share
    one component and still differ here, so it is scoped rather than shared. */
 .sortmenu .pmfoot { margin-top: var(--space-8); }
-.pipemenu .pmclear {
+.pmclear {
   border: none; background: none; cursor: pointer; padding: 7px var(--space-8) 6px;
   border-radius: var(--radius-sm); font-family: var(--font-sans);
   /* the Button-Small's two Color variants: `Blue` #1d4ed8 while there is
      something to clear, `Disabled` #94a3b8 when there is not. */
   font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--blue-700);
 }
-.pipemenu .pmclear:hover:not([disabled]) { background: var(--blue-50); }
-.pipemenu .pmclear:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
-.pipemenu .pmclear[disabled] { cursor: not-allowed; color: var(--slate-400); }
+.pmclear:hover:not([disabled]) { background: var(--blue-50); }
+.pmclear:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.pmclear[disabled] { cursor: not-allowed; color: var(--slate-400); }

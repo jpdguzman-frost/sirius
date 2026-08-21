@@ -58,27 +58,7 @@
           at the page inset, so neither panel moves for any reason. }}
       {{#if pipeFilterMenu}}
         <div class="pipemenu filtermenu" role="dialog" aria-label="Filter the pipeline">
-          {{#each pipeFacets as f}}
-            <p class="pmhead" aria-hidden="true">{{f.label}}</p>
-            {{! STATUS is the only open-ended axis — Trello list names, and the real
-                board carries many more than the frame's four. It scrolls WITHIN its
-                own group so the four short categories keep their place; scrolling
-                the whole panel would let the longest axis push the others out of
-                view (jp→miles #49). }}
-            <div class="pmitems {{#if f.scroll}}pmscroll{{/if}}" role="group" aria-label="{{f.label}}">
-              {{#each f.values as v}}
-                {{! No disabled state: a zero-count value is HIDDEN by the facet
-                    list, so every row rendered here can be picked. The one that
-                    survives at zero is one already ticked, and that one has to
-                    stay clickable — it is the only way back off it. }}
-                {{! `label` and `value` differ for exactly one item: absence is
-                    stored as null and DRAWN as None (owl #63), so a board value
-                    that really is the word None stays a separate checkbox }}
-                <button class="pmitem pmcheck {{#if v.on}}on{{/if}}" on-click="['togglePipeFilter', f.key, v.value]"
-                        aria-pressed="{{v.on ? 'true' : 'false'}}"><span class="pmbox" aria-hidden="true"></span><span class="pmval">{{v.label}}</span><span class="pmcount">{{v.count}}</span></button>
-              {{/each}}
-            </div>
-          {{/each}}
+          {{#each pipeFacets as f}}{{>filterGroup f}}{{/each}}
           <div class="pmfoot">
             <button class="pmclear" disabled="{{!pipeFilterCount}}" on-click="['clearPipeFilters']">Clear filter</button>
           </div>
@@ -126,11 +106,11 @@
             exactly what the containment guard in chipPopOut relies on. }}
         <span class="fchip" on-mouseenter="['chipPopIn', c.key]" on-mouseleave="['chipPopOut']">
           <span class="fchiplabel">
-            <span class="fcaxis">{{c.name}} is</span>
+            <span class="fcaxis">{{c.label}} is</span>
             <span class="fcvals" title="{{c.text}}">{{c.text}}</span>
           </span>
           <button class="fchipx" on-click="['removePipeAxis', c.key]"
-                  aria-label="Remove the {{c.name}} filter">{{{icon.close}}}</button>
+                  aria-label="Remove the {{c.label}} filter">{{{icon.close}}}</button>
 
           {{! THE CHIP'S OWN PANEL (node 593:80073) — the same dropdown chrome
               as the Filter button's, cut down to ONE group and with the footer
@@ -143,20 +123,14 @@
               it never leaves `.fchip`, so the close guard covers the whole
               journey and the 4px gap is spanned by the bridge below. }}
           {{#if chipPop === c.key}}
-            <div class="pipemenu chipmenu" role="dialog" aria-label="{{c.name}} filter">
-              <p class="pmhead" aria-hidden="true">{{c.name}}</p>
-              <div class="pmitems {{#if c.scroll}}pmscroll{{/if}}" role="group" aria-label="{{c.name}}">
-                {{#each c.values as v}}
-                  <button class="pmitem pmcheck {{#if v.on}}on{{/if}}" on-click="['togglePipeFilter', c.key, v.value]"
-                          aria-pressed="{{v.on ? 'true' : 'false'}}"><span class="pmbox" aria-hidden="true"></span><span class="pmval">{{v.label}}</span><span class="pmcount">{{v.count}}</span></button>
-                {{/each}}
-              </div>
+            <div class="pipemenu chipmenu" role="dialog" aria-label="{{c.label}} filter">
+              {{>filterGroup c}}
             </div>
           {{/if}}
         </span>
       {{/each}}
       {{! the same handler the panel's own Clear uses — one way to clear }}
-      <button class="fclearall" on-click="['clearPipeFilters']">Clear all</button>
+      <button class="pmclear fclearall" on-click="['clearPipeFilters']">Clear all</button>
     </div>
   {{/if}}
 

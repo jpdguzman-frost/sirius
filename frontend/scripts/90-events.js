@@ -247,13 +247,9 @@ app.on({
      CHILD of the chip, which is what makes the containment guard below cover
      the panel too — moving onto a checkbox never leaves `.fchip`. */
   chipPopIn(ctx, key) {
-    warnPopCancelClose();
-    if (app.get('chipPop') === key) return; // re-entering the same chip is not a toggle
-    /* Refuses to open over another overlay, the same rule the warning card
-       keeps (R-warn-r): a chip grazed while the Filter panel is up must not
-       replace it, or a pointer crossing the row would swap the reader's panel
-       out from under them. */
-    if (OVERLAY_KEYS.some((k) => k !== 'chipPop' && app.get(k))) return;
+    // the shared hover-open policy: refuse over an active edit, cancel any
+    // pending close, and treat re-entry as a no-op rather than a toggle
+    if (!openHoverOverlay('chipPop', key)) return;
     openOverlay(ctx, key, { key: 'chipPop' });
   },
   chipPopOut(ctx) {

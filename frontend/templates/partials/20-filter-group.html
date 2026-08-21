@@ -1,0 +1,27 @@
+{{! ONE filter group — heading, then its values as checkbox rows. Used by BOTH
+    the Filter button's panel (over `pipeFacets`) and a chip's hover panel (over
+    that chip's own facet), which is why it reads a CONTEXT rather than root
+    state: `{key, label, scroll, values}`, the shape a facet already has.
+
+    It was typed out twice before. The two had already drifted on the group's
+    accessible name, and nothing in the suite pinned the row's markup — so an
+    aria fix or a change to the box would have landed in one panel only. }}
+{{#partial filterGroup}}
+  <p class="pmhead" aria-hidden="true">{{label}}</p>
+  {{! STATUS is the one open-ended axis — Trello list names, and the real board
+      carries many more than the frame's four. It scrolls WITHIN its own group
+      so the short axes keep their place; scrolling the whole panel would let
+      the longest push the others out of view (jp→miles #49). }}
+  <div class="pmitems {{#if scroll}}pmscroll{{/if}}" role="group" aria-label="{{label}}">
+    {{#each values as v}}
+      {{! No disabled state: a zero-count value is HIDDEN by the facet list, so
+          every row here can be picked. The one that survives at zero is one
+          already ticked, and it has to stay clickable — it is the only way
+          back off it. `label` and `value` differ for exactly one item: absence
+          is stored as null and DRAWN as None (owl #63), so a board value that
+          really is the word None stays a separate checkbox. }}
+      <button class="pmitem pmcheck {{#if v.on}}on{{/if}}" on-click="['togglePipeFilter', key, v.value]"
+              aria-pressed="{{v.on ? 'true' : 'false'}}"><span class="pmbox" aria-hidden="true"></span><span class="pmval">{{v.label}}</span><span class="pmcount">{{v.count}}</span></button>
+    {{/each}}
+  </div>
+{{/partial}}

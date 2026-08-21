@@ -283,6 +283,28 @@ function openMeasured(ctx, id, opts) {
   if (!placeMeasured(node, id, opts)) requestAnimationFrame(() => placeMeasured(node, id, opts));
 }
 
+/* THE HOVER-OPEN POLICY, once, for every overlay a POINTER opens. Three rules
+   that used to be re-typed per overlay:
+
+   1. a passive hover must not destroy an ACTIVE edit — the due popover holds a
+      staged date only Apply writes (W2), and moving the pointer across the
+      table is not consent to discard it (R-warn-r). Derived from OVERLAY_KEYS,
+      so a sixth overlay is one entry.
+   2. re-entering what is already open is not a toggle.
+   3. ⚠️ THE CANCEL COMES AFTER THE REFUSAL, and that ordering is load-bearing.
+      The close timer is SHARED, so cancelling before knowing whether we will
+      open cancels somebody else's pending close and never reschedules it:
+      graze a chip while a warning card is closing and the card is stranded
+      open with no pointer on it. The copy this replaces had that bug.
+
+   Returns false when it declined, so the caller can skip its own opening. */
+function openHoverOverlay(key, id) {
+  if (OVERLAY_KEYS.some((k) => k !== key && app.get(k))) return false;
+  warnPopCancelClose();
+  if (app.get(key) === id) return false; // already open; its close is now cancelled
+  return true;
+}
+
 /* ---- the warning hover card's opener (owl #41, node 537:69135) ----
    Hoisted on purpose: openOverlay and closeMenus above both call the canceller,
    and the pair belongs beside the placer it uses rather than beside them. */
@@ -315,13 +337,7 @@ function showWarnPop(node, cardId) {
      without this the Escape that closed the card would immediately re-open it.
      Checked BEFORE the cancel because closeMenus has already cancelled. */
   if (restoringFocus) return;
-  warnPopCancelClose();
-  if (app.get('warnPop') === cardId) return;
-  /* A passive hover must not destroy an ACTIVE edit. openOverlay nulls every
-     other overlay, and the due popover holds a staged date that only Apply
-     writes (W2) — moving the pointer across the table is not consent to
-     discard it. Derived from OVERLAY_KEYS so a sixth overlay is one entry. */
-  if (OVERLAY_KEYS.some((k) => k !== 'warnPop' && app.get(k))) return;
+  if (!openHoverOverlay('warnPop', cardId)) return;
   // the height is one list-item per missing field, each wrapping — measure the
   // rendered box and place it again, exactly as the Requests select does. The
   // second placement is also what settles the FLIP the bridge rides on.
