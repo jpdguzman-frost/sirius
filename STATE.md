@@ -28,23 +28,21 @@ needs none — an absent stamp already means "never written by Sirius"). The
 ~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
 rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 
-## ⚠️ Deployed but NEVER CLICKED
+## Live-verified 2026-08-21
 
-The 2026-08-21 review pass found three defects live on the deployed site; all
-three are fixed and **deployed 2026-08-21** (`897c3dd`) — healthz 200, host
-bundle sha256 == local, both processes restarted clean.
+Batches 15 + 15r deployed (`897c3dd`) and **clicked through on rt-test** — every
+fix confirmed, zero console errors (`docs/history/state-log/2026-08-21.md`).
 
-The lesson stands, and it is why the row below matters: **the Pipeline's filter
-and sort panels were inert on the live site for a day while the whole suite was
-green.** Nothing in the suite can open an overlay — `toHTML()` has no pointer.
-Until the live pass runs, "deployed" means the bytes are on the host, not that
-the feature works.
+⚠️ The lesson: those panels were inert on the live site for a day with the whole
+suite green. Nothing in the suite can open an overlay — `toHTML()` has no
+pointer. **"Deployed" is not "works".**
 
 ## Decisions needed from JP (blocking)
 
 | # | Decision | Blocks | Status |
 |---|---|---|---|
 | BRD §9 | Amend "write impossible by permission" — the write surface is now the three-entry registry (urgency + due date + difficulty) | Vendor assessment, v2 | ⬜ open (grew 2026-08-04, again 2026-08-12) — product confirmed 2026-08-12 they'll raise it across all THREE docs quoting "one write": BRD §9, pilot security readiness, vendor assessment; not done yet |
+| DL-scope | **The Deadlines Breakdown mixes two scopes.** DUE THIS MONTH / URGENT / CONFLICTS are month-scoped, NEEDS REPLOTTING is board-wide — the test board reads `CONFLICTS 0` beside `NEEDS REPLOTTING 4` (its conflicts are all Sep–Nov), so the number disagrees with the rows beneath it, which R-dl-f says cannot happen. Found in the live pass; answer with Miles's open "does it narrow to deadline breaches" (#52) — same number, two questions. | Deadlines reading honestly | ⬜ **pending (JP, 2026-08-21)** — I'd scope it to the month |
 
 ## Decisions needed later (not blocking yet)
 
@@ -71,8 +69,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   asserted a ruling JP had not made or later declined, so verify with JP
   before building on one. **Thread position**: miles→jp acked through **#64**; jp→miles sent through **#52**.
   **Awaiting Miles**: the ARES read-path caching answer · the Deadlines
-  acknowledged-state design (R-dl-n) · whether NEEDS REPLOTTING narrows to
-  deadline breaches · whether the conflict detail rows navigate, and where ·
+  acknowledged-state design (R-dl-n) · NEEDS REPLOTTING's meaning (see DL-scope) · whether the conflict detail rows navigate, and where ·
   whether the round week button was meant to collapse the group (#52).
   Closed threads → `docs/history/state-log/`.
 - **Figma reads** — Rex MCP is OFFLINE. **The official Figma MCP is the
@@ -122,8 +119,6 @@ archive entries as complete as ever; length there is fine. This window holds
 the newest 10 lines and older ones are deleted — `docs/history/state-log/`
 is self-indexing by date.
 
-- 2026-08-21 — **Review pass, batches 13–15 + DEPLOY**: /simplify (15 of 20, `2d5a017`) + /code-review high (**8 defects, all confirmed**, `54471b5`); batches 15 and 15r deployed and verified (healthz 200, host sha256 == local). Both dismisser shields now derive from one keyed map, so an overlay cannot join the list without declaring what must not dismiss it. 1068 → 1078 + 24 todo. → docs/history/state-log/2026-08-21.md
+- 2026-08-21 — **Review pass, batches 13–15 + DEPLOY + live pass**: /simplify (15 of 20, `2d5a017`) + /code-review high (**8 defects, all confirmed**, `54471b5`), deployed `897c3dd` and clicked through on rt-test. Both dismisser shields now derive from one keyed map. The live pass found the Breakdown scope mismatch (DL-scope, above). 1068 → 1078 + 24 todo. → docs/history/state-log/2026-08-21.md
 - 2026-08-21 — **Owls #63 + #64**: "None" is now a filter value on the three axes that can lack one (closes R-pf-i) and the **Deadlines tab was rebuilt to node 630:51389** (R-dl-a..n). Corrected product twice — order-of-filing had already landed, and STATUS still cannot keep Trello's order. Kept the acknowledge action and the day planner the frame omits: this tab is the only route to either. 1035 → 1068 + 24 todo. Not deployed. → docs/history/state-log/2026-08-21.md
-- 2026-08-20 — **Owls #54–#56 + JP's styling pass**: #55 inverted my caption emphasis (tasks lead, count trails at every N — R-exp-l); JP ruled the frame beats its own annotation on the `Open Card` underline (R-warn-r) and labels are sentence-cased at display (R-warn-s). → docs/history/state-log/2026-08-20.md
 - 2026-08-20 — **Batch 14: owls #52 + #53** — a shared MC stops attributing its tasks. Probed the real board: NO structural task→deliverable edge exists, so invariant 4 is confirmed, not broken; the ambiguous case is 78.4% of tasks, not the minority. 982 → 993 + 24 todo. → docs/history/state-log/2026-08-20.md
-- 2026-08-19 — **Leftover sweep + template split DEPLOYED** (`b401bac`): the second session's worktree was already merged; `--dir test` retired. Corrected a wrong claim — `public/` is gitignored, so a `git diff` over it proves nothing. → docs/history/state-log/2026-08-19.md
