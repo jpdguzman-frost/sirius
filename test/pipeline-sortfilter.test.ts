@@ -660,8 +660,12 @@ describe('the filter indicator says what is filtered, in words', () => {
     expect(chip).toContain('class="pipemenu chipmenu"');
     expect(chip).not.toContain('pmfoot');
     // it anchors LEFT, to the chip — the shared rule anchors right, to the row
-    expect(cssRule('.chipmenu', PIPELINE_CSS)).toContain('left: 0');
-    expect(cssRule('.chipmenu', PIPELINE_CSS)).toContain('right: auto');
+    /* two classes, because `.pipemenu` anchors right and is declared later —
+       a single-class rule lost the cascade and only looked right because a box
+       with left, right and width is over-constrained. `-1px` because `left`
+       resolves against the chip's padding box, inside its 1px border. */
+    expect(cssRule('.pipemenu.chipmenu', PIPELINE_CSS)).toContain('left: -1px');
+    expect(cssRule('.pipemenu.chipmenu', PIPELINE_CSS)).toContain('right: auto');
     expect(cssRule('.fchip', PIPELINE_CSS)).toContain('position: relative');
   });
 

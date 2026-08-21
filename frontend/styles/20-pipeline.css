@@ -160,7 +160,15 @@
    no scrollbar, which is exactly how the frame switches those two off. Anchored
    under the chip and LEFT-aligned: `.pipemenu`'s shared rule anchors right, to
    the toolbar, so both edges are restated here rather than inherited by luck. */
-.chipmenu { left: 0; right: auto; }
+/* Two classes on purpose: `.pipemenu` anchors right and is declared later in
+   this file, so a single-class `.chipmenu` lost the cascade and only landed
+   correctly because a box with left, right AND width is over-constrained —
+   which would have snapped it to the right edge the day the width changed.
+
+   `-1px` rather than 0: `left` resolves against the chip's PADDING box, and the
+   chip has a 1px border, so 0 sits the panel one pixel inside the edge it is
+   supposed to line up with. */
+.pipemenu.chipmenu { left: -1px; right: auto; }
 /* THE HOVER BRIDGE. The panel sits 4px clear of the chip; without this the
    pointer crosses dead space on its way down, `mouseleave` fires, and the close
    can run out before it arrives — the same hazard the warning card's bridge
