@@ -30,12 +30,12 @@ rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 
 ## Live-verified 2026-08-21
 
-Batches 15 + 15r deployed (`897c3dd`) and **clicked through on rt-test** — every
-fix confirmed, zero console errors (`docs/history/state-log/2026-08-21.md`).
+Batches 15 + 15r deployed and **clicked through on rt-test** — every fix
+confirmed, zero console errors (`docs/history/state-log/2026-08-21.md`).
 
 ⚠️ The lesson: those panels were inert on the live site for a day with the whole
-suite green. Nothing in the suite can open an overlay — `toHTML()` has no
-pointer. **"Deployed" is not "works".**
+suite green — nothing in the suite can open an overlay. **"Deployed" is not
+"works".**
 
 ## Decisions needed from JP (blocking)
 
@@ -104,6 +104,11 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
+- **Queued by JP (2026-08-21), NOT applied** — panel padding so the checkbox and
+  the heading sit level at 17px: `.pmhead` → `2px var(--space-16)
+  var(--space-8)`; `.pmitem` → `6px var(--space-16) 5px var(--space-8)`. Revises
+  his own symmetric-16 ruling; three guards in `pipeline-sortfilter.test.ts`
+  and R-pf-k's spacing line pin the old numbers and move with it.
 - **Agent backlog**: T075 AC sweep · non-member 403 check · `Last Synced`
   browser-TZ + col-done width leftovers · schedules-tab full tokenization
   beyond the planner · per-tab URL sub-state (filters/week/sort as query
@@ -123,4 +128,3 @@ is self-indexing by date.
 
 - 2026-08-21 — **Review pass, batches 13–15 + DEPLOY + live pass**: /simplify (15 of 20, `2d5a017`) + /code-review high (**8 defects, all confirmed**, `54471b5`), deployed `897c3dd` and clicked through on rt-test. Both dismisser shields now derive from one keyed map. The live pass found the Breakdown scope mismatch (DL-scope, above). 1068 → 1078 + 24 todo. → docs/history/state-log/2026-08-21.md
 - 2026-08-21 — **Owls #63 + #64**: "None" is now a filter value on the three axes that can lack one (closes R-pf-i) and the **Deadlines tab was rebuilt to node 630:51389** (R-dl-a..n). Corrected product twice — order-of-filing had already landed, and STATUS still cannot keep Trello's order. Kept the acknowledge action and the day planner the frame omits: this tab is the only route to either. 1035 → 1068 + 24 todo. Not deployed. → docs/history/state-log/2026-08-21.md
-- 2026-08-20 — **Batch 14: owls #52 + #53** — a shared MC stops attributing its tasks. Probed the real board: NO structural task→deliverable edge exists, so invariant 4 is confirmed, not broken; the ambiguous case is 78.4% of tasks, not the minority. 982 → 993 + 24 todo. → docs/history/state-log/2026-08-20.md
