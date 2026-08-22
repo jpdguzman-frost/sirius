@@ -22,9 +22,12 @@
  * partial up.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import RactiveModule from 'ractive';
 import { describe, expect, it } from 'vitest';
-import { template } from './helpers/source.ts';
+import { appScripts, template } from './helpers/source.ts';
 
 /**
  * Ractive's ESM typings sit in a CommonJS package, so the default import types
@@ -109,5 +112,66 @@ describe('the shipped template registers its partials where Ractive can find the
     const sunk = partialAudit('<header>{{#partial strip}}<b>hi</b>{{/partial}}</header><main>{{>strip}}</main>');
     expect(sunk.nested).toEqual(['strip']);
     expect(sunk.unresolved).toEqual(['strip']);
+  });
+});
+
+/* ==========================================================================
+ * The unfinished-screen background
+ * ========================================================================== */
+
+describe('the grey wash reaches only tabs that have not been rebuilt', () => {
+  /* THE DEFECT THIS ENCODES: the rule used to be written as a list of tabs to
+     EXEMPT from the wash, so every rebuild had to remember to edit it — and two
+     did not. Sprint Schedules and Deadlines were finished screens rendering on
+     the unfinished-screen background for weeks, and nothing said so, because a
+     background colour is not something any assertion was looking at.
+
+     Asserted as the RULE — a tab with a rulebook is a rebuilt tab and must not
+     be washed — rather than as today's list, so the guard keeps working when
+     Admin is eventually designed. */
+  const REBUILT_TABS: Record<string, string> = {
+    requests: 'requests-frame-notes.md',
+    pipeline: 'pipeline-frame-notes.md',
+    schedules: 'gantt-frame-notes.md', // the planner's law predates the tab's name
+    deadlines: 'deadlines-frame-notes.md',
+    forecast: 'forecast-frame-notes.md',
+  };
+
+  const specDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'specs', '001-sirius-v1');
+  const SRC = template();
+  const UI_TABS = [...appScripts().matchAll(/\{ id: '([a-z]+)', label: '/g)].map((m) => m[1]!);
+  const washLine = (() => {
+    const at = SRC.indexOf('legacybg');
+    expect(at, 'the wash has been renamed or removed — re-point this guard').toBeGreaterThan(-1);
+    return SRC.slice(SRC.lastIndexOf('<main', at), SRC.indexOf('>', at) + 1);
+  })();
+
+  it('every tab named as rebuilt really does have a rulebook on disk', () => {
+    for (const [tab, notes] of Object.entries(REBUILT_TABS)) {
+      expect(fs.existsSync(path.join(specDir, notes)), `${tab} claims a rulebook that is not there`).toBe(true);
+    }
+  });
+
+  it('and none of them is washed', () => {
+    for (const tab of Object.keys(REBUILT_TABS)) {
+      expect(washLine, `${tab} has been rebuilt but still renders on the unfinished-screen background`).not.toContain(
+        `'${tab}'`,
+      );
+    }
+  });
+
+  it('the wash is spelled as the EXCEPTION, so a rebuild does not have to remember it', () => {
+    // one tab named, and it is the one being washed — not a list of exemptions
+    const named = [...washLine.matchAll(/activeTab === '([a-z]+)'/g)].map((m) => m[1]!);
+    expect(named, 'the wash is back to listing exemptions — a rebuild will forget one').toHaveLength(1);
+    expect(REBUILT_TABS[named[0]!], `${named[0]} has a rulebook and should not be the washed one`).toBeUndefined();
+  });
+
+  it('the wash still exists for the tab that has genuinely never been designed', () => {
+    expect(UI_TABS, 'the tab list moved').toContain('admin');
+    expect(washLine).toContain("'admin'");
+    expect(fs.existsSync(path.join(specDir, 'admin-frame-notes.md')), 'Admin has a rulebook now — stop washing it').toBe(
+      false,
+    );
   });
 });

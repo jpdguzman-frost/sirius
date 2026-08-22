@@ -35,12 +35,19 @@
 
 {{#if banner}}<div class="banner">{{banner}}</div>{{/if}}
 
-{{! The grey wash is what a tab looked like before it was rebuilt to its
-    frames. Forecast joins the exemption because it now is (R-fc-q); Schedules
-    and Deadlines were rebuilt without this ternary being updated and still
-    carry it — flagged, not fixed here, because changing how two other tabs
-    look is not this build's business. }}
-<main class="view {{activeTab === 'pipeline' || activeTab === 'requests' || activeTab === 'forecast' ? '' : 'legacybg'}}" id="view-panel" role="tabpanel" aria-labelledby="tab-{{activeTab}}">
+{{! The grey wash marks a tab that has NOT been rebuilt to its frames — that
+    is what the name says and, since 2026-08-22, what it does. It used to be
+    written the other way round, as a list of tabs to EXEMPT, so every rebuild
+    had to remember to edit it and two of them did not: Sprint Schedules and
+    Deadlines were finished screens still rendering on the unfinished-screen
+    background. Both of their frames are plain white (`262:33320`, `630:51389`,
+    read via Rex 2026-08-22), as are all four of the others.
+
+    Naming the exception instead of the rule means a tab rebuilt tomorrow gets
+    the right background by default, and this line only changes when a tab
+    stops being legacy — which is the event it is actually about. Admin is the
+    one left: it has no frame and has never been designed. }}
+<main class="view {{activeTab === 'admin' ? 'legacybg' : ''}}" id="view-panel" role="tabpanel" aria-labelledby="tab-{{activeTab}}">
 
 <!-- inject:views -->
 </main>
