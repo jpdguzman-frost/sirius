@@ -97,7 +97,8 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   are the unanswered list, and this project has already shipped a screen that
   was inert for a day under a green suite. Queue, in order: **Forecast (never
   deployed, never seen)** · **the Pipeline filter + sort panels** · **Deadlines
-  v2, never seen** · the task-due picker by hand · the sub-350px last-resort
+  v2, never seen** · **the white page background on Schedules + Deadlines
+  (2026-08-22)** · the task-due picker by hand · the sub-350px last-resort
   scroll · the b13 note chip + clarification accent · drag a bar collapsed.
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
