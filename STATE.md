@@ -72,10 +72,11 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   **#66 (2026-08-24) closed #51–#55 in full**, every escalation confirmed.
   Product is fixing seven frame defects; **until they confirm, this build is
   authoritative over those frames.** **Still awaiting Miles**: only the
-  Deadlines acknowledged-state design (R-dl-n) — **ARES caching is ANSWERED
-  2026-08-25 by reading `../ares/`, not by owl**: reads never touch Trello
-  (15-min materialised store) and `lastPolledAt` is the true fetch time, so
-  `staleGuard` compares the wrong clock. Latent while writes are off.
+  Deadlines acknowledged-state design (R-dl-n) — **ARES caching ANSWERED 2026-08-25 by
+  reading `../ares/`**: reads never touch Trello — a store filled by a 15-min
+  poll AND a live Trello→ARES webhook (measured: 1 card off-cycle in 200). Both
+  writers stamp `lastPolledAt`, so it is the true fetch time and `staleGuard`
+  compares the wrong clock. Latent while writes are off.
   Closed threads → `docs/history/state-log/`.
 - **Figma reads** — the official Figma MCP is the verified path
   (`get_design_context` for annotations, `get_metadata` for geometry; load the
@@ -91,8 +92,8 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 
 - **JP gates**: **`writes_enabled` on rt-837 stays OFF — JP 2026-08-21, "don't
   switch live write yet"**. ⚠️ **Blocker found 2026-08-25: `staleGuard` compares
-  our write against the instant we ISSUED the ARES read, but ARES serves a
-  15-min cache — so a reconcile can revert a user's edit. Inert while writes
+  our write against the instant we ISSUED the ARES read, never against when ARES
+  actually fetched — so a reconcile can revert a user's edit. Inert while writes
   are off; fix it (use `lastPolledAt`) BEFORE enabling.** Security review also precedes · `GOOGLE_SHEETS_CREDENTIALS` — lights up Requests plus
   requestor/type on real data · ALT-9 sheet-row link (expose
   `intake_sheet_id` or drop the sub-label) · ALT-1 (dead server `?filter=`
