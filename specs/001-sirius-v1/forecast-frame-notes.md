@@ -32,7 +32,7 @@ Each of these reverses drawn content. Each is one line to put back.
 
 | # | Rule | Asserted |
 |---|---|---|
-| **R-fc-d** | 🚨 **THE MODEL CONSTANTS PANEL IN THE FRAME QUOTES THE RETIRED SPREADSHEET FORMULA.** The footer banner reads *Total Cycle Time · 1.28 × Forecasted Review Time + 2.96*. Those two numbers are `LEGACY_CYCLE` in `lib/model.ts` — the workbook regression that `lib/forecast.legacy.ts` implements, that `test/forecast.legacy.test.ts` asserts **against `legacyForecast` only**, and that **invariant 6 forbids UI code from ever showing** ("for migration tests only… never imported by UI code"). **SC-3 says it in the spec's own words: the spreadsheet formula "is never exposed" (BR-2, BR-3).** It is also not a description of the shipped engine, which computes `lead + design + review` twice over. Shipping the panel verbatim would have printed the exact constants the constitution retired, on the one screen whose whole purpose is that the retired model is gone. **The panel renders the SHIPPED engine's constants instead**, and the Total Cycle Time entry states the real relation including the fact that a Review SLA override makes the total differ from the two cycle columns. The other three constants the frame gives (render starts the Friday of the sketch-approval week · WORKDAY with PH holidays excluded · W is WEEKNUM of the start date) are all correct and are quoted as drawn. | Yes — the legacy coefficients asserted ABSENT from template, scripts and stylesheet, and the four constant keys asserted against the engine |
+| **R-fc-d** | 🚨 **THE MODEL CONSTANTS PANEL IN THE FRAME QUOTES THE RETIRED SPREADSHEET FORMULA.** The footer banner reads *Total Cycle Time · 1.28 × Forecasted Review Time + 2.96*. Those two numbers are `LEGACY_CYCLE` in `lib/model.ts` — the workbook regression that `lib/forecast.legacy.ts` implements, that `test/forecast.legacy.test.ts` asserts **against `legacyForecast` only**, and that **invariant 6 forbids UI code from ever showing** ("for migration tests only… never imported by UI code"). **SC-3 says it in the spec's own words: the spreadsheet formula "is never exposed" (BR-2, BR-3).** It is also not a description of the shipped engine, which computes `lead + design + review` twice over. Shipping the panel verbatim would have printed the exact constants the constitution retired, on the one screen whose whole purpose is that the retired model is gone. **The panel renders the SHIPPED engine's constants instead**, and the Total Cycle Time entry states the real relation including the fact that a Review SLA override makes the total differ from the two cycle columns. The other three constants the frame gives (render starts the Friday of the sketch-approval week · WORKDAY with PH holidays excluded · W is WEEKNUM of the start date) are all correct and are quoted as drawn. | Yes — the legacy coefficients asserted ABSENT from template, scripts and stylesheet, and the four constant keys asserted against the engine. **RATIFIED by owl #66** — product's words: it should never have been in that panel; the replacement wording stands and the frame is being fixed. |
 | **R-fc-e** | ⚠️ **THE SECOND BREAKDOWN GROUP IS LABELLED `SKETCH` IN THE FRAME. It ships as `RENDER`.** Tier-one cells 5 and 6 both read exactly `SKETCH`, confirmed three ways (Rex `characters`, `get_design_context`, and the pixel render), in both target frames. Three independent sources say the second block is the render breakdown: §7.2's own list, the fields it renders (`renderLead`/`renderDesign`/`renderReview`/`renderCycle`), and the frame's own sample figures, which differ between the two blocks. **A header that says SKETCH over render figures is a user-visible error, not a design choice** — and the same frame proves it carries typos, because it spells `CYLCE` in three headers while its own footer spells *Total Cycle Time* correctly. Raised to product rather than changed under them. | Yes — both group labels asserted, and the render block asserted to read its own four fields and never the sketch ones |
 | **R-fc-f** | ⚠️ **`CYLCE` → `CYCLE`, three headers.** Same evidence as R-fc-e: the footer banner in the same frame spells it correctly. Shipped correct. | Yes — the misspelling asserted absent |
 | **R-fc-g** | ⚠️ **The percentile select is headed `TYPE` in the frame. It ships as `CONFIDENCE`.** Its values are `Average / 70th pct / 85th pct / 95th pct`, the wire field is `confidence`, §7.2 names it Confidence — and **`TYPE` already means asset type in the Pipeline table**, so the drawn label would collide with an established column meaning one tab away. Raised to product. | Yes |
@@ -56,7 +56,7 @@ Each of these reverses drawn content. Each is one line to put back.
 | **R-fc-o** | ⚠️ **NO STICKY HEADER IS CLAIMED AND NO FROZEN COLUMN IS BUILT.** In the 1440 frame both header tiers and all five body rows are siblings offset together by −1392px, so the header scrolls horizontally WITH the body and `MC #` / `DELIVERABLE` scroll clean out of view. Vertical stickiness is simply not determinable from a static frame and nothing in the file indicates it. The build uses the same `.ptable th` sticky recipe the other three tables use — no new mechanism, no invented frozen column — and whether that recipe is inert against page scroll is one of the things only a browser can answer (see the `it.todo` block). | Yes — asserted that the header uses the shared recipe and that no rule pins a column |
 | **R-fc-p** | ⚠️ **THE FRAME HAS NO REAL SCROLL CONTAINER; THE BUILD ADDS ONE.** `Request Tab Table` and `Content` are `clipsContent: false` in all three frames, and the 1440 view fakes scrolling by offsetting Content to x=−1392 and letting the top-level frame clip — with the consequence that scrolled-out columns **bleed into the left 64px page gutter** instead of stopping at the table's edge. The build puts the table in the house `.pscrollwrap` / `.pscroll` / `.hslider` trio, which clips at the table's own bounds and never lets the page body scroll sideways. **This forces the one hard wiring change a fourth wide table costs**: `thumbKeyOf` gains an `.fcwrap` branch, app state gains `fcThumb`, and `selectTab` must remeasure on `forecast` or the slider is stale on first mount. | Yes — the wrapper class, the resolver branch and the remeasure list all asserted |
 | **R-fc-q** | ⚠️ **NO EMPTY STATE IS DRAWN, IN ANY FRAME.** §8 requires one for every table. Built with the shipped `.rempty` recipe — the same one Requests and Sprint Schedules use — rather than a third variant, with two distinct causes given two distinct states per the rule Requests already states: the search that hid every row, and a board with nothing to forecast. **`.rempty` itself departs from §8 twice** (border `--slate-200` not `--border-border`; 48px vertical padding not 32px) — it is the precedent three tabs already match, so the build matches it and the departure is recorded here rather than split down the middle. | Yes — both states asserted, and the empty state asserted to REPLACE the table |
-| **R-fc-r** | **The *How this forecast works* link is drawn in both target frames with nowhere to go.** Its destination — a 480px Helper Panel drawer holding six Formula Cards — is designed only in `279:15122`, which is not a target frame. Built as an in-page anchor to the Model Constants panel, the one destination that exists and the one that answers the question. Raised: the drawer is designed and could be built, and the link changes in one line if product wants it. | Yes — the anchor asserted to resolve to a real id in the same view |
+| **R-fc-r** | **The *How this forecast works* link is drawn in both target frames with nowhere to go.** Its destination — a 480px Helper Panel drawer holding six Formula Cards — is designed only in `279:15122`, which is not a target frame. Built as an in-page anchor to the Model Constants panel, the one destination that exists and the one that answers the question. **SETTLED by owl #66: do NOT build the drawer.** Model Constants already answers the question, and a second surface carrying the same explanations is exactly how the retired formula (R-fc-d) survived this long. The anchor is the destination, permanently. | Yes — the anchor asserted to resolve to a real id in the same view |
 
 ## What was already here and is kept
 
@@ -102,11 +102,31 @@ day** with the whole suite green, because nothing in the suite can open an
 overlay. A green run on this tab is evidence about its column model and its
 handlers, and about nothing else.
 
-## Raised to product (owl)
+## Raised to product — every item answered, owl #66
 
-1. **The Model Constants panel quotes the retired spreadsheet formula** (R-fc-d) — the one item here that would have shipped a number the constitution retired.
-2. **`SKETCH` appears twice as a group label; `CYLCE` three times** (R-fc-e, R-fc-f) — shipped as RENDER and CYCLE.
-3. **`TYPE` heads the confidence select** and collides with Pipeline's asset-type column (R-fc-g) — shipped as CONFIDENCE.
-4. **Difficulty is drawn with a chevron against a spec that says read-only** (R-fc-h) — shipped read-only.
-5. **No empty state and no *How this forecast works* destination are drawn** (R-fc-q, R-fc-r).
-6. **The tier-one rule is sheared and the header is ragged in the source frame** (R-fc-n, R-fc-m) — built full width and solid.
+All six came back confirmed. **Product is fixing the frames; until they confirm those fixes
+are in, this build is authoritative over them.**
+
+1. **The Model Constants panel quotes the retired spreadsheet formula** (R-fc-d). Ruled: it
+   *should never have been in that panel*. Those coefficients are confined to
+   `forecast.legacy.ts` by invariant 6, and SC-3 says the spreadsheet formula is never exposed
+   because it overstates review waits 2.6–4.6× — building the panel as drawn would have put a
+   retired model in front of a PM as if it were live. The provenance read holds: inherited from
+   the old prototype's panel, from when those *were* the model. The replacement wording stands
+   and the frame is being fixed so it cannot be copied forward again.
+2. **`SKETCH` over the render figures; `CYLCE` ×3** (R-fc-e, R-fc-f) — both corrections
+   confirmed, and being fixed in the frame.
+3. **`TYPE` heads the confidence select** (R-fc-g) — confirmed as CONFIDENCE.
+4. **Difficulty drawn with a chevron** (R-fc-h) — **read-only confirmed.** The write exists on
+   Pipeline; the question was whether a second write surface opens here, and it does not. The
+   tab's own copy already tells the reader it is not editable. The chevrons come off the frame.
+5. **No empty state drawn** (R-fc-q) — confirmed: §8 requires them, the frames omit them, and
+   the recipe borrowed from Requests and Sprint Schedules is the right source.
+6. **The sheared tier-one rule and the ragged header** (R-fc-n, R-fc-m) — confirmed as
+   hug-sizing artifacts, not a treatment. One solid band per tier is right. **Cell sums are
+   authoritative and frame widths are not**, stated on the frame file; the sheared rule in
+   `279:22602` is being fixed.
+
+**"How this forecast works" stays pointed at Model Constants — do NOT build the drawer**
+(closing R-fc-r). That panel already answers the question, and a second surface carrying the
+same explanations is precisely how the stale formula survived this long.

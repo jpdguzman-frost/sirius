@@ -914,3 +914,42 @@ describe('the panels behave like every other overlay', () => {
     expect(reset).toContain('pipeFilters');
   });
 });
+
+/* ---------------------------------------------------------------------- */
+/* H — one word per column, wherever it is spoken                          */
+/* ---------------------------------------------------------------------- */
+
+describe('a column and the filter that narrows it use the SAME word', () => {
+  /* Miles, owl #66: REQUESTOR everywhere. The table header had said `Client`
+     since the frame did (`70:10009` names Client in its column order), while
+     the panel, the chip and the Requests table all said Requestor — and the
+     cell underneath the header had always rendered `row.requestor`. The values
+     are people; on a single-client board a Client filter selects everything or
+     nothing, which is why the axis was never built as one.
+
+     The guard is the RULE, not the fix: every filter axis narrows a column the
+     table draws, so every axis label must appear verbatim in the header row.
+     A future sixth axis is covered without editing this test, and renaming a
+     header in one of the three places it is spoken fails here. */
+  const headerRow = TEMPLATE.slice(TEMPLATE.indexOf('<table class="ptable">'));
+  const headText = headerRow.slice(headerRow.indexOf('<thead'), headerRow.indexOf('</thead>'));
+  const headings = [...headText.matchAll(/<th class="[a-z-]+">([^<]+)<\/th>/g)].map((m) => m[1]);
+
+  it('draws a header for every column the task rows draw', () => {
+    expect(headings.length).toBe(11);
+  });
+
+  it('names each filter axis exactly as its column header names it', () => {
+    const axes = (recipe.PIPE_FILTERS as Axis[]).map((f) => f.label);
+    expect(axes.length).toBeGreaterThan(0);
+    for (const label of axes) {
+      expect(headings, `no column header reads "${label}"`).toContain(label);
+    }
+  });
+
+  it('says Requestor, and does not say Client anywhere in the table', () => {
+    expect(headings).toContain('Requestor');
+    const table = TEMPLATE.slice(TEMPLATE.indexOf('<table class="ptable">'));
+    expect(table.slice(0, table.indexOf('</table>'))).not.toMatch(/\bClient\b/);
+  });
+});

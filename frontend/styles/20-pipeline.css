@@ -291,7 +291,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .ptable .col-type { width: 140px; min-width: 140px; }
 .ptable .col-diff, .ptable .col-urgency { width: 144px; min-width: 144px; }
 .ptable .col-status { width: 228px; min-width: 228px; }
-.ptable .col-client { width: 142px; min-width: 142px; }
+.ptable .col-requestor { width: 142px; min-width: 142px; }
 .ptable .col-due, .ptable .col-started { width: 156px; min-width: 156px; }
 .ptable .col-done { width: 76px; min-width: 76px; }
 .ptable .col-links { width: 94px; min-width: 94px; }

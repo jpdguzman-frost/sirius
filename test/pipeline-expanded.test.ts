@@ -100,7 +100,7 @@ describe('the task rows live in the parent’s own column grid', () => {
     const cells = [...taskRows(OPEN)[0]!.matchAll(/<td class="([a-z-]+)"/g)].map((m) => m[1]);
     expect(cells).toEqual([
       'col-mc', 'col-name', 'col-type', 'col-diff', 'col-urgency',
-      'col-status', 'col-client', 'col-due', 'col-started', 'col-done', 'col-links',
+      'col-status', 'col-requestor', 'col-due', 'col-started', 'col-done', 'col-links',
     ]);
     expect(taskRows(OPEN)[0]).not.toContain('colspan');
   });
@@ -113,7 +113,7 @@ describe('the task rows live in the parent’s own column grid', () => {
   });
 
   it('leaves type, difficulty, urgency and requestor cells EMPTY — MC-level attributes', () => {
-    for (const cls of ['col-type', 'col-diff', 'col-urgency', 'col-client']) {
+    for (const cls of ['col-type', 'col-diff', 'col-urgency', 'col-requestor']) {
       expect(cell(taskRows(OPEN)[0]!, cls)).toBe(`<td class="${cls}"></td>`);
     }
   });

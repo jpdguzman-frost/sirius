@@ -70,14 +70,13 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority: twice an owl
   asserted a ruling JP had not made or later declined, so verify with JP
-  before building on one. **Thread position**: miles→jp acked through **#65**; jp→miles sent through **#55**.
-  **Awaiting Miles**: ARES read-path caching · the Deadlines acknowledged-state
-  design (R-dl-n) · NEEDS REPLOTTING's meaning (DL-scope) · **CLIENT or
-  REQUESTOR** — his fifth filter group is CLIENT, ours says REQUESTOR, and our
-  table header already says CLIENT (#53/#54) · do the conflict rows navigate,
-  and where · was the round week button meant to collapse (#52) · **the five
-  Forecast items in #55**, the first being that the Model Constants panel
-  quotes the RETIRED formula.
+  before building on one. **Thread position**: miles→jp acked through **#66**; jp→miles sent through **#56**.
+  **#66 (2026-08-24) closed #51–#55 in full** — every escalation confirmed,
+  including that the retired formula should never have been in the frame.
+  Product is fixing seven frame defects on their side; **until they confirm,
+  this build is authoritative over those frames.**
+  **Still awaiting Miles**: ARES read-path caching · the Deadlines
+  acknowledged-state design (R-dl-n).
   Closed threads → `docs/history/state-log/`.
 - **Figma reads** — the official Figma MCP is the verified path
   (`get_design_context` for annotations, `get_metadata` for geometry; load the
@@ -126,5 +125,5 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
+- 2026-08-25 — **Owl #66 processed: every escalation confirmed**. One code change fell out — the Pipeline table header said **Client** while the filter, the chip and the whole Requests table said **Requestor**, over one field; renamed, class with it. Guarded as the RULE — every filter axis label must appear verbatim in the header row, so a sixth axis is covered free. Product is fixing seven frame defects; until they land, **this build is authoritative over those frames**. R-fc-r closed. → docs/history/state-log/2026-08-25.md
 - 2026-08-21 — **The Forecast tab, built to §7.2/§7.3** (`9a0f817`): the last tab on pre-redesign markup, and the ONLY one with **no owl and no Figma annotations** — the build spec and two frames were the whole source, so every disagreement had to be ruled (R-fc-a…y). ⚠️ **The frame's Model Constants panel quotes the RETIRED workbook formula** — building it verbatim breaches SC-3 on the one screen whose purpose is that the old model is gone. Three frame typos corrected, difficulty kept read-only against a chevron. Eleven engine fields were being dropped before the browser. ⚠️ **THE CASCADE TRAP, A THIRD TIME** — and the first a test catches: the guard now COMPUTES SPECIFICITY and found a second instance the moment it ran. Review: 9 findings all confirmed, 5 guards rewritten after mutations proved them empty. 1115 → 1170 + 32 todo. **Not deployed.** → docs/history/state-log/2026-08-21.md
-- 2026-08-21 — **Filter/sort panels + the Filter Indicator** (`a3e4c88`): both measured through **Rex** against the component's own auto-layout, not screenshots — which caught four states a screenshot cannot show. Reviewed twice, 6 defects all confirmed. ⚠️ **Two cascade traps in one file in one day.** → docs/history/state-log/2026-08-21.md

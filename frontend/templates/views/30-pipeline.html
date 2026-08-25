@@ -147,7 +147,7 @@
         <thead><tr>
           <th class="col-mc">MC #</th><th class="col-name">Card Name</th><th class="col-type">Type</th>
           <th class="col-diff">Difficulty</th><th class="col-urgency">Urgency</th><th class="col-status">Status</th>
-          <th class="col-client">Client</th><th class="col-due">Due</th><th class="col-started">Started</th>
+          <th class="col-requestor">Requestor</th><th class="col-due">Due</th><th class="col-started">Started</th>
           <th class="col-done">Done</th><th class="col-links">Links</th>
         </tr></thead>
         <tbody>
@@ -275,7 +275,7 @@
               {{/if}}
             </div></td>
             <td class="col-status">{{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{{hl(row.currentList)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-            <td class="col-client">{{#if row.requestor}}<span class="pbadge">{{{hl(row.requestor)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-requestor">{{#if row.requestor}}<span class="pbadge">{{{hl(row.requestor)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-due"><div class="duewrap">
               {{#if writesEnabled}}
                 <button class="datefield {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}} {{#if savingDeadline[row.cardId]}}saving{{/if}}"
@@ -333,7 +333,7 @@
                 <td class="col-diff"></td>
                 <td class="col-urgency"></td>
                 <td class="col-status"></td>
-                <td class="col-client"></td>
+                <td class="col-requestor"></td>
                 <td class="col-due"></td>
                 <td class="col-started"></td>
                 <td class="col-done"></td>
@@ -359,7 +359,7 @@
                 <td class="col-diff"></td>
                 <td class="col-urgency"></td>
                 <td class="col-status">{{#if w.currentList}}<span class="pbadge s-{{w.status}}">{{w.currentList}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-                <td class="col-client"></td>
+                <td class="col-requestor"></td>
                 <td class="col-due"><div class="duewrap">
                   {{#if writesEnabled}}
                     <!-- the SAME W2 popover recipe as the parent row, bound to

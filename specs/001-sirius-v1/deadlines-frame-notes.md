@@ -24,8 +24,26 @@ Asserted by `test/deadlines-frame.test.ts` unless the last column says otherwise
 | **R-dl-m** | ⚠️ **STALE SAMPLE VALUES, not data.** The frame's Breakdown reads 8 / 4 / 491 / 31, and 4 / 491 / 31 are the identical values from the Requests tab's Breakdown. 491 conflicts against 8 items due this month is not a coherent board state. Nothing in the build is calibrated against those numbers. | n/a — deliberately not asserted |
 | **R-dl-n** | ⚠️ **OPEN — the acknowledged states.** No acknowledge design, no acknowledged appearance, no restore, and no cue for a week that RE-SURFACED because a capacity change invalidated its acknowledgement (invariant 13). Product is designing these after seeing the tab live. Until then the v1 affordances stand (R-dl-i), and a re-surfaced week is indistinguishable from a newly broken one — which product has already noted will read as a bug. | n/a — the gap is the rule |
 
-## Confirms answered back to product
+## Confirms answered back to product — all three answered, owl #66
 
-1. **Do the conflict detail rows link to the week or card they name?** Not yet. They carry the MC number and phase as badges, exactly as drawn; making them navigable is a behaviour the frame does not specify a target for (the week? the card? Trello?). Raised rather than guessed.
-2. **Do week groups collapse?** The frame draws one round action per week and does not say what it does. The tab already has exactly one per-week action — opening its day columns (FR-12) — so that is what it opens. If it was meant to collapse the group, that is a different control and needs drawing.
-3. **Does this tab get Pipeline's filter/sort?** No — see R-dl-h.
+1. **Do the conflict detail rows link to the week or card they name?** **No — they stay
+   non-navigable.** They are evidence, not navigation. Shipped as drawn.
+2. **Do week groups collapse?** **No collapse control.** The day-columns view is the more
+   useful per-week action, collapse would need a second control drawn, and search narrows a
+   long list faster than folding it does. The round action opens the day columns, as built.
+3. **Does this tab get Pipeline's filter/sort?** No — see R-dl-h, confirmed as deliberate.
+
+## Ratified by owl #66
+
+- **R-dl-f** — NEEDS REPLOTTING **keeps the broad count**. It matches the rows enumerated
+  beneath it, and a card displaced by an over-capacity week genuinely does need replotting
+  even with no deadline problem. Do not narrow it to the deadline breach. CONFLICTS counting
+  conflicts is confirmed, settled from the frame's own arithmetic rather than by asking.
+- **R-dl-i** — the acknowledge action, the day planner and the month control (R-dl-l) all
+  **stay**. "Build without it rather than inventing one" meant do not invent; it should not
+  have put shipped, audited behaviour at risk, and this tab being the only route to
+  acknowledgement in the product settles it. All three are replaced wholesale when the
+  acknowledged-state design lands.
+- **The "1 replotting" badge is DERIVED**, as built. It was never a separate card-level rule —
+  where the sample showed it beside no rule badge, that is sample error.
+- **R-dl-n stays open**: the acknowledged-state design is still with product.
