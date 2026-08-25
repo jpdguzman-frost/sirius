@@ -83,9 +83,9 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   the component's own auto-layout and its VARIANT names** — how the 2026-08-21
   panel work found states a screenshot cannot show; run `mcp__rex__get_status`
   for the channel, never write the number down (it takes a free port at start).
-- **File drop `../owl/` (ARES agent)** — **CLOSED 2026-08-19** (JP: don't
-  chase); three notes, no reply. ⚠️ **`../ares/` is a sibling repo — read it
-  instead of waiting on that channel** (how ARES caching got settled).
+- **File drop `../owl/` (ARES agent)** — **ALIVE AGAIN 2026-08-25**: they
+  replied (#01; our #10 back) and **`hLL7WW2V` push is live** — first events
+  03:41:50Z, drained ~1s. **`../ares/` is a sibling repo — read it rather than wait.**
 
 ## Still open
 
