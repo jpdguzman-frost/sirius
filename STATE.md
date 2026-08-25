@@ -16,7 +16,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸, T075 pending, non-member 403 parked | write-enable on rt-837 = next JP gate |
 | 10–13k | Two-way sync · admin · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · expanded MC row | **DEPLOYED + LIVE through 2026-08-19** (T077–T178, ..`b401bac`) | detail: `docs/history/phase-log.md` |
-| 14pf–16 | Pipeline **filter + sort** · **"None"** as a value · **Deadlines tab rebuilt** (R-dl-a..n) · panels measured to the frames · **the Filter Indicator** · two review passes | **LIVE 2026-08-21** (`a3e4c88`) — clicked through; Deadlines v2 ⚠️ never seen |
+| 14pf–16 | Pipeline **filter + sort** · **"None"** as a value · **Deadlines tab rebuilt** (R-dl-a..n) · panels measured to the frames · **the Filter Indicator** · two review passes | **LIVE 2026-08-21** (`a3e4c88`) — clicked through on rt-test, twice (`897c3dd` and again for the Indicator work); the pass found DL-scope in the Deadlines Breakdown |
 | 17 | **Forecast tab rebuilt to §7.2/§7.3** — the last tab on pre-redesign markup. Two-tier header, 25 columns from one column table, the model banner, search, Model Constants, §8 empty states. Law: `specs/001-sirius-v1/forecast-frame-notes.md` (R-fc-a…y) | **DEPLOYED 2026-08-22** (`3cfcd96`) — ⚠️ **LIVE BUT NEVER SEEN IN A BROWSER** (JP accepted; browser pass still owed) |
 | 17b | **One clock, Manila's** (invariant 11 — planner week, Add-sprint, Deadlines month) · **Schedules + Deadlines off the unfinished-screen background** (frames `262:33320` / `630:51389`, both white) | **DEPLOYED 2026-08-22** (`3cfcd96`) |
 
@@ -27,18 +27,17 @@ needs none — an absent stamp already means "never written by Sirius"). The
 ~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
 rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 
-## Live 2026-08-22 — `3cfcd96`
+## Live 2026-08-25 — `41cc2a0`
 
-Phases 17 + 17b deployed. healthz 200, mongo + redis connected, both pm2
-processes restarted, migrations already up to date. The served bundle is
-**byte-identical to the local build** once the server's own base-path line is
-removed, and confirmed by content: `fctable`/`45-forecast` present, `todayIso`
-and `CYLCE` absent.
+The Requestor column heading. healthz 200, mongo + redis connected, both
+processes restarted, migrations up to date, and the served page **byte-identical
+to the local build** once the injected base-path line is removed. Phases 17 +
+17b went out 2026-08-22 (`3cfcd96`) the same way.
 
-⚠️ **NOTHING IN THIS DEPLOY HAS BEEN OPENED IN A BROWSER** — the Forecast tab,
-the two backgrounds and the clock fix all went live unseen (JP accepted).
-Standing lesson: the filter panels were inert on the live site for a day under a
-green suite. **"Deployed" is not "works", and it is now live.**
+⚠️ **STILL NEVER OPENED IN A BROWSER**: the Forecast tab, and the white
+background on Schedules + Deadlines. The filter panels were once inert on the
+live site for a day under a green suite — nothing in the suite can open an
+overlay.
 
 ## Decisions needed from JP (blocking)
 
@@ -101,11 +100,12 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   profile). **JP 2026-08-21: the Forecast build is accepted WITHOUT browser
   validation for now — deferred deliberately, not skipped.** Do not read its
   green suite as "it works"; the 8 `it.todo` in `test/forecast-frame.test.ts`
-  are the unanswered list, and this project has already shipped a screen that
-  was inert for a day under a green suite. Queue, in order: **Forecast (never
-  deployed, never seen)** · **the Pipeline filter + sort panels** · **Deadlines
-  v2, never seen** · **the white page background on Schedules + Deadlines
-  (2026-08-22)** · the task-due picker by hand · the sub-350px last-resort
+  are the unanswered list. ⚠️ **PRUNED 2026-08-25 — this queue had gone stale
+  and was reported to JP as fact.** The Pipeline panels and Deadlines v2 were
+  clicked through on 2026-08-21; `56569fc` recorded that pass and left this
+  list untouched. **Prune it in the same commit that records a pass.** Queue:
+  **Forecast** · **the white background on Schedules + Deadlines** (both live
+  2026-08-22, unseen) · the task-due picker by hand · the sub-350px last-resort
   scroll · the b13 note chip + clarification accent · drag a bar collapsed.
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
@@ -126,4 +126,4 @@ line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
 - 2026-08-25 — **Owl #66 processed: every escalation confirmed**. One code change fell out — the Pipeline table header said **Client** while the filter, the chip and the whole Requests table said **Requestor**, over one field; renamed, class with it. Guarded as the RULE — every filter axis label must appear verbatim in the header row, so a sixth axis is covered free. Product is fixing seven frame defects; until they land, **this build is authoritative over those frames**. R-fc-r closed. → docs/history/state-log/2026-08-25.md
-- 2026-08-21 — **The Forecast tab, built to §7.2/§7.3** (`9a0f817`): the last tab on pre-redesign markup, and the ONLY one with **no owl and no Figma annotations** — the build spec and two frames were the whole source, so every disagreement had to be ruled (R-fc-a…y). ⚠️ **The frame's Model Constants panel quotes the RETIRED workbook formula** — building it verbatim breaches SC-3 on the one screen whose purpose is that the old model is gone. Three frame typos corrected, difficulty kept read-only against a chevron. Eleven engine fields were being dropped before the browser. ⚠️ **THE CASCADE TRAP, A THIRD TIME** — and the first a test catches: the guard now COMPUTES SPECIFICITY and found a second instance the moment it ran. Review: 9 findings all confirmed, 5 guards rewritten after mutations proved them empty. 1115 → 1170 + 32 todo. **Not deployed.** → docs/history/state-log/2026-08-21.md
+- 2026-08-21 — **The Forecast tab, built to §7.2/§7.3** (`9a0f817`): the only tab with **no owl and no Figma annotations** — build spec + two frames were the whole source, so every disagreement had to be ruled (R-fc-a…y). ⚠️ The frame's Model Constants panel quotes the **RETIRED workbook formula**; building it verbatim breaches SC-3. Three frame typos corrected, difficulty kept read-only against a chevron, eleven engine fields were being dropped before the browser. ⚠️ **THE CASCADE TRAP, A THIRD TIME** — first one a test catches: the guard COMPUTES SPECIFICITY and found a second instance the moment it ran. → docs/history/state-log/2026-08-21.md
