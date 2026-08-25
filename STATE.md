@@ -27,16 +27,16 @@ needs none — an absent stamp already means "never written by Sirius"). The
 ~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
 rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 
-## Live 2026-08-25 — `41cc2a0`
+## Live 2026-08-25 — `40af172`
 
-The Requestor column heading. healthz 200, both processes restarted, and the
-served page **byte-identical to the local build** once the injected base-path
-line is removed. Phases 17 + 17b went out 2026-08-22 (`3cfcd96`) the same way.
+Requestor heading (`41cc2a0`) + the reconcile-clock fix (`40af172`). healthz
+200, both restarted, page byte-identical to local. The worker fix has no page,
+so it was verified by a LIVE SYNC: **`unstamped: 0` on 598 of 598 production
+cards** — the path runs and ARES does send `lastPolledAt`.
 
-⚠️ **STILL NEVER OPENED IN A BROWSER**: the Forecast tab, and the white
-background on Schedules + Deadlines. The filter panels were once inert on the
-live site for a day under a green suite — nothing in the suite opens an
-overlay.
+⚠️ **NEVER OPENED IN A BROWSER**: the Forecast tab, and the white background on
+Schedules + Deadlines. The filter panels were once inert on the live site for a
+day under a green suite — nothing in the suite opens an overlay.
 
 ## Decisions needed from JP (blocking)
 
@@ -92,9 +92,9 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **JP gates**: **`writes_enabled` on rt-837 stays OFF — JP 2026-08-21, "don't
   switch live write yet"**. ⚠️ **Blocker found 2026-08-25: `staleGuard` compares
   our write against the instant we ISSUED the ARES read, never against when ARES
-  actually fetched, so a reconcile could revert a user's edit. **FIXED
-  2026-08-25** — inert until writes go on, so what is owed before enabling is a
-  live check on the TEST board: edit, force a sync, confirm no revert.**
+  actually fetched, so a reconcile could revert a user's edit. **FIXED + LIVE
+  2026-08-25** (`unstamped: 0` on 598 cards); the TEST-board edit-and-reconcile
+  check is what remains before enabling.**
   Security review also precedes · `GOOGLE_SHEETS_CREDENTIALS` — lights up Requests plus
   requestor/type on real data · ALT-9 sheet-row link (expose
   `intake_sheet_id` or drop the sub-label) · ALT-1 (dead server `?filter=`
@@ -131,4 +131,4 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
-- 2026-08-25 — **Owl #66 processed** (every escalation confirmed) → the Pipeline header said **Client** while the filter, chip and Requests table said **Requestor**; renamed, guarded as the rule. **Then the bigger one: ARES caching settled by reading `../ares/`, not by owl** — reads never touch Trello (15-min store + a live Trello webhook, measured). `staleGuard` was comparing our write against when we ASKED, not when ARES FETCHED, so a reconcile could revert a user's edit once writes go on. **Fixed**: it reads ARES's own `lastPolledAt`, the upserts accept no clock at all, an absent stamp skips-and-warns, and the contract probe fails the build if ARES drops the field. Also reconfirmed the 9-file test failure (973s vs ~27s — saturation) and pruned a stale browser-pass queue. → docs/history/state-log/2026-08-25.md
+- 2026-08-25 — **Owl #66 processed** → the Pipeline header said **Client** while the filter, chip and Requests table said **Requestor**; renamed, guarded as the rule. **Then the bigger one: ARES caching settled by reading `../ares/`, not by owl** — reads never touch Trello (15-min store + a live Trello webhook, measured). `staleGuard` compared our write against when we ASKED, not when ARES FETCHED, so a reconcile could revert a user's edit once writes go on. **Fixed and live**: reads `lastPolledAt`, the upserts accept no clock at all, an absent stamp skips-and-warns, the probe fails the build if ARES drops the field — `unstamped: 0` on 598 production cards. Also reconfirmed the 9-file test failure (973s vs ~27s — saturation) and pruned a stale browser-pass queue. → docs/history/state-log/2026-08-25.md
