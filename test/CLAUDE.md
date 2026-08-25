@@ -6,13 +6,11 @@ Scope: everything under `test/`. Planner law lives in
 
 _last-verified: 2026-08-18_
 
-1. **Guards assert the RULE, never a snapshot of the implementation.** The
-   lesson: `expect(...matchAll(...)).toHaveLength(4)` on the rAF
-   lambda text actively FORBADE extracting the duplicated lambda into
-   `remeasure()`, while a fifth seam calling only half the pair still passed
-   — a count-pin that blocked a correct refactor and missed a real defect.
-   State the rule the test defends; assert that. [state-log 2026-08-18,
-   review sweep]
+1. **Guards assert the RULE, never a snapshot of the implementation.** A
+   count-pin on the rAF lambda text FORBADE a correct refactor while a fifth
+   seam calling half the pair still passed — it blocked good work and missed a
+   real defect. State the rule the test defends; assert that. [state-log
+   2026-08-18, review sweep]
 
 2. **Derive, don't copy.** When a guard must agree with a production value,
    READ it out of the shipped module or EXECUTE both sides against each
@@ -22,11 +20,10 @@ _last-verified: 2026-08-18_
    executed against each other (twelve months + leap day + out-of-range),
    not compared as source strings. [state-log 2026-08-18]
 
-3. **Source-regex guards read RAW text — comments included.** Twice a prose comment tripped a drift guard (a CSS comment naming the
-   four phase colour classes; a bare decimal in a JS comment). Both times
-   the guard was right and the comment was reworded, not the guard. Know
-   this both when writing guards and when editing guarded files.
-   [state-log 2026-08-18; gantt-rules §5]
+3. **Source-regex guards read RAW text — comments included.** Twice a prose
+   comment tripped a drift guard; both times the guard was right and the
+   comment was reworded. Know this when writing guards AND when editing
+   guarded files. [state-log 2026-08-18; gantt-rules §5]
 
 4. **Only a browser proves an interaction.** Law: `gantt-rules.md` §5 — NO
    synthetic `DragEvent`s, ever (they call the handlers directly and never
@@ -48,6 +45,10 @@ _last-verified: 2026-08-18_
    server suite (socket hang up / stranger's 404). Green
    on rerun is fine — record it; never retry-cap, never mask. The real fix
    (explicit `127.0.0.1` listening, ~21 files) is a parked task.
+
+   ⚠️ SECOND, distinct flake: many files timing out at `startTestDb()` (31
+   start a real mongod). Tell is DURATION — 973s vs ~27s. Confirm by
+   re-running the FULL suite, not one file. → state-log 2026-08-25
    [STATE.md §Still open]
 
 6. **Render tests go through `test/helpers/gantt-render.ts`** — real

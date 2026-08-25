@@ -74,8 +74,10 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   including that the retired formula should never have been in the frame.
   Product is fixing seven frame defects on their side; **until they confirm,
   this build is authoritative over those frames.**
-  **Still awaiting Miles**: ARES read-path caching · the Deadlines
-  acknowledged-state design (R-dl-n).
+  **Still awaiting Miles**: **does the ARES read path serve cached
+  data, and at what max age** — `staleGuard` assumes issue-time ≈ fetch-time;
+  if not, a push can revert a user edit (detail: state-log 2026-08-25) · the
+  Deadlines acknowledged-state design (R-dl-n).
   Closed threads → `docs/history/state-log/`.
 - **Figma reads** — the official Figma MCP is the verified path
   (`get_design_context` for annotations, `get_metadata` for geometry; load the
