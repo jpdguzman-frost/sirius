@@ -47,6 +47,25 @@ export interface AresCard {
   archived?: boolean;
   dateLastActivity?: string;
   createdAt?: string;
+  /**
+   * When ARES last FETCHED this card from Trello — not when we asked it for
+   * the card, and not when the card last changed. ARES never reads Trello at
+   * request time (`getCard()` is a `findOne` against its own store), so this
+   * is the only honest answer to "how old is this data" (contract
+   * §Freshness, settled 2026-08-25).
+   *
+   * Stamped by `buildCardDoc`, which BOTH of ARES's writers share — the
+   * 15-minute poll and the Trello webhook that re-fetches a changed card
+   * within seconds. That shared stamp is what makes it safe to compare
+   * against: it tracks whichever path last fetched, so it stays correct
+   * under either cadence and under any future one.
+   *
+   * Optional in the type because ARES's own audit records this field as
+   * "read by none" — a cleanup could remove it. `staleGuard` treats its
+   * absence as infinitely stale rather than falling back to a clock that
+   * would silently reinstate the bug it guards.
+   */
+  lastPolledAt?: string;
 }
 
 export interface AresMovement {

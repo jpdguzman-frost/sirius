@@ -20,7 +20,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 17 | **Forecast tab rebuilt to §7.2/§7.3** — the last tab on pre-redesign markup. Two-tier header, 25 columns from one column table, the model banner, search, Model Constants, §8 empty states. Law: `specs/001-sirius-v1/forecast-frame-notes.md` (R-fc-a…y) | **DEPLOYED 2026-08-22** (`3cfcd96`) — ⚠️ **LIVE BUT NEVER SEEN IN A BROWSER** (JP accepted; browser pass still owed) |
 | 17b | **One clock, Manila's** (invariant 11 — planner week, Add-sprint, Deadlines month) · **Schedules + Deadlines off the unfinished-screen background** (frames `262:33320` / `630:51389`, both white) | **DEPLOYED 2026-08-22** (`3cfcd96`) |
 
-**Build health (2026-08-21):** 1170/1170 tests + 32 `it.todo`, 65 files — green
+**Build health (2026-08-25):** 1189/1189 tests + 32 `it.todo`, 66 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **008** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
@@ -68,15 +68,14 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority: twice an owl
   asserted a ruling JP had not made or later declined, so verify with JP
-  before building on one. **Thread position**: miles→jp acked through **#66**; jp→miles sent through **#56**.
+  before building on one. **Thread position**: miles→jp acked through **#66**; jp→miles sent through **#57**.
   **#66 (2026-08-24) closed #51–#55 in full**, every escalation confirmed.
   Product is fixing seven frame defects; **until they confirm, this build is
   authoritative over those frames.** **Still awaiting Miles**: only the
   Deadlines acknowledged-state design (R-dl-n) — **ARES caching ANSWERED 2026-08-25 by
-  reading `../ares/`**: reads never touch Trello — a store filled by a 15-min
-  poll AND a live Trello→ARES webhook (measured: 1 card off-cycle in 200). Both
-  writers stamp `lastPolledAt`, so it is the true fetch time and `staleGuard`
-  compares the wrong clock. Latent while writes are off.
+  reading `../ares/`**: reads never touch Trello — a 15-min store plus a live
+  Trello→ARES webhook (measured). Both writers stamp `lastPolledAt`, the true
+  fetch time; `staleGuard` moved onto it and the probe guards it.
   Closed threads → `docs/history/state-log/`.
 - **Figma reads** — the official Figma MCP is the verified path
   (`get_design_context` for annotations, `get_metadata` for geometry; load the
@@ -93,8 +92,10 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **JP gates**: **`writes_enabled` on rt-837 stays OFF — JP 2026-08-21, "don't
   switch live write yet"**. ⚠️ **Blocker found 2026-08-25: `staleGuard` compares
   our write against the instant we ISSUED the ARES read, never against when ARES
-  actually fetched — so a reconcile can revert a user's edit. Inert while writes
-  are off; fix it (use `lastPolledAt`) BEFORE enabling.** Security review also precedes · `GOOGLE_SHEETS_CREDENTIALS` — lights up Requests plus
+  actually fetched, so a reconcile could revert a user's edit. **FIXED
+  2026-08-25** — inert until writes go on, so what is owed before enabling is a
+  live check on the TEST board: edit, force a sync, confirm no revert.**
+  Security review also precedes · `GOOGLE_SHEETS_CREDENTIALS` — lights up Requests plus
   requestor/type on real data · ALT-9 sheet-row link (expose
   `intake_sheet_id` or drop the sub-label) · ALT-1 (dead server `?filter=`
   param) · OD-4's non-capacity remainder — the capacity slice was ruled
@@ -130,4 +131,4 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
-- 2026-08-25 — **Owl #66 processed** (every escalation confirmed) → the Pipeline header said **Client** while the filter, chip and Requests table said **Requestor**; renamed, guarded as the rule (every axis label must appear in the header row). **Then the bigger one: ARES caching settled by reading `../ares/`** — reads never touch Trello, 15-min store, `lastPolledAt` is the true fetch time, so `staleGuard` compares the wrong clock and could revert a user's edit once writes are on. Also reconfirmed the 9-file test failure (973s run vs ~27s — saturation) and pruned a stale browser-pass queue. → docs/history/state-log/2026-08-25.md
+- 2026-08-25 — **Owl #66 processed** (every escalation confirmed) → the Pipeline header said **Client** while the filter, chip and Requests table said **Requestor**; renamed, guarded as the rule. **Then the bigger one: ARES caching settled by reading `../ares/`, not by owl** — reads never touch Trello (15-min store + a live Trello webhook, measured). `staleGuard` was comparing our write against when we ASKED, not when ARES FETCHED, so a reconcile could revert a user's edit once writes go on. **Fixed**: it reads ARES's own `lastPolledAt`, the upserts accept no clock at all, an absent stamp skips-and-warns, and the contract probe fails the build if ARES drops the field. Also reconfirmed the 9-file test failure (973s vs ~27s — saturation) and pruned a stale browser-pass queue. → docs/history/state-log/2026-08-25.md

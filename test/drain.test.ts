@@ -36,6 +36,11 @@ function aresCard(over: Partial<AresCard> = {}): AresCard {
     currentList: 'Design',
     labels: [label('Main Card'), label('Urgent')],
     due: '2026-08-22T09:00:00.000Z',
+    // Real ARES cards always carry this; the reconcile guard reads it as the
+    // instant ARES fetched the card from Trello (contracts/ares-read.md
+    // §Freshness). A fixture without it exercises the SKIP path, not the
+    // reconcile — which is what these tests are about.
+    lastPolledAt: '2026-08-18T12:00:00.000Z',
     ...over,
   } as AresCard;
 }

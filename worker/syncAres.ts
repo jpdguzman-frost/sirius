@@ -24,6 +24,14 @@ export interface SyncStats {
   eventsInserted: number;
   workSpans: number;
   deactivated: number;
+  /**
+   * Cards whose registry reconcile was SKIPPED because ARES sent no usable
+   * fetch instant (see `fetchedAtOf`). Expected to be 0 forever. A non-zero
+   * count means `lastPolledAt` has gone missing from the ARES payload and
+   * urgency, due dates and difficulty have quietly stopped reconciling — the
+   * skip is deliberate and safe, but silence about it would not be.
+   */
+  unstamped: number;
   capacity: Record<string, number | null> | null;
 }
 
@@ -50,24 +58,39 @@ function dueInstant(iso: string | null | undefined): Date | null {
 }
 
 /**
- * The stale-reconcile guard (product owl #50, 2026-08-18). Reconciliation is
- * read-then-write, so there is a window in which the ARES payload in hand
- * predates a registry write that has since landed: the full sync reads the
- * whole board and then loops upserts, and the push drain reads a card and
- * upserts it milliseconds later. Overwriting inside that window silently
- * reverts the value the user just set and watched stick — the ONE failure in
- * this area that shows a wrong value rather than merely looking untidy.
+ * The stale-reconcile guard (product owl #50, 2026-08-18; **clock corrected
+ * 2026-08-25**). Reconciliation is read-then-write, so there is a window in
+ * which the ARES payload in hand predates a registry write that has since
+ * landed. Overwriting inside that window silently reverts the value the user
+ * just set and watched stick — the ONE failure in this area that shows a
+ * wrong value rather than merely looking untidy.
+ *
+ * ⚠️ **The window is NOT the moment we issued the request, and using that was
+ * a real defect.** ARES never reads Trello at request time: `getCard()` is a
+ * `findOne` against its own materialised store, filled by a 15-minute poll
+ * and by a webhook that re-fetches a changed card within seconds. So a
+ * payload can predate our write however recently we asked for it. Compared
+ * against issue-time the guard passed exactly when it should have stopped:
+ *
+ *     ARES fetches card at 10:00 · user edits at 10:05 · reconcile at 10:06
+ *     10:05 < 10:06 → guard passes → the 10:00 payload reverts the edit.
+ *
+ * It compares against `trello_polled_at` — ARES's own `lastPolledAt`, the
+ * instant IT fetched the card from Trello. Both of ARES's writers stamp it
+ * through one shared `buildCardDoc`, so it follows whichever path last
+ * fetched and stays correct under either cadence, or any future one. That is
+ * the point: a measured fetch time needs no assumption about how often ARES
+ * runs, and the 15-minute figure is never load-bearing.
  *
  * The guard is a FILTER, not an expression: a registry-owned field is written
- * only when Sirius's own last write to the card is no newer than the instant
- * this read was ISSUED. It is time-bounded by construction and needs no
- * expiry — the next read that starts after the write is authoritative again,
- * so invariant 8 keeps its promise exactly: a manual change made in Trello
- * still surfaces, at most one reconcile later.
+ * only when Sirius's own last write is no newer than that fetch. Time-bounded
+ * by construction, no expiry — the next FETCH after the write is
+ * authoritative again, so invariant 8 keeps its promise: a manual change made
+ * in Trello still surfaces, at most one reconcile later.
  *
  * Absent `registry_written_at` (every card Sirius has never written, i.e.
- * nearly all of them) passes the guard, so no backfill and no migration are
- * needed — the field's absence already means "never written by us".
+ * nearly all of them) passes, so no backfill and no migration are needed —
+ * the field's absence already means "never written by us".
  *
  * Deliberately NOT an aggregation-pipeline update, which would fold both
  * writes into one op: in pipeline form every `$set` value is an EXPRESSION,
@@ -75,14 +98,35 @@ function dueInstant(iso: string | null | undefined): Date | null {
  * storing its own title. Two plain updates cost one extra round trip per card
  * and cannot be read wrong.
  */
-const staleGuard = (readAt: Date) => ({
+const staleGuard = (fetchedAt: Date) => ({
   // STRICTLY older, so a same-millisecond tie counts as stale and the write
   // is left alone. The two mistakes are not equally bad: skipping a good
   // reconcile costs one cycle of staleness and heals itself, while applying a
   // stale one shows the user a value they did not choose.
-  $or: [{ registry_written_at: { $exists: false } }, { registry_written_at: { $lt: readAt } }],
+  $or: [{ registry_written_at: { $exists: false } }, { registry_written_at: { $lt: fetchedAt } }],
 });
 
+/**
+ * The fetch instant for one mapped card, or `null` when ARES did not send one.
+ *
+ * **`null` means SKIP the registry reconcile, never "fall back to a clock".**
+ * Falling back to `new Date()` is precisely the bug above, reinstated
+ * silently — and a fallback is exactly what a future edit would reach for, so
+ * the absence is expressed as a value the caller must handle rather than as a
+ * default it can ignore. The asymmetry the guard already runs on decides it:
+ * a skipped reconcile costs one cycle and heals, an applied stale one shows a
+ * value nobody chose.
+ *
+ * ARES's own 2026-08-02 audit records `lastPolledAt` as "written in three
+ * places and read by none", so a cleanup on their side could remove it. That
+ * is why `scripts/ares-probe.mjs` asserts the field on a live card: drift
+ * fails the build rather than quietly stopping every reconcile in the app.
+ */
+export function fetchedAtOf(card: { trello_polled_at: string | null }): Date | null {
+  if (!card.trello_polled_at) return null;
+  const t = new Date(card.trello_polled_at);
+  return Number.isNaN(t.getTime()) ? null : t;
+}
 /**
  * Ownership-safe deliverable upsert — Trello-owned fields only; Sirius-owned
  * planning fields are NEVER touched by sync (§1.2 ownership). Urgency, the due
@@ -90,16 +134,20 @@ const staleGuard = (readAt: Date) => ({
  * made in Trello surfaces here, and the echo of Sirius's own write is a
  * same-value no-op. Shared by the full board sync and the push drain.
  *
- * `readAt` is the instant the caller ISSUED its ARES read — required, never
- * defaulted: a caller that passed `new Date()` here would disable the guard
- * silently, which is the exact bug it exists to prevent.
+ * ⚠️ **This takes NO clock from its caller, deliberately.** It used to take
+ * `readAt`, documented as "required, never defaulted: a caller that passed
+ * `new Date()` would disable the guard silently, which is the exact bug it
+ * exists to prevent" — and both callers passed exactly that, because a read
+ * instant was the only clock they had. The warning was right and did not
+ * help. The fetch instant now comes off the payload this function is already
+ * given, so there is no argument left to get wrong: the class is gone, not
+ * the instance.
  */
 export async function upsertDeliverable(
   projectId: Types.ObjectId,
   d: MappedDeliverable,
   displayId: string | undefined,
-  readAt: Date,
-): Promise<void> {
+): Promise<boolean> {
   const key = { project_id: projectId, trello_card_id: d.trello_card_id };
   await Deliverable.updateOne(
     key,
@@ -132,8 +180,13 @@ export async function upsertDeliverable(
   // W1 urgency, W2 due, W3 difficulty — the whole write registry, and so the
   // whole set a stale payload can revert. No upsert: the write above made the
   // document exist.
+  //
+  // No fetch instant, no reconcile: leaving our value alone is the safe half
+  // of the asymmetry, and it is visible in `sync_runs` rather than silent.
+  const fetchedAt = fetchedAtOf(d);
+  if (!fetchedAt) return false;
   await Deliverable.updateOne(
-    { ...key, ...staleGuard(readAt) },
+    { ...key, ...staleGuard(fetchedAt) },
     {
       $set: {
         difficulty: d.difficulty ?? null,
@@ -143,14 +196,14 @@ export async function upsertDeliverable(
       },
     },
   );
+  return true;
 }
 
 /** Ownership-safe work-card upsert — shared by full sync and the push drain. */
 export async function upsertWorkCard(
   projectId: Types.ObjectId,
   w: MappedWorkCard,
-  readAt: Date,
-): Promise<void> {
+): Promise<boolean> {
   const key = { project_id: projectId, trello_card_id: w.trello_card_id };
   await WorkCard.updateOne(
     key,
@@ -174,10 +227,13 @@ export async function upsertWorkCard(
   // under the same stale guard as the deliverable's due. Difficulty is NOT
   // guarded on a task card: W3 writes deliverables only, so nothing here can
   // be reverting a Sirius write.
+  const fetchedAt = fetchedAtOf(w);
+  if (!fetchedAt) return false;
   await WorkCard.updateOne(
-    { ...key, ...staleGuard(readAt) },
+    { ...key, ...staleGuard(fetchedAt) },
     { $set: { trello_due: w.trello_due, trello_due_at: dueInstant(w.trello_due_at) } },
   );
+  return true;
 }
 
 /**
@@ -323,12 +379,11 @@ export async function syncProject(
 ): Promise<SyncStats> {
   const projectId = project._id;
 
-  // Stamped BEFORE the read, so it is never later than the data it describes.
-  // The full sync has the widest stale window in the app — one board read,
-  // then an upsert per card — so every registry write racing this loop is
-  // compared against the moment the board was fetched, not the moment its own
-  // card's turn came round.
-  const readAt = new Date();
+  // No read instant is stamped here any more (2026-08-25). This loop used to
+  // take one clock before the board read and apply it to every card in it —
+  // "the widest stale window in the app", as the comment said. Each card now
+  // carries the instant ARES fetched THAT card, so the window is per-card and
+  // the widest-window problem does not exist to be reasoned about.
   const cards = await client.boardCards(project.trello_board_id);
   const mapped = mapTrello(cards, project.trello_label ?? null);
 
@@ -339,16 +394,27 @@ export async function syncProject(
     mapped.deliverables,
   );
 
+  // Counted, not just skipped: a payload with no fetch instant stops urgency,
+  // due dates and difficulty reconciling, and that must never be silent.
+  let unstamped = 0;
+
   const seenDeliverables = new Set<string>();
   for (const d of mapped.deliverables) {
     seenDeliverables.add(d.trello_card_id);
-    await upsertDeliverable(projectId, d, displayIds.get(d.trello_card_id), readAt);
+    if (!(await upsertDeliverable(projectId, d, displayIds.get(d.trello_card_id)))) unstamped++;
   }
 
   const seenWork = new Set<string>();
   for (const w of mapped.workCards) {
     seenWork.add(w.trello_card_id);
-    await upsertWorkCard(projectId, w, readAt);
+    if (!(await upsertWorkCard(projectId, w))) unstamped++;
+  }
+
+  if (unstamped > 0) {
+    console.warn(
+      `[syncAres] ${unstamped}/${mapped.deliverables.length + mapped.workCards.length} cards carried no ARES fetch instant — ` +
+        'registry fields did NOT reconcile for them. Check that ARES still sends `lastPolledAt` (contracts/ares-read.md §Freshness).',
+    );
   }
 
   // Cards gone from the board: inactive, never deleted (mirror of FR-8.4).
@@ -393,6 +459,7 @@ export async function syncProject(
     eventsInserted: inserted,
     workSpans,
     deactivated: deactivated.modifiedCount,
+    unstamped,
     capacity: capacity.typical != null ? (capacity as unknown as Record<string, number | null>) : null,
   };
 }

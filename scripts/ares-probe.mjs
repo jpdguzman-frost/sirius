@@ -66,4 +66,56 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
+/*
+ * Field-level check, not just endpoint-level: `lastPolledAt` is load-bearing.
+ *
+ * It is the instant ARES fetched the card from Trello, and `staleGuard` in
+ * worker/syncAres.ts compares every registry write against it. ARES answers
+ * from its own store, so no other value in the payload bounds the data's age.
+ *
+ * Why this needs a probe rather than trust: ARES's own 2026-08-02 integrity
+ * survey records the field as "written in three places and read by none", so a
+ * cleanup could reasonably drop it. If it vanishes, Sirius does NOT break
+ * loudly — it stops reconciling urgency, due dates and difficulty and carries
+ * on looking healthy. That is the failure this exists to convert into a red
+ * build.
+ *
+ * Endpoint-level stability would not catch it: the path stays `stable` while
+ * the field disappears from the body.
+ */
+const boardsRes = await fetch(`${BASE}/api/v1/trello/boards`, {
+  headers: { 'X-API-Key': KEY, Accept: 'application/json' },
+});
+if (!boardsRes.ok) {
+  console.error(`[ares-probe] failed to list boards: HTTP ${boardsRes.status}`);
+  process.exit(1);
+}
+const boards = (await boardsRes.json())?.data?.boards ?? [];
+// The busiest board, so an empty or dormant one cannot pass this vacuously.
+const board = boards.slice().sort((a, b) => (b.cardCount ?? 0) - (a.cardCount ?? 0))[0];
+if (!board?.boardId) {
+  console.error('[ares-probe] no boards returned — cannot verify the card shape');
+  process.exit(1);
+}
+
+const cardsRes = await fetch(`${BASE}/api/v1/trello/boards/${board.boardId}/cards?pageSize=1`, {
+  headers: { 'X-API-Key': KEY, Accept: 'application/json' },
+});
+const body = await cardsRes.json();
+const sample = (body?.data?.cards ?? body?.data ?? [])[0];
+if (!sample) {
+  console.error(`[ares-probe] board ${board.boardId} returned no cards — cannot verify the card shape`);
+  process.exit(1);
+}
+if (!sample.lastPolledAt) {
+  console.error('[ares-probe] CONTRACT DRIFT: `lastPolledAt` is gone from the card payload.');
+  console.error('  It is the ONLY honest measure of how old ARES data is, and the reconcile');
+  console.error('  guard compares every registry write against it. Without it, urgency, due');
+  console.error('  dates and difficulty stop reconciling silently (they fail SAFE — our value');
+  console.error('  is kept — but they stop).');
+  console.error('  See specs/001-sirius-v1/contracts/ares-read.md §Freshness and worker/syncAres.ts.');
+  process.exit(1);
+}
+
 console.log(`[ares-probe] OK — ${Object.keys(REQUIRED).length} endpoints present at expected stability`);
+console.log('[ares-probe] OK — cards still carry `lastPolledAt` (the reconcile guard depends on it)');

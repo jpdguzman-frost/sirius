@@ -33,6 +33,10 @@ function stubClient(over: Partial<Record<'cards' | 'movements', unknown[]>> & { 
   } as unknown as AresClient;
 }
 
+// `lastPolledAt` is on both: every real ARES card carries it, and the reconcile
+// guard reads it as the instant ARES fetched the card from Trello
+// (contracts/ares-read.md §Freshness). Omitting it exercises the SKIP path,
+// which has its own tests in reconcile.test.ts.
 const CARDS: AresCard[] = [
   {
     cardId: 'c-main-1',
@@ -44,6 +48,7 @@ const CARDS: AresCard[] = [
       { id: 'l2', name: 'Difficulty: Medium' },
     ],
     due: '2026-08-21T09:00:00.000Z',
+    lastPolledAt: '2026-08-18T12:00:00.000Z',
   },
   {
     cardId: 'c-task-1',
@@ -52,6 +57,7 @@ const CARDS: AresCard[] = [
     currentList: 'Production Backlog',
     labels: [],
     due: null,
+    lastPolledAt: '2026-08-18T12:00:00.000Z',
   },
 ];
 

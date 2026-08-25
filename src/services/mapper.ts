@@ -39,6 +39,13 @@ export interface MappedDeliverable {
   /** Reconciled from the `Urgent` label (FR-9.5) — Trello is the truth. */
   urgent: boolean;
   active: boolean;
+  /**
+   * When ARES last fetched this card from Trello (`AresCard.lastPolledAt`).
+   * NOT a display field — it is the clock `staleGuard` compares a Sirius
+   * registry write against, and the only field on this record whose job is to
+   * describe the PAYLOAD rather than the card.
+   */
+  trello_polled_at: string | null;
 }
 
 export interface MappedWorkCard {
@@ -54,6 +61,13 @@ export interface MappedWorkCard {
   trello_due: string | null;
   trello_due_at: string | null;
   active: boolean;
+  /**
+   * When ARES last fetched this card from Trello (`AresCard.lastPolledAt`).
+   * NOT a display field — it is the clock `staleGuard` compares a Sirius
+   * registry write against, and the only field on this record whose job is to
+   * describe the PAYLOAD rather than the card.
+   */
+  trello_polled_at: string | null;
 }
 
 export interface MapResult {
@@ -141,6 +155,7 @@ export function mapTrello(cards: AresCard[], projectLabel: string | null): MapRe
         trello_due_at: card.due ?? null,
         urgent: labels.includes(URGENT_LABEL_NAME),
         active,
+        trello_polled_at: card.lastPolledAt ?? null,
       });
       if (!mc) result.unlinked.push({ trello_card_id: card.cardId, name: card.name, isMainCard: true });
     } else {
@@ -161,6 +176,7 @@ export function mapTrello(cards: AresCard[], projectLabel: string | null): MapRe
         trello_due: dateOnly(card.due),
         trello_due_at: card.due ?? null,
         active,
+        trello_polled_at: card.lastPolledAt ?? null,
       });
     }
   }
