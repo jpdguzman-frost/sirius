@@ -7,7 +7,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
-import { aresCard, label } from './helpers/fixtures.ts';
+import { aresCard, label } from './helpers/ares-card.ts';
 import { syncProject } from '../worker/syncAres.ts';
 import type { AresCard, AresClient, AresMovement } from '../src/services/ares.ts';
 import { CardEvent, Deliverable, Project, WorkCard } from '../src/models/index.ts';

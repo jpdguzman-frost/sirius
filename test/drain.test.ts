@@ -8,7 +8,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Types } from 'mongoose';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
-import { aresCard as baseAresCard, label } from './helpers/fixtures.ts';
+import { aresCard as baseAresCard, label } from './helpers/ares-card.ts';
 import { drainPushEvents, reconcileCard, shouldRunFullSync } from '../worker/drainPush.ts';
 import type { AresClient, AresCard, AresMovement } from '../src/services/ares.ts';
 import { validateEnv } from '../src/config/env.ts';
@@ -85,6 +85,32 @@ describe('drainPushEvents — notification, then read (FR-9.4)', () => {
     expect((await PushEvent.findOne({ event_id: 'evt-a' }))?.status).toBe('done');
     const run = await SyncRun.findOne({ project_id: project._id, source: 'ares_push', ok: true });
     expect(run?.stats).toMatchObject({ events: 1, cards: 1, deliverable: 1 });
+  });
+
+  it('records an unstamped push reconcile, so the quieter path is not the silent one', async () => {
+    /* `worker/syncAres.ts` documents that BOTH callers must consume the
+       upserts' return. Only the full sync had a test for it, so deleting the
+       drain's `if (outcome.unstamped)` left the suite green while the push
+       path lost its only signal (review, 2026-08-25) — and this is the path
+       FR-9.6 leaves running at ~37s while the full sync relaxes to hourly, so
+       it is the one that would go quiet first and the one that matters. */
+    const project = await makeProject();
+    await PushEvent.create(pushEvent(project._id, { event_id: 'evt-bare' }));
+    await drainPushEvents(
+      env,
+      stubClient(pushRead(aresCard({ lastPolledAt: undefined }))),
+    );
+
+    const run = await SyncRun.findOne({ project_id: project._id, source: 'ares_push', ok: true });
+    expect(run?.stats, 'the push path swallowed an unstamped reconcile').toMatchObject({ unstamped: 1 });
+  });
+
+  it('records nothing when every pushed card carries a stamp — the steady state', async () => {
+    const project = await makeProject();
+    await PushEvent.create(pushEvent(project._id, { event_id: 'evt-ok' }));
+    await drainPushEvents(env, stubClient());
+    const run = await SyncRun.findOne({ project_id: project._id, source: 'ares_push', ok: true });
+    expect((run?.stats as Record<string, unknown>)?.unstamped).toBeUndefined();
   });
 
   it('many events for one card coalesce into a single read', async () => {

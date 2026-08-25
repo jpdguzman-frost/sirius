@@ -963,6 +963,40 @@ describe('a column and the filter that narrows it use the SAME word', () => {
     }
   });
 
+  it('every column class it emits is one the stylesheet and the body both know', () => {
+    /* The gap the review found in the derivation (2026-08-25): the HEADER now
+       comes from `PIPE_COLS`, but the body `<td class="col-…">` cells and the
+       `.ptable .col-…` width rules are still hand-typed. Rename a `cls` here —
+       the exact edit this table was built to make safe — and the `<th>` renders
+       a class the stylesheet has no rule for, so the header cell loses its
+       width while its body cells keep theirs and the column visibly misaligns.
+       Nothing else notices: pipeline-expanded pins the BODY classes as its own
+       list, and the header test above only checks that the loop exists.
+
+       So the join is asserted here in both directions: every emitted class is
+       drawn by the body and measured by the stylesheet. */
+    const table = TEMPLATE.slice(TEMPLATE.indexOf('<table class="ptable">'));
+    const body = table.slice(table.indexOf('<tbody'), table.indexOf('</tbody>'));
+    const bodyClasses = new Set([...body.matchAll(/<td class="(col-[a-z-]+)"/g)].map((m) => m[1]!));
+
+    // Rule blocks, comments stripped first — a source scan reads raw text and
+    // a prose comment naming a class would otherwise satisfy this (rule 3).
+    const css = PIPELINE_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const measured = new Set<string>();
+    for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      if (!/width\s*:/.test(m[2]!)) continue;
+      for (const cls of m[1]!.matchAll(/\.ptable\s+\.(col-[a-z-]+)/g)) measured.add(cls[1]!);
+    }
+
+    for (const c of COLS) {
+      expect(bodyClasses, `header column "${c.cls}" has no body cell`).toContain(c.cls);
+      expect(
+        measured,
+        `header column "${c.cls}" has no width rule — its header and body will misalign`,
+      ).toContain(c.cls);
+    }
+  });
+
   it('still says Requestor — the regression this all came from', () => {
     expect(COLS.map((c) => c.label)).toContain('Requestor');
     expect(COLS.map((c) => c.label)).not.toContain('Client');

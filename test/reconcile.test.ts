@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Types } from 'mongoose';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
-import { aresCard, label } from './helpers/fixtures.ts';
+import { aresCard, label } from './helpers/ares-card.ts';
 import { syncProject, upsertDeliverable, upsertWorkCard } from '../worker/syncAres.ts';
 import { decl, fnBody } from './helpers/gantt-render.ts';
 import { mapTrello } from '../src/services/mapper.ts';
@@ -96,20 +96,6 @@ describe('FR-9.5 — written fields reconcile from ARES reads', () => {
   });
 });
 
-/**
- * The stale-reconcile guard (product owl #50, 2026-08-18; **clock corrected
- * 2026-08-25**). A reconcile is read-then-write, so it can be holding a
- * payload older than a registry write that has since landed. Applying it
- * reverts the value the user just set — the only failure in the push/poll
- * area that shows a WRONG value.
- *
- * The rule under test, stated once: a registry-owned field is written only
- * when Sirius's own last write to that card is strictly older than the
- * instant **ARES FETCHED THE CARD FROM TRELLO** — not the instant Sirius
- * issued its request. ARES answers from its own store, so those two are
- * different clocks and only the first bounds the data. Everything else on the
- * card reconciles regardless: the guard protects three fields, not the row.
- */
 /** A card Sirius wrote to at `writtenAt`, holding the user's chosen values. */
 async function writtenDeliverable(projectId: Types.ObjectId, writtenAt: Date) {
   return Deliverable.create({
@@ -128,6 +114,20 @@ async function writtenDeliverable(projectId: Types.ObjectId, writtenAt: Date) {
 
 const mapped = (over: Partial<AresCard> = {}) => mapTrello([card(over)], null).deliverables[0]!;
 
+/**
+ * The stale-reconcile guard (product owl #50, 2026-08-18; **clock corrected
+ * 2026-08-25**). A reconcile is read-then-write, so it can be holding a
+ * payload older than a registry write that has since landed. Applying it
+ * reverts the value the user just set — the only failure in the push/poll
+ * area that shows a WRONG value.
+ *
+ * The rule under test, stated once: a registry-owned field is written only
+ * when Sirius's own last write to that card is strictly older than the
+ * instant **ARES FETCHED THE CARD FROM TRELLO** — not the instant Sirius
+ * issued its request. ARES answers from its own store, so those two are
+ * different clocks and only the first bounds the data. Everything else on the
+ * card reconciles regardless: the guard protects three fields, not the row.
+ */
 describe('stale reconcile cannot revert a registry write (owl #50)', () => {
 
 
@@ -228,6 +228,34 @@ describe('stale reconcile cannot revert a registry write (owl #50)', () => {
     expect(doc?.urgency).toBe('Urgent');
   });
 
+  it('an absent fetch instant still populates a card Sirius has NEVER written', async () => {
+    /* The bug the first version of this fix shipped with (caught in review,
+       2026-08-25). No fetch instant meant "skip the registry write" — but on a
+       card Sirius has never touched there is nothing to protect, and skipping
+       left urgency on the schema's `Non-Urgent` default with no difficulty and
+       no deadline. That is the same class of failure the guard exists to
+       prevent, manufactured by the guard itself: a value the user did not
+       choose, on a card Trello marks Urgent.
+
+       Unknown freshness now NARROWS the guard to never-written cards rather
+       than disabling the write. */
+    const project = await makeProject();
+    await upsertDeliverable(
+      project._id,
+      mapped({
+        lastPolledAt: undefined,
+        labels: [label('Main Card'), label('Urgent'), label('Difficulty: Hard')],
+        due: '2026-09-01T09:00:00.000Z',
+      }),
+      'MC-1',
+    );
+
+    const doc = await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c1' });
+    expect(doc?.urgency, 'a new Urgent card landed on the schema default').toBe('Urgent');
+    expect(doc?.difficulty).toBe('Hard');
+    expect(doc?.trello_due).toBe('2026-09-01');
+  });
+
   it('a card Sirius has never written carries no stamp and reconciles normally', async () => {
     const project = await makeProject();
     await upsertDeliverable(project._id, mapped({ labels: [label('Main Card'), label('Urgent')] }), 'MC-1');
@@ -267,29 +295,48 @@ describe('stale reconcile cannot revert a registry write (owl #50)', () => {
   });
 
   it('the real race: a write landing DURING the board read survives that sync', async () => {
+    /* ⚠️ This test went VACUOUS when the clock changed and the review caught it
+       (2026-08-25): the shared fixture stamps a fixed 2026-08-18, the racing
+       write stamps `new Date()`, so the guard held for the trivial reason that
+       any fixture card predates today — moving the write BEFORE the sync gave
+       the identical green. The stamp is now minted relative to the write, so
+       the ordering under test is the only thing that decides the outcome. */
     const project = await makeProject();
+    const polled = new Date(Date.now() - 60_000).toISOString(); // ARES fetched a minute ago
     await syncProject(
-      stubClient([card({ labels: [label('Main Card'), label('Difficulty: Easy')] })]),
+      stubClient([card({ lastPolledAt: polled, labels: [label('Main Card'), label('Difficulty: Easy')] })]),
       project,
     );
 
     // the user sets Hard while the NEXT sync's board read is in flight — the
-    // write lands after that sync stamped its read instant
+    // write lands AFTER ARES fetched the payload that read returns
     const racing = {
       boardCards: async () => {
         await Deliverable.updateOne(
           { project_id: project._id, trello_card_id: 'c1' },
           { $set: { difficulty: 'Hard', registry_written_at: new Date() } },
         );
-        return [card({ labels: [label('Main Card'), label('Difficulty: Easy')] })]; // pre-write payload
+        return [card({ lastPolledAt: polled, labels: [label('Main Card'), label('Difficulty: Easy')] })];
       },
       boardMovements: async () => [],
       referenceWeeks: async () => ({ least: null, typical: null, most: null, effectiveWeeklyRate: null }),
     } as unknown as AresClient;
     await syncProject(racing, project);
 
-    const doc = await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c1' });
-    expect(doc?.difficulty).toBe('Hard');
+    expect((await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c1' }))?.difficulty).toBe('Hard');
+
+    // …and the mirror, which is what makes the above non-vacuous: a payload
+    // ARES fetched AFTER the write reconciles normally.
+    const fresh = {
+      boardCards: async () => [card({
+        lastPolledAt: new Date(Date.now() + 60_000).toISOString(),
+        labels: [label('Main Card'), label('Difficulty: Easy')],
+      })],
+      boardMovements: async () => [],
+      referenceWeeks: async () => ({ least: null, typical: null, most: null, effectiveWeeklyRate: null }),
+    } as unknown as AresClient;
+    await syncProject(fresh, project);
+    expect((await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c1' }))?.difficulty).toBe('Easy');
   });
 });
 
@@ -328,9 +375,12 @@ describe('the guard reads a MEASURED fetch instant, never a local clock', () => 
        slice past the doc comment above `fetchedAtOf`, which quotes `new Date()`
        while explaining why it must never be the fallback — a source guard reads
        raw text including comments (test/CLAUDE.md rule 3). */
-    const guard = decl(SYNC, 'staleGuard');
+    const guard = fnBody('staleGuard', SYNC);
     expect(guard).toContain('registry_written_at');
     expect(guard).not.toContain('new Date()');
+    // an absent instant NARROWS the guard to never-written cards; it must not
+    // skip the write, which would strand a new card on its schema defaults
+    expect(guard).toContain('$exists: false');
 
     // the fetch instant is derived from the payload field, and the parse is
     // the module's ONE ISO parser rather than a second copy of it

@@ -20,7 +20,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 17 | **Forecast tab rebuilt to §7.2/§7.3** — the last tab on pre-redesign markup. Two-tier header, 25 columns from one column table, the model banner, search, Model Constants, §8 empty states. Law: `specs/001-sirius-v1/forecast-frame-notes.md` (R-fc-a…y) | **DEPLOYED 2026-08-22** (`3cfcd96`) — ⚠️ **LIVE BUT NEVER SEEN IN A BROWSER** (JP accepted; browser pass still owed) |
 | 17b | **One clock, Manila's** (invariant 11 — planner week, Add-sprint, Deadlines month) · **Schedules + Deadlines off the unfinished-screen background** (frames `262:33320` / `630:51389`, both white) | **DEPLOYED 2026-08-22** (`3cfcd96`) |
 
-**Build health (2026-08-25):** 1189/1189 tests + 32 `it.todo`, 66 files — green
+**Build health (2026-08-25):** 1196/1196 tests + 32 `it.todo`, 68 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **008** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
@@ -131,4 +131,4 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
-- 2026-08-25 — **Owl #66 processed** → the Pipeline header said **Client** while the filter, chip and Requests table said **Requestor**; renamed, guarded as the rule. **Then the bigger one: ARES caching settled by reading `../ares/`, not by owl** — reads never touch Trello (15-min store + a live Trello webhook, measured). `staleGuard` compared our write against when we ASKED, not when ARES FETCHED, so a reconcile could revert a user's edit once writes go on. **Fixed and live**: reads `lastPolledAt`, the upserts accept no clock at all, an absent stamp skips-and-warns, the probe fails the build if ARES drops the field — `unstamped: 0` on 598 production cards. Also reconfirmed the 9-file test failure (973s vs ~27s — saturation) and pruned a stale browser-pass queue. → docs/history/state-log/2026-08-25.md
+- 2026-08-25 — **Owl #66** → the Pipeline header said **Client** while the filter, chip and Requests table said **Requestor**; renamed, then made impossible: the header now DERIVES from a column table. **ARES caching settled by reading `../ares/`, not by owl** — reads never touch Trello (15-min store + a live webhook, measured), so `staleGuard` was comparing our write against when we ASKED, not when ARES FETCHED, and a reconcile could revert a user's edit. Fixed, live, `unstamped: 0` on 598 cards. **/simplify + /code-review: 27 findings, 24 applied** — including a bug the fix itself introduced (no stamp skipped the registry write even on INSERT, stranding a new card on schema defaults), a vacuous race test, and three faults in guards written the same day. → docs/history/state-log/2026-08-25.md

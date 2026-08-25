@@ -5,19 +5,23 @@
 import { describe, expect, it } from 'vitest';
 import { assignDisplayIds, mapTrello, mcNumberOf } from '../src/services/mapper.ts';
 import type { AresCard } from '../src/services/ares.ts';
+import { aresCard } from './helpers/ares-card.ts';
 
+/* Built on the shared factory, so the contract fields — notably
+   `lastPolledAt`, which the reconcile guard compares against — come from one
+   definition. This suite kept its own inline builder through the 2026-08-25
+   consolidation and was the one place it mattered most: it owns mapping, so a
+   card here that never carries the field means the mapped `trello_polled_at`
+   is only ever exercised on its null path (review). */
 let n = 0;
 function card(name: string, labels: string[], over: Partial<AresCard> = {}): AresCard {
   n++;
-  return {
+  return aresCard({
     cardId: over.cardId ?? `card${String(n).padStart(3, '0')}`,
-    boardId: 'b1',
     name,
-    currentList: 'Design',
     labels: labels.map((l, i) => ({ id: `l${i}`, name: l })),
-    due: null,
     ...over,
-  };
+  });
 }
 
 describe('taxonomy (BRD §5)', () => {
@@ -147,5 +151,29 @@ describe('display ids (invariant 3)', () => {
     expect(ids.get('a1')).toBe('MC-825.1');
     expect(ids.get('a2')).toBe('MC-825.2');
     expect(ids.get('a9')).toBe('MC-825.3');
+  });
+});
+
+describe('the payload-fetch instant the reconcile guard reads', () => {
+  /* `trello_polled_at` is not a display field — it is the clock `staleGuard`
+     compares a Sirius registry write against, so the mapper reading the wrong
+     source field would silently disarm the guard. It had no assertion in the
+     suite that owns mapping (review, 2026-08-25); the DB-backed suites covered
+     it only indirectly. */
+  it('carries ARES lastPolledAt onto BOTH mapped kinds', () => {
+    const r = mapTrello(
+      [
+        card('MC-1 Hero', ['Main Card'], { lastPolledAt: '2026-08-20T01:02:03.000Z' }),
+        card('Render Asset: MC-1 exports', [], { lastPolledAt: '2026-08-20T01:02:03.000Z' }),
+      ],
+      null,
+    );
+    expect(r.deliverables[0]!.trello_polled_at).toBe('2026-08-20T01:02:03.000Z');
+    expect(r.workCards[0]!.trello_polled_at).toBe('2026-08-20T01:02:03.000Z');
+  });
+
+  it('maps an absent instant to null rather than inventing one', () => {
+    const r = mapTrello([card('MC-2 Hero', ['Main Card'], { lastPolledAt: undefined })], null);
+    expect(r.deliverables[0]!.trello_polled_at).toBeNull();
   });
 });

@@ -98,13 +98,24 @@ function dueInstant(iso: string | null | undefined): Date | null {
  * storing its own title. Two plain updates cost one extra round trip per card
  * and cannot be read wrong.
  */
-const staleGuard = (fetchedAt: Date) => ({
-  // STRICTLY older, so a same-millisecond tie counts as stale and the write
-  // is left alone. The two mistakes are not equally bad: skipping a good
-  // reconcile costs one cycle of staleness and heals itself, while applying a
-  // stale one shows the user a value they did not choose.
-  $or: [{ registry_written_at: { $exists: false } }, { registry_written_at: { $lt: fetchedAt } }],
-});
+function staleGuard(fetchedAt: Date | null) {
+  // ⚠️ NO FETCH INSTANT NARROWS THE GUARD, IT DOES NOT DISABLE THE WRITE.
+  // An early return here was wrong (review, 2026-08-25): on a card Sirius has
+  // NEVER written there is provably nothing to protect, and skipping meant a
+  // brand-new Urgent card was created with the schema's Non-Urgent default and
+  // no deadline — manufacturing the exact "a value the user did not choose"
+  // failure this guard exists to prevent. The never-written branch below was
+  // always the answer for those cards; unknown freshness must not make it
+  // unreachable.
+  const neverWritten = { registry_written_at: { $exists: false } };
+  if (!fetchedAt) return neverWritten;
+  // STRICTLY older, so a same-millisecond tie counts as stale and the write is
+  // left alone. The two mistakes are not equally bad: skipping a good reconcile
+  // costs one cycle of staleness and heals itself, while applying a stale one
+  // shows the user a value they did not choose.
+  return { $or: [neverWritten, { registry_written_at: { $lt: fetchedAt } }] };
+}
+
 
 /**
  * The fetch instant for one mapped card, or `null` when ARES did not send one.
@@ -146,8 +157,9 @@ function fetchedAtOf(card: { trello_polled_at: string | null }): Date | null {
  * help. The fetch instant now comes off the payload this function is already
  * given, so there is no argument left to get wrong: the class is gone, not
  * the instance. *
- * @returns whether the REGISTRY half ran. `false` means ARES sent no fetch
- * instant, so urgency/due/difficulty were left alone — see `fetchedAtOf`.
+ * @returns whether ARES sent a fetch instant. `false` means the guard ran
+ * NARROWED to never-written cards, so every card Sirius has touched kept its
+ * registry values rather than reconciling — see `staleGuard`.
  * Reported rather than re-derived by the caller: if the skip ever gains a
  * second reason, a caller predicting it would under-count while this stays
  * correct. **Both callers must consume it** (`syncProject` counts it into
@@ -193,10 +205,10 @@ export async function upsertDeliverable(
   // whole set a stale payload can revert. No upsert: the write above made the
   // document exist.
   //
-  // No fetch instant, no reconcile: leaving our value alone is the safe half
-  // of the asymmetry, and it is visible in `sync_runs` rather than silent.
+  // No fetch instant narrows the guard to never-written cards (see there); it
+  // does not skip the write. The absence is still REPORTED, because unknown
+  // freshness means every card Sirius has touched stops reconciling.
   const fetchedAt = fetchedAtOf(d);
-  if (!fetchedAt) return false;
   await Deliverable.updateOne(
     { ...key, ...staleGuard(fetchedAt) },
     {
@@ -208,7 +220,7 @@ export async function upsertDeliverable(
       },
     },
   );
-  return true;
+  return fetchedAt !== null;
 }
 
 /** Ownership-safe work-card upsert — shared by full sync and the push drain. */
@@ -240,12 +252,11 @@ export async function upsertWorkCard(
   // guarded on a task card: W3 writes deliverables only, so nothing here can
   // be reverting a Sirius write.
   const fetchedAt = fetchedAtOf(w);
-  if (!fetchedAt) return false;
   await WorkCard.updateOne(
     { ...key, ...staleGuard(fetchedAt) },
     { $set: { trello_due: w.trello_due, trello_due_at: dueInstant(w.trello_due_at) } },
   );
-  return true;
+  return fetchedAt !== null;
 }
 
 /**

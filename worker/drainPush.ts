@@ -103,8 +103,15 @@ export async function drainPushEvents(env: Env, clientOverride?: AresClient): Pr
     try {
       const outcomes: Record<string, number> = {};
       if (resync) {
-        await syncProject(client, project);
+        // The full sync's own stats are the only place the unstamped count
+        // exists on this branch — discarding them meant a resync-triggered
+        // sync could find every card unstamped and record nothing but
+        // `resync: 1` (review, 2026-08-25). FR-9.6 leaves this path as the
+        // primary reconcile while push is healthy, so it is the last one that
+        // should be silent.
+        const full = await syncProject(client, project);
         outcomes.resync = 1;
+        if (full.unstamped > 0) outcomes.unstamped = full.unstamped;
       } else {
         for (const cardId of cardIds) {
           const outcome = await reconcileCard(client, project, cardId);
@@ -116,6 +123,14 @@ export async function drainPushEvents(env: Env, clientOverride?: AresClient): Pr
           // push is healthy, so this is the path that would go quiet first
           // while the fallback that might have masked it is throttled.
           if (outcome.unstamped) outcomes.unstamped = (outcomes.unstamped ?? 0) + 1;
+        }
+        if (outcomes.unstamped) {
+          // syncProject warns for its own loop; the drain had no counterpart,
+          // so the quieter path was also the silent one.
+          console.warn(
+            `[drainPush] ${outcomes.unstamped}/${cardIds.length} pushed cards carried no ARES fetch instant — ` +
+              'registry fields did NOT reconcile for them (contracts/ares-read.md §Freshness).',
+          );
         }
         // ONE derivation for the whole batch: Started/Done follow the list
         // moves just ingested. Idempotent and order-independent, and it reads

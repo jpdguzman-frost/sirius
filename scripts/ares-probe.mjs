@@ -83,21 +83,6 @@ if (failures.length > 0) {
  * Endpoint-level stability would not catch it: the path stays `stable` while
  * the field disappears from the body.
  */
-const boardsRes = await fetch(`${BASE}/api/v1/trello/boards`, {
-  headers: { 'X-API-Key': KEY, Accept: 'application/json' },
-});
-if (!boardsRes.ok) {
-  console.error(`[ares-probe] failed to list boards: HTTP ${boardsRes.status}`);
-  process.exit(1);
-}
-const boards = (await boardsRes.json())?.data?.boards ?? [];
-// The busiest board, so an empty or dormant one cannot pass this vacuously.
-const board = boards.reduce((a, b) => ((b.cardCount ?? 0) > (a?.cardCount ?? -1) ? b : a), null);
-if (!board?.boardId) {
-  console.error('[ares-probe] no boards returned — cannot verify the card shape');
-  process.exit(1);
-}
-
 const json = async (url) => {
   const res = await fetch(url, { headers: { 'X-API-Key': KEY, Accept: 'application/json' } });
   if (!res.ok) {
@@ -107,42 +92,68 @@ const json = async (url) => {
   return res.json();
 };
 
-/*
- * `?.data` and nothing else, deliberately. The shipped adapter unwraps the
- * `/api/v1/*` envelope exactly that way (`AresClient.getAllPages`), and a
- * probe that accepts MORE shapes than the code it protects can pass green on
- * a payload the sync worker reads as empty. A drift check must be at least as
- * strict as its consumer, never more forgiving.
- */
-const cards = (await json(`${BASE}/api/v1/trello/boards/${board.boardId}/cards?pageSize=1`))?.data ?? [];
-const sample = cards[0];
-if (!sample) {
-  console.error(`[ares-probe] board ${board.boardId} returned no cards — cannot verify the card shape`);
-  process.exit(1);
-}
-
 const missing = (what) => {
   console.error(`[ares-probe] CONTRACT DRIFT: \`lastPolledAt\` is gone from ${what}.`);
   console.error('  It is the ONLY honest measure of how old ARES data is, and the reconcile');
   console.error('  guard compares every registry write against it. Without it, urgency, due');
-  console.error('  dates and difficulty stop reconciling silently (they fail SAFE — our value');
-  console.error('  is kept — but they stop).');
+  console.error('  dates and difficulty stop reconciling for every card Sirius has written');
+  console.error('  (they fail SAFE — our value is kept — but they stop).');
   console.error('  See specs/001-sirius-v1/contracts/ares-read.md §Freshness and worker/syncAres.ts.');
   process.exit(1);
 };
 
-if (!sample.lastPolledAt) missing('the board-cards payload');
+const boards = (await json(`${BASE}/api/v1/trello/boards`))?.data?.boards ?? [];
+if (!boards.length) {
+  console.error('[ares-probe] no boards returned — cannot verify the card shape');
+  process.exit(1);
+}
 
 /*
- * BOTH endpoints, because the two reconcile paths read different ones and can
- * lose the field independently: the full sync reads the board list above, the
- * push drain reads this single-card route. The push path is the one that would
- * go quiet first — FR-9.6 relaxes the full sync to hourly while push is
- * healthy, so the fallback that might have masked it is throttled exactly when
- * it is needed.
+ * SEVERAL boards, not the biggest one.
+ *
+ * The first version sampled whichever board reported the highest card count,
+ * which in CI is whatever happens to be largest across all of ARES — not
+ * necessarily a board any Sirius project is configured for (review,
+ * 2026-08-25). Drift confined to the board Sirius actually syncs would have
+ * passed green. The probe has no database and so cannot ask which boards those
+ * are; `ARES_PROBE_BOARDS` pins them when someone wants certainty, and absent
+ * that it samples broadly instead of narrowly, which is the honest fallback.
+ *
+ * The single-card endpoint is checked too: the two reconcile paths read
+ * different routes — the full sync the board list, the push drain the card —
+ * and the field can leave one and not the other. The push path is the one that
+ * would go quiet first, since FR-9.6 relaxes the full sync to hourly while
+ * push is healthy.
  */
-const one = (await json(`${BASE}/api/v1/trello/cards/${sample.cardId}`))?.data;
+const pinned = (process.env.ARES_PROBE_BOARDS ?? '').split(',').map((b) => b.trim()).filter(Boolean);
+// ARES lists a shared board once PER PROJECT, so the raw list repeats board ids
+// — without this the sample silently narrows to two or three distinct boards.
+const distinct = [...new Map(boards.map((b) => [b.boardId, b])).values()];
+const sample = pinned.length
+  ? distinct.filter((b) => pinned.includes(b.boardId))
+  : distinct.sort((a, b) => (b.cardCount ?? 0) - (a.cardCount ?? 0)).slice(0, 5);
+
+if (pinned.length && sample.length !== pinned.length) {
+  console.error(`[ares-probe] ARES_PROBE_BOARDS names a board ARES does not list: ${pinned.join(', ')}`);
+  process.exit(1);
+}
+
+let firstCard = null;
+const checked = [];
+for (const board of sample) {
+  const cards = (await json(`${BASE}/api/v1/trello/boards/${board.boardId}/cards?pageSize=1`))?.data ?? [];
+  if (!cards[0]) continue; // an empty board proves nothing either way
+  if (!cards[0].lastPolledAt) missing(`board ${board.boardId}'s cards payload`);
+  firstCard ??= cards[0];
+  checked.push(board.boardId);
+}
+if (!checked.length) {
+  console.error('[ares-probe] every sampled board returned no cards — cannot verify the card shape');
+  process.exit(1);
+}
+
+const one = (await json(`${BASE}/api/v1/trello/cards/${firstCard.cardId}`))?.data;
 if (!one?.lastPolledAt) missing('the single-card payload (the push path)');
 
 console.log(`[ares-probe] OK — ${Object.keys(REQUIRED).length} endpoints present at expected stability`);
-console.log('[ares-probe] OK — both card endpoints still carry `lastPolledAt` (the reconcile guard depends on it)');
+console.log(`[ares-probe] OK — \`lastPolledAt\` present on ${checked.length} board(s) (${checked.join(', ')}) and on the single-card route`);

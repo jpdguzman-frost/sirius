@@ -480,6 +480,9 @@ export function renderMetrics(kpi: Record<string, unknown>): string {
   return new Ractive({ template: divFragment('<div class="metrics">'), data: { kpi } }).toHTML();
 }
 
+export const PIPE_COLS: Array<{ cls: string; label: string }> =
+  new Function(`${decl(APP_JS, 'PIPE_COLS')} return PIPE_COLS;`)();
+
 /**
  * Renders the Pipeline table (`<div class="pscrollwrap">`, which occurs
  * exactly once — the Requests and Gantt wrappers carry a second class).
@@ -496,15 +499,12 @@ export function renderMetrics(kpi: Record<string, unknown>): string {
  * put a second one in the test helper and let the render pass while the app
  * drew something else.
  */
-export const PIPE_COLS = (): Array<{ cls: string; label: string }> =>
-  new Function(`${decl(APP_JS, 'PIPE_COLS')} return PIPE_COLS;`)();
-
 export function renderPipelineTable(state: PipelineTableState): string {
   const instance = new Ractive({
     template: divFragment('<div class="pscrollwrap">'),
     partials: { dueCalendar: DUE_CALENDAR_PARTIAL },
     data: {
-      pipeCols: PIPE_COLS(),
+      pipeCols: PIPE_COLS,
       pipelineRows: stampRows(state.pipelineRows, state.rowWarning, state.workCardsByMc ?? {}),
       pipeMcAnchor: mcAnchor(state.pipelineRows),
       warnPop: state.warnPop ?? null,

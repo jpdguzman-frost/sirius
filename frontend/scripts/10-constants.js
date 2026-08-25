@@ -371,21 +371,6 @@ const pipeSortRows = (rows, sort) => {
   return decorated.map((d) => d.r);
 };
 
-/* THE FIVE FILTER AXES. Values are DERIVED FROM THE BOARD, never a fixed list
-   (frame: "a type or status nobody uses simply does not appear"). `order` sets
-   the value order inside a category: the two closed vocabularies read in their
-   natural progression, the three open ones alphabetically. STATUS would ideally
-   read in Trello's own list order, but the wire carries no list position - see
-   R-pf-e. NO STATE FILTERS: blocked and missing-info were considered and
-   declined; row state stays on the rows themselves.
-
-   `none: true` marks an axis where ABSENCE is itself a selectable value (owl
-   #63, closing R-pf-i). Without it the rows carrying no type, no difficulty or
-   no requestor are the only rows NO filter can reach, and those are the
-   incomplete rows most needing attention - a missing difficulty label is one of
-   the three Needs Info conditions. URGENCY and STATUS are deliberately NOT
-   marked: every card sits in a list, and `Non-Urgent` is a value rather than an
-   absence, so neither axis has a residue to collect. */
 /* THE PIPELINE COLUMN TABLE — one row per column, in draw order.
 
    Added 2026-08-25 for a reason the project paid for: this header was the only
@@ -421,6 +406,21 @@ const PIPE_COLS = [
     `test/pipeline-sortfilter.test.ts` turns into a failing build. */
 const pipeColLabel = (cls) => (PIPE_COLS.find((c) => c.cls === cls) || {}).label;
 
+/* THE FIVE FILTER AXES. Values are DERIVED FROM THE BOARD, never a fixed list
+   (frame: "a type or status nobody uses simply does not appear"). `order` sets
+   the value order inside a category: the two closed vocabularies read in their
+   natural progression, the three open ones alphabetically. STATUS would ideally
+   read in Trello's own list order, but the wire carries no list position - see
+   R-pf-e. NO STATE FILTERS: blocked and missing-info were considered and
+   declined; row state stays on the rows themselves.
+
+   `none: true` marks an axis where ABSENCE is itself a selectable value (owl
+   #63, closing R-pf-i). Without it the rows carrying no type, no difficulty or
+   no requestor are the only rows NO filter can reach, and those are the
+   incomplete rows most needing attention - a missing difficulty label is one of
+   the three Needs Info conditions. URGENCY and STATUS are deliberately NOT
+   marked: every card sits in a list, and `Non-Urgent` is a value rather than an
+   absence, so neither axis has a residue to collect. */
 /* Labels in HUMAN case. The panel heading shouts them in CSS (`.pmhead` carries
    `text-transform: uppercase`) and the chip needs them unshouted — storing them
    shouted meant carrying a second, opposite case rule in JS to un-shout them.
