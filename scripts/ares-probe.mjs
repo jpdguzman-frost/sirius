@@ -92,30 +92,57 @@ if (!boardsRes.ok) {
 }
 const boards = (await boardsRes.json())?.data?.boards ?? [];
 // The busiest board, so an empty or dormant one cannot pass this vacuously.
-const board = boards.slice().sort((a, b) => (b.cardCount ?? 0) - (a.cardCount ?? 0))[0];
+const board = boards.reduce((a, b) => ((b.cardCount ?? 0) > (a?.cardCount ?? -1) ? b : a), null);
 if (!board?.boardId) {
   console.error('[ares-probe] no boards returned — cannot verify the card shape');
   process.exit(1);
 }
 
-const cardsRes = await fetch(`${BASE}/api/v1/trello/boards/${board.boardId}/cards?pageSize=1`, {
-  headers: { 'X-API-Key': KEY, Accept: 'application/json' },
-});
-const body = await cardsRes.json();
-const sample = (body?.data?.cards ?? body?.data ?? [])[0];
+const json = async (url) => {
+  const res = await fetch(url, { headers: { 'X-API-Key': KEY, Accept: 'application/json' } });
+  if (!res.ok) {
+    console.error(`[ares-probe] ${url} failed: HTTP ${res.status}`);
+    process.exit(1);
+  }
+  return res.json();
+};
+
+/*
+ * `?.data` and nothing else, deliberately. The shipped adapter unwraps the
+ * `/api/v1/*` envelope exactly that way (`AresClient.getAllPages`), and a
+ * probe that accepts MORE shapes than the code it protects can pass green on
+ * a payload the sync worker reads as empty. A drift check must be at least as
+ * strict as its consumer, never more forgiving.
+ */
+const cards = (await json(`${BASE}/api/v1/trello/boards/${board.boardId}/cards?pageSize=1`))?.data ?? [];
+const sample = cards[0];
 if (!sample) {
   console.error(`[ares-probe] board ${board.boardId} returned no cards — cannot verify the card shape`);
   process.exit(1);
 }
-if (!sample.lastPolledAt) {
-  console.error('[ares-probe] CONTRACT DRIFT: `lastPolledAt` is gone from the card payload.');
+
+const missing = (what) => {
+  console.error(`[ares-probe] CONTRACT DRIFT: \`lastPolledAt\` is gone from ${what}.`);
   console.error('  It is the ONLY honest measure of how old ARES data is, and the reconcile');
   console.error('  guard compares every registry write against it. Without it, urgency, due');
   console.error('  dates and difficulty stop reconciling silently (they fail SAFE — our value');
   console.error('  is kept — but they stop).');
   console.error('  See specs/001-sirius-v1/contracts/ares-read.md §Freshness and worker/syncAres.ts.');
   process.exit(1);
-}
+};
+
+if (!sample.lastPolledAt) missing('the board-cards payload');
+
+/*
+ * BOTH endpoints, because the two reconcile paths read different ones and can
+ * lose the field independently: the full sync reads the board list above, the
+ * push drain reads this single-card route. The push path is the one that would
+ * go quiet first — FR-9.6 relaxes the full sync to hourly while push is
+ * healthy, so the fallback that might have masked it is throttled exactly when
+ * it is needed.
+ */
+const one = (await json(`${BASE}/api/v1/trello/cards/${sample.cardId}`))?.data;
+if (!one?.lastPolledAt) missing('the single-card payload (the push path)');
 
 console.log(`[ares-probe] OK — ${Object.keys(REQUIRED).length} endpoints present at expected stability`);
-console.log('[ares-probe] OK — cards still carry `lastPolledAt` (the reconcile guard depends on it)');
+console.log('[ares-probe] OK — both card endpoints still carry `lastPolledAt` (the reconcile guard depends on it)');

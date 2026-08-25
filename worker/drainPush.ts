@@ -35,7 +35,7 @@ export async function reconcileCard(
   client: AresClient,
   project: ProjectDoc,
   cardId: string,
-): Promise<'deliverable' | 'work_card' | 'descoped' | 'missing'> {
+): Promise<{ kind: 'deliverable' | 'work_card' | 'descoped' | 'missing'; unstamped: boolean }> {
   // No read instant (2026-08-25). This used to stamp `new Date()` before the
   // read, on the reasoning that a registry write landing mid-flight must win
   // over the payload — true, but it measured the wrong flight. ARES answers
@@ -43,14 +43,14 @@ export async function reconcileCard(
   // request returns, and the push would revert a change the user just made.
   // The fetch instant rides on the card itself now; see `staleGuard`.
   const { card, movements } = await client.cardWithMovements(cardId);
-  if (!card) return 'missing'; // the full board sync catches true deletions
+  if (!card) return { kind: 'missing', unstamped: false }; // the full board sync catches true deletions
   const mapped = mapTrello([card], project.trello_label ?? null);
 
   if (mapped.deliverables.length > 0) {
     const d = mapped.deliverables[0]!;
     const existing = await Deliverable.find({ project_id: project._id }).select('trello_card_id display_id');
     const ids = assignDisplayIds(new Map(existing.map((x) => [x.trello_card_id, x.display_id])), [d]);
-    await upsertDeliverable(project._id, d, ids.get(d.trello_card_id));
+    const reconciled = await upsertDeliverable(project._id, d, ids.get(d.trello_card_id));
     // a card that just GAINED the Main Card label may have lived in the other
     // collection: deactivate the twin here rather than waiting up to an hour
     // for the full sync's sweep, or the same trello_card_id is served — and
@@ -60,17 +60,17 @@ export async function reconcileCard(
       { $set: { active: false } },
     );
     await insertCardEvents(project._id, movements);
-    return 'deliverable';
+    return { kind: 'deliverable', unstamped: !reconciled };
   }
   if (mapped.workCards.length > 0) {
-    await upsertWorkCard(project._id, mapped.workCards[0]!);
+    const reconciled = await upsertWorkCard(project._id, mapped.workCards[0]!);
     // the mirror case: a card that just LOST the Main Card label
     await Deliverable.updateOne(
       { project_id: project._id, trello_card_id: cardId, active: true },
       { $set: { active: false, updated_at: new Date() } },
     );
     await insertCardEvents(project._id, movements);
-    return 'work_card';
+    return { kind: 'work_card', unstamped: !reconciled };
   }
   // Scoped out (lost the project label) or an unlinked task: locally known
   // rows go inactive, never deleted (FR-8.4 mirror).
@@ -82,7 +82,7 @@ export async function reconcileCard(
     { project_id: project._id, trello_card_id: cardId, active: true },
     { $set: { active: false } },
   );
-  return 'descoped';
+  return { kind: 'descoped', unstamped: false };
 }
 
 /** Drain pending push events, project by project (invariant 1). */
@@ -108,7 +108,14 @@ export async function drainPushEvents(env: Env, clientOverride?: AresClient): Pr
       } else {
         for (const cardId of cardIds) {
           const outcome = await reconcileCard(client, project, cardId);
-          outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
+          outcomes[outcome.kind] = (outcomes[outcome.kind] ?? 0) + 1;
+          // Counted HERE and not only in the full sync, because the two paths
+          // read DIFFERENT ARES endpoints — the board list there, the
+          // single-card read here — so `lastPolledAt` can vanish from one and
+          // not the other. And FR-9.6 relaxes the full sync to hourly while
+          // push is healthy, so this is the path that would go quiet first
+          // while the fallback that might have masked it is throttled.
+          if (outcome.unstamped) outcomes.unstamped = (outcomes.unstamped ?? 0) + 1;
         }
         // ONE derivation for the whole batch: Started/Done follow the list
         // moves just ingested. Idempotent and order-independent, and it reads

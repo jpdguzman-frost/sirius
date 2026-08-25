@@ -87,7 +87,7 @@ export const APP_JS_CODE = APP_JS.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|
  */
 export function fnBody(name: string, src: string = APP_JS_CODE): string {
   const at = src.indexOf(`function ${name}(`);
-  if (at < 0) throw new Error(`gantt-render: no \`function ${name}\` in the shipped client`);
+  if (at < 0) throw new Error(`gantt-render: no \`function ${name}\` in the source given`);
   let i = src.indexOf('(', at);
   for (let depth = 0; i < src.length; i++) {
     if (src[i] === '(') depth++;
@@ -489,11 +489,22 @@ export function renderMetrics(kpi: Record<string, unknown>): string {
  * different cell. The urgency/difficulty menus and the due popover are all
  * closed for the same reason.
  */
+/**
+ * The shipped `PIPE_COLS`, EXECUTED — not a stub copy like `REQ_COLS_STUB`
+ * above. The whole point of deriving the Pipeline header (2026-08-25) is that
+ * the column labels live in exactly one place; a hand-copied array here would
+ * put a second one in the test helper and let the render pass while the app
+ * drew something else.
+ */
+export const PIPE_COLS = (): Array<{ cls: string; label: string }> =>
+  new Function(`${decl(APP_JS, 'PIPE_COLS')} return PIPE_COLS;`)();
+
 export function renderPipelineTable(state: PipelineTableState): string {
   const instance = new Ractive({
     template: divFragment('<div class="pscrollwrap">'),
     partials: { dueCalendar: DUE_CALENDAR_PARTIAL },
     data: {
+      pipeCols: PIPE_COLS(),
       pipelineRows: stampRows(state.pipelineRows, state.rowWarning, state.workCardsByMc ?? {}),
       pipeMcAnchor: mcAnchor(state.pipelineRows),
       warnPop: state.warnPop ?? null,
@@ -626,7 +637,7 @@ export function renderRequestsTable(state: RequestsTableState): string {
  */
 export function decl(src: string, name: string): string {
   const at = src.indexOf(`\nconst ${name} =`);
-  if (at < 0) throw new Error(`gantt-render: no declaration of \`${name}\` in the shipped frontend source`);
+  if (at < 0) throw new Error(`gantt-render: no declaration of \`${name}\` in the source given`);
   let depth = 0;
   for (let i = at + 1; i < src.length; i++) {
     const c = src[i]!;

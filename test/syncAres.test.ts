@@ -7,6 +7,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
+import { aresCard, label } from './helpers/fixtures.ts';
 import { syncProject } from '../worker/syncAres.ts';
 import type { AresCard, AresClient, AresMovement } from '../src/services/ares.ts';
 import { CardEvent, Deliverable, Project, WorkCard } from '../src/models/index.ts';
@@ -33,32 +34,24 @@ function stubClient(over: Partial<Record<'cards' | 'movements', unknown[]>> & { 
   } as unknown as AresClient;
 }
 
-// `lastPolledAt` is on both: every real ARES card carries it, and the reconcile
-// guard reads it as the instant ARES fetched the card from Trello
-// (contracts/ares-read.md §Freshness). Omitting it exercises the SKIP path,
-// which has its own tests in reconcile.test.ts.
+/* Built through the shared `aresCard` fixture so the contract fields (notably
+   `lastPolledAt`, which the reconcile guard compares against) come from one
+   definition rather than being restated per suite. */
 const CARDS: AresCard[] = [
-  {
+  aresCard({
     cardId: 'c-main-1',
     boardId: 'fxA',
     name: 'MC-655 / Main Card: Landing hero',
-    currentList: 'Design',
-    labels: [
-      { id: 'l1', name: 'Main Card' },
-      { id: 'l2', name: 'Difficulty: Medium' },
-    ],
+    labels: [label('Main Card'), label('Difficulty: Medium')],
     due: '2026-08-21T09:00:00.000Z',
-    lastPolledAt: '2026-08-18T12:00:00.000Z',
-  },
-  {
+  }),
+  aresCard({
     cardId: 'c-task-1',
     boardId: 'fxA',
     name: 'Render Asset: MC-655 exports',
     currentList: 'Production Backlog',
     labels: [],
-    due: null,
-    lastPolledAt: '2026-08-18T12:00:00.000Z',
-  },
+  }),
 ];
 
 const MOVES: AresMovement[] = [
@@ -139,6 +132,30 @@ describe('syncProject', () => {
     const p = await Project.findById(project._id).orFail();
     expect(p.ref_week_typical).toBe(116);
     expect(p.effective_weekly_rate).toBe(89.2);
+  });
+
+  it('counts cards ARES sent with no fetch instant, so the skip is never silent', async () => {
+    /* `SyncStats.unstamped` exists to make one failure visible: if ARES drops
+       `lastPolledAt`, the registry reconcile stops and everything still looks
+       healthy. The clock fix shipped with four source-shape guards and nothing
+       that EXECUTED this counter — so a wrong denominator or a dropped field
+       in the returned stats would have shipped green. */
+    const project = await makeProject();
+    const stamped = CARDS[0]!;
+    const bare = { ...CARDS[1]!, lastPolledAt: undefined };
+    const stats = await syncProject(stubClient({ cards: [stamped, bare] }), project);
+
+    expect(stats.unstamped, 'the unstamped card was not counted').toBe(1);
+    // and it is the SKIP that was counted, not merely a card: the guarded
+    // fields held while the unguarded half of the same card reconciled
+    const w = await WorkCard.findOne({ trello_card_id: 'c-task-1' });
+    expect(w?.current_list).toBe('Production Backlog');
+  });
+
+  it('reports zero when every card carries one — the expected steady state', async () => {
+    const project = await makeProject();
+    const stats = await syncProject(stubClient({ cards: CARDS }), project);
+    expect(stats.unstamped).toBe(0);
   });
 
   it('AC-19: a failed sync throws, and last good data stays untouched', async () => {

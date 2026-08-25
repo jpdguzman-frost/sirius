@@ -61,12 +61,7 @@ export interface MappedWorkCard {
   trello_due: string | null;
   trello_due_at: string | null;
   active: boolean;
-  /**
-   * When ARES last fetched this card from Trello (`AresCard.lastPolledAt`).
-   * NOT a display field — it is the clock `staleGuard` compares a Sirius
-   * registry write against, and the only field on this record whose job is to
-   * describe the PAYLOAD rather than the card.
-   */
+  /** Same payload-fetch instant as the deliverable's — see there. */
   trello_polled_at: string | null;
 }
 

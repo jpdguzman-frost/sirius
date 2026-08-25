@@ -10,7 +10,9 @@ import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Types } from 'mongoose';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
+import { aresCard, label } from './helpers/fixtures.ts';
 import { syncProject, upsertDeliverable, upsertWorkCard } from '../worker/syncAres.ts';
+import { decl, fnBody } from './helpers/gantt-render.ts';
 import { mapTrello } from '../src/services/mapper.ts';
 import type { AresClient, AresCard } from '../src/services/ares.ts';
 import { AuditLog, Deliverable, Project, WorkCard } from '../src/models/index.ts';
@@ -25,24 +27,9 @@ beforeEach(async () => {
   await clearCollections();
 });
 
-const label = (name: string) => ({ id: `l-${name}`, name });
-
-function card(over: Partial<AresCard> = {}): AresCard {
-  return {
-    cardId: 'c1',
-    boardId: 'b1',
-    name: 'MC-1 Hero banner',
-    currentList: 'Design',
-    labels: [label('Main Card')],
-    due: null,
-    // Every real ARES card carries this — it is how ARES reports when IT last
-    // fetched the card from Trello, and the guard below compares against it.
-    // Defaulted late so a test not about staleness reconciles normally;
-    // staleness tests override it, which is the only way they can now.
-    lastPolledAt: '2026-08-18T12:00:00.000Z',
-    ...over,
-  } as AresCard;
-}
+/** This suite's card identity, over the contract defaults in `fixtures.ts`. */
+const card = (over: Partial<AresCard> = {}): AresCard =>
+  aresCard({ name: 'MC-1 Hero banner', ...over });
 
 const stubClient = (cards: AresCard[]): AresClient =>
   ({
@@ -123,32 +110,48 @@ describe('FR-9.5 — written fields reconcile from ARES reads', () => {
  * different clocks and only the first bounds the data. Everything else on the
  * card reconciles regardless: the guard protects three fields, not the row.
  */
-describe('stale reconcile cannot revert a registry write (owl #50)', () => {
-  const mapped = (over: Partial<AresCard> = {}) =>
-    mapTrello([card(over)], null).deliverables[0]!;
+/** A card Sirius wrote to at `writtenAt`, holding the user's chosen values. */
+async function writtenDeliverable(projectId: Types.ObjectId, writtenAt: Date) {
+  return Deliverable.create({
+    project_id: projectId,
+    mc_number: 'MC-1',
+    display_id: 'MC-1',
+    trello_card_id: 'c1',
+    name: 'MC-1 Hero banner',
+    urgency: 'Urgent',
+    difficulty: 'Hard',
+    trello_due: '2026-08-25',
+    trello_due_at: new Date('2026-08-25T09:00:00.000Z'),
+    registry_written_at: writtenAt,
+  });
+}
 
-  /** A card Sirius wrote to at `writtenAt`, holding the user's chosen values. */
-  async function writtenDeliverable(projectId: Types.ObjectId, writtenAt: Date) {
-    return Deliverable.create({
-      project_id: projectId,
-      mc_number: 'MC-1',
-      display_id: 'MC-1',
-      trello_card_id: 'c1',
-      name: 'MC-1 Hero banner',
-      urgency: 'Urgent',
-      difficulty: 'Hard',
-      trello_due: '2026-08-25',
-      trello_due_at: new Date('2026-08-25T09:00:00.000Z'),
-      registry_written_at: writtenAt,
-    });
-  }
+const mapped = (over: Partial<AresCard> = {}) => mapTrello([card(over)], null).deliverables[0]!;
+
+describe('stale reconcile cannot revert a registry write (owl #50)', () => {
+
 
   it('a payload FETCHED BEFORE the write leaves all three written fields alone', async () => {
-    const project = await makeProject();
-    await writtenDeliverable(project._id, new Date('2026-08-18T10:00:01.000Z'));
+    /* The defect this guard shipped with, and the reason it changed clocks
+       (2026-08-25). ARES never reads Trello at request time — it answers from
+       a store filled by a 15-minute poll and by a webhook — so this sequence
+       is ordinary, not exotic:
 
-    // ARES fetched this card one second BEFORE the user's write landed, so the
-    // payload still carries the pre-write values.
+         10:00  ARES fetches the card
+         10:05  the user edits urgency in Sirius; we write Trello and stamp
+         10:06  a reconcile fires and asks ARES for the card
+
+       Judged on the REQUEST instant (10:06) the guard passed — 10:05 < 10:06 —
+       and wrote the 10:00 payload straight over the user's change. Judged on
+       the FETCH instant (10:00) it holds, which is the whole correction. The
+       request instant cannot be expressed here any more: the upserts take no
+       clock, which is what made the bug unrepresentable rather than merely
+       fixed. */
+    const project = await makeProject();
+    await writtenDeliverable(project._id, new Date('2026-08-18T10:05:00.000Z'));
+
+    // ARES fetched this card five minutes BEFORE the user's write landed, so
+    // the payload still carries the pre-write values.
     await upsertDeliverable(
       project._id,
       mapped({
@@ -161,43 +164,12 @@ describe('stale reconcile cannot revert a registry write (owl #50)', () => {
     );
 
     const doc = await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c1' });
-    expect(doc?.urgency).toBe('Urgent'); // W1 held
+    expect(doc?.urgency, 'the reconcile reverted the edit — the guard is on the wrong clock').toBe('Urgent');
     expect(doc?.difficulty).toBe('Hard'); // W3 held
     expect(doc?.trello_due).toBe('2026-08-25'); // W2 held
     expect(doc?.trello_due_at?.toISOString()).toBe('2026-08-25T09:00:00.000Z');
     // and the guard protects THOSE THREE ONLY — the rest of the card still reconciles
     expect(doc?.current_list).toBe('Render');
-  });
-
-  it('THE BUG: a payload fetched before the write, requested after it, is still held', async () => {
-    /* The defect this guard shipped with, and the reason it moved clocks
-       (2026-08-25). ARES never reads Trello at request time — it answers from
-       a store filled by a 15-minute poll and by a webhook. So this sequence is
-       ordinary, not exotic:
-
-         10:00  ARES fetches the card
-         10:05  the user edits urgency in Sirius; we write Trello and stamp
-         10:06  a reconcile fires and asks ARES for the card
-
-       Judged on the REQUEST instant (10:06) the guard passed — 10:05 < 10:06 —
-       and wrote the 10:00 payload straight over the user's change. Judged on
-       the FETCH instant (10:00) it holds, which is the whole correction.
-
-       Asserted with the request instant LATER than the write, so this test can
-       only pass on the fetch clock: on the old code it failed. */
-    const project = await makeProject();
-    await writtenDeliverable(project._id, new Date('2026-08-18T10:05:00.000Z'));
-
-    await upsertDeliverable(
-      project._id,
-      mapped({ lastPolledAt: '2026-08-18T10:00:00.000Z', labels: [label('Main Card')], due: null }),
-      'MC-1',
-    );
-
-    const doc = await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c1' });
-    expect(doc?.urgency, 'the push reverted the edit — the guard is on the wrong clock').toBe('Urgent');
-    expect(doc?.difficulty).toBe('Hard');
-    expect(doc?.trello_due).toBe('2026-08-25');
   });
 
   it('a payload FETCHED AFTER the write applies it — invariant 8 keeps its promise', async () => {
@@ -349,23 +321,22 @@ describe('the guard reads a MEASURED fetch instant, never a local clock', () => 
   });
 
   it('the guard compares against the field ARES stamps, not against now', () => {
-    /* Sliced to the FUNCTION BODIES, not to the next declaration: the doc
-       comment above `fetchedAtOf` quotes `new Date()` while explaining why it
-       must never be the fallback, and a source guard reads raw text including
-       comments (test/CLAUDE.md rule 3). The guard was right and the scope was
-       wrong — the same resolution that rule records twice already. */
-    const bodyOf = (decl: string) => {
-      const from = SYNC.indexOf(decl);
-      return SYNC.slice(from, SYNC.indexOf('\n});', from));
-    };
-    const guard = bodyOf('const staleGuard');
+    /* Sliced with `decl`/`fnBody` rather than `indexOf` plus a magic
+       terminator. `handlerBody`'s own doc names why: a landmark like `'\n});'`
+       silently truncates the moment the code it reads grows a nested object,
+       and an assertion on a fragment passes for the wrong reason. These also
+       slice past the doc comment above `fetchedAtOf`, which quotes `new Date()`
+       while explaining why it must never be the fallback — a source guard reads
+       raw text including comments (test/CLAUDE.md rule 3). */
+    const guard = decl(SYNC, 'staleGuard');
     expect(guard).toContain('registry_written_at');
     expect(guard).not.toContain('new Date()');
 
-    // and the fetch instant is derived from the payload field, nowhere else
-    const from = SYNC.indexOf('export function fetchedAtOf');
-    const derive = SYNC.slice(from, SYNC.indexOf('\n}', from));
+    // the fetch instant is derived from the payload field, and the parse is
+    // the module's ONE ISO parser rather than a second copy of it
+    const derive = fnBody('fetchedAtOf', SYNC);
     expect(derive).toContain('trello_polled_at');
+    expect(derive).toContain('dueInstant');
     expect(derive).not.toContain('new Date()');
   });
 
@@ -380,23 +351,17 @@ describe('the guard reads a MEASURED fetch instant, never a local clock', () => 
   });
 
   it('is executed, not just read: an absent stamp holds the value', async () => {
-    /* The source assertions above prove the shape. This proves the behaviour,
-       because a shape can be right while the branch is dead. */
+    /* The three assertions above read source text. A describe block of only
+       source assertions is the vacuity risk test/CLAUDE.md rule 1 names — a
+       shape can be right while the branch is dead — so this one runs it. It
+       shares `writtenDeliverable`/`mapped` with the block above rather than
+       re-declaring the fixture, which is what it used to do. */
     const project = await makeProject();
-    await Deliverable.create({
-      project_id: project._id,
-      mc_number: 'MC-2',
-      display_id: 'MC-2',
-      trello_card_id: 'c2',
-      name: 'MC-2 Banner',
-      urgency: 'Urgent',
-      registry_written_at: new Date('2026-08-18T10:00:00.000Z'),
-    });
-    const noStamp = mapTrello([card({ cardId: 'c2', name: 'MC-2 Banner', lastPolledAt: undefined })], null)
-      .deliverables[0]!;
+    await writtenDeliverable(project._id, new Date('2026-08-18T10:00:00.000Z'));
+    const noStamp = mapped({ lastPolledAt: undefined });
     expect(noStamp.trello_polled_at, 'the mapper invented a stamp').toBeNull();
-    await upsertDeliverable(project._id, noStamp, 'MC-2');
-    const doc = await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c2' });
+    await upsertDeliverable(project._id, noStamp, 'MC-1');
+    const doc = await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c1' });
     expect(doc?.urgency).toBe('Urgent');
   });
 });

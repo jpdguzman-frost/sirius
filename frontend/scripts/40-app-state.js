@@ -143,6 +143,7 @@ const app = new Ractive({
     reqMenu: null, // which select's overlay is open — shares the Pipeline recipe
     reqMenuPos: { left: 0, top: 0 },
     reqCols: REQ_COLS,
+    pipeCols: PIPE_COLS,
     /* owl #18: '' = the default newest-filed order, which is also where the
        third click on a header lands. Two flat keys, not an object, so the
        header expressions depend on exactly what they read. */

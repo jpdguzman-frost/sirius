@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { APP_JS, APP_JS_CODE, PIPELINE_CSS, TEMPLATE, cssRule, decl, fnBody, handlerBody, method } from './helpers/gantt-render.ts';
 
 interface Sort { key: string; group: string; label: string; dir: number; value: (r: unknown) => unknown }
-interface Axis { key: string; label: string; pick: (r: unknown) => unknown; order?: string[]; none?: boolean }
+interface Axis { key: string; col: string; label: string; pick: (r: unknown) => unknown; order?: string[]; none?: boolean }
 interface FacetValue { value: string | null; label: string; count: number; on: boolean }
 interface Facet { key: string; label: string; scroll: boolean; values: FacetValue[] }
 
@@ -28,6 +28,8 @@ const recipe = new Function(`
   ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
   ${decl(APP_JS, 'pipeCompare')}
   ${decl(APP_JS, 'pipeSortRows')}
+  ${decl(APP_JS, 'PIPE_COLS')}
+  ${decl(APP_JS, 'pipeColLabel')}
   ${decl(APP_JS, 'PIPE_FILTERS')}
   ${decl(APP_JS, 'unranked')}
   ${decl(APP_JS, 'alphaSort')}
@@ -39,8 +41,9 @@ const recipe = new Function(`
   ${decl(APP_JS, 'pipeChipList')}
   ${decl(APP_JS, 'pipeSortLabel')}
   ${decl(APP_JS, 'mcRank')}
-  return { pipeChipList, PIPE_SORTS, PIPE_SORT_DEFAULT, pipeSortRows, PIPE_FILTERS, PIPE_FILTERS_EMPTY, pipeMatches, pipeFacetList, pipeSortLabel };
+  return { PIPE_COLS, pipeChipList, PIPE_SORTS, PIPE_SORT_DEFAULT, pipeSortRows, PIPE_FILTERS, PIPE_FILTERS_EMPTY, pipeMatches, pipeFacetList, pipeSortLabel };
 `)() as {
+  PIPE_COLS: Array<{ cls: string; label: string }>;
   PIPE_SORTS: Sort[];
   PIPE_SORT_DEFAULT: Sort;
   pipeSortRows: (rows: unknown[], s: Sort) => unknown[];
@@ -920,36 +923,48 @@ describe('the panels behave like every other overlay', () => {
 /* ---------------------------------------------------------------------- */
 
 describe('a column and the filter that narrows it use the SAME word', () => {
-  /* Miles, owl #66: REQUESTOR everywhere. The table header had said `Client`
-     since the frame did (`70:10009` names Client in its column order), while
-     the panel, the chip and the Requests table all said Requestor — and the
-     cell underneath the header had always rendered `row.requestor`. The values
-     are people; on a single-client board a Client filter selects everything or
-     nothing, which is why the axis was never built as one.
+  /* Miles, owl #66: REQUESTOR everywhere. The header had said `Client` since
+     the frame did (`70:10009` names Client in its column order), while the
+     panel, the chip and the Requests table all said Requestor — over the same
+     field, since the cell underneath had always rendered `row.requestor`. The
+     values are people; on a single-client board a Client filter selects
+     everything or nothing, which is why the axis was never built as one.
 
-     The guard is the RULE, not the fix: every filter axis narrows a column the
-     table draws, so every axis label must appear verbatim in the header row.
-     A future sixth axis is covered without editing this test, and renaming a
-     header in one of the three places it is spoken fails here. */
-  const headerRow = TEMPLATE.slice(TEMPLATE.indexOf('<table class="ptable">'));
-  const headText = headerRow.slice(headerRow.indexOf('<thead'), headerRow.indexOf('</thead>'));
-  const headings = [...headText.matchAll(/<th class="[a-z-]+">([^<]+)<\/th>/g)].map((m) => m[1]);
+     ⚠️ The FIX is not this test. The header is now derived from `PIPE_COLS`
+     and each filter takes its label from the column it narrows, so the word is
+     spelt in one place and a second spelling cannot be typed. What is left to
+     assert is the join that makes that true: every axis must name a column the
+     table actually draws. An axis pointing at a `col-` that does not exist
+     yields `undefined` as its label, which would render an empty filter
+     heading — visible only here.
 
-  it('draws a header for every column the task rows draw', () => {
-    expect(headings.length).toBe(11);
+     Deliberately NOT asserted: a column COUNT (`test/pipeline-expanded.ts`
+     enumerates the eleven classes in order; a second hand-copied number is the
+     count-pin test/CLAUDE.md rule 1 forbids), and the absence of the word
+     `Client` across the table subtree (that reads raw text including comments
+     — rule 3 — so one capital in a prose comment would fail it for a reason
+     unrelated to the rule). */
+  const COLS = recipe.PIPE_COLS as Array<{ cls: string; label: string }>;
+
+  it('draws its header FROM the column table, with nothing hand-typed', () => {
+    const table = TEMPLATE.slice(TEMPLATE.indexOf('<table class="ptable">'));
+    const head = table.slice(table.indexOf('<thead'), table.indexOf('</thead>'));
+    expect(head).toContain('{{#each pipeCols as c}}');
+    expect(head, 'a hand-typed header cell is back').not.toMatch(/<th class="[a-z-]+">[A-Za-z]/);
   });
 
-  it('names each filter axis exactly as its column header names it', () => {
-    const axes = (recipe.PIPE_FILTERS as Axis[]).map((f) => f.label);
+  it('gives every filter axis a column that exists, and takes its label from it', () => {
+    const axes = recipe.PIPE_FILTERS as Array<Axis & { col: string }>;
     expect(axes.length).toBeGreaterThan(0);
-    for (const label of axes) {
-      expect(headings, `no column header reads "${label}"`).toContain(label);
+    for (const a of axes) {
+      const col = COLS.find((c) => c.cls === a.col);
+      expect(col, `axis "${a.key}" names column "${a.col}", which the table does not draw`).toBeTruthy();
+      expect(a.label, `axis "${a.key}" has a label the column table did not supply`).toBe(col!.label);
     }
   });
 
-  it('says Requestor, and does not say Client anywhere in the table', () => {
-    expect(headings).toContain('Requestor');
-    const table = TEMPLATE.slice(TEMPLATE.indexOf('<table class="ptable">'));
-    expect(table.slice(0, table.indexOf('</table>'))).not.toMatch(/\bClient\b/);
+  it('still says Requestor — the regression this all came from', () => {
+    expect(COLS.map((c) => c.label)).toContain('Requestor');
+    expect(COLS.map((c) => c.label)).not.toContain('Client');
   });
 });

@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Types } from 'mongoose';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
+import { aresCard as baseAresCard, label } from './helpers/fixtures.ts';
 import { drainPushEvents, reconcileCard, shouldRunFullSync } from '../worker/drainPush.ts';
 import type { AresClient, AresCard, AresMovement } from '../src/services/ares.ts';
 import { validateEnv } from '../src/config/env.ts';
@@ -26,24 +27,15 @@ beforeEach(async () => {
 const env = validateEnv({ NODE_ENV: 'test', ARES_WEBHOOK_SECRET: 's3cret', ARES_URL: 'http://ares.test', ARES_API_KEY: 'k' });
 const envNoPush = validateEnv({ NODE_ENV: 'test' });
 
-const label = (name: string) => ({ id: `l-${name}`, name });
-
-function aresCard(over: Partial<AresCard> = {}): AresCard {
-  return {
+/** This suite's card identity, over the contract defaults in `fixtures.ts`. */
+const aresCard = (over: Partial<AresCard> = {}): AresCard =>
+  baseAresCard({
     cardId: 'c9',
-    boardId: 'b1',
     name: 'MC-9 Poster',
-    currentList: 'Design',
     labels: [label('Main Card'), label('Urgent')],
     due: '2026-08-22T09:00:00.000Z',
-    // Real ARES cards always carry this; the reconcile guard reads it as the
-    // instant ARES fetched the card from Trello (contracts/ares-read.md
-    // §Freshness). A fixture without it exercises the SKIP path, not the
-    // reconcile — which is what these tests are about.
-    lastPolledAt: '2026-08-18T12:00:00.000Z',
     ...over,
-  } as AresCard;
-}
+  });
 
 const stubClient = (over: Partial<Record<'cardWithMovements' | 'boardCards', unknown>> = {}): AresClient =>
   ({
@@ -137,7 +129,7 @@ describe('reconcileCard edges (FR-9.5)', () => {
       project,
       'c9',
     );
-    expect(outcome).toBe('descoped');
+    expect(outcome.kind).toBe('descoped');
     expect((await Deliverable.findOne({ trello_card_id: 'c9' }))?.active).toBe(false);
   });
 
@@ -152,7 +144,7 @@ describe('reconcileCard edges (FR-9.5)', () => {
       cardWithMovements: async () => ({ card: aresCard({ name: 'Render Asset: MC-9 exports', labels: [] }), movements: [] as AresMovement[] }),
     });
     const kind = await reconcileCard(client, (await Project.findById(project._id))!, 'c9');
-    expect(kind).toBe('work_card');
+    expect(kind.kind).toBe('work_card');
     expect((await WorkCard.findOne({ trello_card_id: 'c9' }))?.active).toBe(true);
     expect((await Deliverable.findOne({ trello_card_id: 'c9' }))?.active).toBe(false);
 
@@ -160,7 +152,7 @@ describe('reconcileCard edges (FR-9.5)', () => {
     const back = stubClient({
       cardWithMovements: async () => ({ card: aresCard(), movements: [] as AresMovement[] }),
     });
-    expect(await reconcileCard(back, (await Project.findById(project._id))!, 'c9')).toBe('deliverable');
+    expect((await reconcileCard(back, (await Project.findById(project._id))!, 'c9')).kind).toBe('deliverable');
     expect((await Deliverable.findOne({ trello_card_id: 'c9' }))?.active).toBe(true);
     expect((await WorkCard.findOne({ trello_card_id: 'c9' }))?.active).toBe(false);
   });
@@ -173,7 +165,7 @@ describe('reconcileCard edges (FR-9.5)', () => {
     const client = stubClient({
       cardWithMovements: async () => ({ card: aresCard({ name: 'Render Asset: MC-9 exports', labels: [], due: 'not-a-date' }), movements: [] as AresMovement[] }),
     });
-    expect(await reconcileCard(client, (await Project.findById(project._id))!, 'c9')).toBe('work_card');
+    expect((await reconcileCard(client, (await Project.findById(project._id))!, 'c9')).kind).toBe('work_card');
     const doc = await WorkCard.findOne({ trello_card_id: 'c9' });
     expect(doc?.trello_due ?? null).toBeNull();
     expect(doc?.trello_due_at ?? null).toBeNull();
@@ -182,7 +174,7 @@ describe('reconcileCard edges (FR-9.5)', () => {
   it('a card ARES no longer knows is left to the full board sync', async () => {
     const project = await makeProject();
     const outcome = await reconcileCard(stubClient(pushRead(null)), project, 'gone');
-    expect(outcome).toBe('missing');
+    expect(outcome.kind).toBe('missing');
   });
 });
 

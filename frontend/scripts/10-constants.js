@@ -386,15 +386,55 @@ const pipeSortRows = (rows, sort) => {
    the three Needs Info conditions. URGENCY and STATUS are deliberately NOT
    marked: every card sits in a list, and `Non-Urgent` is a value rather than an
    absence, so neither axis has a residue to collect. */
+/* THE PIPELINE COLUMN TABLE — one row per column, in draw order.
+
+   Added 2026-08-25 for a reason the project paid for: this header was the only
+   table header in the app still hand-typed, and it is the one that drifted. It
+   read `Client` for months while the filter panel, its chip and the whole
+   Requests table read `Requestor`, over the same field, and it took an owl
+   round-trip to settle. Requests derives its header from `REQ_COLS` and
+   Forecast from `FC_COLS`; Pipeline was the outlier.
+
+   A test can only catch the second spelling AFTER someone types it. Deriving
+   the header means there is no second place to type it. `PIPE_FILTERS` below
+   takes its label from here too, so the word a reader sees above a column and
+   the word the filter for that column shows are the same string, not two
+   strings a guard compares.
+
+   The BODY cells stay hand-written: their contents are bespoke per column, and
+   `col-*` there is a class name rather than a human word. */
+const PIPE_COLS = [
+  { cls: 'col-mc', label: 'MC #' },
+  { cls: 'col-name', label: 'Card Name' },
+  { cls: 'col-type', label: 'Type' },
+  { cls: 'col-diff', label: 'Difficulty' },
+  { cls: 'col-urgency', label: 'Urgency' },
+  { cls: 'col-status', label: 'Status' },
+  { cls: 'col-requestor', label: 'Requestor' },
+  { cls: 'col-due', label: 'Due' },
+  { cls: 'col-started', label: 'Started' },
+  { cls: 'col-done', label: 'Done' },
+  { cls: 'col-links', label: 'Links' },
+];
+/** A column's human label, by class. Throws nothing: an axis naming a column
+    that does not exist yields undefined, which the guard in
+    `test/pipeline-sortfilter.test.ts` turns into a failing build. */
+const pipeColLabel = (cls) => (PIPE_COLS.find((c) => c.cls === cls) || {}).label;
+
 /* Labels in HUMAN case. The panel heading shouts them in CSS (`.pmhead` carries
    `text-transform: uppercase`) and the chip needs them unshouted — storing them
-   shouted meant carrying a second, opposite case rule in JS to un-shout them. */
+   shouted meant carrying a second, opposite case rule in JS to un-shout them.
+
+   `label` is DERIVED from the column each axis narrows (`col`), so renaming a
+   column renames its filter and its chip in the same edit. That is the fix for
+   the Client/Requestor drift: not a guard that notices two spellings, but one
+   place to spell it. */
 const PIPE_FILTERS = [
-  { key: 'type', label: 'Type', pick: (r) => r.assetType, none: true },
-  { key: 'difficulty', label: 'Difficulty', pick: (r) => r.difficulty, order: ['Easy', 'Medium', 'Hard'], none: true },
-  { key: 'urgency', label: 'Urgency', pick: (r) => r.urgency, order: ['Non-Urgent', 'Urgent'] },
-  { key: 'status', label: 'Status', pick: (r) => r.currentList, scroll: true },
-  { key: 'requestor', label: 'Requestor', pick: (r) => r.requestor, none: true },
+  { key: 'type', col: 'col-type', label: pipeColLabel('col-type'), pick: (r) => r.assetType, none: true },
+  { key: 'difficulty', col: 'col-diff', label: pipeColLabel('col-diff'), pick: (r) => r.difficulty, order: ['Easy', 'Medium', 'Hard'], none: true },
+  { key: 'urgency', col: 'col-urgency', label: pipeColLabel('col-urgency'), pick: (r) => r.urgency, order: ['Non-Urgent', 'Urgent'] },
+  { key: 'status', col: 'col-status', label: pipeColLabel('col-status'), pick: (r) => r.currentList, scroll: true },
+  { key: 'requestor', col: 'col-requestor', label: pipeColLabel('col-requestor'), pick: (r) => r.requestor, none: true },
 ];
 /** Absence is DRAWN as the word None — one rule, so the chip and the panel
     cannot disagree about it (owl #63). */

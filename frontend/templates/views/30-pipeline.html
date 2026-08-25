@@ -144,12 +144,13 @@
   <div class="pscrollwrap">
     <div class="pscroll" on-scroll="['pipeScrolled']">
       <table class="ptable">
-        <thead><tr>
-          <th class="col-mc">MC #</th><th class="col-name">Card Name</th><th class="col-type">Type</th>
-          <th class="col-diff">Difficulty</th><th class="col-urgency">Urgency</th><th class="col-status">Status</th>
-          <th class="col-requestor">Requestor</th><th class="col-due">Due</th><th class="col-started">Started</th>
-          <th class="col-done">Done</th><th class="col-links">Links</th>
-        </tr></thead>
+        <!-- Derived from PIPE_COLS, like Requests from REQ_COLS and Forecast
+             from FC_COLS. This header was the last hand-typed one in the app
+             and the only one that ever drifted: it read `Client` for months
+             while the filter, its chip and the Requests table read
+             `Requestor`, over the same field. The filter labels now come from
+             the same table, so there is ONE place the word is spelt. -->
+        <thead><tr>{{#each pipeCols as c}}<th class="{{c.cls}}">{{c.label}}</th>{{/each}}</tr></thead>
         <tbody>
         {{#each pipelineRows as row}}
           <!-- .warn is PRESENTATION ONLY (owl #36, revised by owl #41): the row

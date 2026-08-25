@@ -110,22 +110,26 @@ const staleGuard = (fetchedAt: Date) => ({
  * The fetch instant for one mapped card, or `null` when ARES did not send one.
  *
  * **`null` means SKIP the registry reconcile, never "fall back to a clock".**
- * Falling back to `new Date()` is precisely the bug above, reinstated
- * silently — and a fallback is exactly what a future edit would reach for, so
- * the absence is expressed as a value the caller must handle rather than as a
- * default it can ignore. The asymmetry the guard already runs on decides it:
- * a skipped reconcile costs one cycle and heals, an applied stale one shows a
- * value nobody chose.
+ * Falling back to `new Date()` is precisely the bug `staleGuard` documents,
+ * reinstated silently — and a fallback is exactly what a future edit would
+ * reach for, so the absence is expressed as a value the caller must handle
+ * rather than as a default it can ignore. The asymmetry the guard already runs
+ * on decides it: a skipped reconcile costs one cycle and heals, an applied
+ * stale one shows a value nobody chose.
+ *
+ * The parse itself is `dueInstant`'s, deliberately — one definition of
+ * "unparseable ISO" per module. Its comment carries why an Invalid Date must
+ * never reach Mongoose, and that reasoning applies here identically: this
+ * value goes straight into a `$lt`.
  *
  * ARES's own 2026-08-02 audit records `lastPolledAt` as "written in three
- * places and read by none", so a cleanup on their side could remove it. That
- * is why `scripts/ares-probe.mjs` asserts the field on a live card: drift
- * fails the build rather than quietly stopping every reconcile in the app.
+ * places and read by none", so a cleanup could remove it. That is why
+ * `scripts/ares-probe.mjs` asserts the field on live cards from BOTH endpoints
+ * Sirius reads: drift fails the build rather than quietly stopping every
+ * reconcile in the app.
  */
-export function fetchedAtOf(card: { trello_polled_at: string | null }): Date | null {
-  if (!card.trello_polled_at) return null;
-  const t = new Date(card.trello_polled_at);
-  return Number.isNaN(t.getTime()) ? null : t;
+function fetchedAtOf(card: { trello_polled_at: string | null }): Date | null {
+  return dueInstant(card.trello_polled_at);
 }
 /**
  * Ownership-safe deliverable upsert — Trello-owned fields only; Sirius-owned
@@ -141,7 +145,15 @@ export function fetchedAtOf(card: { trello_polled_at: string | null }): Date | n
  * instant was the only clock they had. The warning was right and did not
  * help. The fetch instant now comes off the payload this function is already
  * given, so there is no argument left to get wrong: the class is gone, not
- * the instance.
+ * the instance. *
+ * @returns whether the REGISTRY half ran. `false` means ARES sent no fetch
+ * instant, so urgency/due/difficulty were left alone — see `fetchedAtOf`.
+ * Reported rather than re-derived by the caller: if the skip ever gains a
+ * second reason, a caller predicting it would under-count while this stays
+ * correct. **Both callers must consume it** (`syncProject` counts it into
+ * `SyncStats.unstamped`, `reconcileCard` into the push drain's outcomes) —
+ * a dropped `false` is the silence the counter exists to prevent, and
+ * `test/reconcile.test.ts` asserts both call sites read it.
  */
 export async function upsertDeliverable(
   projectId: Types.ObjectId,
@@ -401,13 +413,15 @@ export async function syncProject(
   const seenDeliverables = new Set<string>();
   for (const d of mapped.deliverables) {
     seenDeliverables.add(d.trello_card_id);
-    if (!(await upsertDeliverable(projectId, d, displayIds.get(d.trello_card_id)))) unstamped++;
+    const reconciled = await upsertDeliverable(projectId, d, displayIds.get(d.trello_card_id));
+    if (!reconciled) unstamped++;
   }
 
   const seenWork = new Set<string>();
   for (const w of mapped.workCards) {
     seenWork.add(w.trello_card_id);
-    if (!(await upsertWorkCard(projectId, w))) unstamped++;
+    const reconciled = await upsertWorkCard(projectId, w);
+    if (!reconciled) unstamped++;
   }
 
   if (unstamped > 0) {
