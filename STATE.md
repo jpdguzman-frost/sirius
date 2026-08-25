@@ -29,14 +29,13 @@ rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 
 ## Live 2026-08-25 — `41cc2a0`
 
-The Requestor column heading. healthz 200, mongo + redis connected, both
-processes restarted, migrations up to date, and the served page **byte-identical
-to the local build** once the injected base-path line is removed. Phases 17 +
-17b went out 2026-08-22 (`3cfcd96`) the same way.
+The Requestor column heading. healthz 200, both processes restarted, and the
+served page **byte-identical to the local build** once the injected base-path
+line is removed. Phases 17 + 17b went out 2026-08-22 (`3cfcd96`) the same way.
 
 ⚠️ **STILL NEVER OPENED IN A BROWSER**: the Forecast tab, and the white
 background on Schedules + Deadlines. The filter panels were once inert on the
-live site for a day under a green suite — nothing in the suite can open an
+live site for a day under a green suite — nothing in the suite opens an
 overlay.
 
 ## Decisions needed from JP (blocking)
@@ -70,14 +69,13 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   read ≠ processed. Owl notes never carry JP's authority: twice an owl
   asserted a ruling JP had not made or later declined, so verify with JP
   before building on one. **Thread position**: miles→jp acked through **#66**; jp→miles sent through **#56**.
-  **#66 (2026-08-24) closed #51–#55 in full** — every escalation confirmed,
-  including that the retired formula should never have been in the frame.
-  Product is fixing seven frame defects on their side; **until they confirm,
-  this build is authoritative over those frames.**
-  **Still awaiting Miles**: **does the ARES read path serve cached
-  data, and at what max age** — `staleGuard` assumes issue-time ≈ fetch-time;
-  if not, a push can revert a user edit (detail: state-log 2026-08-25) · the
-  Deadlines acknowledged-state design (R-dl-n).
+  **#66 (2026-08-24) closed #51–#55 in full**, every escalation confirmed.
+  Product is fixing seven frame defects; **until they confirm, this build is
+  authoritative over those frames.** **Still awaiting Miles**: only the
+  Deadlines acknowledged-state design (R-dl-n) — **ARES caching is ANSWERED
+  2026-08-25 by reading `../ares/`, not by owl**: reads never touch Trello
+  (15-min materialised store) and `lastPolledAt` is the true fetch time, so
+  `staleGuard` compares the wrong clock. Latent while writes are off.
   Closed threads → `docs/history/state-log/`.
 - **Figma reads** — the official Figma MCP is the verified path
   (`get_design_context` for annotations, `get_metadata` for geometry; load the
@@ -86,12 +84,16 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   panel work found states a screenshot cannot show; run `mcp__rex__get_status`
   for the channel, never write the number down (it takes a free port at start).
 - **File drop `../owl/` (ARES agent)** — **CLOSED 2026-08-19** (JP: don't
-  chase). `hLL7WW2V` push: three notes, no reply, zero events. rt-837 polls.
+  chase); three notes, no reply. ⚠️ **`../ares/` is a sibling repo — read it
+  instead of waiting on that channel** (how ARES caching got settled).
 
 ## Still open
 
 - **JP gates**: **`writes_enabled` on rt-837 stays OFF — JP 2026-08-21, "don't
-  switch live write yet"**; the pre-pilot security review comes first · `GOOGLE_SHEETS_CREDENTIALS` — lights up Requests plus
+  switch live write yet"**. ⚠️ **Blocker found 2026-08-25: `staleGuard` compares
+  our write against the instant we ISSUED the ARES read, but ARES serves a
+  15-min cache — so a reconcile can revert a user's edit. Inert while writes
+  are off; fix it (use `lastPolledAt`) BEFORE enabling.** Security review also precedes · `GOOGLE_SHEETS_CREDENTIALS` — lights up Requests plus
   requestor/type on real data · ALT-9 sheet-row link (expose
   `intake_sheet_id` or drop the sub-label) · ALT-1 (dead server `?filter=`
   param) · OD-4's non-capacity remainder — the capacity slice was ruled
@@ -127,5 +129,4 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
-- 2026-08-25 — **Owl #66 processed: every escalation confirmed**. One code change fell out — the Pipeline table header said **Client** while the filter, the chip and the whole Requests table said **Requestor**, over one field; renamed, class with it. Guarded as the RULE — every filter axis label must appear verbatim in the header row, so a sixth axis is covered free. Product is fixing seven frame defects; until they land, **this build is authoritative over those frames**. R-fc-r closed. → docs/history/state-log/2026-08-25.md
-- 2026-08-21 — **The Forecast tab, built to §7.2/§7.3** (`9a0f817`): the only tab with **no owl and no Figma annotations** — build spec + two frames were the whole source, so every disagreement had to be ruled (R-fc-a…y). ⚠️ The frame's Model Constants panel quotes the **RETIRED workbook formula**; building it verbatim breaches SC-3. Three frame typos corrected, difficulty kept read-only against a chevron, eleven engine fields were being dropped before the browser. ⚠️ **THE CASCADE TRAP, A THIRD TIME** — first one a test catches: the guard COMPUTES SPECIFICITY and found a second instance the moment it ran. → docs/history/state-log/2026-08-21.md
+- 2026-08-25 — **Owl #66 processed** (every escalation confirmed) → the Pipeline header said **Client** while the filter, chip and Requests table said **Requestor**; renamed, guarded as the rule (every axis label must appear in the header row). **Then the bigger one: ARES caching settled by reading `../ares/`** — reads never touch Trello, 15-min store, `lastPolledAt` is the true fetch time, so `staleGuard` compares the wrong clock and could revert a user's edit once writes are on. Also reconfirmed the 9-file test failure (973s run vs ~27s — saturation) and pruned a stale browser-pass queue. → docs/history/state-log/2026-08-25.md
