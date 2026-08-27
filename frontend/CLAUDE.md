@@ -44,10 +44,10 @@ build.js writes nothing, only running it directly does.
   `rowWarning(row)` sat in seven template positions while the Pipeline table
   re-renders on every search keystroke. Derived per-row data is stamped once in
   `loadAll`'s stamp loop beside `r.blob`, never computed in the template.
-- Never interleave a layout read (`scrollWidth`) with a style write that a live
-  selector keys on (`data-clipped`) — that forces one full layout per changed
-  element. Split into a read pass, then a write pass (`refreshClips` is the
-  precedent).
+- Never interleave a layout read (`scrollWidth`) with a style write that a
+  live selector keys on — that forces one full layout per changed element.
+  Split into a read pass, then a write pass (the retired `refreshClips`,
+  git history, is the worked example).
 
 ## Comments can trip source-regex guards [docs/history/state-log/2026-08-18.md — two incidents, batches 8 and 9]
 

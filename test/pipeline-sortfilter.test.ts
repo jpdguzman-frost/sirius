@@ -4,7 +4,8 @@
  *
  * Both are READ-ONLY view operations over rows the client already holds, so
  * the whole feature lives in the shipped app scripts. The recipes below are
- * SLICED OUT OF THOSE SCRIPTS AND EXECUTED (the suggest-counts pattern) — a
+ * SLICED OUT OF THOSE SCRIPTS AND EXECUTED (the executed-computed pattern,
+ * now homed in test/sprint-schedule-render.test.ts) — a
  * source-text assertion could show a sort exists without showing it orders
  * anything.
  *

@@ -16,9 +16,11 @@
  * Only one subtree is rendered per call: each is self-contained (the rest of
  * the template would drag in every tab's computeds), and its own div nesting
  * is balanced inside each `{{#if}}` branch, so the extractor can find its end
- * by counting tags. It has since grown past the Gantt — the Suggest bar, the
- * sprints modal and (batch 5) the Pipeline and Requests tables all render
- * through the same `divFragment` + `toHTML` path.
+ * by counting tags. It has since grown past the Gantt — the sprints modal and
+ * (batch 5) the Pipeline and Requests tables all render through the same
+ * `divFragment` + `toHTML` path. The Suggest bar's renderer retired with the
+ * feature (owl #72, 2026-08-28), and `renderGantt` gave way to
+ * `renderSprintSchedule` when the tab body was rebuilt on the work-card unit.
  */
 
 import fs from 'node:fs';
@@ -27,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import RactiveModule from 'ractive';
 import { appScripts, template } from './source.ts';
 import type { WorkCardWire } from '../../src/services/pipeline.ts';
+import type { SprintItemRow } from '../../src/services/sprint-items.ts';
 
 /**
  * Ractive ships ESM typings inside a CommonJS package, so the default import
@@ -53,6 +56,8 @@ const readFrontend = (...p: string[]) => fs.readFileSync(path.join(root, 'fronte
 
 export const TEMPLATE = template();
 export const GANTT_CSS = readFrontend('styles', '35-gantt.css');
+/** The planner chrome that is not the timeline — badges, toolbar, blocks. */
+export const PLANNER_CSS = readFrontend('styles', '30-planner.css');
 /** The sprints modal's recipes live here, not in the Gantt sheet. */
 export const UI_CSS = readFrontend('styles', '10-ui.css');
 /** The Pipeline table, its row states and every popover that escapes its clip. */
@@ -124,134 +129,153 @@ export function divFragment(openTag: string, src: string = TEMPLATE): string {
 /** The `<div class="gantt …">` subtree. */
 export const ganttFragment = (src: string = TEMPLATE): string => divFragment('<div class="gantt ', src);
 
-export interface PlannerRow {
-  cardId: string;
-  mcLabel: string;
-  displayId: string;
-  name: string;
-  slottedWeek: string | null;
-  urgency: string;
-  difficulty?: string;
-  requestor?: string;
-  assetType?: string;
-  currentList?: string;
-  status?: string;
-  statusNote?: string;
-  pinned?: boolean;
-}
+/* ------------------------------------------------------------------ *
+ * Sprint Schedules — the work-card rebuild (owls #72/#73, frame 731:98513)
+ *
+ * `renderGantt` (deliverable rows, phase runs, drag) retired with the drag
+ * on 2026-08-28; `renderSuggestBar` went with the Suggest feature the same
+ * day. This renderer is their replacement for the rebuilt tab body: one row
+ * = one work card, placement is a CLICK, and the bar is `itemBar(row)`.
+ * ------------------------------------------------------------------ */
 
-export interface PlannerGroup {
+/**
+ * A schedule row as `src/services/sprint-items.ts loadSprintItems()` puts it
+ * on the wire — DERIVED from the server's own `SprintItemRow` rather than
+ * hand-copied (the `WorkCardRow` precedent), so the fixture shape cannot
+ * drift from the contract; the identity fields stay required and the rest
+ * keeps this helper's fixture-friendly optionality.
+ */
+export type SprintScheduleRow = Pick<SprintItemRow, 'id' | 'sprintId' | 'cardId' | 'mcNumber' | 'name'> &
+  Partial<SprintItemRow>;
+
+/** One group as the shipped `sprintGroups()` computed emits it — no `kind`: */
+export interface SprintGroup {
   id: string;
-  kind: string;
   name: string;
   meta: string;
   count: string;
-  rows: PlannerRow[];
+  rows: SprintScheduleRow[];
 }
 
-const ROWS: PlannerRow[] = [
-  {
-    cardId: 'c1', mcLabel: 'MC-655', displayId: 'MC-655.1', name: 'Hero render',
-    slottedWeek: '2026-08-03', urgency: 'Urgent', difficulty: 'Hard',
-    requestor: 'Ana', assetType: 'Render', currentList: 'Sketching', status: 'ongoing',
-  },
-  {
-    cardId: 'c2', mcLabel: 'MC-712', displayId: 'MC-712', name: 'Loft plan',
-    slottedWeek: null, urgency: 'Non-Urgent', currentList: 'Backlog', status: 'pending',
-  },
-];
-
-export const GROUPS: PlannerGroup[] = [
-  { id: 's1', kind: 'sprint', name: 'Sprint A', meta: '2 wk', count: '1 item', rows: [ROWS[0]!] },
-  { id: 'outside', kind: 'outside', name: 'Outside any sprint', meta: '', count: '0 items', rows: [] },
-  { id: 'unscheduled', kind: 'unscheduled', name: 'Unscheduled', meta: '', count: '1 item', rows: [ROWS[1]!] },
-];
-
-export interface GanttState {
-  leftCollapsed?: boolean;
-  collapsedBlocks?: Record<string, boolean>;
-  plannerGroups?: PlannerGroup[];
-  arrived?: Record<string, boolean>;
-  ganttDragging?: boolean;
-  /**
-   * Batch 8 (T158): `() => []` renders a scheduled row whose phases are ALL
-   * clipped away — no run box, so no handle to grab. Any suite that needs that
-   * state injects it here rather than reaching into the template.
-   */
-  phaseRun?: () => unknown[];
+/** One bar as the shipped `itemBar(row)` emits it (50-gantt-geometry.js). */
+export interface ItemBarStub {
+  left: string;
+  width: string;
+  cls: string;
+  title: string;
 }
 
 /**
- * Renders the block for one view state. The per-row helpers (`phaseRun`,
- * `deadlineTick`, `ghostBar`, `footText`, `footCls`) are stubbed: their maths
- * is covered by test/gantt-run-geometry.test.ts (the run box and its re-based
- * segments, executed out of the shipped app scripts), test/planner-weeks.test.ts
- * and test/planner-payload.test.ts — what matters here is which nodes the
- * template emits, not what is inside a bar.
+ * The #73 fixture name — a real board title long enough that every clamp is
+ * tempted. The value on the row is ALWAYS this full string (the ellipsis is a
+ * display clamp, not the value); test/sprint-items.test.ts pins the same
+ * string on the server side.
  */
-export function renderGantt(state: GanttState = {}): string {
+export const COREY_G = 'Sketch Asset: Corey G Singing "Chicosci Vampire Social Club" by Chicosci';
+
+/** Plotted, urgent, on-board — the row with everything to render. */
+export const PLOTTED: SprintScheduleRow = {
+  id: 'i1', sprintId: 's1', cardId: 'w1', mcNumber: 'MC-655', name: 'Hero render',
+  taskPrefix: 'Render Asset', difficulty: 'Hard', currentList: 'Working on design',
+  status: 'ongoing', trelloUrl: null, urgent: true,
+  startsOn: '2026-08-03', finish: '2026-08-12', deadline: '2026-08-28', late: false, position: 1,
+};
+
+/** Unplotted (a REAL state, #72 §6), non-urgent, no difficulty, no deadline. */
+export const UNPLOTTED: SprintScheduleRow = {
+  id: 'i2', sprintId: 's1', cardId: 'w2', mcNumber: 'MC-824', name: COREY_G,
+  taskPrefix: 'Sketch Asset', difficulty: null, currentList: 'Backlog',
+  status: 'pending', trelloUrl: null, urgent: false,
+  startsOn: null, finish: null, deadline: null, late: false, position: 2,
+};
+
+/** The card left the board: `status` null is its own state, not 'ongoing'. */
+export const OFF_BOARD: SprintScheduleRow = {
+  id: 'i3', sprintId: 's1', cardId: 'w3', mcNumber: 'MC-712', name: 'Loft plan',
+  taskPrefix: null, difficulty: 'Easy', currentList: null,
+  status: null, trelloUrl: null, urgent: false,
+  startsOn: '2026-08-10', finish: '2026-08-14', deadline: '2026-08-11', late: true, position: 3,
+};
+
+/**
+ * The default groups: one sprint with rows and one EMPTY sprint — empty
+ * renders too (the add affordance needs a home), and NO 'outside', NO
+ * 'unscheduled' group exists any more (#72 §2: absence is the design).
+ * `count` uses the shipped `itemCount` format ('· N items').
+ */
+export const SPRINT_GROUPS: SprintGroup[] = [
+  { id: 's1', name: 'Sprint A', meta: 'Aug 24 - Aug 28', count: '· 3 items', rows: [PLOTTED, UNPLOTTED, OFF_BOARD] },
+  { id: 's2', name: 'Sprint B', meta: 'Aug 31 - Sep 4', count: '· 0 items', rows: [] },
+];
+
+export interface SprintScheduleState {
+  sprintGroups?: SprintGroup[];
+  leftCollapsed?: boolean;
+  collapsedBlocks?: Record<string, boolean>;
+  /** single selection — the checkbox toggles it; null = nothing selected */
+  sprintSel?: string | null;
+  /** the week the pointer is over on the SELECTED unplotted row's track */
+  plotWeek?: string | null;
+  addRow?: { sprintId: string; mc: string | null; cardId: string | null; saving: boolean } | null;
+  addMenu?: null | 'mc' | 'card';
+  /** what the two dropdowns list — the deriving computeds are executed from
+      shipped source in test/sprint-schedule-render.test.ts, never re-proven
+      through a render */
+  addMcOptions?: string[];
+  addCardOptions?: Array<{ cardId: string; name: string; taskPrefix: string | null }>;
+  /**
+   * `() => []` renders a row with NO bar — unplotted, unforecastable, or
+   * clipped fully outside the window. The default draws one bar so the
+   * `.gitem` assertions have a node to read.
+   */
+  itemBar?: (row: SprintScheduleRow) => ItemBarStub[];
+  deadlineTick?: (row: SprintScheduleRow) => string | null;
+  sprintFootText?: (weekKey: string) => string;
+  sprintFootCls?: (weekKey: string) => string;
+}
+
+/**
+ * Renders the rebuilt tab body (`<div class="gantt …">`) for one view state.
+ * The per-row helpers (`itemBar`, `plusLeft`, `deadlineTick`, the two foot
+ * helpers) are stubbed here BECAUSE test/sprint-schedule-render.test.ts
+ * executes each recipe out of the shipped scripts — what a render proves is
+ * which nodes the template emits, not what is inside a bar. Every array the
+ * template iterates is stubbed (rule 6), or a section renders empty and its
+ * assertion passes vacuously.
+ */
+export function renderSprintSchedule(state: SprintScheduleState = {}): string {
   const instance = new Ractive({
     template: ganttFragment(),
     data: {
+      sprintGroups: state.sprintGroups ?? SPRINT_GROUPS,
       leftCollapsed: state.leftCollapsed ?? false,
       collapsedBlocks: state.collapsedBlocks ?? {},
-      plannerGroups: state.plannerGroups ?? GROUPS,
+      sprintSel: state.sprintSel ?? null,
+      plotWeek: state.plotWeek ?? null,
+      addRow: state.addRow ?? null,
+      addMenu: state.addMenu ?? null,
+      addMcOptions: state.addMcOptions ?? ['MC-655', 'MC-824'],
+      addCardOptions: state.addCardOptions ?? [],
       plannerWeeks: [
         { key: '2026-08-03', wk: 'wk1', sub: 'Aug 3–7' },
         { key: '2026-08-10', wk: 'wk2', sub: 'Aug 10–14' },
       ],
       plannerMonths: [{ month: 'AUGUST', monthKey: '2026-08', span: 2 }],
-      selected: {},
-      // T139: cardId → true for the rows a drop just moved (the arrival pulse)
-      arrived: state.arrived ?? {},
-      // T139, rescoped in batch 7 (T153): live from dragstart to dragend. It
-      // no longer touches the bar — a drag source that is not hit-testable is a
-      // drag Chrome cancels — and now hides only the `.gdl` deadline tick,
-      // which paints over the bar and carries no dragover handler of its own.
-      ganttDragging: state.ganttDragging ?? false,
-      footCaption: '92 / wk',
+      footCaption: 'Capacity: 8',
       ganttThumb: { needed: false },
       icon: {},
-      // T158: one run box (percent of the TRACK) carrying its segments
-      // re-based to percent OF THE BOX. The default draws one run with one
-      // segment filling it; `phaseRun: () => []` draws a row with no box.
-      phaseRun: state.phaseRun
-        ?? (() => [{ left: 0, width: 10, segs: [{ cls: 'sketch', left: 0, width: 100, title: 'Sketch' }] }]),
-      deadlineTick: () => null,
-      ghostBar: () => [],
-      fmt: (v: unknown) => String(v),
-      footCls: () => 'ok',
-      footText: () => '1',
-    },
-  });
-  return instance.toHTML();
-}
-
-export interface SuggestBarState {
-  suggest?: unknown;
-  suggestProposed?: number;
-  suggestFlagged?: number;
-  suggestHardHeavy?: number;
-  suggestBlockedWhy?: string;
-}
-
-/**
- * Renders the planner toolbar's functionality box (owl #25). The counts are fed
- * in directly — the computeds that produce them are executed against the
- * shipped source in test/suggest-counts.test.ts, so what this proves is the
- * other half: that the bar takes the Suggest button's slot, and that
- * `disabled="{{suggestBlockedWhy}}"` really drops the attribute when the
- * reason is empty. That one idiom is the whole R-e mechanism.
- */
-export function renderSuggestBar(state: SuggestBarState = {}): string {
-  const instance = new Ractive({
-    template: divFragment('<div class="fnbox">'),
-    data: {
-      suggest: state.suggest ?? null,
-      suggestProposed: state.suggestProposed ?? 0,
-      suggestFlagged: state.suggestFlagged ?? 0,
-      suggestHardHeavy: state.suggestHardHeavy ?? 0,
-      suggestBlockedWhy: state.suggestBlockedWhy ?? '',
+      itemBar: state.itemBar
+        ?? ((row: SprintScheduleRow) =>
+          row.startsOn && row.finish
+            ? [{ left: '0.00', width: '11.67', cls: 'render', title: `${row.startsOn} → ${row.finish}` }]
+            : []),
+      deadlineTick: state.deadlineTick ?? (() => null),
+      // left edge of the hovered column as a track % — the shipped arithmetic
+      // is `plusLeft` in 50-gantt-geometry.js, executed by the geometry suite
+      plusLeft: () => '8.33',
+      fmtLongIso: (iso: unknown) => (iso ? `long:${String(iso)}` : '—'),
+      sprintFootText: state.sprintFootText ?? (() => '—'),
+      sprintFootCls: state.sprintFootCls ?? (() => 'empty'),
     },
   });
   return instance.toHTML();

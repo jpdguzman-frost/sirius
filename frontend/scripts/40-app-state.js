@@ -53,7 +53,6 @@ const app = new Ractive({
     capDraft: 0,
     savingCapacity: false,
     expanded: {},
-    selected: {},
     searchQ: '',
     urgencyMenu: null, // cardId whose urgency select is open (annotation 169:26074)
     urgencyMenuPos: { left: 0, top: 0 }, // fixed-position anchor — escapes the scroll clip
@@ -75,11 +74,28 @@ const app = new Ractive({
     pipeThumb: { needed: false, left: 0, width: 100 },
     iconSprite: ICON_SPRITE,
     weekStart: mondayIso(manilaToday()),
-    suggest: null,
+    /* ---- Sprint Schedules (owls #72/#73, frame 731:98513) ----
+       The tab body's unit is the WORK CARD: `sprintItems` is the server's
+       {rows, addable} payload stored verbatim in loadAll (rows are
+       position-sorted per sprint; addable = MC → its incomplete work cards).
+       Everything below it is VIEW state for placement and the Add row,
+       never persisted. */
+    sprintItems: { rows: [], addable: {} },
+    /* single selection — the checkbox arms ONE row for placement (#72 §6) */
+    sprintSel: null,
+    /* the week the pointer is over on the SELECTED unplotted row's track —
+       where the violet + renders. Null whenever the pointer is elsewhere. */
+    plotWeek: null,
+    /* the one pending Add row: { sprintId, mc, cardId, saving } while open.
+       Nothing in it is written until Add Item posts (#72 §3). */
+    addRow: null,
+    /* which Add dropdown is open ('mc' | 'card') — an overlay key like the
+       rest, registered in OVERLAY_KEYS with the `.gdd` shield. */
+    addMenu: null,
     /* owl #24: block id → true = collapsed. VIEW state only, no persistence —
-       keyed on plannerGroups' `id` (a sprint's _id, or 'outside'/'unscheduled'),
-       never the sprint NAME, and cleared on a project switch because sprint ids
-       are per-project. */
+       keyed on sprintGroups' `id` (a sprint's own id, never the sprint NAME:
+       names are free text), and cleared on a project switch because sprint
+       ids are per-project. */
     collapsedBlocks: {},
     // owl #24: view state; SURVIVES a project switch — it is a reader
     // preference about the pane, not project data.
@@ -93,33 +109,21 @@ const app = new Ractive({
        it and nothing would ever read as changed. */
     sprintBaseline: [],
     sprintError: '',
-    /* Miles's ruling (#30): removing a sprint that covers slotted deliverables
-       warns with the count first. `{ idx, name, count }` while the confirm is
-       open, null otherwise. Draft-only — nothing persists until Save. */
+    /* Miles's ruling (#30): removing a sprint that holds work cards warns
+       with the count first (#72 re-based the count on sprint_items rows).
+       `{ idx, name, count }` while the confirm is open, null otherwise.
+       Draft-only — nothing persists until Save. */
     sprintDeleteConfirm: null,
     /* the ACTIVE working-day calendar, straight off the deliverables payload
        (getHolidays() — ARES-canonical). Only the sprints modal's gap warning
        reads it; an empty array simply means weekends are the only skip. */
     holidays: [],
-    /* owl #31 — cardId → true for the rows a drop just moved, cleared after the
-       pulse. View state, never persisted. */
-    arrived: {},
-    /* true from dragstart to dragend. The ONLY thing it does is make the
-       DEADLINE TICK transparent to hit-testing for the duration
-       (`.gantt.gdragging .gdl`): the tick paints over the bar and carries no
-       dragover handler, so left solid it refuses the drop across its own
-       column. It no longer touches the bar or its segments — those are the drag
-       source, and a source that is not hit-testable makes Chrome cancel the
-       drag in the same tick (T153). View state, never persisted. */
-    ganttDragging: false,
     ganttThumb: { needed: false, left: 0, width: 100 },
-    /* per-week capacity totals, keyed by slotted-week Monday. `perWeek` is the
-       server's (window-independent, every slotted row); `perWeekLocal` is the
-       optimistic override a drop writes and loadAll clears. A key present with
-       a null value means "this week emptied" and must beat the server's stale
-       entry, which is why the lookup tests hasOwnProperty rather than ??. */
+    /* per-week capacity totals off the payload, keyed by slotted-week Monday.
+       UNREAD since the footer went overlap-based over sprintItems (#72) —
+       kept only because the payload still carries it and this build touches
+       no server file; it leaves with the server field. */
     perWeek: {},
-    perWeekLocal: {},
     requests: [],
     rejects: [],
     requestCounts: { requests: 0, inPipeline: 0, toFile: 0, forClarification: 0 },
@@ -170,6 +174,7 @@ const app = new Ractive({
     dlQ: '',
     fmt: (iso) => fmtDate(iso),
     fmtLong: fmtLongIso,
+    fmtLongIso, // the schedules cells call it by its own name (PLAN 2026-08-28)
     /* the Deadlines card's two dates, which mean different things and are
        formatted differently on purpose (owl #64) */
     dlDate: fmtDayMonth,
@@ -499,129 +504,53 @@ const app = new Ractive({
       const live = s.push_at && Date.now() - new Date(s.push_at).getTime() < PUSH_LIVE_MS;
       return `synced ${MANILA_TIME.format(at)}${live ? ' · push live' : ''}`;
     },
-    /* Each row is stamped with the KEY of the block it belongs to — the
-       sprint's id, or the two derived tails. Never the sprint NAME: names are
-       free text (the modal edits them, and addSprint can auto-name a duplicate
-       'Sprint 2'), so a name join makes two same-named sprints each collect the
-       union of both ranges and every affected row render twice. */
-    schedRows() {
-      const sprints = this.get('sprints');
-      return this.get('rows')
-        .filter((r) => r.status !== 'done')
-        .map((r) => {
-          const s = r.slottedWeek ? sprints.find((sp) => r.slottedWeek >= sp.start && r.slottedWeek <= sp.end) : null;
-          return { ...r, sprintKey: r.slottedWeek ? (s ? s.id : 'outside') : 'unscheduled' };
-        });
-    },
-    /* R5 — sprint membership is DERIVED from the slotted week, so dragging a
-       row into another sprint's date range IS the sprint move; there is no
-       sprint-assignment write. Invariant 12 wants the gaps surfaced, hence the
-       'Outside any sprint' block between the sprints and the unscheduled tail.
-       Empty groups are dropped.
+    /* ---- Sprint Schedules groups (owls #72/#73, frame 731:98513) ----
+       ONE group per sprint, INCLUDING empty sprints — the add affordance
+       needs a home, and an empty sprint that vanished would leave nowhere to
+       put its first card. Rows are the server's sprint_items filtered by
+       sprintId, in the server's own order (position-sorted there; re-sorting
+       here would fight the persisted order). NO 'outside' and NO
+       'unscheduled' group: absence is the design (#72 §2) — a work card
+       either belongs to a sprint or it is not on this screen.
 
-       `meta` and `count` are two strings because the frame gives them two
-       tones (dump sprintHeader: '#duration' #64748b, '#items' #94a3b8); their
-       concatenation is the contract §3.5 string, character for character. */
-    plannerGroups() {
-      const rows = this.get('schedRows');
-      const groups = [];
-      for (const s of this.get('sprints')) {
-        const inSprint = rows.filter((r) => r.sprintKey === s.id);
-        if (!inSprint.length) continue;
-        groups.push({
-          kind: 'sprint',
+       `meta` and `count` stay two strings because the frame gives them two
+       tones (sprintHeader: '#duration' #64748b, '#items' #94a3b8). */
+    sprintGroups() {
+      const items = this.get('sprintItems').rows;
+      return this.get('sprints').map((s) => {
+        const rows = items.filter((r) => r.sprintId === s.id);
+        return {
           id: s.id,
           name: s.name,
-          meta: `${fmtDate(s.start)} - ${fmtDate(s.end)} · ${mondaysBetween(s.start, s.end)} wk`,
-          count: itemCount(inSprint.length),
-          rows: inSprint,
-        });
-      }
-      const outside = rows.filter((r) => r.sprintKey === 'outside');
-      if (outside.length) {
-        groups.push({ kind: 'outside', id: 'outside', name: 'Outside any sprint', meta: 'weeks no sprint covers', count: itemCount(outside.length), rows: outside });
-      }
-      const unsched = rows.filter((r) => r.sprintKey === 'unscheduled');
-      if (unsched.length) {
-        groups.push({ kind: 'unscheduled', id: 'unscheduled', name: 'Unscheduled', meta: 'Not yet plotted', count: itemCount(unsched.length), rows: unsched });
-      }
-      return groups;
+          meta: `${fmtDate(s.start)} - ${fmtDate(s.end)}`,
+          count: itemCount(rows.length),
+          rows,
+        };
+      });
     },
-    /* GUARD, not a fix — the live defect recorded in gantt-frame-notes.md.
-       `POST /suggest` keys its plan off lib/calendar's buildWeeks(), whose
-       `key` is derived with toISOString() from a LOCAL-midnight Monday: on an
-       Asia/Manila host (invariant 11, i.e. production) every key comes back as
-       the SUNDAY before. Those keys match no drawn column, so R8's ghost bars
-       render nothing, and Accept would persist them as slotted_week — the rows
-       then fall outside their sprint and the capacity footer, keyed on
-       Mondays, silently blanks. `lib/**` is frozen and the repair is JP's
-       call, so until it lands a proposal whose weeks are not Mondays is
-       refused loudly instead of applied silently. Empty on a correct host. */
-    suggestOffWeeks() {
-      const s = this.get('suggest');
-      if (!s || !s.plan) return [];
-      return [...new Set(Object.values(s.plan).filter((w) => w && mondayIso(w) !== w))].sort();
+    /* the Add row's MC dropdown — the addable map's keys, alphabetical. The
+       map itself is server-shaped (#73): MC → its incomplete work cards. */
+    addMcOptions() {
+      return Object.keys(this.get('sprintItems').addable).sort();
     },
-    suggestOffWeeksText() {
-      const off = this.get('suggestOffWeeks');
-      return off.length === 1
-        ? `the plan proposes ${off[0]}, which is not a Monday`
-        : `the plan proposes ${off.length} weeks that are not Mondays (${off.join(', ')})`;
+    /* the Work Card dropdown for the picked MC — server-sorted alphabetically
+       (#73's provisional rule; DO NOT re-sort client-side). Empty until an MC
+       is picked, which is the same state that keeps the control inert
+       (openAddMenu refuses 'card' without one). */
+    addCardOptions() {
+      const add = this.get('addRow');
+      if (!add || !add.mc) return [];
+      return this.get('sprintItems').addable[add.mc] || [];
     },
-    /* ---- owl #25 expanded-bar counts (node 262:34499) ----
-
-       All three read the /suggest payload the client ALREADY holds — no second
-       request, no re-forecast (invariants 5–7: no forecast math runs here), and
-       the measured hard-mix ceiling stays inside lib/planner — it is never
-       retyped here, not even to check a share. `strain` is the server's
-       own answer to "which weeks are hard-heavy UNDER THE PROPOSED PLAN", so it
-       is read, never recomputed. Deriving from `suggest` rather than banking a
-       count at fetch time means the numbers can never drift from the proposal.
-
-       R-a: flagged and hard-heavy are INDEPENDENT counts in different units
-       (proposals vs weeks) — separate sources, no cross-check, no total. */
-    suggestProposed() {
-      const s = this.get('suggest');
-      return s && s.plan ? Object.keys(s.plan).length : 0;
-    },
-    /* `notes` is suggestPlan's own per-card exception channel — over-capacity,
-       past the hard ceiling, unmeetable deadline, or a 🛑 blocker. Intersected
-       with `plan` so the unit is PROPOSALS: a note on a card the planner could
-       not place at all is not a proposal and does not count. (detectConflicts
-       is not reusable here — it consumes forecast milestones for the PERSISTED
-       plan, so a proposal would need a re-forecast the client must not do.) */
-    suggestFlagged() {
-      const s = this.get('suggest');
-      if (!s || !s.plan || !s.notes) return 0;
-      return Object.keys(s.plan).filter((id) => s.notes[id]).length;
-    },
-    suggestHardHeavy() {
-      const s = this.get('suggest');
-      return s && Array.isArray(s.strain) ? s.strain.length : 0;
-    },
-    /* One computed drives both the Accept button's disabled state and its
-       reason — a non-empty string is truthy. R-e: nothing to apply is not an
-       error, so the bar still shows and Discard still reverts; the off-week
-       tripwire keeps precedence because a non-Monday week corrupts silently. */
-    suggestBlockedWhy() {
-      if (this.get('suggestOffWeeks').length) return 'The proposed weeks are not Mondays — accepting would corrupt the slotted weeks.';
-      return this.get('suggestProposed') === 0 ? 'Nothing to apply — this suggestion proposes no moves.' : '';
-    },
-    /* the hard-mix thresholds the server measured (lib/planner.constants
-       HARD_MIX), with the module constants as the pre-payload fallback */
-    capHardIdeal() {
-      const c = this.get('capacity');
-      return Number.isFinite(c.hardIdeal) ? c.hardIdeal : HARD_IDEAL;
-    },
-    capHardCeiling() {
-      const c = this.get('capacity');
-      return Number.isFinite(c.hardCeiling) ? c.hardCeiling : HARD_CEILING;
-    },
-    /* '13%' is ROUNDED from the measured 12.9% ceiling, never a second literal */
+    /* the footer caption beside WORK CARDS / WEEK — the committed capacity
+       plus its band against the reference weeks, through the same
+       capacityBand recipe the slider's descriptor uses so the two cannot
+       disagree about what a number means. capacity.weekly, not capDraft: the
+       footer states the committed number; the live thumb has capBand. */
     footCaption() {
       const c = this.get('capacity');
-      const typical = Number.isFinite(c.typical) ? c.typical : '—';
-      return `capacity ${c.weekly} · typical ${typical} · hard ceiling ${Math.round(this.get('capHardCeiling') * 100)}%`;
+      const band = capacityBand(c.weekly, c);
+      return `Capacity: ${c.weekly}${band ? ` (${band})` : ''}`;
     },
 
     /* ---- sprints modal validation (owls #28–#30, #37) ----

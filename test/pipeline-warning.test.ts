@@ -9,7 +9,8 @@
  *
  *   RECIPE — `WARN_LABEL`, `WARN_WHY` and `rowWarning` are sliced out of the
  *   SHIPPED the shipped app scripts and evaluated (the
- *   test/suggest-counts.test.ts pattern). The label is a VARIABLE string in
+ *   executed-computed pattern, now homed in
+ *   test/sprint-schedule-render.test.ts). The label is a VARIABLE string in
  *   every place it appears, so the tests read it from the constant instead of
  *   re-typing 'Needs Info' — retyping it would be the drift the ruling exists
  *   to prevent. Batch 10 moves the icon's accessible NAME into the same recipe
@@ -1063,7 +1064,8 @@ describe('one recipe per visual (CSS)', () => {
        `transform: translateY(-0.05em)` on `.ptable .mcid` went green.
        And it is not hypothetical — the live pass owes a look at `.mcid`'s
        ~1px optical shift inside `.mccell`, and a nudge is exactly the reflex
-       fix. Same shape as the `.grun` property bans in gantt-run-geometry. */
+       fix. Same shape as the retired run-geometry suite's `.grun` property
+       bans (its arithmetic lives on in sprint-schedule-render). */
     expect(PIPELINE_CSS, 'the flat rule walker cannot see inside an at-rule')
       .not.toMatch(/@(media|supports|container)/);
     const chain = ['.pscroll', '.ptable', 'table', 'tbody', 'tr', '.prow', 'td', '.col-mc', '.mccell', '.mcid', '.warnhost'];

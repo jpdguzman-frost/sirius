@@ -170,8 +170,8 @@ async function writeTaskDue(cardId, value) {
 /* Cards / week (build-spec §5.4). Sirius-INTERNAL planning data — no source
    system is touched, so this is not a registry write; it is the same class as
    a slotted week or a pin, and the server audits it. Optimistic all the same:
-   capacity.weekly drives the footer's over-capacity tint and the suggester's
-   quota, so the whole board must move with the thumb or not at all.
+   capacity.weekly drives the footer's over-capacity tint (#72: sprintFootCls
+   reads it), so the whole board must move with the thumb or not at all.
 
    Commits are SERIALISED: one PATCH in flight at a time, the newest value
    queued behind it. A held arrow key fires a 'change' per step and a drag can
@@ -305,13 +305,17 @@ async function loadAll() {
       unattachedWork: pipeline.unattachedWork || { cards: 0, mcNumbers: [] },
       corrections: pipeline.corrections,
       sprints: pipeline.sprints,
+      /* stored VERBATIM off the payload (#72): {rows, addable} is the whole
+         Sprint Schedules body — rows are position-sorted per sprint and
+         addable is MC → its incomplete work cards, both server-shaped. The
+         fallback only covers a payload from before the sprint_items routes. */
+      sprintItems: pipeline.sprintItems || { rows: [], addable: {} },
       // R-f-8: the ARES-canonical working-day calendar, so the sprints modal's
       // gap warning counts the same open days the server's forecast does
       holidays: pipeline.holidays || [],
       capacity: pipeline.capacity,
       capDraft: pipeline.capacity.weekly, // server truth re-seats the thumb
-      perWeek: pipeline.perWeek || {},
-      perWeekLocal: {}, // server truth supersedes every optimistic drop delta
+      perWeek: pipeline.perWeek || {}, // unread since the overlap footer (#72) — see the state key's note
       sync: pipeline.sync,
       syncLabel: pipeline.sync
         ? pipeline.sync.ok

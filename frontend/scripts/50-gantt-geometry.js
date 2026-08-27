@@ -60,83 +60,72 @@ const weekAtX = (clientX, rect, weeks) => {
   return weeks[Math.min(n - 1, Math.max(0, col))].key;
 };
 
-/* R3 — the bar IS the server's phase segments (absolute, half-open ISO dates
-   built from lib/forecast output). No forecast math runs here: the same
-   dayIndex/clampUnits pair is applied to the same server-supplied startIso and
-   endIso, in the same order, with the same drop rule for a segment the window
-   clips to nothing. Only the DENOMINATOR of the final division moved.
+/* ---- the sprint-item bar (owls #72/#73, frame 731:98513) -----------------
 
-   JP's structural ruling, 2026-08-18: the coloured run gets its own box inside
-   the track-wide wrapper, and THAT box is the drag source. One box over the
-   whole run, not one per segment — the segments touch, so it looks identical
-   and the handle cannot flicker across a seam. This helper therefore returns
-   the box AND its segments re-based to it, in one shape, so the template does
-   no arithmetic and no second helper exists to drift out of step with it.
+   One row = one task card = one bar. The bar spans the PM's click
+   (`startsOn`) to the computed finish (`finish`), finish day INCLUSIVE —
+   the finish is the day the work delivers, so the bar covers it rather than
+   stopping at its midnight. Both dates come off the server row; no forecast
+   math runs here, which is what keeps the bar and the FORECASTED column
+   incapable of disagreeing (#72 §6: "if those two can ever disagree,
+   something is wrong" — they are one field).
 
-   The box: left is the leftmost segment edge, right is the rightmost, widened
-   to MIN_GRAB_UNITS if the run is narrower than that. The one-line clamp
-       L = max(0, min(R0, TOTAL_UNITS - W))
-   reads as: anchor the box at the run's left edge and let the invisible part
-   grow RIGHT; if the grown right edge would pass the end of the track, slide
-   the whole box left until its right edge sits exactly on the last unit; never
-   let the left edge go negative. One expression, no branch, no second path.
+   MIN_GRAB widening carried over from phaseRun (JP 2026-08-18 ruling 2, same
+   arithmetic): a short card draws down to one unit (18.4px), fiddly to read
+   and to click, so the box is never narrower than 24px, slid left if the
+   window's end would clip it. The mock's bars are 28×31 fixed — that is the
+   look of a short card under this rule, not a rule that bars are 28px.
 
-   Why the widening is visually free. Composing the two percentages back gives
-       left + left'_i * width / 100
-         = 100*L/T + (100*(sL_i - L)/W) * (100*W/T) / 100
-         = 100*sL_i/T
-   which is exactly the percentage this helper emitted before the box existed —
-   W cancels identically, and so it does for the widths. The identity holds
-   whatever MIN_GRAB_UNITS is, whichever branch of the clamp fired, and however
-   many segments there are. After the shipped two-decimal rounding — on both
-   sides, since the position it is compared against was rounded too — the
-   residue measured across every fixture is at most 0.0075 percentage points,
-   under a tenth of a pixel on the 1104px track.
-   test/gantt-run-geometry.test.ts holds it to 0.02pp and shows the arithmetic.
-   (Do not restate that pixel figure as a decimal here: the drift guard in
-   test/suggest-counts.test.ts counts bare shares in this file and a stray
-   bare share reads as a second copy of one of them.)
-
-   An empty return means no segment survived the window — so the template emits
-   no box, no handle and no draggable at all, exactly as ghostBar's empty return
-   emits no ghost. There is no conditional anywhere in the geometry path. */
-const phaseRun = (row) => {
-  const phases = Array.isArray(row.phases) ? row.phases : [];
-  const segs = [];
-  for (const p of phases) {
-    const l = clampUnits(dayIndex(p.startIso));
-    const r = clampUnits(dayIndex(p.endIso));
-    if (r <= l) continue; // zero-width, or clipped fully outside the window
-    segs.push({ cls: p.phase, left: l, width: r - l, title: `${p.phase} → ${fmtDate(p.endIso)}` });
-  }
-  if (!segs.length) return []; // nothing visible -> no box, no handle
-  const r0 = Math.min(...segs.map((s) => s.left));
-  const r1 = Math.max(...segs.map((s) => s.left + s.width));
-  const width = Math.max(r1 - r0, MIN_GRAB_UNITS);
-  const left = Math.max(0, Math.min(r0, TOTAL_UNITS - width));
+   An empty return means unplotted, unforecastable (no difficulty), or fully
+   outside the drawn window — the template emits nothing and the violet +
+   (placement) takes over on the selected row. */
+const itemBar = (row) => {
+  if (!row.startsOn || !row.finish) return [];
+  const l = clampUnits(dayIndex(row.startsOn));
+  const r = clampUnits(dayIndex(row.finish) + 1);
+  if (r <= l) return []; // fully clipped by the window
+  const width = Math.max(r - l, MIN_GRAB_UNITS);
+  const left = Math.max(0, Math.min(l, TOTAL_UNITS - width));
   return [{
     left: unitPct(left),
     width: unitPct(width),
-    segs: segs.map((s) => ({ cls: s.cls, title: s.title, left: pctOf(s.left - left, width), width: pctOf(s.width, width) })),
+    cls: itemPhase(row),
+    title: `${row.startsOn} → ${row.finish}${row.late ? ' · past the client deadline' : ''}`,
   }];
 };
-app.set('phaseRun', phaseRun);
+app.set('itemBar', itemBar);
+
+/* COLOUR ONLY — never data. The lane-by-title defect (2026-08-27) is exactly
+   this match promoted into arithmetic; here the prefix picks a swatch and a
+   wrong guess costs a colour, not a forecast. Unknown prefixes wear the
+   neutral swatch rather than borrowing a phase they may not be. */
+const itemPhase = (row) => {
+  const p = (row.taskPrefix || '').toLowerCase();
+  if (p.startsWith('sketch')) return 'sketch';
+  if (p.startsWith('render')) return 'render';
+  return 'work';
+};
+
+/* The client-deadline tick — unchanged from the deliverable era except its
+   dress (owl #72, node 731:98733: 1px red-500, a RULE not a bar). Position
+   is the deadline's workday ordinal; null when the row has no deadline or
+   the window clips it. The bar-right-of-tick relationship is the row's
+   whole late signal. */
 app.set('deadlineTick', (row) => {
   if (!row.deadline) return null;
   const u = dayIndex(row.deadline);
   return u >= 0 && u <= TOTAL_UNITS ? unitPct(u) : null;
 });
-/* R8 — a pending suggestion draws an outline over the PROPOSED week alongside
-   the row's current bar. Returns 0 or 1 entries so the template resolves it in
-   one call; a proposal outside the drawn window draws nothing. */
-app.set('ghostBar', (row) => {
-  const s = app.get('suggest');
-  const week = s && s.plan ? s.plan[row.cardId] : null;
-  if (!week) return [];
-  const at = app.get('plannerWeeks').findIndex((w) => w.key === week);
-  if (at < 0) return [];
-  return [{ left: unitPct(at * WORKDAYS_PER_WEEK), width: unitPct(WORKDAYS_PER_WEEK) }];
+
+/* The violet + rides the SELECTED unplotted row and renders in whichever week
+   column the pointer is over (#72 §6: it tracks the pointer, it is not fixed
+   to the column the mock shows). Left edge of that column as a track %; the
+   CSS centres the 24px circle inside the --gw column. */
+app.set('plusLeft', (weekKey) => {
+  const at = app.get('plannerWeeks').findIndex((w) => w.key === weekKey);
+  return at < 0 ? null : unitPct(at * WORKDAYS_PER_WEEK);
 });
+
 /* The sprints modal's LENGTH cell — DERIVED and read-only, never an input. It
    is the same counted-Mondays helper the sprint block headers print ('2 wk'),
    so the modal and the planner can never disagree about how long a sprint is. */

@@ -37,10 +37,9 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 - golden: test/golden/original.mjs — VERBATIM oracle, DO NOT EDIT; calendar/forecast/planner.test.ts pin port-trio parity — highest-value tests; forecast.legacy/.workbook.test.ts (40 sanitized workbook rows) pin BR-1/AC-10.
 - test/helpers/gantt-render.ts — renders the shipped schedules template with real Ractive — the template-proof harness.
 - test/helpers/ — db.ts in-memory mongod + migrations; fixtures.ts project/member/agent preamble; requests.ts shared payload shape.
-- test/drag-hittest.test.ts — pins drag-source (.grun) count/classes; bar stays hit-testable.
-- test/gantt-run-geometry.test.ts — pins coloured-run pixel geometry from shipped source text.
-- test/gantt-legend.test.ts — one phase→colour map only; deadline tick reuses .gdl.
-- test/suggest-counts.test.ts — the Suggest bar's three client-side counts.
+- test/drag-hittest.test.ts — the inline-style law + week-cell hit-testability (placement clicks); drag sweeps retired 2026-08-28.
+- test/sprint-schedule-render.test.ts — the rebuilt Sprint Schedules tab (owls #72/#73): groups, add flow, itemBar geometry, withdrawal guards.
+- test/gantt-legend.test.ts — one phase→colour map only; deadline tick reuses .gdl (1px red).
 - test/planner-weeks.test.ts — week/month labels + bar geometry from shipped planner text.
 - test/sprints-modal.test.ts — modal validators executed out of the shipped app scripts + rendered states.
 - test/pipeline-warning.test.ts — warning icon + hover card, keyed on server-emitted tokens.

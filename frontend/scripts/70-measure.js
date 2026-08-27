@@ -46,95 +46,49 @@ function refreshThumbs() {
 }
 window.addEventListener('resize', refreshThumbs);
 
-/* Truncation sweep for the shared clip recipe (owl #39, corrected by #40 —
-   the frames' `@handle` samples are longer than any production requestor).
-
-   It MEASURES, it never guesses: a character count would clip "Andy" on one
-   font and miss a long value on another.
-
-   Deliberately NOT updateThumb's `+ 1` epsilon, and the difference is the point.
-   `text-overflow: ellipsis` fires on ANY overflow, including a fraction of a
-   pixel, so `scrollWidth === clientWidth + 1` is a value the user can SEE
-   truncated — the ellipsis is drawn and 2-3 characters are gone. Under the
-   epsilon that badge got no tooltip and no tab stop, i.e. the exact bug this
-   sweep exists to fix, surviving in a ~1px band. The two costs are asymmetric:
-   a false positive puts a harmless tooltip on a value that only just fits, a
-   false negative hides data with no way to reach it. updateThumb's epsilon
-   guards the opposite trade (suppress a useless slider for 1px of scroll), so
-   it keeps its own. Both metrics are integer-rounded already, which absorbs the
-   sub-pixel noise the epsilon was there for.
-
-   It CLEARS as well as sets, and that half is not tidiness: `{{#each g.rows}}`
-   is unkeyed, so Ractive reuses badge nodes by index and only rewrites their
-   text — a node that held a long value and now holds a short one would keep a
-   stale tab stop and a stale tooltip forever if the sweep only added. Neither
-   attribute appears in the template, so Ractive does not own them and will not
-   fight the sweep between renders.
-
-   Collapsed left pane falls out for free: `.c-req` is `display: none` there, so
-   both widths read 0, the test is false, and the hidden cell is stripped of its
-   tab stop — which is what a hidden cell should have. Expanding re-runs it.
-
-   NOT hooked to `resize`: every width in the pinned pane is a literal px with
-   no responsive rule, so the viewport cannot change this verdict.
-
-   MEASURE FIRST, THEN WRITE — never interleaved. `data-clipped` is a live
-   selector (it turns the badge `position: relative` for the tooltip), so a
-   write dirties layout and the NEXT badge's `scrollWidth` read has to flush a
-   full style+layout pass over the whole Gantt to answer. Read-then-write costs
-   one layout for the sweep instead of one per changed badge; the left-pane
-   collapse, where every badge flips verdict at once, was the worst case. */
-function refreshClips() {
-  const badges = document.querySelectorAll('.clipbadge');
-  const clipped = [];
-  // pass 1 — reads only
-  badges.forEach((el) => {
-    const text = el.firstElementChild; // .cliptext is the badge's only child
-    clipped.push(!!text && text.scrollWidth > text.clientWidth); // any overflow at all — the ellipsis is already drawn
-  });
-  // pass 2 — writes only
-  badges.forEach((el, i) => {
-    if (clipped[i]) {
-      el.setAttribute('data-clipped', '');
-      el.setAttribute('tabindex', '0'); // only a TRUNCATED badge is reachable
-    } else {
-      el.removeAttribute('data-clipped');
-      el.removeAttribute('tabindex');
-    }
-  });
-}
+/* refreshClips WITHDRAWN 2026-08-28: its selector left every template with
+   the Sprint Schedules rebuild (the requestor/type cells retired — owls
+   #72/#73), so the sweep measured zero nodes every frame. The recipe left
+   20-pipeline.css in the same change; the ruled tooltip gaps (owl #42, T152)
+   live in the state log. `remeasure` keeps its ONE name and its thumb half —
+   a fifth seam must still not pick up half of it. */
 /* Every seam that remounts row nodes re-measures BOTH the scroll thumbs and
    the clip verdicts, on the frame after the render. One name, so a fifth seam
    cannot pick up half of it. */
-const remeasure = () => requestAnimationFrame(() => { refreshThumbs(); refreshClips(); });
+const remeasure = () => requestAnimationFrame(() => { refreshThumbs(); });
 /* The webfont lands AFTER first paint (index.html loads Google Sans Flex with
    `display=swap`), so the first sweep can measure fallback metrics and be wrong
    in either direction. One re-measure when the real font is in. */
-document.fonts.ready.then(refreshClips);
 
-/* ---- capacity footer ----
+/* ---- capacity footer (owls #72/#73) ----
 
-   The totals are the SERVER's, computed over every slotted row rather than the
-   twelve visible columns, so week nav never refetches and never re-sums. The
-   only client-side arithmetic is the optimistic drop delta below, which writes
-   into perWeekLocal; that override wins even when it is null, which is how a
-   week that just emptied prints a dash instead of its stale server total. */
-function weekTotal(weekKey) {
-  const local = app.get('perWeekLocal');
-  if (Object.prototype.hasOwnProperty.call(local, weekKey)) return local[weekKey];
-  return app.get('perWeek')[weekKey] || null;
+   The counts are CLIENT-side now and OVERLAP-based: a plotted row weighs on
+   every week its [startsOn..finish] window touches, so a bar spanning two
+   weeks counts in both (default taken, flagged at CLOSE). Workday-window
+   overlap — the week runs from its Monday key to the Friday four days on —
+   because both endpoints are Mon–Fri days by construction (lib/calendar
+   workday math), so a weekend touch cannot exist to argue about.
+
+   No server total and no optimistic delta any more: the rows in `sprintItems`
+   are the whole population, and every placement write ends in loadAll
+   replacing them, so the footer cannot drift from the bars above it. */
+function sprintWeekLoad(weekKey) {
+  const friday = isoAddDays(weekKey, 4);
+  return app.get('sprintItems').rows.filter(
+    (r) => r.startsOn && r.finish && r.startsOn <= friday && r.finish >= weekKey,
+  ).length;
 }
-app.set('footText', (weekKey) => {
-  const t = weekTotal(weekKey);
-  return t ? app.get('fmtLoad')(t.cards) : '—';
+app.set('sprintFootText', (weekKey) => {
+  const n = sprintWeekLoad(weekKey);
+  return n ? String(n) : '—';
 });
-/* R9: over capacity — or over the measured hard-mix ceiling — is red, the
-   ideal-to-ceiling band is amber, and an empty week is a dimmed dash. */
-app.set('footCls', (weekKey) => {
-  const t = weekTotal(weekKey);
-  if (!t) return 'empty';
-  if (t.over || t.hardOver) return 'over';
-  return t.hardWarn ? 'warn' : '';
+/* over capacity is red, an empty week is a dimmed dash. The hard-mix bands
+   left with the deliverable-week footer (#72: the unit is work cards now,
+   and a work card carries no difficulty share to band on). */
+app.set('sprintFootCls', (weekKey) => {
+  const n = sprintWeekLoad(weekKey);
+  if (!n) return 'empty';
+  return n > app.get('capacity').weekly ? 'over' : '';
 });
 
 /* ---- the note field hugs its text (frame 731:101140) ----------------------

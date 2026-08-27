@@ -70,8 +70,9 @@ const collapsed = () =>
   renderPipelineTable({ pipelineRows: [PARENT, CHILDLESS], rowWarning, workCardsByMc: TASKS });
 const open = (over: Record<string, unknown> = {}) =>
   renderPipelineTable({ pipelineRows: [PARENT, CHILDLESS], rowWarning, workCardsByMc: TASKS, expanded: { 'MC-837': true }, ...over });
-/* the three recurring renders, hoisted once — the gantt-requestor-clip
-   precedent; fresh calls remain only where options differ */
+/* the three recurring renders, hoisted once (a hoist pattern from the
+   retired gantt-requestor-clip suite, 2026-08-28); fresh calls remain only
+   where options differ */
 const COLLAPSED = collapsed();
 const OPEN = open();
 const WRITABLE = open({ writesEnabled: true });

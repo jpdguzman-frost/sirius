@@ -1,9 +1,8 @@
 /* Sprint Schedules — planner toolbar, tokenised to the Figma frame
    (owl #21, node 94:4828; 7 Rex-verified annotations). Scope is the TOOLBAR
-   only: the phase legend, the unavoidable-mix banner, the gantt grid and the
-   sprints modal still ride the legacy 10-ui.css recipes, which stay in place
-   because the unmigrated tabs use them too. Every value binds to a token
-   (05-tokens.css) — a raw hex here is a defect. */
+   only: the phase legend and the gantt grid are 35-gantt.css, the sprints
+   modal rides its own recipes. Every value binds to a token (05-tokens.css)
+   — a raw hex here is a defect. */
 
 /* ---- 1. the row: three sections, 24px apart, no surface of its own ---- */
 .ptoolbar {
@@ -114,7 +113,18 @@
   box-shadow: var(--shadow-xs);
 }
 
-/* ---- 4. functionality container ---- */
+/* ---- 4. functionality container ----
+   WITHDRAWN 2026-08-28 (owls #72/#73, rebuild plan): the proposal era's
+   whole toolbar family — its primary button, the disabled treatment that
+   held its slot, the bordered dismiss variant, and the expanded bar (owl
+   #25, node 262:34499) that replaced the button while a proposal was live,
+   with the bar's count spans and its local badge colourway. The tab now
+   schedules work cards one bar at a time, so there is nothing left for a
+   proposal to propose over; the markup went first (see the template's own
+   withdrawal note) and these rules go with it rather than sit as dead
+   selectors reading like a live treatment. Only the neutral button and the
+   helper note survive — the one remaining toolbar action opens the sprints
+   modal. */
 .fnbox { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .ptoolbar .fnbtn {
   height: 36px; flex: none;
@@ -124,41 +134,9 @@
   white-space: nowrap; cursor: pointer;
 }
 .ptoolbar .fnbtn:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
-.ptoolbar .fnbtn.primary { background: var(--neutral-950); color: var(--white); }
-.ptoolbar .fnbtn.primary:hover { background: var(--slate-700); }
 .ptoolbar .fnbtn.ghost { background: var(--slate-100); color: var(--slate-700); }
 .ptoolbar .fnbtn.ghost:hover { background: var(--slate-200); }
-/* a proposal the client refuses to apply keeps its slot in the row so the
-   toolbar does not reflow, but reads as unavailable — its own title carries
-   the reason, and the strip below the toolbar carries the long form */
-.ptoolbar .fnbtn[disabled] { background: var(--slate-100); color: var(--slate-400); cursor: not-allowed; }
-.ptoolbar .fnbtn.discard { background: transparent; color: var(--surface-foreground); border-color: var(--slate-200); }
-.ptoolbar .fnbtn.discard:hover { background: var(--slate-100); }
 .fnbox .fnnote {
   font-size: var(--text-body); font-weight: 400; line-height: 1.4;
   color: var(--slate-400); max-width: 420px;
 }
-
-/* ---- 5. Suggest-plan expanded bar (owl #25, node 262:34499) ----
-   A pending suggestion is a proposal, not a state: while one is live the bar
-   REPLACES the Suggest button in its own toolbar slot, so the row never
-   reflows and the resting look is never two competing primaries. Height is
-   the frame's 54 (8 + a 36px button + 8 + two hairlines); width HUGS its
-   content — the frame's 503 measures one sample, it is not a constraint. */
-.fnbox .sgbar {
-  display: flex; align-items: center; gap: var(--space-16);
-  height: 54px; padding: var(--space-8) var(--space-16);
-  background: var(--blue-50); border: 1px solid var(--blue-300); border-radius: var(--radius-md);
-}
-.sgbar .sgprop {
-  display: inline-flex; align-items: center; gap: var(--space-4);
-  font-size: var(--text-body); font-weight: 600; line-height: 1; color: var(--blue-600);
-}
-.sgbar .sgflag {
-  font-size: var(--text-body); font-weight: 400; line-height: 1; color: var(--surface-muted-foreground);
-}
-/* the SHARED .pbadge geometry (20-pipeline.css) — 12/600, r4, 1px border;
-   only the colour trio is local, exactly as the d-* recipes do it */
-.sgbar .pbadge.sgheavy { background: var(--red-50); border-color: var(--red-500); color: var(--red-500); }
-.sgbar .sgbtns { display: flex; align-items: center; gap: 6px; } /* frame: 6, no token */
-.sgbar .fnbtn { padding: 0 var(--space-16); }                     /* frame: px16 */

@@ -27,12 +27,12 @@ async function resetForProjectSwitch() {
   // re-attaches project A's draft to project B's same-numbered row and
   // Submit would write it there.
   //
-  // Planner view state is per-project too (R-d, owl #25): a pending suggestion
-  // is a plan for THIS project's cards — its cardIds mean nothing in the next
-  // one, and Accept would post them to /replot regardless. `collapsedBlocks` is
-  // keyed on sprint ids, which are per-project, and on 'outside'/'unscheduled',
-  // which would otherwise carry over. `leftCollapsed` deliberately does NOT
-  // reset — it is a reader preference about the pane, not project data.
+  // Planner view state is per-project too (R-d, owl #25; re-based on the
+  // work-card unit, #72): `sprintSel` and a half-built `addRow` name THIS
+  // project's item and sprint ids — carried over, the next click would write
+  // them into another project. `collapsedBlocks` is keyed on sprint ids,
+  // which are per-project. `leftCollapsed` deliberately does NOT reset — it
+  // is a reader preference about the pane, not project data.
   app.set({
     ...reqFiltersCleared(),
     requestFilter: 'all',
@@ -55,7 +55,11 @@ async function resetForProjectSwitch() {
     noteEditing: null,
     noteDraft: { remark: '', clarify: false },
     noteError: '',
-    suggest: null,
+    /* Sprint Schedules placement + Add row (#72) — `addMenu` needs no entry
+       of its own: it is an overlay key, so NO_OVERLAYS above already nulls it. */
+    sprintSel: null,
+    plotWeek: null,
+    addRow: null,
     collapsedBlocks: {},
     // owl #45 recon finding: `expanded` is keyed on mc_number, which repeats
     // ACROSS projects (invariant 3) — carried over, project A's expanded
@@ -86,6 +90,13 @@ function pipeBackToTop() {
   const el = scrollerOf(null);
   if (el) el.scrollTop = 0;
 }
+
+/* ONE placement write in flight (the savingUrgency discipline, invariant 8's
+   shape): a double-click on the track — or on the calendar icon — would send
+   the same PATCH twice, and the second would bank an audit row for a
+   non-change. A single flag, not per-item chrome: both writes end in loadAll,
+   which replaces the rows before a second gesture can mean anything. */
+let sprintItemSaving = false;
 
 app.on({
   noop(ctx) { ctx.event && ctx.event.stopPropagation(); },
@@ -536,157 +547,113 @@ app.on({
      so they commit too. */
   capSlide(ctx) { app.set('capDraft', Number(ctx.node.value)); },
   async capCommit(ctx) { await writeCapacity(Number(ctx.node.value)); },
-  /* the drag flag hides ONE thing for the duration: the deadline tick. `.gdl`
-     paints over the bar (later sibling, same absolute containing block) and
-     carries no dragover handler, so left solid it refuses the drop across its
-     own 2px column; it cannot be transparent at rest because it owns a real
-     `title` there. It is a class toggle only (no geometry, no text), so the
-     drag image the browser snapshots at dragstart is unaffected. dragend always
-     fires, drop or cancel, and moveRows clears it a second time for the case
-     where a re-render eats the source node first. The SEGMENTS left that rule
-     because nothing needs them transparent any more — the solid run box beneath
-     them takes the drop — and they stay solid so that no pixel inside the drag
-     source can be blanked, which is what brings back Chrome's same-tick cancel
-     the moment anyone moves `draggable` down onto a segment (T153). */
-  dragRow(ctx, cardId) {
-    ctx.event.dataTransfer.setData('text/plain', cardId);
-    ctx.event.dataTransfer.effectAllowed = 'move';
-    app.set('ganttDragging', true);
+  /* ---- Sprint Schedules placement (owls #72/#73, frame 731:98513) --------
+     Select, then click a week: the checkbox arms ONE row, the pointer names
+     a week on that row's track, and the click writes `starts_on` — the drag
+     era's five-handler dance replaced by one PATCH. The finish is computed
+     server-side, so no forecast math runs here (invariants 5–7), and the
+     bar and the FORECASTED column read the same field back. */
+  sprintSelect(_ctx, itemId) {
+    /* toggle — the same id disarms. `plotWeek` was the pointer's answer for
+       the PREVIOUS selection's track, so any selection change voids it: left
+       standing, the violet + would paint on the next row before the pointer
+       ever entered its track. */
+    app.set({ sprintSel: app.get('sprintSel') === itemId ? null : itemId, plotWeek: null });
   },
-  dragEnd() { app.set('ganttDragging', false); },
-  dragOver(ctx) { ctx.event.preventDefault(); },
-  async dropOnWeek(ctx, weekKey) {
-    ctx.event.preventDefault();
-    await moveRows(ctx.event.dataTransfer.getData('text/plain'), weekKey);
+  plotHover(ctx) {
+    /* the same pure mapper the drop path used (weekAtX): pointer X against
+       the TRACK's measured rect. Per-mousemove is fine — Ractive no-ops the
+       set until the pointer actually crosses into another column. */
+    app.set('plotWeek', weekAtX(ctx.event.clientX, ctx.node.getBoundingClientRect(), app.get('plannerWeeks')));
   },
-  /* the run box is the drag source AND its own drop target (T153, re-seated on
-     `.grun` in batch 8). Chrome aborts a drag whose source is not hit-testable,
-     so the source can never go transparent — it maps the pointer to a week
-     column from the TRACK's own geometry and then runs the SAME `moveRows`
-     recipe `dropOnWeek` runs: one write, one audit row, no second path.
-     The body is unchanged by the move because it never measured the element it
-     is bound to. `ctx.node` is now the run's own box rather than the track-wide
-     wrapper, and `closest('.gtrack')` makes that a non-event: the rect that
-     gets measured is the TRACK's either way, so the column arithmetic is
-     identical whether this directive sits on a 1104px box or a 24px one.
-     `ctx.node`, never `ctx.event.target`: with the segments hit-testable the
-     event fires on a 26px `.gseg` and bubbles up to the box carrying this
-     directive, and measuring the target would map a fraction of a column.
-     Outside the run the track is transparent again, so the `.gweek` cells take
-     those drops themselves through `dropOnWeek` — the same `moveRows`.
-     The id comes off the dataTransfer and never off this row, because an
-     UNSCHEDULED row dragged across a scheduled row lands here. */
-  async dropOnBar(ctx) {
-    ctx.event.preventDefault();
-    /* the WHOLE track is the geometry, never the run box: the run is as narrow
-       as 24px, so measuring it would map the pointer to the wrong week and
-       move the card somewhere the user did not point. No fallback for that
-       reason — a run outside a track is a broken render, and refusing the drop
-       is the only safe answer. */
-    const track = ctx.node.closest('.gtrack');
-    if (!track) return;
-    const week = weekAtX(ctx.event.clientX, track.getBoundingClientRect(), app.get('plannerWeeks'));
-    if (!week) return;
-    await moveRows(ctx.event.dataTransfer.getData('text/plain'), week);
+  plotLeave() { app.set('plotWeek', null); },
+  async plotPlace(_ctx, itemId) {
+    const week = app.get('plotWeek');
+    /* no week means no mousemove ran before the click (a tap, or a click
+       racing the first hover) — nothing to place, so nothing to send */
+    if (!week || sprintItemSaving) return;
+    sprintItemSaving = true;
+    try {
+      /* #72 §6: placement is by hovered WEEK, and the week's Monday is the
+         start — `plotWeek` IS that Monday (plannerWeeks keys are Mondays).
+         Day-granular placement is #75's rollover territory. */
+      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/sprint-items/${itemId}`, { starts_on: week });
+    } catch (err) {
+      // nothing was optimistic and the selection survives, so the user can
+      // re-click once the banner explains what refused
+      flashBanner(errText(err));
+      return;
+    } finally {
+      sprintItemSaving = false;
+    }
+    app.set({ sprintSel: null, plotWeek: null });
+    await loadAll();
   },
-  /* the Unscheduled block's bar is the one unslot target — the sprint bars
-     take the same handlers and refuse the drop, so the markup has one path
-     (the pattern dayDragOver already uses for holidays) */
-  dragOverBlock(ctx, kind) {
-    if (kind === 'unscheduled') ctx.event.preventDefault();
+  /* the calendar icon: clear the placement, the row stays (#72). The button
+     is disabled without a `startsOn`, and the in-flight lock backs it up, so
+     no no-op PATCH reaches the audit log — the rule saveSprints keeps. */
+  async unplotItem(_ctx, itemId) {
+    if (sprintItemSaving) return;
+    sprintItemSaving = true;
+    try {
+      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/sprint-items/${itemId}`, { starts_on: null });
+    } catch (err) {
+      flashBanner(errText(err));
+      return;
+    } finally {
+      sprintItemSaving = false;
+    }
+    await loadAll();
   },
-  async dropBlock(ctx, kind) {
-    if (kind !== 'unscheduled') return;
-    ctx.event.preventDefault();
-    await moveRows(ctx.event.dataTransfer.getData('text/plain'), null);
+
+  /* ---- the Add row (#72 §3, #73) ----
+     ONE pending row per screen — `addRow` is a single object, not a map, so
+     opening a zone in another sprint replaces a half-built row rather than
+     accumulating drafts. Nothing is written until Add Item posts. */
+  openAddRow(_ctx, sprintId) {
+    app.set('addRow', { sprintId, mc: null, cardId: null, saving: false });
   },
-  async rowKey(ctx, cardId) {
-    /* THE ROW ITSELF, never a descendant. `.growr` is the keydown listener but
-       it holds seven other focusable controls — the select checkbox, the note
-       button, and the three row-action buttons — and an arrow key on any of
-       them bubbled here and RESLOTTED the deliverable a week, an audited data
-       change from a keystroke that should have done nothing. The requestor
-       badge was immunised individually in batch 6, which hid how wide this
-       was; the guard belongs here, the way `pipeRowKey` has always had it. */
-    if (ctx.event.target !== ctx.node) return;
-    const key = ctx.event.key;
-    if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
-    ctx.event.preventDefault();
-    const row = app.get('schedRows').find((r) => r.cardId === cardId);
-    if (!row) return;
-    /* the keyboard path says what the drag path says. /replot skips pinned
-       rows server-side (FR-5.9), so without this an arrow key on a pinned row
-       is a round trip that changes nothing and reports nothing — the same
-       silent no-op that made pinned rows non-draggable (contract §3.8). A
-       multi-select still goes through: /replot applies the unpinned members. */
-    const sel = app.get('selected');
-    const inMulti = Object.keys(sel).filter((id) => sel[id]).length > 1 && sel[cardId];
-    if (row.pinned && !inMulti) {
-      flashBanner('Pinned — unpin to move.');
+  cancelAddRow() { app.set('addRow', null); }, // Escape lands here too — 60-overlays' keydown
+  openAddMenu(ctx, which) {
+    /* 'card' is INERT until an MC is picked (#73): its options are keyed by
+       MC, so opening it early would show a list that belongs to nobody.
+       Through openOverlay for the shared lifecycle — outside click, Escape,
+       mutual exclusion — and openOverlay's toggle is what closes an open
+       menu on a second click of its control. */
+    if (which === 'card' && !app.get('addRow.mc')) return;
+    openOverlay(ctx, which, { key: 'addMenu' });
+  },
+  pickAddMc(_ctx, mc) {
+    closeMenus({ restoreFocus: true });
+    /* ALWAYS clears the card — even re-picking the same MC (#73: never
+       re-match a work card by name; the stored id is the only identity). */
+    app.set({ 'addRow.mc': mc, 'addRow.cardId': null });
+  },
+  pickAddCard(_ctx, cardId) {
+    closeMenus({ restoreFocus: true });
+    app.set('addRow.cardId', cardId);
+  },
+  async submitAddItem() {
+    const add = app.get('addRow');
+    // the button is already disabled in these states; this is the second lock
+    if (!add || !add.cardId || add.saving) return;
+    app.set('addRow.saving', true);
+    try {
+      await api.send('POST', `/api/projects/${app.get('activeProjectId')}/sprint-items`, {
+        sprint_id: add.sprintId, card_id: add.cardId,
+      });
+    } catch (err) {
+      /* the 409s (CARD_COMPLETE / ALREADY_SCHEDULED) land here — errText
+         prefers the server's own message, so it is shown verbatim. The row
+         stays open with its picks intact for another try. */
+      app.set('addRow.saving', false);
+      flashBanner(errText(err));
       return;
     }
-    const from = row.slottedWeek || app.get('weekStart');
-    await moveRows(cardId, mondayShift(from, key === 'ArrowRight' ? 1 : -1));
-  },
-  async togglePin(_ctx, cardId, pinned) {
-    await api.send('PATCH', patchUrl(cardId), { pinned: !pinned });
+    app.set('addRow', null);
     await loadAll();
   },
-  async duplicateRow(_ctx, cardId) {
-    await api.send('POST', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/duplicate`);
-    await loadAll();
-  },
-  /* owl #27's Calendar Remove — unslot. It is the SAME audited path a drop on
-     the Unscheduled block header takes (`moveRows(id, null)` → POST /replot →
-     one `schedule.replot` audit row with `after.slotted_week = null`), not a
-     new endpoint and not a new audit action. The pinned guard is belt and
-     braces: the button is already `disabled` (JP's ruling B — pins stay fully
-     frozen), and /replot would skip the row server-side anyway. */
-  async unslotRow(_ctx, cardId) {
-    const row = app.get('schedRows').find((r) => r.cardId === cardId);
-    if (!row) return;
-    if (row.pinned) {
-      flashBanner('Pinned — unpin to move.');
-      return;
-    }
-    // a row with no slotted week is already off the schedule: /replot would
-    // still audit the no-op, and a non-change must not reach the audit log
-    if (!row.slottedWeek) return;
-    await moveRows(cardId, null);
-  },
-  async editNote(_ctx, cardId, current) {
-    const note = window.prompt('Status override note (empty to clear — reverts to the Trello status):', current || '');
-    if (note === null) return;
-    await api.send('PATCH', patchUrl(cardId), { status_note: note || null });
-    await loadAll();
-  },
-  async runSuggest() {
-    const res = await api.send('POST', `/api/projects/${app.get('activeProjectId')}/suggest`, {
-      from: app.get('weekStart'),
-      weeks: WEEK_COUNT,
-    });
-    // the whole SuggestResult is the state; every count in the bar is a
-    // computed over it, so there is no second number to keep in step
-    app.set('suggest', res);
-  },
-  clearSuggest() { app.set('suggest', null); },
-  async acceptSuggest() {
-    const s = app.get('suggest');
-    if (!s) return;
-    /* see the suggestOffWeeks note — the button is already disabled in this
-       state; this is the second lock, because a persisted non-Monday week
-       corrupts the slot silently and is not recoverable from the UI */
-    if (app.get('suggestOffWeeks').length) {
-      flashBanner(`Suggestion not applied — ${app.get('suggestOffWeeksText')}. Accepting would corrupt the slotted weeks.`);
-      return;
-    }
-    if (app.get('suggestProposed') === 0) return; // R-e: nothing to apply, and no empty /replot
-    const moves = Object.entries(s.plan).map(([cardId, week]) => ({ cardId, week }));
-    await api.send('POST', `/api/projects/${app.get('activeProjectId')}/replot`, { moves });
-    app.set('suggest', null);
-    await loadAll();
-  },
-  /* owl #24 — collapse is PRESENTATION only: plannerGroups, the block header's
+  /* owl #24 — collapse is PRESENTATION only: sprintGroups, the block header's
      meta/count and the capacity footer all keep reading every row, so a hidden
      row still counts against capacity (the footer is data, not visibility). */
   toggleBlock(_ctx, id) {
@@ -700,8 +667,8 @@ app.on({
      and lies about how much timeline is off-screen. */
   toggleLeftPane() {
     app.set('leftCollapsed', !app.get('leftCollapsed'));
-    // collapsing hides .c-req entirely, so its badges measure 0 and lose the tab
-    // stop; expanding has to re-measure to give it back
+    // the collapsed pane hides the three detail columns (#72 layout), so the
+    // sheet's width and the thumb's ratio both change — re-measure next frame
     remeasure();
   },
 
@@ -744,16 +711,15 @@ app.on({
     const v = ctx.node.value;
     app.set(`sprintDraft.${idx}.end`, v ? fridayIso(v) : v);
   },
-  /* Miles's ruling (#30): a sprint covering slotted deliverables warns with the
-     COUNT before it goes. The count is read off the rows already loaded — the
-     same `slottedWeek ∈ [start, end]` test that derives membership — so it is
-     the real number, not an estimate. Zero covered rows removes it outright. */
+  /* Miles's ruling (#30): a sprint holding work warns with the COUNT before
+     it goes. Re-based on the work-card unit (#72): membership is EXPLICIT now
+     (sprint_items.sprintId), so the count is the sprint's own rows — a
+     filter, not a date-range estimate. A draft-added sprint has no id yet and
+     so no rows: it removes outright, as before. */
   removeSprint(_ctx, idx) {
     const s = app.get('sprintDraft')[idx];
     if (!s) return;
-    const covered = app.get('schedRows').filter(
-      (r) => r.slottedWeek && s.start && s.end && r.slottedWeek >= s.start && r.slottedWeek <= s.end,
-    ).length;
+    const covered = app.get('sprintItems').rows.filter((r) => r.sprintId === s.id).length;
     if (!covered) {
       app.splice('sprintDraft', idx, 1);
       app.set('sprintDeleteConfirm', null);
@@ -851,131 +817,4 @@ app.on({
   },
 });
 
-function patchUrl(cardId) {
-  return `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/planning`;
-}
-
-/* One week's total, moved by one row (§3.6). The base is the CURRENT view of
-   the week — the optimistic override if this drop already touched it, else the
-   server's — because a delta applied to zero would erase every row the server
-   counted. `null` means the week has no rows left and renders a dash. */
-function bumpWeek(map, weekKey, row, sign) {
-  if (!weekKey) return;
-  const seen = Object.prototype.hasOwnProperty.call(map, weekKey);
-  const cur = (seen ? map[weekKey] : app.get('perWeek')[weekKey]) || { cards: 0, rows: 0, hard: 0 };
-  const rows = cur.rows + sign;
-  if (rows <= 0) {
-    map[weekKey] = null;
-    return;
-  }
-  const hard = cur.hard + (row.difficulty === 'Hard' ? sign : 0);
-  const cards = Math.max(0, Math.round((cur.cards + sign * (row.weight || 1)) * 1000) / 1000);
-  const hardShare = hard / rows;
-  const cap = app.get('capacity');
-  const ideal = app.get('capHardIdeal');
-  const ceiling = app.get('capHardCeiling');
-  map[weekKey] = {
-    cards,
-    rows,
-    hard,
-    hardShare,
-    over: cards > cap.weekly,
-    hardOver: hardShare > ceiling,
-    hardWarn: hardShare > ideal && hardShare <= ceiling,
-  };
-}
-
-/* ---- the arrival affordance (owl #31) ----
-
-   The row does NOT travel with the pointer any more: the bar moves, the write
-   lands, and the row's relocation into another block is an OUTCOME of
-   re-deriving `schedRows` — so something has to say where it went. A brief
-   background pulse plus a scroll into view is that something.
-
-   `loadAll()` re-renders the whole block, so the moved row's node identity
-   changes and any reference captured before the reload is stale. The class
-   therefore lives in Ractive state (it survives the re-render by construction)
-   and the DOM is re-queried by cardId inside a frame, the way refreshThumbs
-   already does. `block: 'nearest'` cannot disturb the timeline's own
-   horizontal scroller: a row is wider than the scrollport, so both its edges
-   are outside it and the inline axis is left alone. */
-const ARRIVAL_MS = 1200;
-let arrivalTimer = null;
-function announceArrival(cardIds) {
-  if (!cardIds.length) return;
-  const map = {};
-  for (const id of cardIds) map[id] = true;
-  app.set('arrived', map);
-  if (arrivalTimer) clearTimeout(arrivalTimer);
-  arrivalTimer = setTimeout(() => {
-    arrivalTimer = null;
-    app.set('arrived', {});
-  }, ARRIVAL_MS);
-  requestAnimationFrame(() => {
-    const node = [...document.querySelectorAll('.gantt .growr')].find((n) => cardIds.includes(n.dataset.card));
-    if (!node) return;
-    const box = node.getBoundingClientRect();
-    if (box.top < 0 || box.bottom > window.innerHeight) node.scrollIntoView({ block: 'nearest' });
-  });
-}
-
-/* BR-8: a multi-select drag applies the grabbed row's interval to every
-   selected row. A null target unslots instead — /replot takes `week: null`,
-   and an interval has no meaning when there is no week to land on. */
-async function moveRows(grabbedId, targetWeek) {
-  /* the drop has landed, so the deadline ticks can stop hiding from hit-testing
-     even if dragend has not fired yet (a re-render that eats the source node
-     would swallow it, and a stuck flag would leave every tick's tooltip dead).
-     Harmless on the keyboard path, where the flag was never set. */
-  app.set('ganttDragging', false);
-  const selected = app.get('selected');
-  const rows = app.get('schedRows');
-  const grabbed = rows.find((r) => r.cardId === grabbedId);
-  if (!grabbed) return;
-  const ids = Object.keys(selected).filter((id) => selected[id]);
-  const group = ids.length > 1 && ids.includes(grabbedId) ? ids : [grabbedId];
-  const from = grabbed.slottedWeek || targetWeek;
-  const deltaWeeks = targetWeek === null ? 0 : Math.round((Date.parse(targetWeek) - Date.parse(from)) / (7 * 864e5));
-  const moves = group.map((cardId) => {
-    const row = rows.find((r) => r.cardId === cardId);
-    if (targetWeek === null) return { cardId, week: null };
-    return { cardId, week: row.slottedWeek ? mondayShift(row.slottedWeek, deltaWeeks) : targetWeek };
-  });
-  /* A NON-CHANGE MUST NOT REACH THE AUDIT LOG — the rule `unslotRow` and
-     `saveSprints` already keep. Releasing the bar inside the column it is
-     already in is now an easy gesture (batch 8 made the coloured run itself
-     the handle, so the pointer barely has to travel), and it used to POST
-     /replot and write a `schedule.replot` row that recorded nothing. Only when
-     EVERY member is a no-op: a mixed multi-select still goes, and /replot
-     skips the members that have not moved. */
-  if (moves.every((mv) => {
-    const row = rows.find((r) => r.cardId === mv.cardId);
-    return !!row && (row.slottedWeek || null) === mv.week;
-  })) return;
-  /* the footer moves with the rows, before the round trip. Pinned rows are
-     skipped server-side (FR-5.9), so counting them here would show a total the
-     server will never agree with. */
-  const local = { ...app.get('perWeekLocal') };
-  for (const mv of moves) {
-    const row = rows.find((r) => r.cardId === mv.cardId);
-    if (!row || row.pinned) continue;
-    bumpWeek(local, row.slottedWeek, row, -1);
-    bumpWeek(local, mv.week, row, 1);
-  }
-  app.set('perWeekLocal', local);
-  try {
-    await api.send('POST', `/api/projects/${app.get('activeProjectId')}/replot`, { moves });
-  } catch (err) {
-    app.set('perWeekLocal', {}); // the optimistic totals are void — fall back to the server's
-    flashBanner(`Replot failed — the plan is unchanged. ${errText(err)}`);
-    return;
-  }
-  await loadAll();
-  /* pinned members are skipped server-side, so they never arrive anywhere and
-     must not be pulsed as though they had */
-  announceArrival(moves.map((mv) => mv.cardId).filter((id) => {
-    const row = rows.find((r) => r.cardId === id);
-    return row && !row.pinned;
-  }));
-}
 

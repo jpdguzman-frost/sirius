@@ -1,31 +1,43 @@
-/* Sprint Schedules — deliverables table + Gantt planner (owl #22, node
-   95:5795). This file owns the whole planner BODY; the toolbar above it is
+/* Sprint Schedules — work-card rows + Gantt planner (owls #72/#73, frame
+   731:98513; rebuilt 2026-08-28 from the deliverable-row planner of owl #22).
+   This file owns the whole planner BODY; the toolbar above it is
    30-planner.css and is untouched (R1). Every value binds to a token
    (05-tokens.css) — a raw hex here is a defect.
 
-   Layout contract (frozen contract §3.7): the left column block is pinned at
-   999px and the timeline scrolls inside its OWN container, so the page body
-   never scrolls horizontally. One scroller holds the month header, the week
-   header, every row's track and the capacity footer, and the left block is
-   `position: sticky; left: 0` inside it — that is what keeps the five columns
-   and their bars on the same baseline without a second scroll listener.
+   Layout contract (frozen contract §3.7, re-measured against 731:98513): the
+   left column block is pinned at 952px and the timeline scrolls inside its
+   OWN container, so the page body never scrolls horizontally. One scroller
+   holds the month header, the week header, every row's track and the capacity
+   footer, and the left block is `position: sticky; left: 0` inside it — that
+   is what keeps the five columns and their bars on the same baseline without
+   a second scroll listener.
 
    Widths are INTRINSIC: a week column is --gw wide, every row lays 12 of them
    end to end, so the sheet sizes itself and no rule repeats the week count.
    --gw is the CSS half of WEEK_PX (10-constants.js); the month cells multiply
-   it with calc() rather than shipping a second pixel number. */
+   it with calc() rather than shipping a second pixel number.
+
+   WITHDRAWN 2026-08-28 (owls #72/#73, the sprint rebuild): every recipe that
+   served moving a row or its bar with the pointer — the grab affordances, the
+   source boxes and their hit-test contortions, the mid-flight tick blanking,
+   the pin refusals, the arrival pulse and the not-yet-placed caption — plus
+   the proposal outline, the note chip and its tooltip, the row-level late
+   caption, and the requestor/type columns. Rows are placed by click now
+   (select, hover a week, click), so none of that markup exists; the rules are
+   removed rather than left orphaned, because dead selectors read as a live
+   treatment to the next person pricing a change. */
 
 .gantt {
   --gw: 92px; /* one week column — mirrors WEEK_PX in 10-constants.js */
-  --gleft: 999px; /* 58 gutter + 97 + 262 + 136 + 146 + 300 — mirrors LEFT_PANE_PX */
-  --gbar-h: 26px;
+  --gleft: 952px; /* 122 + 262 + 163 + 142 + 263 — mirrors LEFT_PANE_PX. No gutter: the checkbox replaced the grip */
+  --gbar-h: 31px; /* the bar band (frame 731:98682) */
   font-family: var(--font-sans);
 }
 
-/* ---- 1. phase legend (R4, node 262:33342) ----
-   The frame carries no legend, but four bar colours with no key is a worse
-   defect than one extra row: the swatches reuse the phase classes below, so
-   there is exactly ONE phase→colour map in the codebase.
+/* ---- 1. phase legend (R4, carried into the rebuild by owl #72) ----
+   The frame carries no legend, but bar colours with no key is a worse defect
+   than one extra row: the swatches reuse the phase classes below, so there is
+   exactly ONE phase→colour map in the codebase.
 
    Owl #26 tightened it to the node's own facts: a 12px-tall RIGHT-aligned
    strip, 16px between items, Row-scope swatches at 20×10 r4, 12/400 slate-500
@@ -42,11 +54,12 @@
 .glegend .gleg { display: inline-flex; align-items: center; gap: 6px; } /* frame 262:33342 — the 26px offset = 20 swatch + 6 gap; no 6px token */
 .glegend .gleg-dl { gap: var(--space-8); } /* the deadline entry alone reads 8px */
 .glegend .gseg { display: inline-block; width: 20px; height: 10px; border-radius: var(--radius-sm); }
-/* the deadline swatch borrows `.gantt .gdl`'s colour AND its 2px stroke — one
-   deadline-marker recipe, never a second — but not its absolute placement, and
-   that rule is declared LATER at equal specificity, so this one carries the
-   `.gantt` prefix too or the swatch escapes the legend to the top-left of the
-   page (found at integrate). Declaring no `width` here is deliberate. */
+/* the deadline swatch borrows `.gantt .gdl`'s colour AND its stroke width —
+   one deadline-marker recipe, never a second — but not its absolute
+   placement, and that rule is declared LATER at equal specificity, so this
+   one carries the `.gantt` prefix too or the swatch escapes the legend to the
+   top-left of the page (found at integrate). Declaring no `width` here is
+   deliberate. */
 .gantt .glegend .gdl { position: static; height: 12px; }
 
 /* ---- 2. the card + its scroller ---- */
@@ -66,7 +79,7 @@
   border-right: 1px solid var(--slate-200);
   background: var(--surface-background);
 }
-/* The pin's right border IS the 999px pane boundary (it doubles as the cover
+/* The pin's right border IS the 952px pane boundary (it doubles as the cover
    the sticky column scrolls under), so the FIRST timeline cell of every strip
    drops its own left border — otherwise the two 1px rules sit adjacent and the
    frame's single hairline renders 2px wide, two-tone in the row and footer. */
@@ -106,19 +119,22 @@
 .gantt .gwkn { font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--surface-foreground); }
 .gantt .gwksub { font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--slate-400); white-space: nowrap; }
 
-/* ---- 4. sprint / outside / unscheduled block headers (36px) ----
-   R6 (closed, owl #24): the chevron collapses the block's ROWS; the header and
-   its meta counts stay, and the capacity footer keeps counting the hidden rows
-   — the footer is DATA, not visibility. The frame's header CHECKBOX is still
-   not built. */
+/* ---- 4. sprint block headers (48px — frame nodes 731:98676/98784; the old
+   36px was the deliverable-era frame's, re-assigned to this file mid-build
+   2026-08-28) ----
+   R6 (closed, owl #24): the chevron collapses the block's ROWS (and the add
+   affordance with them); the header and its meta counts stay, and the
+   capacity footer keeps counting the hidden rows — the footer is DATA, not
+   visibility. An EMPTY sprint still renders its header: the add affordance
+   needs a home (#72 §2). The frame's header CHECKBOX is still not built. */
 .gantt .gblockhead {
-  display: flex; align-items: center; min-height: 36px;
+  display: flex; align-items: center; min-height: 48px;
   background: var(--slate-100); border-bottom: 1px solid var(--slate-200);
 }
 .gantt .gbhinner {
   position: sticky; left: 0;
   display: flex; align-items: center; gap: var(--space-8);
-  padding: var(--space-8) var(--space-16); white-space: nowrap;
+  padding: 14px var(--space-16); white-space: nowrap; /* frame: 14 vertical, no token */
 }
 .gantt .gbname { font-size: var(--text-body); font-weight: 600; line-height: 1; color: var(--surface-foreground); }
 /* the frame gives the header's meta line two tones: the duration reads
@@ -126,11 +142,6 @@
    '#items'), so they are two spans, not one string */
 .gantt .gbmeta { font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--surface-muted-foreground); }
 .gantt .gbcount { font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--slate-400); }
-/* the one unslot drop zone (contract §3.8) — the Unscheduled block's own bar.
-   It keeps its drop handlers WHILE COLLAPSED: the toggle is a real <button>
-   inside the header, so click and drag never contend for the same node. */
-.gantt .gblockhead.dropzone { cursor: copy; }
-.gantt .gblockhead.dropzone .gbcount::after { content: ' · drop a row here to unslot it'; }
 /* one chevron in the sprite, rotated — the same trick .ptoolbar .rangenav
    .flipx uses (30-planner.css). No new icon. */
 .gantt .gbtoggle {
@@ -144,72 +155,54 @@
 .gantt .gbchev-o { transform: rotate(90deg); } /* expanded: chevron points down */
 .gantt .gbchev-c { transform: none; }          /* collapsed: points right */
 
-/* ---- 5. deliverable row (84px base, grows when the badges wrap) ----
-   owl #31 — the row itself is no longer a drag source: a SCHEDULED row is
-   moved by its bar (§6), so only an UNSCHEDULED row (which has no bar) still
-   carries the grab cursor and the row-drag it goes with (R-drag-a). */
+/* ---- 5. the work-card row (120px, frame 731:98682) ----
+   One row = one work card = at most one bar (#72 §6). The height is FIXED,
+   not a floor: the pinned pane and the timeline bars share a baseline, and a
+   long card name is a display clamp (#73 — the value is never cut), so the
+   name wraps and the CELL's clip swallows what the 120px cannot show. */
 .gantt .growr {
-  display: flex; min-height: 84px;
+  display: flex; height: 120px;
   background: var(--surface-background); border-bottom: 1px solid var(--slate-200);
 }
-.gantt .growr.unsched { cursor: grab; }
-.gantt .growr:focus { outline: 2px solid var(--blue-500); outline-offset: -2px; }
+/* placement selection (sprintSel) — the checkbox toggles it, the tint says
+   which row the next track click will place */
 .gantt .growr.sel { background: var(--blue-50); }
 .gantt .growr.sel .gpin { background: var(--blue-50); }
-/* /replot skips pinned rows server-side (FR-5.9), so a pinned row does not
-   drag at all rather than fail silently — JP's ruling B (2026-08-17) keeps
-   pins FULLY frozen, bar and row alike */
-.gantt .growr.unsched.pinned { cursor: not-allowed; }
-/* the arrival pulse: a drop rewrites the slotted week, and the row's move into
-   another block is a RE-RENDER of the derivation, so the row has to say where
-   it landed. 1.2s, then the class is dropped from the Ractive state. */
-@keyframes garrive {
-  0% { background-color: var(--blue-100); }
-  100% { background-color: var(--surface-background); }
-}
-.gantt .growr.arrived,
-.gantt .growr.arrived .gpin { animation: garrive 1.2s ease-out; }
-@media (prefers-reduced-motion: reduce) {
-  .gantt .growr.arrived,
-  .gantt .growr.arrived .gpin { animation: none; background-color: var(--blue-100); }
-}
 
 .gantt .gdetails { display: flex; align-items: stretch; }
 /* a cell is a fixed box: it clips rather than pushing its neighbours, so no
    freak-long Trello list name can widen the pinned block past --gleft */
-.gantt .gdetails .gcell { flex: none; padding: var(--space-16) var(--space-8) var(--space-16) 0; overflow: hidden; }
-/* frame column widths (58 + 97 + 262 + 136 + 146 + 300 = --gleft) — the 58px
-   gutter lives INSIDE the first cell so the header label and the MC number
-   share one left edge and the drag handle sits in the space beside them */
-.gantt .gdetails .c-mc { width: 155px; position: relative; padding-left: 58px; }
+.gantt .gdetails .gcell { flex: none; padding: var(--space-16) var(--space-8) var(--space-16) var(--space-16); overflow: hidden; }
+/* frame column widths (122 + 262 + 163 + 142 + 263 = --gleft). The checkbox
+   sits IN FLOW where the grip's gutter used to be, so the row's content and
+   the header label share one 16px left edge by the shared padding alone. */
+.gantt .gdetails .c-mc { width: 122px; display: flex; align-items: flex-start; gap: var(--space-12); }
 .gantt .gdetails .c-scope { width: 262px; }
-/* owl #39/#40 — the ONE cell whose clip moves inward. Its badge clips itself
-   with an ellipsis (the shared `.clipbadge` recipe, 20-pipeline.css), so the
-   cell has nothing left to spill and its own clip is redundant; releasing it is
-   what lets the badge's tooltip escape the cell without a fixed-position
-   overlay or a hard-coded left offset. Same specificity as the `.gcell` rule
-   above (0,3,0) and declared later, so it wins with no new selector. The other
-   four columns keep the clip untouched — `flex: none` + the width below is what
-   holds the pinned block to --gleft, not the overflow. */
-.gantt .gdetails .c-req { width: 136px; overflow: visible; }
-.gantt .gdetails .c-type { width: 146px; overflow: visible; }
-.gantt .gdetails .c-status { width: 300px; display: flex; align-items: flex-start; gap: var(--space-8); }
+.gantt .gdetails .c-dl { width: 163px; }
+.gantt .gdetails .c-fc { width: 142px; }
+.gantt .gdetails .c-gstatus { width: 263px; display: flex; align-items: flex-start; gap: var(--space-8); }
+/* the two date columns are plain values, not badges — the frame prints them
+   muted (731:98682 '31 Aug 2026' → #64748b). Scoped to .growr, NOT .gdetails:
+   the header cells share the column classes (that sharing is what keeps the
+   header hiding in step with the rows when collapsed), and via .gdetails this
+   later rule would win the order tie against the header recipe (§3) and
+   silently regrow the DEADLINE / FORECASTED labels to body size. */
+.gantt .growr .c-dl, .gantt .growr .c-fc {
+  font-size: var(--text-body); line-height: 1.5; color: var(--surface-muted-foreground);
+}
 
-/* owl #24 — the collapsed pane: MC# + name only (155 + 262 = 417). ONE
+/* owl #24 — the collapsed pane: MC# + scope only (122 + 262 = 384). ONE
    variable moves the sticky pins, the sheet's intrinsic width and the footer
-   caption together, so the week columns and every drop target keep their
-   geometry and no JS width maths exists to keep in sync (.gsheet is
-   `width: max-content`). The header cells share these class names, so the
-   header hides in step with the rows and the two can never disagree.
-   KNOWN CONSEQUENCE (R11, carried forward from T133): the action cluster lives
-   in c-status and the status-note affordance in .gchips, and BOTH are hidden
-   here — so Copy / Pin / Calendar Remove and the note editor are unavailable
-   while collapsed. Expand to use them (recorded in the frame notes). */
-.gantt.lpc { --gleft: 417px; }
-.gantt.lpc .c-req,
-.gantt.lpc .c-type,
-.gantt.lpc .c-status,
-.gantt.lpc .gchips { display: none; }
+   caption together, so the week columns keep their geometry and no JS width
+   maths exists to keep in sync (.gsheet is `width: max-content`). The header
+   cells share these class names, so the header hides in step with the rows
+   and the two can never disagree.
+   KNOWN CONSEQUENCE (R11, carried forward): the icon trio lives in the
+   status column and is hidden here — expand to clear a placement. */
+.gantt.lpc { --gleft: 384px; }
+.gantt.lpc .c-dl,
+.gantt.lpc .c-fc,
+.gantt.lpc .c-gstatus { display: none; }
 /* absolutely positioned so it cannot disturb the five-column measure that adds
    up to --gleft; the .gcolhead .gpin it sits in is `position: sticky`, i.e. a
    positioned ancestor, so `right` is the PANE's right edge in both states and
@@ -224,46 +217,37 @@
 .gantt .lpctoggle:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
 .gantt .lpctoggle .flipx { transform: rotate(180deg); }
 
-/* BR-8's multi-select stays on BOTH row kinds — only the grip is conditional */
-.gantt .gsel { position: absolute; left: var(--space-16); top: 20px; width: 14px; height: 14px; margin: 0; cursor: pointer; }
-/* R11: the frame's 16px chevron is the drag-handle affordance and nothing else.
-   R-drag-b (owl #31): it now renders ONLY on unscheduled rows. With the row
-   drag gone from scheduled rows the grip there would be a handle that drags
-   nothing — the same trap R-f-6 deletes from the sprints table's column 1. */
-/* Miles, owl #59: the handle is HOVER-REVEALED, like the action cluster and
-   unlike the checkbox and the note chip — those two are always visible because
-   one is a control the row is selected with and the other carries content.
-   Same `opacity` reveal and the same trigger pair as `.gactions`, so the two
-   appear together rather than a beat apart. The pinned exception is the
-   CLUSTER's only (state must not hide behind a hover); a pinned row's handle
-   already refuses the drag below, so revealing it at rest would advertise
-   something that cannot happen. The COLUMN stays reserved either way —
-   `.c-mc`'s 58px left pad does not depend on the handle rendering, so
-   scheduled and unscheduled rows start their content at the same x (#59: a
-   collapsing column reads as broken, not tidy). */
-.gantt .ghandle {
-  position: absolute; left: 36px; top: 18px;
-  display: inline-flex; color: var(--slate-400); cursor: grab;
-  opacity: 0; transition: opacity 0.12s ease;
-}
-.gantt .growr:hover .ghandle,
-.gantt .growr:focus-within .ghandle { opacity: 1; }
-.gantt .growr.pinned .ghandle { cursor: not-allowed; }
-.gantt .ghandle svg { display: block; }
+/* the selection checkbox — 16px in flow (frame 731:98682: box at the pane's
+   16px inset, MC number 12px after it); the 2px nudge seats it on the MC
+   number's first text line */
+.gantt .gsel { width: 16px; height: 16px; flex: none; margin: 2px 0 0; cursor: pointer; }
 .gantt .gmc { display: block; font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
-.gantt .glate { display: block; font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--red-600); }
-/* nowrap since the note chip started carrying freeform text (owl #48): a
-   second chips line grows the row past its 84px floor and the pinned pane
-   stops lining up with the timeline bars. See the note-chip rules below for
-   which chip is allowed to shrink instead. */
-.gantt .gchips { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--space-4); margin-bottom: var(--space-8); }
+
+/* the scope cell: badges row, then the FULL name (frame: badges at 16,
+   name at 41 — a 6px seam, no token) */
+.gantt .gchips { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; margin-bottom: 6px; }
 /* contract §2: a null difficulty prints the same dimmed dash as every other
    empty column, sized onto the badges' 19px baseline instead of pushing the
    chips row taller — those rows carry no bar either, so the dash is the only
    cue that the missing difficulty label is why */
 .gantt .gchips .gdim { font-size: var(--text-label); line-height: 19px; }
-.gantt .gname { font-size: var(--text-body); font-weight: 400; line-height: 1.4; color: var(--surface-foreground); }
+.gantt .gname { font-size: var(--text-body); font-weight: 400; line-height: 1.5; color: var(--surface-foreground); }
 .gantt .gdim { font-size: var(--text-body); line-height: 1.5; color: var(--surface-muted-foreground); }
+
+/* the urgency chip (frame 731:98682) — a read-only span, NOT the Pipeline
+   select pill, which is why it does not join that selector list: interaction
+   chrome there (cursor, fixed 111px, chevron slot) would be a lie here. The
+   colourways are the family's, restated at the row's 19px size: urgent is the
+   frame's solid fill, Non-Urgent keeps the DASHED stroke the Pipeline and
+   Deadlines chips wear — the dash IS the "no flag set" grammar. */
+.gantt .gub {
+  display: inline-flex; align-items: center; flex: none;
+  height: 19px; padding: 4px 6px 3px;
+  font-size: var(--text-caption); font-weight: 600; line-height: 1;
+  border: 1px solid transparent; border-radius: var(--radius-xs); white-space: nowrap;
+}
+.gantt .gub.urgent { background: var(--red-500); border-color: var(--red-500); color: var(--red-50); }
+.gantt .gub.nonurgent { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
 
 /* badges: the SHARED .pbadge recipes (20-pipeline.css) at the frame's row
    sizes. No second status map, no second difficulty map (contract §3.10) —
@@ -273,46 +257,17 @@
   height: 19px; padding: 4px 6px 3px;
   font-size: var(--text-caption); border-radius: var(--radius-xs);
 }
-.gantt .pbadge.u-on { background: var(--red-500); border-color: var(--red-500); color: var(--red-50); }
-.gantt .pbadge.u-off { background: var(--slate-100); border-color: var(--slate-200); color: var(--slate-500); }
-/* With the line held to one row (above), the note is the only chip allowed to
-   shrink: urgency and difficulty carry fixed vocabularies and must never be
-   cut, while the note already has a truncation recipe and a hover reveal for
-   the part that does not fit. Its real budget is the cell minus those two
-   chips, which is exactly what the measurement sweep sees. */
-.gantt .gchips > * { flex-shrink: 0; }
-.gantt .pbadge.gnote { flex-shrink: 1; min-width: 0; }
 
-/* The status-note chip has NO colourway of its own (product ruling, owl #49):
-   it inherits the base badge — the same fill, stroke and ink the Requestor
-   badge wears — so the two content-bearing chips read as one family by
-   sharing a rule rather than by copying values. The grammar it settles:
-   coloured chips carry STATE (urgency, difficulty), neutral chips carry
-   CONTENT (requestor, note). The amber it replaces read as a severity that a
-   note like 'waiting on brief' does not have.
-
-   Its ONE deviation from the shared clip recipe is the tooltip measure. The
-   other two clipped values are a person and an asset type — short by nature —
-   so a single nowrap line always fits. A note is freeform, and a long one on
-   one line runs off the right of the viewport where no pointer can reach it.
-   Capped and wrapped here, and nowhere else, because no other clipped value
-   has that problem. */
-.gantt .gnote[data-clipped]:hover::after,
-.gantt .gnote[data-clipped]:focus-visible::after {
-  content: attr(data-note);
-  white-space: normal; width: max-content; max-width: 260px; line-height: 1.4;
-}
-
-/* row actions — Copy · Pin · Calendar Remove, the design's own 55×13 cluster
-   (owl #27, node I262:33396;251:27040): three 13px glyphs 8px apart, stroked
-   --slate-400. It stays out of the resting look — hover or keyboard focus
-   reveals it, and a PINNED row keeps it visible because state must never hide
-   behind a hover. `opacity: 0` rather than `display: none` is what leaves all
-   three in the tab order at rest. */
-.gantt .gactions { display: inline-flex; align-items: center; gap: var(--space-8); margin-left: auto; opacity: 0; transition: opacity 0.12s ease; }
+/* the icon trio — Copy · Pin · Calendar clear (55×13 in the frame): three
+   13px glyphs 8px apart, stroked --slate-400, centred against the 25px lane
+   chip beside them. It stays out of the resting look — hover or keyboard
+   focus reveals it. `opacity: 0` rather than `display: none` is what leaves
+   the live control in the tab order at rest. Two of the three are inert by
+   RULE, not omission (ruled decision 4): duplicating is refused by the
+   one-row-per-card unique index, and pinning is parked — their titles say so. */
+.gantt .gactions { display: inline-flex; align-items: center; align-self: center; gap: var(--space-8); margin-left: auto; opacity: 0; transition: opacity 0.12s ease; }
 .gantt .growr:hover .gactions,
-.gantt .growr:focus-within .gactions,
-.gantt .growr.pinned .gactions { opacity: 1; }
+.gantt .growr:focus-within .gactions { opacity: 1; }
 .gantt .gact {
   display: inline-flex; align-items: center; justify-content: center;
   border: none; background: none; cursor: pointer; padding: var(--space-4); line-height: 1;
@@ -321,173 +276,194 @@
 .gantt .gact svg { display: block; }
 .gantt .gact:hover { background: var(--slate-100); color: var(--slate-700); }
 .gantt .gact:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
-.gantt .gact.on { color: var(--surface-foreground); }
-/* JP's ruling B — Calendar Remove is DISABLED on a pinned row, not merely
-   warned about: /replot skips pinned rows server-side, so an enabled control
-   would be a round trip that changes nothing */
 .gantt .gact[disabled] { cursor: not-allowed; opacity: 0.45; }
 .gantt .gact[disabled]:hover { background: none; color: var(--slate-400); }
 
-/* owl #27 — the status-note affordance, kept OUTSIDE badge-icons-container so
-   the cluster is exactly the three icons the design specifies. With a note the
-   chip that announces it IS the edit control (same pixels, no new chrome);
-   without one, a ghost pencil in the same chips row appears on the same
-   hover/focus the cluster answers to. */
-.gantt button.pbadge { font-family: var(--font-sans); cursor: pointer; }
-.gantt .gnoteadd { opacity: 0; transition: opacity 0.12s ease; }
-.gantt .growr:hover .gnoteadd,
-.gantt .growr:focus-within .gnoteadd { opacity: 1; }
-
-/* ---- 6. the timeline track + the bars ---- */
+/* ---- 6. the timeline track + the bar ---- */
 .gantt .gtrack { position: relative; flex: none; display: flex; }
 .gantt .gweeks { display: flex; flex: 1; }
 /* the body gridline is the SAME hairline as the headers' (#e2e8f0 in the frame
    dump's row-weeks and footer Cells), so it runs continuously past the header
-   boundary instead of visibly lightening below it */
+   boundary instead of visibly lightening below it. The cells stay bare of
+   pointer rules ON PURPOSE: a placement CLICK lands on the track and maps to
+   a week by arithmetic (weekAtX, 50-gantt-geometry.js), and the hit-test law
+   in test/drag-hittest.test.ts now guards them for that consumer. */
 .gantt .gweek { width: var(--gw); flex: none; border-left: 1px solid var(--slate-200); }
 
-/* ONE phase→colour map (R4). The Board-scope amber Review variant in the
-   component set contradicts the Row-scope palette and is judged a stale copy;
-   the legend swatches above reuse these same four classes. */
-.gseg.sketch { background: var(--amber-500); }
-.gseg.review { background: var(--blue-200); }
-.gseg.render { background: var(--blue-600); }
-.gseg.renderOverdue { background: var(--red-600); }
-/* owl #31 (T153), re-seated on the run's own box by JP's structural ruling of
-   2026-08-18. `.grun` is the DRAG SOURCE — the coloured run's own box, one box
-   over the whole run — and `.gbar` is the track-wide wrapper it sits inside.
-   (Do not misread the neighbours: `.growr` is a planner ROW and `.gunsched` is
-   the "not yet scheduled" caption. Only `.grun` is the handle.)
-   `pointer-events: auto` on `.grun` must STAY `auto` in every state. Chrome
-   hit-tests the draggable ancestor when a drag begins and CANCELS the drag in
-   the same tick if that ancestor cannot be hit — proven with real mouse input
-   (CDP): a `none` on the source produced dragstart → dragend, dropEffect
-   "none", no drag/dragenter/dragover/drop at all. That ban did not shrink when
-   the source moved; it moved with it. The `auto` is written out rather than
-   omitted for two reasons: `pointer-events` INHERITS, so the explicit value
-   defends the source against any future ancestor rule — and it is what makes
-   the wrapper's `none` legal at all, since a child's own `auto` overrides an
-   inherited `none`. Deleting it would silently re-create the cancel.
-   `.gbar` is `pointer-events: none` ON PURPOSE, and that is the point of the
-   change: it spans 1104px, so left solid it swallows every drop that lands on
-   the track OUTSIDE the coloured run, and the `.gweek` columns beneath never
-   see them. Transparent, it hands those columns their drops back while `.grun`
-   keeps its own. Both paths end in the same `moveRows` — the box maps the
-   pointer's X to a week column itself (`weekAtX`, 50-gantt-geometry.js), the cells
-   are simply hit. `inset: 0` keeps the wrapper's box identical to the track's.
-   `.grun` IS THE BAR STRIP (JP, 2026-08-18, batch 9). It was `top: 0; bottom:
-   0` — the whole 99px row — and the browser's drag image is a snapshot of the
-   SOURCE'S BOX, so a row-tall transparent box handed Chrome a row-tall picture:
-   it painted the week gridlines crossing it and wrapped the tall silhouette in
-   its own shadow. JP wants the ghost to be the coloured bars, so the source box
-   is now the coloured bars' own band — `--gbar-h` tall, centred in the row.
-   The centring MOVED UP ONE LEVEL and is byte-identical arithmetic. `top: 50%;
-   transform: translateY(-50%); height: var(--gbar-h)` was on `.gantt .gtrack
-   .gseg` and is now here; the 50% resolves against `.gbar`, which is `inset: 0`
-   of the same `.gtrack` the segments used to resolve against, so the strip's top
-   edge lands on the pixel the segments' top edge landed on. `.gseg` below then
-   fills the strip with `top: 0; bottom: 0` instead of centring itself, so it
-   ends up in exactly the same place on screen. Nothing about where the bars
-   appear changed; only the box the browser snapshots did. The corollary is JP's
-   ruling, not a regression: the vertical grab area is the 26px band, not the
-   whole row. Only the coloured bars are the handle.
-   `transform` here is the centring, and its two side effects are both wanted or
-   harmless: `.grun` becomes a stacking context (so Chrome's drag snapshot has a
-   smaller chance of reaching sibling content at all) and a containing block for
-   its absolute `.gseg` children, which it already was by virtue of `position:
-   absolute`. Paint order is unchanged — `.gdl` and `.gghost` are later siblings
-   of `.gbar` at `z-index: auto` and still paint on top.
-   The minimum grab width is ARITHMETIC, in `phaseRun`, never CSS. A `min-width`
-   (or padding, or a border) here would widen the RENDERED box, and the segments
-   inside are positioned in percentages OF THAT BOX — so every short run would
-   visibly stretch. The box must paint nothing at all: no background, border,
-   outline, shadow, hover tint or pseudo-element. Only `.gseg` paints.
-   THE POINTER AFFORDANCE IS NOT THE HIT AREA (JP, 2026-08-18, closing T155(h)).
-   The cursor lives on `.gseg` — the coloured runs, the only thing the user
-   thinks of as "the bar" — and `.grun` reads `default`, which is what the rest
-   of `.growr` reads (the row declares no cursor). The box's invisible extension
-   is empty track to the eye, so it shows the plain arrow while still being
-   grabbable: an honest hit area with an honest cursor. `.gbar` names no cursor
-   now, and needs none — a `pointer-events: none` box never receives hover, so
-   the arrow over empty track comes from the cells and the row beneath. */
-.gantt .gbar { position: absolute; inset: 0; pointer-events: none; }
-.gantt .grun {
-  position: absolute; top: 50%; transform: translateY(-50%); height: var(--gbar-h);
-  pointer-events: auto; cursor: default;
-}
-.gantt .grun .gseg { pointer-events: auto; cursor: grab; }
-.gantt .grun .gseg:active { cursor: grabbing; }
-/* The ONE thing that still hides for the duration of a drag is the deadline
-   tick. `.gdl` is a later sibling of `.gbar` inside the same `position:
-   relative` `.gtrack`, both absolute at `z-index: auto`, so it paints ON TOP of
-   the bar and wins hit-testing across its 2px column. Left solid it would take
-   the `dragover` there, carry no handler, call no preventDefault, and the drop
-   would be refused at exactly the deadline. It cannot simply be made
-   permanently transparent: at rest it carries a real `title="deadline …"`
-   affordance. `.gdragging` is set on dragstart and cleared on dragend (and
-   defensively in moveRows, for the re-render that eats the source node).
-   The segments are NOT in this rule any more, and nothing needs them to be: the
-   run box beneath them is solid and carries the dragover/drop itself, so an
-   event over a transparent `.gseg` would simply hit `.grun` instead. They are kept
-   solid anyway, and the guard bans the alternative outright — blanking a
-   segment mid-drag would abort the drag only if `draggable` ever moved onto
-   `.gseg` (the variant batch 7 rejected), and that is exactly the move the ban
-   stops from silently re-creating the cancel. */
-.gantt.gdragging .gdl { pointer-events: none; }
-/* pins stay FULLY frozen (JP, 2026-08-17) — the bar refuses the grab and says
-   why. Scoped to the SEGMENTS by the 2026-08-18 affordance ruling, for the same
-   reason `grab` was: a refusal is an affordance too, and a 1104px `not-allowed`
-   would claim the whole empty track had been withheld when nothing there was
-   ever offered. Only the RESTING clause is load-bearing. At (0,5,0) it already
-   outranks the grab rule above (0,3,0) AND the grabbing rule above (0,4,0 — one
-   pseudo-class), so a pressed pinned segment computes `not-allowed` even with
-   the `:active` clause deleted. That clause is kept defensively, not because the
-   cascade needs it today: it is what would still hold if anyone raised the
-   grabbing rule's specificity. The pinned row still states itself
-   in words on hover: `.growr` carries `title="Pinned — unpin to move"`, which
-   covers the track it contains, and each `.gseg` appends the same sentence to
-   its phase title. */
-.gantt .growr.pinned .grun .gseg,
-.gantt .growr.pinned .grun .gseg:active { cursor: not-allowed; }
-/* The segments FILL the strip rather than centring against the row. `.grun`
-   above is now `--gbar-h` tall and centred, so `top: 0; bottom: 0` here resolves
-   to the same top edge and the same 26px height the old `top: 50%;
-   transform: translateY(-50%); height: var(--gbar-h)` resolved to — the
-   centring did not disappear, it moved up one level to the strip. The height is
-   deliberately NOT restated here: `--gbar-h` has exactly one owner inside the
-   track now (`.grun`), and a second copy could drift.
-   Horizontal geometry is untouched — `left`/`width` still arrive as inline
-   percentages of the run box out of `phaseRun`.
-   This rule is scoped to `.gtrack` on purpose and the legend is NOT inside one:
-   `.glegend .gseg` (§1) is a static 20×10 inline-block swatch and must keep its
-   own box, so it must never be reached from here. The four phase classes above
-   carry colour only — no box at all — which is what lets both share them.
-   (Naming any one of them again in this file would read as a second colour map
-   to the drift guard in test/gantt-legend.test.ts, so they are not listed.) */
-.gantt .gtrack .gseg {
-  position: absolute; top: 0; bottom: 0; border-radius: var(--radius-xs);
-}
-/* the frame draws the client deadline as a LIGHT 2px tick (dump row84
-   'Deadline Marker' → mark: stroke #94a3b8, stroke-width 2), not the legacy
-   week-board's near-black 2.5px bar */
-.gantt .gdl { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--slate-400); }
-/* R8: a pending suggestion is a proposal, not a state — outline only, drawn
-   over the proposed week ALONGSIDE the row's current bar. */
-.gantt .gghost {
+/* ONE phase→colour map (R4): the legend swatches and the bars share these
+   classes, which carry colour and nothing else — that is what lets a 20×10
+   swatch and a row-tall bar wear the same rule. The last pair OVERRIDES the
+   phase fill at equal specificity by declaration order alone: past the client
+   deadline the bar turns alarm-red whatever the phase (#72 §6 — the red BAR
+   is the card-level indicator invariant 13 says no acknowledgement may
+   suppress). The neutral third phase is the no-prefix fallback (itemPhase:
+   a wrong prefix guess costs a colour, not a forecast) and has no legend
+   entry — the legend keys the phases a PM plans by, not the fallback. */
+.gseg.sketch, .gitem.sketch { background: var(--amber-500); }
+.gseg.render, .gitem.render { background: var(--blue-600); }
+.gseg.work, .gitem.work { background: var(--slate-400); }
+.gseg.late, .gitem.late { background: var(--red-600); }
+
+/* the bar box — geometry only, colour arrives via the map above. Horizontal
+   placement is inline percentages out of itemBar (50-gantt-geometry.js);
+   the template does no arithmetic and this rule repeats none of itemBar's.
+   Radius is the node's own 2 (731:98682 — agent C's Rex read overruled the
+   plan's drafted 4, main-thread ruling 2026-08-28). The box keeps native
+   pointer events for its title; nothing beneath it wants clicks on a plotted
+   row — placement only exists where no bar does. */
+.gantt .gitem {
   position: absolute; top: 50%; transform: translateY(-50%);
-  height: var(--gbar-h); border: 1px dashed var(--violet-500); border-radius: var(--radius-xs);
-  background: none; pointer-events: none;
-}
-.gantt .gunsched {
-  position: absolute; inset: 0; display: flex; align-items: center;
-  padding-left: var(--space-16); pointer-events: none; /* the week columns below stay droppable */
-  font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--surface-muted-foreground);
+  height: var(--gbar-h); border-radius: var(--radius-xs);
 }
 
-/* ---- 7. capacity footer (63px) ----
+/* the client-deadline tick — the frame's hairline (731:98733; owl #72's
+   ruling fixes width and colour, and the legend swatch above inherits both
+   by borrowing this recipe rather than declaring its own) */
+.gantt .gdl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--red-500); }
+
+/* the placement + — rides the SELECTED unplotted row's track in whichever
+   week column the pointer is over. plusLeft hands over the COLUMN's left
+   edge; the margin centres the circle inside the --gw column so the CSS half
+   never repeats the geometry maths. `pointer-events: none` is load-bearing:
+   the TRACK owns the click (#72 §6), and a solid button under the pointer
+   would swallow the very click it advertises. */
+.gantt .gplus {
+  position: absolute; top: 50%;
+  margin-left: calc((var(--gw) - 24px) / 2);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* ---- 7. adding a work card (frame 731:98918 / 731:100230) ---- */
+
+/* the 24px indigo circle — ONE recipe for both wearers, deliberately the
+   same (#72 §6): the + that reveals the add row and the + that places a bar
+   are the same promise, "a row lands here". */
+.gantt .gaddplus, .gantt .gplus {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex: none; padding: 0; border: none;
+  border-radius: var(--radius-full);
+  background: var(--indigo-500); color: var(--white);
+}
+.gantt .gaddplus svg, .gantt .gplus svg { display: block; }
+
+/* the add zone after a group's rows — invisible at rest (opacity, not
+   display: it must keep its box to be hoverable and hold its place in the
+   tab order), revealed on hover or keyboard focus; the reveal IS the focus
+   indication. The frame draws the whole affordance inside the details pane
+   (node 731:98918: the rule spans the pane and stops at the gantt boundary),
+   so the zone is pane-wide and rides `position: sticky` like every other
+   pinned surface — it must not drift off with the timeline scroll while the
+   columns it belongs to stay put. */
+.gantt .gaddzone {
+  position: sticky; left: 0;
+  display: flex; align-items: center;
+  width: var(--gleft); height: 24px;
+  cursor: pointer; opacity: 0; transition: opacity 0.12s ease;
+}
+.gantt .gaddzone:hover,
+.gantt .gaddzone:focus-visible,
+.gantt .gaddzone:focus-within { opacity: 1; }
+.gantt .gaddrule { flex: 1; border-top: 1px dashed var(--indigo-500); }
+.gantt .gaddzone .gaddplus { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+
+/* the pending row — the details pane fills slate-50 (frame 731:100230:
+   pending is a SURFACE state, the timeline half stays on the row white), and
+   its cells centre their 32px controls instead of hanging them on the rows'
+   16px top line. The clip release is deliberate and scoped: the shared
+   `.gcell` clip guards the pane width against unbounded VALUES, but these
+   two controls are fixed boxes that cannot spill wide — and the option list
+   opens UPWARD out of the cell (#73), which a clipping cell would swallow
+   whole. Same release, same reasoning, as the old requestor column's. */
+.gantt .gaddrow .gpin { background: var(--slate-50); }
+.gantt .gaddrow .gcell { display: flex; align-items: center; padding-top: 0; padding-bottom: 0; overflow: visible; }
+/* the inert trio is decoration here (aria-hidden in the template) — it shows
+   at rest to keep the pending row on the real rows' grid, so it must not
+   wait for a hover it will never answer */
+.gantt .gaddrow .gactions { opacity: 1; }
+
+/* Add Item — frozen as .gaddbtn (main-thread ruling 2026-08-28): the app's
+   black action button at the frame's 102×32 (node 731:100230). The toolbar's
+   button family is `.ptoolbar`-scoped and cannot reach in here — that
+   scoping is WHY this is its own recipe and not a variant borrow. */
+.gantt .gaddbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 102px; height: 32px; padding: 0 var(--space-12); flex: none;
+  border: none; border-radius: var(--radius-sm);
+  background: var(--neutral-950); color: var(--white);
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 600; line-height: 1;
+  white-space: nowrap; cursor: pointer;
+}
+.gantt .gaddbtn:hover { background: var(--slate-700); }
+.gantt .gaddbtn:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
+.gantt .gaddbtn[disabled] { background: var(--slate-100); color: var(--slate-400); cursor: not-allowed; }
+/* the in-flight POST: half-lit and unpressable, the same saving grammar as
+   the Pipeline select pill */
+.gantt .gaddbtn.saving { opacity: 0.5; pointer-events: none; }
+
+/* the two dropdowns (frame 737:109809/109839). Widths ride the mc/card
+   modifier classes, not the cells, so the recipe names no column. */
+.gantt .gdd { position: relative; }
+.gantt .gddmc { width: 90px; }
+.gantt .gddcard { width: 230px; }
+.gantt .gddctl {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-8);
+  width: 100%; height: 32px; padding: 0 6px 0 8px; /* frame insets — no token at 6/8 asymmetry */
+  background: var(--surface-background);
+  border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; line-height: 1;
+  color: var(--surface-foreground); text-align: left; cursor: pointer;
+}
+.gantt .gddctl:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+/* 'card' is inert until an MC is picked — its list literally does not exist
+   yet (addCardOptions keys off addRow.mc) */
+.gantt .gddctl[disabled] { background: var(--slate-50); color: var(--slate-400); cursor: not-allowed; }
+.gantt .gddval { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gantt .gddval.ph { color: var(--slate-400); }
+.gantt .gddchev { flex: none; transition: transform 0.12s ease; }
+/* open state (frame: the stroke doubles and darkens): the inner ring fakes
+   the second pixel so the control's box never changes and the text does not
+   jump a pixel left on every open */
+.gantt .gdd.open .gddctl {
+  border-color: var(--slate-700);
+  box-shadow: inset 0 0 0 1px var(--slate-700);
+}
+.gantt .gdd.open .gddchev { transform: rotate(180deg); }
+/* the option list opens UPWARD (#73 — the add row lives at a list's end, so
+   an upward menu never needs flip logic) with the frame's 5px seam. The
+   height is a FIXED 218 with its own scroll because scrolling is the normal
+   case, not the overflow case: MC-825 alone carries 99 deliverables. Width
+   tracks the control via the shared 100%. */
+.gantt .gddmenu {
+  position: absolute; bottom: calc(100% + 5px); left: 0; z-index: 5;
+  width: 100%; max-height: 218px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--space-4);
+  padding: var(--space-4) 0;
+  background: var(--surface-background);
+  border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
+}
+/* an option clamps to 2 lines as a DISPLAY courtesy; the stored value is
+   always the full string (#73). Selection is weight ONLY — no tick, no fill
+   (#73) — so the hover tint stays light enough to never read as selection. */
+.gantt .gdditem {
+  border: none; background: none; cursor: pointer; text-align: left;
+  width: 100%; padding: 6px 10px; /* frame item insets — no token */
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; line-height: 1.3;
+  color: var(--surface-foreground);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.gantt .gdditem:hover { background: var(--slate-50); }
+.gantt .gdditem.on { font-weight: 600; }
+
+/* ---- 8. capacity footer (63px) ----
    The footer is CHROME, not a row: the frame paints its caption area and every
    week cell #f8fafc, the same tint the two headers carry. The sticky .gpin
-   needs the tint restated because its own rule seats it on the row surface. */
+   needs the tint restated because its own rule seats it on the row surface.
+   WITHDRAWN 2026-08-28 (owls #72/#73): the amber mid-band treatment — the
+   rebuilt week count has two states, past capacity and empty, and a rule for
+   a class nothing emits reads as a live treatment (sprintFootCls,
+   70-measure.js, is the only writer). */
 .gantt .gfoot { display: flex; min-height: 63px; border-top: 1px solid var(--slate-200); background: var(--slate-50); }
 .gantt .gfoot .gpin { background: var(--slate-50); }
 .gantt .gfootcap {
@@ -506,13 +482,12 @@
   font-size: var(--text-label); font-weight: 600; line-height: 1;
   color: var(--surface-foreground); font-variant-numeric: tabular-nums;
 }
-/* R9 — over capacity (or over the hard ceiling) is red, the ideal-to-ceiling
-   band is amber, and a week with no rows prints a dash, not a zero */
+/* R9, thinned by the rebuild — past the project's weekly capacity is red, and
+   a week with no overlapping bars prints a dash, not a zero */
 .gantt .gfootcell.empty { color: var(--slate-300); }
-.gantt .gfootcell.warn { color: var(--amber-600); }
 .gantt .gfootcell.over { color: var(--red-600); }
 
-/* ---- 8. the horizontal slider (24px) ----
+/* ---- 9. the horizontal slider (24px) ----
    Same .hslider recipe as Pipeline and Requests (20-pipeline.css); only the
    frame's padding (p4,0,4,0), its #f8fafc chrome tint and its seat inside the
    card are local. */

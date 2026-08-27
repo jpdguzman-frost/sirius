@@ -25,7 +25,7 @@ const FRONTEND_SHARED = [
   'monthShiftYm', 'monthShort', 'normalizeUrl', 'noteText', 'NUDGE_PX', 'openOverlay', 'openMeasured', 'openHoverOverlay', 'leaveHoverOverlay', 'OVERLAY_ANCHORED', 'scheduleHoverClose', 'OVERLAY_SHIELDS', 'OVERLAY_SHIELD', 'OVERLAY_SELF_SCROLL',
   'PIPE_COLS', 'pipeColLabel', 'PIPE_FILTERS', 'PIPE_FILTERS_EMPTY', 'PIPE_SORTS', 'PIPE_SORT_DEFAULT', 'pipeCompare', 'pipeSortRows',
   'PIPE_MENU_W', 'pipeBackToTop',
-  'pipeMatches', 'pipeEmpty', 'pipePick', 'pipeFacetList', 'pipeChipList', 'pipeValueLabel', 'pipeSortLabel',
+  'pipeMatches', 'pipePick', 'pipeFacetList', 'pipeChipList', 'pipeValueLabel', 'pipeSortLabel',
   'DL_RULES', 'dlRule', 'dlRuleWord', 'fmtWeekRange', 'fmtDayMonth', 'fmtDeadlineShort',
   'NO_OVERLAYS', 'OVERLAY_KEYS', 'patchRow', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
   'REQ_MENU_H', 'REQ_MENU_W', 'REQ_PAGE_SIZE', 'reqComparator', 'reqFilterKeys', 'reqFiltersCleared',

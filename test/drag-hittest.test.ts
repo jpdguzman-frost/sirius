@@ -1,49 +1,55 @@
 /**
- * Batch 7 (T153) — a drag source must stay HIT-TESTABLE, and the bar owns its
- * own drop. Repointed in batch 8 (T158) onto the source that replaced it.
+ * Hit-testability + the inline-style law. Batch 7 (T153) built this file for
+ * the planner's drag; TRIMMED 2026-08-28 when the Sprint Schedules rebuild
+ * (owls #72/#73, PLAN.md) withdrew that drag — placement is a CLICK now.
  *
  * ────────────────────────────────────────────────────────────────────────────
- * WHY THIS FILE CHANGED, AND WHY THAT IS THE GUARD WORKING.
+ * WHAT SURVIVES THE TRIM, AND WHY.
  *
- * The drag SOURCE moved. It was `.gbar`, a transparent-then-solid box spanning
- * the whole 1104px track; it is now `.grun`, the coloured run's own box nested
- * inside `.gbar`. This file pins the source count and the source class names on
- * purpose, so moving the source could not be done quietly — the guard failed
- * the moment the template changed, which is exactly what it is for.
+ * 1. THE DRAG-SOURCE SWEEP, for the ONE drag left: the Deadlines day entry.
+ *    The schedules sources (`.grun`, `.growr`) died with their drag, but
+ *    `test/deadlines-frame.test.ts` still names this file as the owner of the
+ *    day entry's hit-testability — deleting the sweep would have orphaned a
+ *    living drag. The source count drops 3 → 1; the sweep still derives its
+ *    sources from the template, so a new `draggable` joins it automatically.
  *
- * The ban did not shrink. It moved to the new source AND grew a rule it did not
- * have before: because `.gbar` is now an ANCESTOR of the source and is
- * deliberately `pointer-events: none` (it must be, or it swallows the `.gweek`
- * columns' drops outside the run), the ancestor sweep had to learn the one
- * legitimate escape — an ancestor's inherited `none` is cured by the SOURCE's
- * own explicit `auto`. That exemption is evaluated PER SOURCE and only from the
- * same rules being swept, so `.growr`, which declares no `auto`, still catches
- * every transparent wrapper above it. The SOURCE sweep takes no exemption at
- * all: a source's own `none` is banned outright, in every state.
+ * 2. THE WEEK-CELL SWEEP, same law, NEW CONSUMER. The `.gweek` cells used to
+ *    be the drop path outside the coloured run; they are now the columns a
+ *    real placement CLICK lands through — select a row, hover a week, click
+ *    (`plotHover`/`plotPlace` on the `.gtrack` above them). A
+ *    `pointer-events: none` anywhere on that chain refuses every placement
+ *    while nothing else in the suite notices, exactly as it once refused
+ *    every drop.
  *
- * Three counts are unchanged and are meant to be: three drag sources, one
- * `.gdragging` transparency subject (`.gdl`), and every `dropOnBar` assertion in
- * SUITE 3 — the proof that the drop path did not move with the source.
+ * 3. THE INLINE-STYLE LAW, verbatim — including the `noteGrow` exact-text
+ *    allow-list and its length-2 pin. It never was about the drag: a CSS
+ *    guard cannot see an inline write, so the cheapest way to keep inline
+ *    writes visible is to have none (minus the one documented exemption).
+ *
+ * 4. THE weekAtX SUITE. The mapper survived the rebuild unchanged
+ *    (50-gantt-geometry.js) and `plotHover` now feeds it the pointer, so the
+ *    arithmetic that used to place a DROP places a CLICK.
+ *
+ * Gone with the drag: the `.grun`/`.gbar` source sweeps and their `auto`
+ * dependency pair, the `.gdragging` mid-drag sweep (the class is withdrawn),
+ * the dropOnBar/dropOnWeek wiring suite, and the pinned/unscheduled render
+ * suites. The Deadlines drag carries no mid-drag state class, so no mid-drag
+ * sweep replaces the old one.
  * ────────────────────────────────────────────────────────────────────────────
  * HONESTY NOTE — READ BEFORE TRUSTING A GREEN RUN.
  *
- * Nothing in this file can prove the drag works. This repo has no jsdom and no
- * browser runner (there is no vitest config and no `environment` anywhere), so
- * every assertion below is either Ractive's `toHTML()` or a read of the shipped
- * source text. A synthetic `DragEvent` dispatched in a test runner NEVER enters
- * Chrome's drag machinery: it calls the app's own handlers directly, which is
- * exactly why every automated check since 13g/13j passed while the live bar was
- * un-draggable. Synthetic events were the blind spot, so this suite does not
- * use them.
+ * Nothing in this file can prove the remaining drag — or a click — works.
+ * This repo has no jsdom and no browser runner, so every assertion below is a
+ * read of the shipped source text or an execution of a slice of it. A
+ * synthetic `DragEvent` NEVER enters Chrome's drag machinery (gantt-rules
+ * §46–47); none are used here and none may be added. What these tests prove
+ * is that the CONDITIONS the browser needs are present in the shipped files
+ * and cannot silently regress. Real-input verification stays the
+ * orchestrator's, in a browser, after deploy.
  *
- * What these tests prove is narrower and, for this bug, sufficient: that the
- * CONDITIONS Chrome needs are present in the shipped files and cannot silently
- * regress. The real-input verification — a real mouse, a real drag, a real drop
- * — is the orchestrator's, in a browser, after deploy.
- *
- * THE BUG IN ONE SENTENCE: a drag source that is `pointer-events: none` in any
- * state cannot be hit-tested, and Chrome creates and cancels the drag in the
- * same tick.
+ * THE BUG THIS FILE EXISTS FOR, in one sentence: an interaction target that
+ * is `pointer-events: none` in any state cannot be hit-tested — a drag
+ * cancels in the tick it starts, and a click falls through to nothing.
  * ────────────────────────────────────────────────────────────────────────────
  */
 
@@ -51,15 +57,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import {
-  APP_JS,
-  GANTT_CSS,
-  TEMPLATE,
-  decl,
-  type PlannerGroup,
-  type PlannerRow,
-  renderGantt,
-} from './helpers/gantt-render.ts';
+import { APP_JS, GANTT_CSS, TEMPLATE, decl } from './helpers/gantt-render.ts';
 
 /* ====================================================================== *
  * Parsers. Deliberately small, and each one is pinned by a test of its
@@ -94,21 +92,11 @@ const SCRIPTS: { file: string; js: string }[] = readAll('scripts', '.js').map(({
  * `pointer-events: none`, in every spelling CSS accepts.
  *
  * Property names and keywords are case-INsensitive and whitespace is legal on
- * both sides of the colon, so `POINTER-EVENTS : NONE` takes a drag source out
+ * both sides of the colon, so `POINTER-EVENTS : NONE` takes a target out
  * of hit-testing exactly as thoroughly as the canonical form. A guard that only
  * knows the house style is a guard a reformat walks past.
  */
 const HIT_TEST_OFF = /pointer-events\s*:\s*none/i;
-
-/**
- * The three ways a stylesheet can take an element out of hit-testing. Used only
- * for the mid-drag sweep: `visibility: hidden` and `display: none` are ordinary
- * at-rest tools (a filtered-out row, a collapsed block) and flagging them
- * everywhere would be noise — but a rule that hides the DRAG SOURCE for the
- * duration of the drag is control 3 of the real-input diagnosis, whichever
- * property it reaches for.
- */
-const HIT_TEST_OFF_ANY = /(?:pointer-events\s*:\s*none|visibility\s*:\s*hidden|display\s*:\s*none)/i;
 
 const stripCssComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
 
@@ -178,9 +166,9 @@ const TRANSPARENT_RULES = ALL_RULES.filter((r) => HIT_TEST_OFF.test(r.body));
  *
  * `pointer-events` only disables an element when the rule's subject IS that
  * element (inheritance to descendants is handled separately, below), so the
- * subject is what a drag source has to be compared against. Pseudo-classes and
- * pseudo-elements are stripped: `.gseg:active` is still `.gseg`, and a rule
- * that only bites while `:active` is still a rule that bites mid-drag.
+ * subject is what a target has to be compared against. Pseudo-classes and
+ * pseudo-elements are stripped: `.entry:active` is still `.entry`, and a rule
+ * that only bites while `:active` is still a rule that bites mid-interaction.
  */
 function subjectClasses(selector: string): string[] {
   const compound = selector.trim().split(/[\s>+~]+/).filter(Boolean).pop() ?? '';
@@ -191,10 +179,10 @@ function subjectClasses(selector: string): string[] {
 /**
  * Does the selector's SUBJECT carry a pseudo-class or pseudo-element?
  *
- * `.growr:hover` and `.gseg::after` are state-scoped subjects. That is
+ * `.entry:hover` and `.entry::after` are state-scoped subjects. That is
  * deliberately ignored by every BAN in this file (a rule that bites only while
- * `:active` still bites mid-drag) and it is deliberately fatal to a CURE, which
- * has to hold for the whole drag. Attribute selectors are stripped first so a
+ * `:active` still bites) and it is deliberately fatal to a CURE, which has to
+ * hold for the whole interaction. Attribute selectors are stripped first so a
  * legitimate `[data-…]` containing a colon does not read as a state.
  */
 function hasSubjectState(selector: string): boolean {
@@ -212,10 +200,9 @@ function subjectElement(selector: string): string {
  * The shipped template with both comment forms removed.
  *
  * Ractive's `{{! … }}` ends at the FIRST `}}`, and that is what is emulated
- * here — matching what the browser does rather than what the author meant. The
- * lone `{{!row.trelloDue}}` in the template is a NEGATION in attribute
- * position, not a comment, so only `{{!` followed by whitespace is treated as
- * one. HTML comments go too: batch 7 rewrites one of these blocks, and a
+ * here — matching what the browser does rather than what the author meant.
+ * `{{!expr}}` in attribute position is a NEGATION, not a comment, so only
+ * `{{!` followed by whitespace is treated as one. HTML comments go too: a
  * comment that quotes example markup must not be mistaken for a drag source.
  */
 const TEMPLATE_CODE = TEMPLATE.replace(/<!--[\s\S]*?-->/g, ' ').replace(/\{\{!\s[\s\S]*?\}\}/g, ' ');
@@ -245,8 +232,8 @@ function tagEnd(src: string, start: number): number {
 
 /**
  * The class tokens an element CAN carry, conditionals included:
- * `class="growr {{#if row.pinned}}pinned{{/if}}"` means `pinned` may be
- * present, so a rule targeting `.pinned` alone would still hit this element.
+ * `class="entry {{#if m.late}}late{{/if}}"` means `late` may be present, so a
+ * rule targeting `.late` alone would still hit this element.
  */
 function possibleClasses(openTag: string): string[] {
   const attr = /class="([^"]*)"/.exec(openTag)?.[1] ?? '';
@@ -280,7 +267,7 @@ const VOID_ELEMENTS = new Set([
  * A hand-kept list of ancestor classes is the same staleness vector the drag
  * sources are already protected from: `pointer-events` INHERITS, so a wrapper
  * introduced tomorrow — or one that exists today and was simply forgotten —
- * disables every source inside it while a hard-coded sweep stays green. The
+ * disables every target inside it while a hard-coded sweep stays green. The
  * parse is a plain open/close stack; Ractive requires each section's content to
  * be balanced, so it reaches depth 0 and any imbalance is reported rather than
  * thrown (a throw at module scope would take the hit-test guard down with it).
@@ -322,8 +309,8 @@ const isSubsetOf = (tokens: string[], possible: string[]): boolean =>
 /**
  * The whole guard, in one function so it can be pointed at a fixture as well
  * as at the shipped sheets. A rule offends when the SUBJECT of one of its
- * selectors would match an element in `targets` — the drag sources themselves,
- * or (because `pointer-events` inherits) one of their ancestors.
+ * selectors would match an element in `targets` — the interaction targets
+ * themselves, or (because `pointer-events` inherits) one of their ancestors.
  */
 function offendersIn(
   rules: CssRule[],
@@ -355,29 +342,15 @@ const dedupe = (els: { name: string; classes: string[] }[]): { name: string; cla
 ];
 
 /**
- * Every ancestor of every drag source, de-duplicated. Derived, never listed.
- */
-const ANCESTOR_TARGETS = targetsFor('an ancestor of a drag source', dedupe(DRAG_SOURCES.flatMap((s) => s.ancestors)));
-
-/**
  * Does `rules` re-enable hit-testing ON THE ELEMENT ITSELF, unconditionally?
  *
  * `pointer-events` inherits, and an inherited value is overridden by the
- * element's own explicit one — so `.gantt .gbar { pointer-events: none }` above
- * `.gantt .grun { pointer-events: auto }` leaves the source hit-testable. That
- * is the shipped shape as of T158, and it is the ONLY escape the ancestor and
- * drop-target sweeps grant.
- *
- * The cure must hold in EVERY state and at EVERY viewport, which is the one
- * place this sweep is stricter than the bans around it. A ban counts a rule
- * that only bites while `:hover`, or only inside a `@media` block, because a
- * rule that bites sometimes is still a bug sometimes. A CURE cannot be read the
- * same way: `.growr:hover { pointer-events: auto }` above a transparent
- * ancestor holds at mousedown and evaporates the instant the pointer leaves the
- * row mid-drag — control 2 of the T153 diagnosis, wearing a cure's clothes. So
- * the curing rule must sit at the top level of its sheet (`conditional` false)
- * and its SUBJECT compound must carry no pseudo-class. Rejecting a cure only
- * ever makes the sweep stricter, so an over-cautious reading here is safe.
+ * element's own explicit one — that is the ONLY escape the ancestor sweeps
+ * grant. The cure must hold in EVERY state and at EVERY viewport (gantt-rules
+ * §52): a `:hover` or `@media`-scoped `auto` evaporates mid-interaction, so
+ * the curing rule must sit at the top level of its sheet and its SUBJECT
+ * compound must carry no pseudo-class. Rejecting a cure only ever makes the
+ * sweep stricter, so an over-cautious reading here is safe.
  *
  * Evaluated against the SAME `rules` being swept, never against the shipped
  * sheets: a fixture containing only a `none` must still fire.
@@ -394,10 +367,7 @@ const declaresAuto = (rules: CssRule[], src: { classes: string[] }): boolean =>
 
 /**
  * The ancestor sweep, PER SOURCE. A source that re-enables itself drops out of
- * the sweep entirely; every other source keeps its whole chain. `.gantt` and
- * `.gbrows` are ancestors of BOTH `.grun` and `.growr`, and `.growr` declares no
- * `auto`, so a `none` up there is still caught — which is what makes this an
- * exemption rather than a hole.
+ * the sweep entirely; every other source keeps its whole chain.
  */
 const ancestorOffenders = (rules: CssRule[]): string[] =>
   offendersIn(
@@ -409,45 +379,32 @@ const ancestorOffenders = (rules: CssRule[]): string[] =>
   );
 
 /**
- * The planner's WEEK CELLS — derived from the template by their handler, never
- * listed — because T158 made them load-bearing and the exemption above stops
- * covering them by accident.
+ * The planner's WEEK CELLS — the columns a placement CLICK lands through.
  *
- * Before T158 the `.gweek` cells were incidentally protected: `.gtrack` and
- * everything above it was swept as an ancestor of `.gbar`, the drag source, and
- * the cells inherit through that same chain. T158 moved the source into `.grun`
- * and gave it its own `auto`, so `.grun`'s whole chain now drops out of the
- * ancestor sweep — correctly, for the SOURCE — and the cells lost the cover
- * they never had in their own name.
- *
- * They cannot be left uncovered. `.gbar` is `pointer-events: none` precisely so
- * that a drop landing on the track OUTSIDE the coloured run reaches a `.gweek`
- * cell, which is the ONLY path such a drop has: no cell, no `dropOnWeek`, no
- * `moveRows`. A `pointer-events: none` anywhere on `.gweek` or above it would
- * refuse every drop outside the run while all three drag sources still dragged
- * happily — check (j) of T155, reaching the browser with a green suite.
- *
- * Scoped to the planner's week cells on purpose: this is the path JP's ruling
- * of 2026-08-18 made load-bearing, not a new charter over every drop zone in
- * the app. The other drop targets (`.gblockhead`, `.daycol`) are untouched by
- * this batch and are left to whoever owns them.
+ * SAME LAW, NEW CONSUMER (the 2026-08-28 trim). Before the rebuild these
+ * cells were the drop path outside the coloured run and were derived by their
+ * `dropOnWeek` handler. The rebuilt track carries the handlers itself
+ * (`plotHover`/`plotPlace`, derived below), and the cells carry none — so the
+ * derivation keys on the frozen class instead (PLAN.md template contract: the
+ * `.gtrack` holds the 12 `.gweek` cells). The chain still matters exactly as
+ * it did: a `pointer-events: none` on `.gtrack` or anything above it refuses
+ * every placement click while the rest of the suite stays green — check (j)'s
+ * failure shape, reached by a click instead of a drop.
  */
-const WEEK_CELLS: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) => /on-drop="\['dropOnWeek'/.test(e.source));
+const WEEK_CELLS: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) => e.classes.includes('gweek'));
+
+/** The elements that TAKE the placement click — derived by their handler. */
+const PLACE_TRACKS: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) => e.source.includes("'plotPlace'"));
 
 const weekCellOffenders = (rules: CssRule[]): string[] => [
-  ...offendersIn(rules, targetsFor('the week-cell drop target', WEEK_CELLS)),
+  ...offendersIn(rules, targetsFor('the week cell', WEEK_CELLS)),
   ...offendersIn(
     rules,
     targetsFor(
-      'an ancestor of the week-cell drop target',
+      'an ancestor of the week cell',
       dedupe(WEEK_CELLS.filter((c) => !declaresAuto(rules, c)).flatMap((c) => c.ancestors)),
     ),
   ),
-];
-
-const WEEK_CELL_TARGETS = [
-  ...targetsFor('the week-cell drop target', WEEK_CELLS),
-  ...targetsFor('an ancestor of the week-cell drop target', dedupe(WEEK_CELLS.flatMap((c) => c.ancestors))),
 ];
 
 /* ====================================================================== *
@@ -455,16 +412,11 @@ const WEEK_CELL_TARGETS = [
  * ====================================================================== */
 
 describe('the guard’s own parsers actually see the shipped files', () => {
-  /* THE DEFECT THIS REWRITE FIXES: the assertion under this exact title WAS a
-     hardcoded list of eight filenames, so adding a ninth stylesheet failed a
-     guard whose whole subject is that the enumeration cannot go stale. It went
-     red on 45-forecast.css for no reason except that it had been retyped.
-
-     What it is actually for is non-vacuity and attribution — that `readAll`
-     really walked the directory rather than returning nothing, and that every
-     sheet arrives with its filename and some text. So it reads the directory
-     again, independently, and compares. A sheet added, renamed or deleted needs
-     no edit here; a `readAll` that silently stopped seeing files still fails. */
+  /* Non-vacuity and attribution — that `readAll` really walked the directory
+     rather than returning nothing, and that every sheet arrives with its
+     filename and some text. It reads the directory again, independently, and
+     compares: a sheet added, renamed or deleted needs no edit here; a
+     `readAll` that silently stopped seeing files still fails. */
   it('reads every stylesheet in frontend/styles, not a list that can go stale', () => {
     const onDisk = fs
       .readdirSync(path.join(fileURLToPath(new URL('../frontend/styles', import.meta.url))))
@@ -477,12 +429,14 @@ describe('the guard’s own parsers actually see the shipped files', () => {
     expect(STYLESHEETS.every((s) => s.css.length > 0)).toBe(true);
   });
 
-  it('flattens rules well enough to find known ones in two different sheets', () => {
-    const selectors = ALL_RULES.map((r) => r.selector);
-    expect(selectors).toContain('.gantt .gbar');
-    expect(selectors).toContain('.gantt .grun');
-    expect(selectors).toContain('.ubadge.saving');
-    expect(selectors).toContain('.gantt .grun .gseg');
+  it('flattens rules well enough to find known subjects in two different sheets', () => {
+    // by SUBJECT rather than by exact selector spelling, so the styles pass
+    // that dresses the rebuilt tab cannot break the parser test by rewording
+    // a selector the flattener still sees perfectly well
+    const subjects = ALL_RULES.flatMap((r) => r.selector.split(',').flatMap(subjectClasses));
+    expect(subjects).toContain('gweek');
+    expect(subjects).toContain('gtrack');
+    expect(subjects).toContain('saving'); // .ubadge.saving, 20-pipeline.css
   });
 
   it('uses no CSS nesting, which is the premise the flattener rests on', () => {
@@ -492,37 +446,27 @@ describe('the guard’s own parsers actually see the shipped files', () => {
   });
 
   it('finds real `pointer-events: none` rules and ignores the prose about them', () => {
-    // 35-gantt.css discusses pointer-events at length in comments; the parser
-    // must count the declarations, not the paragraphs
+    // the sheets discuss pointer-events in comments; the parser must count
+    // the declarations, not the paragraphs
     expect(TRANSPARENT_RULES.length).toBeGreaterThan(0);
     for (const r of TRANSPARENT_RULES) expect(r.body).toMatch(HIT_TEST_OFF);
   });
 
   it('reads the template as a BALANCED tree, which is what makes the ancestor sweep real', () => {
     // every ancestor claim below is only as good as this parse: an unbalanced
-    // stack would hand a drag source somebody else's ancestors, or none at all
+    // stack would hand a target somebody else's ancestors, or none at all
     expect(PARSED.problems).toEqual([]);
     expect(TEMPLATE_ELEMENTS.length).toBeGreaterThan(200);
   });
 
-  it('gives each drag source the ancestors the browser will give it', () => {
-    const chain = (primary: string): string[] =>
-      DRAG_SOURCES.find((s) => s.classes[0] === primary)!.ancestors.flatMap((a) => a.classes);
-    expect(chain('grun')).toEqual(
-      expect.arrayContaining(['gantt', 'gwrap', 'gsheet', 'gblock', 'gbrows', 'growr', 'gtrack']),
+  it('gives the day entry the ancestors the browser will give it', () => {
+    // owl #64 rebuilt the Deadlines tab around the horizontal week scroller;
+    // the chain is DERIVED so it keeps tracking whatever the tab becomes
+    const entry = DRAG_SOURCES.find((s) => s.classes[0] === 'entry');
+    expect(entry, 'no day entry drag source in the template').toBeDefined();
+    expect(entry!.ancestors.flatMap((a) => a.classes)).toEqual(
+      expect.arrayContaining(['dlscroll', 'dlweeks', 'dlweek', 'daygrid', 'daycol']),
     );
-    // T158: `.gbar` is no longer the source — it is the source's PARENT, and it
-    // is deliberately transparent. Asserting it explicitly is the whole reason
-    // the ancestor sweep had to learn the `auto` escape below.
-    expect(chain('grun')).toContain('gbar');
-    expect(chain('growr')).toEqual(expect.arrayContaining(['gantt', 'gwrap', 'gsheet', 'gblock', 'gbrows']));
-    // owl #64 rebuilt the Deadlines tab around it: the day entry now hangs off
-    // the horizontal week scroller, so its chain changed and the guard below
-    // re-derives the hit-test over the NEW ancestors rather than the old ones.
-    expect(chain('entry')).toEqual(expect.arrayContaining(['dlscroll', 'dlweeks', 'dlweek', 'daygrid', 'daycol']));
-    // and the wrappers a hand-kept list had missed — this is the whole reason
-    // the chain is derived rather than written down
-    expect(chain('grun')).toEqual(expect.arrayContaining(['view', 'pscrollwrap', 'pscroll', 'gscroll']));
   });
 });
 
@@ -531,68 +475,54 @@ describe('the guard’s own parsers actually see the shipped files', () => {
  * ====================================================================== */
 
 describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT prove this — real input only)', () => {
-  it('enumerates the drag sources FROM the template, so a fourth one joins this guard automatically', () => {
-    // hard-coding the list is how the next drag source slips past the guard.
-    // T158 moved one of them (`.gbar` → `.grun`) and the count is UNCHANGED on
-    // purpose: the source moved, it did not multiply. One handle per phase
-    // segment was the variant JP rejected, and this is what would catch it.
+  it('enumerates the drag sources FROM the template — the count is ONE since the schedules drag withdrew', () => {
+    // 2026-08-28 (#72): `.grun` and `.growr` died with the planner drag; the
+    // Deadlines day entry is the one drag left, and deadlines-frame points at
+    // this file for its hit-testability. A second source joins this guard
+    // automatically — and must justify itself here when it does.
     const primary = DRAG_SOURCES.map((s) => s.classes[0]).sort();
-    expect(primary).toEqual(['entry', 'growr', 'grun']);
-    expect(DRAG_SOURCES).toHaveLength(3);
+    expect(primary).toEqual(['entry']);
+    expect(DRAG_SOURCES).toHaveLength(1);
   });
 
   it('reads the conditional class tokens too — a rule may target a state, not a resting class', () => {
-    const byPrimary = Object.fromEntries(DRAG_SOURCES.map((s) => [s.classes[0]!, s.classes]));
-    expect(byPrimary['growr']).toEqual(['growr', 'sel', 'pinned', 'unsched', 'arrived']);
-    // the run box carries no conditional class — its pinned refusal is reached
-    // through `.growr.pinned`, which is why the CSS can scope by ancestor
-    expect(byPrimary['grun']).toEqual(['grun']);
-    expect(byPrimary['entry']).toEqual(['entry', 'late', 'urgent']);
+    const entry = DRAG_SOURCES.find((s) => s.classes[0] === 'entry')!;
+    expect(entry.classes).toEqual(['entry', 'late', 'urgent']);
   });
 
   it('lets NO rule in ANY stylesheet make a drag source pointer-events: none, in any state', () => {
-    // THIS IS THE BUG. `.gantt .grun { pointer-events: none }` is a rule whose
-    // SUBJECT is `.grun`, and `.grun` carries `draggable` — Chrome starts the
-    // drag from that element and aborts because it cannot be hit.
-    // NO EXEMPTION HERE, ever. The ancestor sweep below forgives an inherited
-    // `none` that the source cures with its own `auto`; a source that turns
-    // ITSELF off has nothing left to cure it, in any state or any spelling.
+    // THIS IS THE BUG. A rule whose SUBJECT is the element carrying
+    // `draggable` cancels the drag in the tick it starts. NO EXEMPTION HERE,
+    // ever: a source that turns ITSELF off has nothing left to cure it.
     expect(offendersIn(ALL_RULES, SOURCE_TARGETS)).toEqual([]);
   });
 
-  it('IS NOT VACUOUS — it flags the exact rule that shipped the bug, and the two variants that also broke it', () => {
-    // a guard that cannot fail on the known bug proves nothing. These three are
-    // the shipped rule and the two the orchestrator confirmed with real input.
+  it('IS NOT VACUOUS — it flags the batch-7 bug shape re-worn by the surviving source', () => {
+    // a guard that cannot fail on the known bug proves nothing. These are the
+    // 1e13088 shapes, rewritten onto the source that carries `draggable` today.
     const fixture = (css: string) => offendersIn(cssRules('fixture.css', css), SOURCE_TARGETS);
 
-    // 1. the shape that shipped the bug at 1e13088, rewritten onto the source
-    //    that carries `draggable` today — transparent at rest
-    expect(fixture('.gantt .grun { position: absolute; top: 0; bottom: 0; pointer-events: none; cursor: grab; }'))
-      .toHaveLength(1);
-    // 2. hit-testable at mousedown only — forced transparent for the duration
-    expect(fixture('.gantt.gdragging .grun { pointer-events: none; }')).toHaveLength(1);
-    // 3. the same trap on the OTHER planner source, scoped to one row state
-    expect(fixture('.gantt .growr.pinned { pointer-events: none; }')).toHaveLength(1);
-    // and a state-only rule still counts: the drag has to survive :active
-    expect(fixture('.grun:active { pointer-events: none; }')).toHaveLength(1);
+    expect(fixture('.daycol .entry { position: absolute; pointer-events: none; cursor: grab; }')).toHaveLength(1);
+    expect(fixture('.entry.late { pointer-events: none; }')).toHaveLength(1); // a state class is still the element
+    expect(fixture('.entry:active { pointer-events: none; }')).toHaveLength(1); // the drag has to survive :active
     // …in whatever spelling: CSS is case-insensitive and tolerates whitespace
     // around the colon, so a reformat must not be able to walk past the guard
-    expect(fixture('.gantt .grun { POINTER-EVENTS : NONE; }')).toHaveLength(1);
-    expect(fixture('.gantt .grun { pointer-events:none !important; }')).toHaveLength(1);
+    expect(fixture('.daycol .entry { POINTER-EVENTS : NONE; }')).toHaveLength(1);
+    expect(fixture('.daycol .entry { pointer-events:none !important; }')).toHaveLength(1);
   });
 
   it('does NOT cry wolf over rules that target something else', () => {
     const fixture = (css: string) => offendersIn(cssRules('fixture.css', css), SOURCE_TARGETS);
-    expect(fixture('.gantt .grun .gseg { pointer-events: none; }')).toEqual([]); // subject is .gseg
-    expect(fixture('.gantt .grun { pointer-events: auto; }')).toEqual([]); // not a `none`
+    expect(fixture('.entry .cliptext { pointer-events: none; }')).toEqual([]); // subject is the child
+    expect(fixture('.daycol .entry { pointer-events: auto; }')).toEqual([]); // not a `none`
     expect(fixture('.ubadge.saving { pointer-events: none; }')).toEqual([]);
-    expect(fixture('.gghost { pointer-events: none; }')).toEqual([]);
+    expect(fixture('.gplus { pointer-events: none; }')).toEqual([]); // the placement +, deliberately inert
   });
 
   it('refuses a class-less subject as well — `*` or a bare tag would blanket every source', () => {
     // the subset test above only fires on a CLASS selector; `* { … }` or
     // `div { … }` names no class and would slip through it while disabling
-    // every drag source in the app
+    // every interaction target in the app
     const blanket = TRANSPARENT_RULES.flatMap((r) =>
       r.selector
         .split(',')
@@ -603,125 +533,95 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
   });
 
   it('sweeps ANCESTORS too, because pointer-events is an inherited property', () => {
-    // a transparent `.gtrack` would disable the `.grun` inside it just as
+    // a transparent `.daycol` would disable the `.entry` inside it just as
     // surely, and the chains come from the template's own nesting so a wrapper
-    // added tomorrow is swept the day it appears. The ONE exemption (T158): an
-    // ancestor's `none` that the source overrides with its own explicit `auto`
-    // — which is precisely the shipped `.gbar` none / `.grun` auto pair.
-    expect(ANCESTOR_TARGETS.length).toBeGreaterThan(10);
+    // added tomorrow is swept the day it appears
+    expect(DRAG_SOURCES.flatMap((s) => s.ancestors).length).toBeGreaterThan(3);
     expect(ancestorOffenders(ALL_RULES)).toEqual([]);
   });
 
   it('the ancestor sweep IS NOT VACUOUS either — a transparent wrapper is flagged wherever it sits', () => {
     const fixture = (css: string) => ancestorOffenders(cssRules('fixture.css', css));
-    expect(fixture('.gtrack { pointer-events: none; }')).toHaveLength(1); // the run's own grandparent
-    expect(fixture('.gantt .gbar { pointer-events: none; }')).toHaveLength(1); // uncured: no `auto` anywhere
-    // THE DOCUMENTED ESCAPE, and the shape that actually ships
-    expect(fixture('.gantt .gbar { pointer-events: none; } .gantt .grun { pointer-events: auto; }')).toEqual([]);
-    // …and it is PER SOURCE, not a global amnesty: `.gbrows` is an ancestor of
-    // `.growr` too, and `.growr` declares no `auto` of its own
-    expect(fixture('.gbrows { pointer-events: none; } .gantt .grun { pointer-events: auto; }')).toHaveLength(1);
-    expect(fixture('.gscroll { pointer-events: none; }')).toHaveLength(1); // a wrapper the old list missed
-    expect(fixture('.daycol.holiday { pointer-events: none; }')).toHaveLength(1); // the Deadlines chain
-    expect(fixture('.gseg { pointer-events: none; }')).toEqual([]); // a CHILD, not an ancestor
-  });
-
-  it('proves the escape is load-bearing on the REAL sheet — delete the run’s `auto` and the sweep fires', () => {
-    // the fixtures above show the exemption behaves; this shows the SHIPPED
-    // stylesheet actually depends on it. Strip `.gantt .grun`'s own
-    // `pointer-events: auto` out of the real rule set and `.gantt .gbar`'s
-    // deliberate `none` immediately becomes what it would be without the cure:
-    // an inherited transparency on the drag source's parent, i.e. the batch-7
-    // bug wearing a different selector.
-    const withoutRunAuto = ALL_RULES.filter(
-      (r) => !(r.selector === '.gantt .grun' && /pointer-events\s*:\s*auto/i.test(r.body)),
-    );
-    expect(withoutRunAuto.length).toBe(ALL_RULES.length - 1);
-    expect(ancestorOffenders(withoutRunAuto).join(' | ')).toContain('.gantt .gbar');
+    expect(fixture('.daycol { pointer-events: none; }')).toHaveLength(1);
+    expect(fixture('.daycol.holiday { pointer-events: none; }')).toHaveLength(1); // a state up the chain
+    expect(fixture('.dlweeks { pointer-events: none; }')).toHaveLength(1);
+    // the documented escape: an ancestor's `none` cured by the source's own
+    // unconditional `auto` — the T158 mechanism, kept because the law is
+    // general even though no shipped pair uses it today
+    expect(fixture('.daycol { pointer-events: none; } .entry { pointer-events: auto; }')).toEqual([]);
+    expect(fixture('.entry .cliptext { pointer-events: none; }')).toEqual([]); // a CHILD, not an ancestor
   });
 
   it('takes NO state- or viewport-scoped rule as a CURE — a ban may bite sometimes, a cure may not', () => {
-    // the asymmetry is the point. `:active` counts against a BAN two tests up,
-    // because a rule that bites only while pressed still kills the drag. The
-    // same reasoning forbids the mirror image: `.growr:hover { auto }` over a
-    // transparent ancestor holds at mousedown and evaporates the moment the
-    // pointer leaves the row mid-drag — control 2's signature, wearing a cure's
-    // clothes — and a `@media` cure simply is not there at other viewports.
+    // the asymmetry is the point (gantt-rules §52). `:active` counts against a
+    // BAN above, because a rule that bites only while pressed still kills the
+    // interaction. The mirror image is forbidden: a `:hover` cure holds at
+    // mousedown and evaporates mid-drag, and a `@media` cure simply is not
+    // there at other viewports.
     const fixture = (css: string) => ancestorOffenders(cssRules('fixture.css', css));
-    expect(fixture('.gbrows { pointer-events: none; } .growr:hover { pointer-events: auto; }')).toHaveLength(1);
+    expect(fixture('.daycol { pointer-events: none; } .entry:hover { pointer-events: auto; }')).toHaveLength(1);
     expect(
-      fixture('.gantt .gbar { pointer-events: none; } @media (max-width: 600px) { .gantt .grun { pointer-events: auto; } }'),
+      fixture('.daycol { pointer-events: none; } @media (max-width: 600px) { .entry { pointer-events: auto; } }'),
     ).toHaveLength(1);
-    // …while the unconditional, state-free form — the one that ships — cures
-    expect(fixture('.gantt .gbar { pointer-events: none; } .gantt .grun { pointer-events: auto; }')).toEqual([]);
+    // …while the unconditional, state-free form cures
+    expect(fixture('.daycol { pointer-events: none; } .entry { pointer-events: auto; }')).toEqual([]);
     // and the flattener still MARKS the conditional rule rather than dropping
     // it, so the ban side keeps seeing it
-    const inMedia = cssRules('fixture.css', '@media (max-width: 600px) { .gantt .grun { pointer-events: none; } }');
+    const inMedia = cssRules('fixture.css', '@media (max-width: 600px) { .daycol .entry { pointer-events: none; } }');
     expect(inMedia.map((r) => r.conditional)).toEqual([true]);
     expect(offendersIn(inMedia, SOURCE_TARGETS)).toHaveLength(1);
   });
 
-  it('sweeps the WEEK CELLS as well — T158 made them the only drop path outside the coloured run', () => {
-    // `.gbar` is transparent so a drop on empty track reaches a `.gweek` cell.
-    // That is the cells' ONLY path: no cell, no `dropOnWeek`, no `moveRows`.
-    // Derived from the handler in the template, so a renamed cell is swept the
-    // day it is renamed.
-    expect(WEEK_CELLS).toHaveLength(1);
-    expect(WEEK_CELLS[0]!.classes).toEqual(['gweek']);
-    expect(WEEK_CELLS[0]!.ancestors.flatMap((a) => a.classes)).toEqual(
-      expect.arrayContaining(['gantt', 'gsheet', 'gbrows', 'growr', 'gtrack', 'gweeks']),
-    );
+  it('sweeps the WEEK CELLS — the columns every placement CLICK lands through (same law, new consumer)', () => {
+    // the track carries the click handlers; the cells and the whole chain
+    // above them must stay hit-testable or placement dies silently — the
+    // exact failure shape drops used to have, reached by a click instead.
+    // The count is NOT pinned: the rebuilt template draws the cells in more
+    // than one branch, and every occurrence is swept wherever it sits.
+    expect(WEEK_CELLS.length).toBeGreaterThanOrEqual(1);
+    for (const cell of WEEK_CELLS) {
+      expect(cell.classes).toEqual(['gweek']);
+      expect(cell.ancestors.flatMap((a) => a.classes)).toEqual(
+        expect.arrayContaining(['gantt', 'gtrack']),
+      );
+    }
     expect(weekCellOffenders(ALL_RULES)).toEqual([]);
   });
 
-  it('the week-cell sweep IS NOT VACUOUS — and it covers exactly what the source exemption stops covering', () => {
+  it('ties the sweep to its consumer — the placement handlers ride the track ABOVE the cells', () => {
+    // derived by handler, so a renamed or relocated click target re-derives
+    // the day it moves; the cells' ancestor chain then covers it
+    expect(PLACE_TRACKS.length).toBeGreaterThanOrEqual(1);
+    for (const track of PLACE_TRACKS) {
+      expect(track.classes).toContain('gtrack');
+      expect(track.source).toContain("'plotHover'");
+    }
+  });
+
+  it('the week-cell sweep IS NOT VACUOUS — and it covers what the source exemption never did', () => {
+    // one offence PER SWEPT ELEMENT, and the element count is the template's
+    // business — so the assertions are “fires” / “stays quiet”, not a tally
     const fixture = (css: string) => weekCellOffenders(cssRules('fixture.css', css));
-    expect(fixture('.gweek { pointer-events: none; }')).toHaveLength(1);
-    expect(fixture('.gantt .gweeks { pointer-events: none; }')).toHaveLength(1);
-    expect(fixture('.gantt .gtrack { pointer-events: none; }')).toHaveLength(1);
-    // the shipped shape is fine: `.gbar` is the run's parent and the cells'
-    // SIBLING, so its `none` never reaches them
-    expect(fixture('.gantt .gbar { pointer-events: none; } .gantt .grun { pointer-events: auto; }')).toEqual([]);
-    // a cell may cure an ancestor for itself, exactly as the run does
+    expect(fixture('.gweek { pointer-events: none; }').length).toBeGreaterThan(0);
+    expect(fixture('.gantt .gtrack { pointer-events: none; }').length).toBeGreaterThan(0);
+    // a cell may cure an ancestor for itself, exactly as a drag source does
     expect(fixture('.gantt .gtrack { pointer-events: none; } .gweek { pointer-events: auto; }')).toEqual([]);
-
-    // THE GAP THIS SWEEP EXISTS FOR, stated as a pair. `.gtrack` is an ancestor
-    // of `.grun` and of nothing else that drags, so the moment `.grun` cures
-    // itself the drag-source sweep stops looking at `.gtrack` — correctly, for
-    // the SOURCE. Every source would still drag; every drop outside the run
-    // would be silently refused.
-    const cured = '.gantt .gtrack { pointer-events: none; } .gantt .grun { pointer-events: auto; }';
-    expect(ancestorOffenders(cssRules('fixture.css', cured))).toEqual([]);
-    expect(weekCellOffenders(cssRules('fixture.css', cured))).toHaveLength(1);
+    // the `.gplus` circle is pointer-transparent BY DESIGN (the track takes
+    // the click) — a child, so the sweep rightly says nothing about it
+    expect(fixture('.gplus { pointer-events: none; }')).toEqual([]);
   });
 
-  it('lets no `.gdragging` rule hide a drag source by ANY means — it must stay hittable for the whole drag', () => {
-    // control 3 of the real-input diagnosis: hit-testable at mousedown only is
-    // not enough. `visibility: hidden` and `display: none` take an element out
-    // of hit-testing exactly as `pointer-events: none` does, so the mid-drag
-    // sweep looks for all three — while leaving at-rest hiding (a filtered row,
-    // a collapsed block) alone, which is ordinary layout work.
-    // NO exemption is passed here, and that is deliberate: the ancestor sweep's
-    // `auto` escape works only because `pointer-events` is a single inherited
-    // property a child can override. `display: none` and `visibility: hidden` on
-    // an ancestor cannot be undone from inside it, so the FULL ancestor set is
-    // swept mid-drag. The shipped `.gantt.gdragging .gdl` is neither a source
-    // nor an ancestor of one, so it passes.
-    // the WEEK CELLS ride along here for the same reason they get their own
-    // resting sweep: mid-drag is exactly when a hidden drop target costs a drop.
-    const midDrag = ALL_RULES.filter((r) => r.selector.includes('.gdragging'));
-    expect(midDrag.length).toBeGreaterThan(0);
-    expect(
-      offendersIn(midDrag, [...SOURCE_TARGETS, ...ANCESTOR_TARGETS, ...WEEK_CELL_TARGETS], HIT_TEST_OFF_ANY),
-    ).toEqual([]);
-
-    const fixture = (css: string) => offendersIn(cssRules('fixture.css', css), SOURCE_TARGETS, HIT_TEST_OFF_ANY);
-    expect(fixture('.gantt.gdragging .grun { pointer-events: none; }')).toHaveLength(1);
-    expect(fixture('.gantt.gdragging .grun { visibility: hidden; }')).toHaveLength(1);
-    expect(fixture('.gantt.gdragging .grun { display: none; }')).toHaveLength(1);
+  it('leaves the deliberate transparencies alone — the guard must not have been met by deleting rules', () => {
+    // each of these is a child or a bystander, never a target or its ancestor:
+    // the placement + hands its click to the track, and the two saving states
+    // freeze a control that is mid-write
+    expect(GANTT_CSS).toMatch(/\.gplus[^{]*\{[^}]*pointer-events: none/);
+    const pipeline = STYLESHEETS.find((s) => s.file === '20-pipeline.css')!.css;
+    expect(pipeline).toMatch(/\.ubadge\.saving \{[^}]*pointer-events: none/);
+    expect(pipeline).toMatch(/\.datefield\.saving \{[^}]*pointer-events: none/);
   });
 
-  it('closes the inline-style vector — no drag source hides itself outside the stylesheets', () => {
+  it('closes the inline-style vector — no interaction target hides itself outside the stylesheets', () => {
     // the sweep above reads frontend/styles only; a `style="…"` attribute or a
     // `node.style.pointerEvents` write would reintroduce the bug where no CSS
     // guard can see it. Neither exists today, and this is what keeps it so.
@@ -744,9 +644,10 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
          (frame 731:101140, JP 2026-08-27).
          The exemption is BY EXACT TEXT, not by property or by file: adding a
          write means adding it here, in front of whoever is reading this rule.
-         Nothing on this list may touch geometry a drag reads — height on a
-         textarea in the Requests table is not a gantt drag source, is not an
-         ancestor of one, and cannot become one without this list changing. */
+         Nothing on this list may touch geometry a click or a drag reads —
+         height on a textarea in the Requests table is not a placement track,
+         is not an ancestor of one, and cannot become one without this list
+         changing. */
       const SAFE_INLINE_WRITES = [
         "el.style.height = 'auto';",
         'el.style.height = `${el.scrollHeight}px`;',
@@ -765,72 +666,13 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     expect(all).toContain('const noteGrow =');
     expect([...all.matchAll(/\.style\b/g)]).toHaveLength(2);
   });
-
-  /**
-   * ⚠ THESE ARE THE ASSERTIONS THAT FLIP AGAINST THE PRE-T158 STYLESHEET. Read
-   * them before assuming a red run here is a regression: at 1c571f1 `.gbar` was
-   * the source and was `auto`; it is now the source's transparent parent and is
-   * `none`, and the `auto` that keeps the drag alive sits on `.grun`.
-   */
-  it('states `pointer-events: auto` on the RUN BOX rather than merely omitting none', () => {
-    // an explicit auto is what the next reader sees, and — since the property
-    // INHERITS — it is what overrides `.gbar`'s deliberate `none` above it
-    expect(GANTT_CSS).toMatch(/\.gantt \.grun \{[^}]*pointer-events: auto/);
-    expect(GANTT_CSS).not.toMatch(/\.gantt \.grun \{[^}]*pointer-events: none/);
-    // INVERTED (T158): the wrapper is transparent now, on purpose
-    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \{[^}]*pointer-events: none/);
-  });
-
-  it('names the dependency between those two rules, so neither can be deleted alone', () => {
-    // `.gbar` MUST be transparent or it swallows every `.gweek` column's drop
-    // outside the coloured run — the whole reason the source moved down a level.
-    // That is only safe because `.grun` re-declares `auto` for itself; delete
-    // that one declaration and the drag source is un-hit-testable again, which
-    // is the exact defect batch 7 fixed. They ship together or not at all.
-    const barNone = /\.gantt \.gbar \{[^}]*pointer-events: none/.test(GANTT_CSS);
-    const runAuto = /\.gantt \.grun \{[^}]*pointer-events: auto/.test(GANTT_CSS);
-    expect([barNone, runAuto]).toEqual([true, true]);
-  });
-
-  it('hides the deadline tick alone mid-drag — it paints OVER the bar and carries no dragover handler', () => {
-    // `.gdl` is a later sibling of `.gbar` in the same positioned `.gtrack`,
-    // both absolute at z-index auto, so it wins hit-testing at its 2px column;
-    // left solid it would swallow the dragover and refuse the drop there.
-    expect(GANTT_CSS).toMatch(/\.gantt\.gdragging \.gdl \{[^}]*pointer-events: none/);
-    // and the segments are NOT in that rule any more. Nothing needs them
-    // transparent — the solid bar beneath them takes the drop — and the ban is
-    // the stricter line on purpose: it is `draggable` moving down onto `.gseg`
-    // (the variant batch 7 rejected) that would turn a blanked segment back
-    // into control 3's same-tick cancel.
-    expect(GANTT_CSS).not.toContain('.gantt.gdragging .gbar .gseg');
-    // and the drag source itself is never in a `.gdragging` rule (T158)
-    expect(GANTT_CSS).not.toContain('.gantt.gdragging .grun');
-    const draggingSubjects = TRANSPARENT_RULES.filter((r) => r.selector.includes('.gdragging'))
-      .flatMap((r) => r.selector.split(',').map((s) => subjectClasses(s).join('.')));
-    expect(draggingSubjects).toEqual(['gdl']);
-  });
-
-  it('leaves the five legitimate transparencies alone — the guard must not have been met by deleting rules', () => {
-    // `.gbar` (T158) is the one that carries a REASON rather than merely being
-    // harmless: it wraps the track, so left solid it would swallow the `.gweek`
-    // columns' drops everywhere outside the coloured run. It is an ancestor of a
-    // drag source, and it is legal only because `.grun` re-declares `auto`.
-    expect(GANTT_CSS).toMatch(/\.gantt \.gbar \{[^}]*pointer-events: none/);
-    // the other four carry no `draggable` and none is an ancestor of one
-    expect(GANTT_CSS).toMatch(/\.gantt \.gghost \{[^}]*pointer-events: none/s);
-    expect(GANTT_CSS).toMatch(/\.gantt \.gunsched \{[^}]*pointer-events: none/s);
-    const pipeline = STYLESHEETS.find((s) => s.file === '20-pipeline.css')!.css;
-    expect(pipeline).toMatch(/\.ubadge\.saving \{[^}]*pointer-events: none/);
-    expect(pipeline).toMatch(/\.datefield\.saving \{[^}]*pointer-events: none/);
-  });
-
-  it('keeps the segments hit-testable at rest as well, so the visible bar is grabbable', () => {
-    expect(GANTT_CSS).toMatch(/\.gantt \.grun \.gseg \{[^}]*pointer-events: auto/);
-  });
 });
 
 /* ====================================================================== *
- * SUITE 2 — the pointer-X → week-column mapping
+ * SUITE 2 — the pointer-X → week-column mapping. The consumer changed
+ * (2026-08-28): `plotHover` feeds it the pointer now, so the arithmetic
+ * that used to place a DROP places a CLICK. The recipe itself is the
+ * shipped, unchanged `weekAtX`.
  * ====================================================================== */
 
 type WeekAtX = (clientX: number, rect: { left: number; width: number }, weeks?: { key: string }[]) => string | null;
@@ -840,9 +682,8 @@ type WeekAtX = (clientX: number, rect: { left: number; width: number }, weeks?: 
  *
  * Sliced LAZILY on purpose: `decl()` throws when the function is absent, and a
  * throw at module scope takes the whole file down with it — including the
- * hit-test guard above, which is the most important test in this batch and has
- * nothing to do with this function. Failing one suite is a report; failing the
- * file is a blindfold.
+ * hit-test guard above, which has nothing to do with this function. Failing
+ * one suite is a report; failing the file is a blindfold.
  */
 let weekAtXSrc: string | undefined;
 const WEEK_AT_X_SRC = (): string => (weekAtXSrc ??= decl(APP_JS, 'weekAtX'));
@@ -860,7 +701,7 @@ const WEEKS = WEEK_KEYS.map((key) => ({ key }));
 /** 12 × 92px, the shipped `--gw`, offset so a bare `clientX` cannot pass by luck. */
 const RECT = { left: 1000, width: 1104 };
 
-describe('the drop maps a pointer’s X to a week column (arithmetic only — it cannot prove a real drop lands)', () => {
+describe('placement maps a pointer’s X to a week column (arithmetic only — it cannot prove a real click lands)', () => {
   it('answers the first column at its exact left edge and at its middle', () => {
     expect(weekAtX(1000, RECT, WEEKS)).toBe('2026-08-03');
     expect(weekAtX(1045, RECT, WEEKS)).toBe('2026-08-03');
@@ -945,179 +786,14 @@ describe('the equal-column premise the mapping rests on is still true in the CSS
     expect(BASE_CSS).toMatch(/\*\s*\{[^}]*box-sizing: border-box/);
   });
 
-  it('re-tunes no column width in a media query, and collapses the PANE not the columns', () => {
+  it('re-tunes no column width conditionally, and collapses the PANE not the columns', () => {
+    // stated as the RULE rather than a media-query tally (test/CLAUDE.md rule
+    // 1): --gw is declared once, at the top level, and NO conditional or
+    // pane-collapse rule re-declares it — `.gantt.lpc` moves --gleft only
     for (const rule of cssRules('35-gantt.css', GANTT_CSS)) {
-      if (rule.selector.startsWith('@')) continue;
-      // `.gantt.lpc` moves --gleft; it must never touch --gw
+      if (rule.conditional) expect(rule.body, `\`${rule.selector}\` re-tunes --gw conditionally`).not.toContain('--gw');
       if (rule.selector.includes('.lpc')) expect(rule.body).not.toContain('--gw');
     }
     expect(GANTT_CSS).toMatch(/\.gantt\.lpc \{[^}]*--gleft/);
-    expect([...GANTT_CSS.matchAll(/@media/g)]).toHaveLength(1);
-    expect(GANTT_CSS).toContain('@media (prefers-reduced-motion: reduce)');
-  });
-});
-
-/* ====================================================================== *
- * SUITE 3 — the wiring: the bar takes its own drop, through the one write
- * ====================================================================== */
-
-/** One `name(ctx…) { … }` handler body, brace-matched out of the shipped source. */
-function handlerBody(src: string, name: string): string {
-  const at = src.indexOf(`${name}(ctx`);
-  if (at < 0) throw new Error(`drag-hittest: no handler \`${name}\` in the shipped frontend source`);
-  const open = src.indexOf('{', src.indexOf(')', at));
-  let depth = 0;
-  for (let i = open; i < src.length; i++) {
-    if (src[i] === '{') depth++;
-    else if (src[i] === '}' && --depth === 0) return src.slice(open + 1, i);
-  }
-  throw new Error(`drag-hittest: unterminated handler \`${name}\``);
-}
-
-/** The `<div class="grun" …>` open tag, as source — directives never render. */
-const RUN_TAG = TEMPLATE_ELEMENTS.find((e) => e.source.startsWith('<div class="grun"'))!.source;
-/** Its parent, which keeps its element and its class and loses every directive. */
-const BAR_TAG = TEMPLATE_ELEMENTS.find((e) => e.source.startsWith('<div class="gbar"'))!.source;
-
-describe('the coloured run is the drag source AND its own drop target', () => {
-  it('carries all five directives on one element (source, not render — directives never reach toHTML)', () => {
-    expect(RUN_TAG).toMatch(/\bdraggable=/);
-    expect(RUN_TAG).toContain("on-dragstart=\"['dragRow', row.cardId]\"");
-    expect(RUN_TAG).toContain("on-dragend=\"['dragEnd']\"");
-    expect(RUN_TAG).toContain("on-dragover=\"['dragOver']\"");
-    expect(RUN_TAG).toContain("on-drop=\"['dropOnBar']\"");
-  });
-
-  it('leaves the wrapper inert — `.gbar` keeps its element and its class and nothing else', () => {
-    // JP's ruling: "Gbar stays." It is a positioning box now, not a handle; a
-    // stray directive left on it would re-create the 1104px drag source.
-    expect(BAR_TAG).not.toMatch(/\bdraggable=/);
-    for (const directive of ['on-dragstart', 'on-dragend', 'on-dragover', 'on-drop']) {
-      expect(BAR_TAG, `.gbar must not carry ${directive}`).not.toContain(directive);
-    }
-  });
-
-  it('reuses the existing dragOver, which is exactly the preventDefault the browser waits for', () => {
-    expect(APP_JS).toMatch(/dragOver\(ctx\) \{ ctx\.event\.preventDefault\(\); \}/);
-  });
-
-  it('takes the SAME write recipe dropOnWeek takes — one POST, one audit row, no fork', () => {
-    const body = handlerBody(APP_JS, 'dropOnBar');
-    expect(body).toMatch(/await moveRows\(/);
-    expect(body).not.toContain('api.send');
-    // the two pre-existing /replot call sites — Accept-suggestions and moveRows
-    // — and no third: a new endpoint here would be a second audit path
-    expect([...APP_JS.matchAll(/api\.send\('POST', `\/api\/projects\/\$\{app\.get\('activeProjectId'\)\}\/replot`/g)])
-      .toHaveLength(2);
-  });
-
-  it('reads the dragged card off the dataTransfer, NEVER off the bar it landed on', () => {
-    // an UNSCHEDULED row dragged across a scheduled row now drops on THAT bar;
-    // taking the id from `row.cardId` would move the wrong card
-    const body = handlerBody(APP_JS, 'dropOnBar');
-    expect(body).toContain("ctx.event.dataTransfer.getData('text/plain')");
-    expect(body).not.toContain('row.cardId');
-    expect(APP_JS).toMatch(/dropOnBar\(ctx\)/);
-    expect(APP_JS).not.toMatch(/dropOnBar\(ctx, /);
-  });
-
-  it('measures ctx.node’s track, not the event target — the event fires on a 26px segment and bubbles', () => {
-    const body = handlerBody(APP_JS, 'dropOnBar');
-    expect(body).toContain("ctx.node.closest('.gtrack')");
-    expect(body).not.toContain('event.target');
-  });
-
-  it('calls preventDefault and bails on an unmeasurable track without writing', () => {
-    const body = handlerBody(APP_JS, 'dropOnBar');
-    expect(body).toContain('ctx.event.preventDefault();');
-    expect(body).toMatch(/if \(!week\) return;/);
-    expect(body.indexOf('return;')).toBeLessThan(body.indexOf('moveRows'));
-  });
-
-  it('feeds the mapping the shipped week list, so the columns it divides are the ones drawn', () => {
-    expect(handlerBody(APP_JS, 'dropOnBar')).toContain("app.get('plannerWeeks')");
-  });
-});
-
-describe('the week cells and the unslot zone keep the drops they already owned', () => {
-  it('leaves .gweek’s own handlers verbatim — unscheduled rows still land there', () => {
-    expect(TEMPLATE).toContain('<div class="gweek" on-dragover="[\'dragOver\']" on-drop="[\'dropOnWeek\', wk.key]">');
-    expect(renderGantt()).toContain('<div class="gweek"></div>');
-  });
-
-  it('leaves the Unscheduled block header unslotting', () => {
-    expect(TEMPLATE).toContain("on-dragover=\"['dragOverBlock', g.kind]\"");
-    expect(TEMPLATE).toContain("on-drop=\"['dropBlock', g.kind]\"");
-  });
-
-  it('keeps dropOnWeek on the same one write path', () => {
-    expect(APP_JS).toMatch(/dropOnWeek\(ctx, weekKey\)[\s\S]{0,200}?moveRows\(ctx\.event\.dataTransfer\.getData\('text\/plain'\), weekKey\)/);
-  });
-});
-
-/* ====================================================================== *
- * SUITE 4 — the pin, rendered
- * ====================================================================== */
-
-const SCHEDULED: PlannerRow = {
-  cardId: 'c1', mcLabel: 'MC-655', displayId: 'MC-655.1', name: 'Hero render',
-  slottedWeek: '2026-08-03', urgency: 'Urgent', difficulty: 'Hard',
-  requestor: 'Ana', assetType: 'Render', currentList: 'Sketching', status: 'ongoing',
-};
-const PINNED: PlannerRow = { ...SCHEDULED, cardId: 'c3', mcLabel: 'MC-900', displayId: 'MC-900', pinned: true };
-const UNSCHEDULED: PlannerRow = {
-  cardId: 'c2', mcLabel: 'MC-712', displayId: 'MC-712', name: 'Loft plan',
-  slottedWeek: null, urgency: 'Non-Urgent', currentList: 'Backlog', status: 'pending',
-};
-const groups = (rows: PlannerRow[]): PlannerGroup[] => [
-  { id: 's1', kind: 'sprint', name: 'Sprint A', meta: '2 wk', count: `${rows.length} items`, rows },
-];
-
-describe('adding the drop did not re-arm the grab on a pinned row (JP 2026-08-17, ruling B)', () => {
-  const html = renderGantt({ plannerGroups: groups([PINNED]) });
-
-  it('still refuses the grab, and still says why', () => {
-    // read off the extracted OPEN TAG: `toHTML()` emits `style` ahead of
-    // `draggable` regardless of the order the template writes them in
-    expect(/<div class="grun"[^>]*>/.exec(html)![0]).toContain('draggable="false"');
-    // NOT a claim about the run box (JP, 2026-08-18): neither `.gbar` nor
-    // `.grun` carries a `title` in either branch. The refusal is on `.growr`,
-    // which a title-less `.gtrack`/`.gbar`/`.grun` inherits, so hovering
-    // anywhere on a pinned row still states it — and each `.gseg` appends the
-    // same sentence to its phase title. Placement is pinned in
-    // gantt-rowactions.test.ts.
-    expect(html).toContain('title="Pinned — unpin to move"');
-    expect(RUN_TAG).not.toContain('title=');
-  });
-
-  it('a pinned row is still a valid LANDING strip for someone else’s drag — the pin freezes the ROW, not the column', () => {
-    // Two halves now (T158). The RUN BOX carries the drop pair unconditionally,
-    // with no `{{#if}}` in its open tag, so a pinned row's coloured bar accepts
-    // someone else's drop exactly as an unpinned one does. Everywhere ELSE
-    // along a pinned row, the track is `.gbar`, which is transparent — so the
-    // drag falls through to the `.gweek` cells and lands via `dropOnWeek`,
-    // which runs the SAME `moveRows`. Either path, the pin freezes only the row
-    // it belongs to; neither carves a dead strip across the timeline.
-    expect(RUN_TAG).toContain("on-dragover=\"['dragOver']\"");
-    expect(RUN_TAG).toContain("on-drop=\"['dropOnBar']\"");
-    expect(RUN_TAG).not.toContain('{{#if');
-    expect(RUN_TAG).not.toContain('{{#unless');
-    expect(TEMPLATE).toContain('<div class="gweek" on-dragover="[\'dragOver\']" on-drop="[\'dropOnWeek\', wk.key]">');
-  });
-});
-
-describe('an unscheduled row keeps the row-drag it has no bar to replace', () => {
-  const html = renderGantt({ plannerGroups: groups([UNSCHEDULED]) });
-
-  it('still drags whole, still shows its grip, still renders neither bar nor run box', () => {
-    expect(/<div class="growr[^>]*>/.exec(html)![0]).toContain('draggable="true"');
-    expect(html).toContain('class="ghandle"');
-    expect(html).not.toContain('class="gbar"');
-    expect(html).not.toContain('class="grun"');
-    expect(html).toContain('class="gunsched"');
-  });
-
-  it('is the second `draggable` source in the template, and the guard covers it too', () => {
-    expect(DRAG_SOURCES.some((s) => s.classes[0] === 'growr')).toBe(true);
   });
 });

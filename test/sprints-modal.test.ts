@@ -4,7 +4,8 @@
  * Two halves, both against the SHIPPED files and neither retyped:
  *
  * 1. The validators are EXECUTED out of the shipped app scripts (the
- *    test/suggest-counts.test.ts precedent), because what a banner says and
+ *    executed-computed precedent, now homed in
+ *    test/sprint-schedule-render.test.ts), because what a banner says and
  *    whether Save locks are arithmetic, not markup — and R-f-8's working-day
  *    gap rule is a NEW date-math site that `lib/**` cannot own (invariant 5),
  *    so it is the one thing in this batch with no golden test behind it.
@@ -910,9 +911,17 @@ describe('deletion warning (Miles, #30)', () => {
     expect(renderSprintModal({ sprintDraft: FOUR })).not.toContain('sconfirm');
   });
 
-  it('reads the count from the SAME membership test the planner derives with', () => {
-    // `slottedWeek ∈ [start, end]` — never a stored sprint reference (invariant 12)
-    expect(APP_JS).toContain('r.slottedWeek >= s.start && r.slottedWeek <= s.end');
+  it('reads the count from the SAME membership test the planner groups with', () => {
+    /* Re-pointed 2026-08-28 (owls #72/#73): the scheduled unit is the WORK
+       CARD and its sprint membership is the server's `sprintId` — the list
+       the card was added to — so the old derived `slottedWeek ∈ [start, end]`
+       recipe left with the deliverable rows. The rule that SURVIVES is the
+       drift rule: the delete-confirm count and `sprintGroups` must run the
+       byte-same membership predicate, so the modal can never warn about a
+       different population than the planner displays. */
+    const sites = [...APP_JS.matchAll(/\.filter\(\(r\) => r\.sprintId === s\.id\)/g)];
+    expect(sites, 'the one membership predicate, in the computed AND the count').toHaveLength(2);
+    expect(APP_JS).not.toContain('r.slottedWeek >= s.start'); // the retired recipe stays gone
   });
 });
 
@@ -1057,10 +1066,15 @@ describe('end to end — the shipped validators drive the shipped markup', () =>
 });
 
 describe('batch semantics — one PUT, nothing per row', () => {
-  it('sends the whole draft in a single PUT and never writes a sprint id onto a row', () => {
+  it('sends the whole draft in a single PUT and never stamps a sprint onto a row', () => {
     expect([...APP_JS.matchAll(/api\.send\('PUT', `\/api\/projects\/\$\{app\.get\('activeProjectId'\)\}\/sprints`/g)]).toHaveLength(1);
-    // membership is derived; no per-row sprint write exists anywhere in the client
-    expect(APP_JS).not.toMatch(/sprint_id|sprintId\s*[:=]/);
+    /* Amended 2026-08-28 (#72): ONE legitimate `sprint_id` exists now — the
+       Add row's POST pairs a work card with the sprint list the PM opened
+       (frozen contract, PLAN.md). Sprint DEFINITIONS still travel only in
+       the batch PUT, and no client code assigns a sprintId onto a row — the
+       rows arrive from the server already carrying theirs. */
+    expect([...APP_JS.matchAll(/sprint_id/g)]).toHaveLength(1);
+    expect(APP_JS).not.toMatch(/\.sprintId\s*=[^=]/); // no property assignment, anywhere
   });
 
   it('re-copies from the stored list on open, which is what makes Cancel a discard', () => {
