@@ -23,6 +23,7 @@ import {
   APP_JS_CODE,
   PIPELINE_CSS,
   TEMPLATE,
+  TOKENS_CSS,
   type PipeRow,
   type WorkCardRow,
   cssRule,
@@ -581,5 +582,42 @@ describe('the UNATTACHED metric states work that is absent from capacity', () =>
     expect(renderMetrics(kpi())).toContain('class="metric warn"');
     expect(cssRule('.metrics .metric.warn .mlabel, .metrics .metric.warn .mvalue', PIPELINE_CSS))
       .toContain('var(--amber-700)');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* OPEN WORK goes blue — owl miles→jp #69, node 731:100892             */
+/* ------------------------------------------------------------------ */
+
+describe('a coloured metric tile colours the LABEL as well as the figure', () => {
+  const kpi = { main: 10, work: 45, open: 4, urgent: 1, unattached: 0, unattachedMcs: 0 };
+
+  it('OPEN WORK carries blue/500', () => {
+    expect(renderMetrics(kpi)).toContain('class="metric blue"');
+    const rule = cssRule('.metrics .metric.blue .mlabel, .metrics .metric.blue .mvalue', PIPELINE_CSS);
+    expect(rule).toContain('var(--blue-500)');
+    // the ramp position, not a second hex: #69 names blue/500 alongside
+    // red/500, green/500 and amber/500
+    expect(TOKENS_CSS).toContain('--blue-500: #3b82f6');
+  });
+
+  /* THE RULE, not this tile. #69 says "both text nodes take the colour" and
+     says it twice, because the natural build is to colour only the 32px
+     figure — which leaves a blue number under a slate-900 label and reads as
+     a rendering fault rather than a treatment. Asserted over every modifier
+     the shipped markup actually uses, so the next coloured tile is covered
+     the day it is added and nobody has to remember this file exists. */
+  it('EVERY metric modifier in the shipped markup pairs .mlabel with .mvalue', () => {
+    const markup = renderMetrics({ ...kpi, unattached: 35, unattachedMcs: 11 });
+    const modifiers = [...markup.matchAll(/class="metric ([a-z]+)"/g)].map((m) => m[1]!);
+    expect(new Set(modifiers).size, 'no coloured tiles rendered — the guard would pass vacuously')
+      .toBeGreaterThan(1);
+
+    for (const mod of new Set(modifiers)) {
+      const selector = `.metrics .metric.${mod} .mlabel, .metrics .metric.${mod} .mvalue`;
+      const rule = cssRule(selector, PIPELINE_CSS);
+      expect(rule, `.metric.${mod} colours one node but not both — see owl #69`).toBeTruthy();
+      expect(rule).toMatch(/color:/);
+    }
   });
 });

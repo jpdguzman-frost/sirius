@@ -87,6 +87,15 @@
 .metrics .metric.warn .mlabel, .metrics .metric.warn .mvalue { color: var(--amber-700); }
 .metrics .metric.warn .mvalue { cursor: help; }
 .metrics .metric.amber .mlabel, .metrics .metric.amber .mvalue { color: var(--amber-500); }
+/* OPEN WORK, owl miles→jp #69 (node 731:100892). BOTH text nodes take the
+   colour, not only the figure — the annotation says so twice because "changed
+   the colour of the stat" is naturally built as just the number, and a blue
+   32px figure under a slate-900 label reads as a rendering fault rather than a
+   treatment. Same construction as `.red` / `.green` / `.warn` above, so the
+   modifier is the only place the pairing is stated.
+
+   `--blue-500` is #3b82f6, the ramp the other three tiles already sit in. */
+.metrics .metric.blue .mlabel, .metrics .metric.blue .mvalue { color: var(--blue-500); }
 
 /* ---- content stack: elements carry 0 margin, the container gaps 16px
    (frame geometry, confirmed against node 17:2063 child positions) ---- */
