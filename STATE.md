@@ -20,24 +20,20 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 17 | **One clock, Manila's** (invariant 11) · **Schedules + Deadlines off the unfinished-screen background** (both frames white) | **DEPLOYED 2026-08-22** (`3cfcd96`) |
 | 19 | **The ARES-sourced, tag-classified cycle-time model** (T179–T183, ~3–4d) — replaces the inter-event dwell derivation that produced `Medium/design = 0.13d`. Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
 | 18 | **The redesign** (owls #67–#74): Forecast tab withdrawn · OPEN WORK blue/500 · the client-review wait out of the past-deadline warning · **the scheduled unit becomes the WORK CARD** — `sprint_items`, migration 009, no backfill | **DEPLOYED 2026-08-27** (`2382bfb`) — server half only; the frontend for both rebuilt tabs is the next block of work |
+| 18b | **Frame drift closed** (JP, 2026-08-27): the expanded MC row's two captions withdrawn · **frame 731:101090's fifteen unlanded Requests specs** · the note field HUGS its text | **DEPLOYED 2026-08-27** (`a7d01f3`) |
 
-**Build health (2026-08-25):** 1196/1196 tests + 32 `it.todo`, 68 files — green
+**Build health (2026-08-27):** 1194/1194 tests + 24 `it.todo`, 66 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **008** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
 ~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
 rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 
-## Live 2026-08-25 — `40af172`
+## Live 2026-08-27 — `a7d01f3`
 
-Requestor heading (`41cc2a0`) + the reconcile-clock fix (`40af172`). healthz
-200, both restarted, page byte-identical to local. The worker fix has no page,
-so it was verified by a LIVE SYNC: **`unstamped: 0` on 598 of 598 production
-cards** — the path runs and ARES does send `lastPolledAt`.
-
-⚠️ **NEVER OPENED IN A BROWSER**: the Forecast tab, and the white background on
-Schedules + Deadlines. The filter panels were once inert on the live site for a
-day under a green suite — nothing in the suite opens an overlay.
+⚠️ **NEVER OPENED IN A BROWSER (live)**: the white background on Schedules +
+Deadlines. The filter panels were once inert on the live site for a day under
+a green suite — nothing in the suite opens an overlay.
 
 ## Decisions needed from JP (blocking)
 
@@ -121,5 +117,5 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
-- 2026-08-27 — **Six owls (#67–#74) replace the scheduling unit**: a row is now one Trello TASK CARD, so sketch and render are separate rows and the Review bar leaves the drawing (not the arithmetic). **JP ruled**: Forecast tab OUT (screen only), REBUILD Schedules + Deadlines, and **past-deadline = the WORK runs past the date**. Answered product from code: the requestor rename needed no data change, and **ARES has no per-item forecast**. Server half shipped + **DEPLOYED `2382bfb`**. **/simplify + /code-review found three real defects in the same day's work** — a raw-string `workday()` invisible to a UTC+Manila suite, a rounding error that MISSED late warnings, and a design cell chosen by card TITLE. → docs/history/state-log/2026-08-27.md
-- 2026-08-25 — **Owl #66** → the Pipeline header said **Client** while the filter, chip and Requests table said **Requestor**; renamed, then made impossible: the header now DERIVES from a column table. **ARES caching settled by reading `../ares/`, not by owl** — reads never touch Trello (15-min store + a live webhook, measured), so `staleGuard` was comparing our write against when we ASKED, not when ARES FETCHED, and a reconcile could revert a user's edit. Fixed, live, `unstamped: 0` on 598 cards. **/simplify + /code-review: 27 findings, 24 applied** — including a bug the fix itself introduced (no stamp skipped the registry write even on INSERT, stranding a new card on schema defaults), a vacuous race test, and three faults in guards written the same day. → docs/history/state-log/2026-08-25.md
+- 2026-08-27b — **Frame drift, found by JP not by us.** Two captions on the expanded MC row withdrawn (not in the frame; both were product DEFAULTS, not rulings). Then **frame 731:101090: fifteen Requests specs never landed** — 3 narrowed columns, plus a note editor carrying ONE uniform 6px gap where the frame has three different ones (structural, not numeric). **The annotations were wrong about their own design three times** — two reds swapped, the tick-box corner, and a status model retired in August — so every value was read off the NODE through Rex. JP: apply all; tick box and buttons stay as built; the notes cell FILLS the column. Then the field itself: no red on tick (that node IS the ticked state) and it **hugs its text**. `drag-hittest`'s blanket `.style` ban blocked the hug and was RIGHT to — narrowed to the hit-testing properties, with a 2-entry exact-text allow-list pinned by its own test. → docs/history/state-log/2026-08-27.md
+- 2026-08-27 — **Six owls (#67–#74) replace the scheduling unit**: a row is now one Trello TASK CARD, so sketch and render are separate rows and the Review bar leaves the drawing (not the arithmetic). **JP ruled**: Forecast tab OUT, REBUILD Schedules + Deadlines, **past-deadline = the WORK runs past the date**. Answered product from code: **ARES has no per-item forecast**. Server half **DEPLOYED `2382bfb`**. **/simplify + /code-review found three real defects in the same day's work** — a raw-string `workday()` invisible to a UTC+Manila suite, a rounding error that MISSED late warnings, and a design cell chosen by card TITLE. → docs/history/state-log/2026-08-27.md
