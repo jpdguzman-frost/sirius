@@ -46,48 +46,95 @@ Do NOT: split into SPA + separate API domain · apply schema or index changes by
 
 
 
-## Build workflow — how work is executed (JP, 2026-08-28)
+## Build workflow — how work is executed (JP, rev 2026-08-28b)
 
-Applies to any build — a feature, a screen, anything multi-file. One-line
-fixes and docs-only changes are exempt. **Deploy is never part of a
-workflow; it waits for JP.**
+**When it applies:** any change touching 2+ files or 30+ lines of non-doc
+code. One-line fixes and docs-only changes are exempt. Unsure → run the
+workflow. **Deploy is never part of a workflow; it waits for JP.**
+
+**Two modes** — the main thread picks one and names it in the drift report:
+- **Full** — default. Features, screens, anything law-heavy or
+  design-heavy, anything with new guards or Figma work. The gate is a
+  HARD STOP: JP sees the artifacts before anything is built.
+- **Light** — small builds only (≤3 files, ≤150 lines, no new guards, no
+  Figma): one survey reader, one build agent, VALIDATE in full, REVIEW as
+  a single correctness pass, E2E only if UI changed. The gate artifacts
+  are still produced and posted, but the build PROCEEDS without waiting —
+  a veto gate, not a wait gate (JP's asking-vs-deciding ruling,
+  2026-08-17: reversible work is decided and reported, not queued).
 
 **The main thread stays open.** It orchestrates, holds the gates, reads
-owls, and talks to JP; the work itself runs as background workflows. Phases
-run as SEPARATE workflows — survey, build, review — with the main thread
-(and JP, at the gate) between them, never one fire-and-forget pipeline.
+owls, and talks to JP; the work itself runs as background workflows.
+Phases run as SEPARATE workflows — survey, build, review — with the main
+thread (and JP, at the gate) between them, never one fire-and-forget
+pipeline.
 
-**Model tiers:** lower models for survey, higher for build. Readers and
-sweeps run Sonnet (Haiku for purely mechanical ones); build agents run
-Opus 5 or Fable 5, whichever fits the piece — Fable for the hardest,
-law-heavy or design-heavy work; review/verify agents run high.
+**Model tiers by role** (mapping current as of this revision — update the
+names when models change, not the roles):
+- Readers and sweeps: mid tier (Sonnet). Purely mechanical sweeps: low
+  tier (Haiku).
+- Build agents: top tier (Opus 5 or Fable 5, whichever fits the piece —
+  Fable for the hardest, law-heavy or design-heavy work).
+- Review/verify agents: top tier, always.
 
 1. **SURVEY** — parallel readers over code, specs/owls, and Figma. Figma
    goes through Rex when connected (`get_status` first), else the Figma
    MCP. **Geometry is read from nodes or exported SVG, never from
    annotation prose** — the prose has been wrong about its own design four
    times on this project. A node id that 404s is re-found by name.
-2. **DRIFT REPORT — the gate.** Survey ends in a table: spec vs built,
-   item by item, every place the mock contradicts a ruled rule called out.
-   JP sees it before anything is built.
+
+2. **GATE: DRIFT REPORT + BUILD PLAN.** Two artifacts, one stop:
+   - **Drift report** — spec vs current code, item by item, every place
+     the mock contradicts a ruled rule called out.
+   - **Build plan** — written by the main thread from survey output,
+     saved as `PLAN.md` at the repo root: the agent split, exclusive
+     file ownership per agent, and the frozen interfaces (state keys,
+     class names, handler names). Interfaces are frozen here and nowhere
+     else. **`PLAN.md` is per-build and EPHEMERAL** — it exists only
+     while its build is in flight and rotates into the day's state-log at
+     CLOSE, leaving the root. Layer 1 stays `STATE.md` alone (the
+     2026-08-18 HANDOFF retirement; the architecture suite enforces it).
+   JP sees both before anything is built (Full mode). If the drift report
+   suggests the spec itself is wrong, that goes to JP as a question,
+   never a guess.
+
 3. **BUILD** — parallel agents where the work allows, each with
-   **exclusive ownership of its files** (the frontend is one concatenated
-   `<script>`: split by layer — state / template / stylesheet / tests —
-   with state keys, class names and handler names frozen in the plan
-   first). Each agent is pointed at the law for its layer
-   (`test/CLAUDE.md`, `gantt-rules.md`).
+   **exclusive ownership of its files** per `PLAN.md` (the frontend is
+   one concatenated `<script>`: split by layer — state / template /
+   stylesheet / tests). Each agent is pointed at the law for its layer
+   (`test/CLAUDE.md`, `gantt-rules.md`). An agent that needs to change a
+   frozen interface **stops and reports**; the main thread amends
+   `PLAN.md` and restarts the affected agents — agents never renegotiate
+   interfaces between themselves.
+
 4. **VALIDATE** — typecheck, lint, full suite `TZ=UTC` and
    `TZ=Asia/Manila` (calendar suites also America/New_York). The two
    documented environmental flakes: re-run before believing red, record,
    never mask. **Every new guard proven non-vacuous** — revert the code,
    watch it fail, restore.
-5. **REVIEW** — a simplification pass and a correctness review with
-   adversarial verification, every build.
+   **On red:** back to the owning build agent with the failing output.
+   Three rounds on the same red → stop, report to JP.
+
+5. **REVIEW** — two passes, in this order, every build:
+   - **Correctness with adversarial verification** — the reviewer works
+     from the drift table and `PLAN.md`; for each item claimed done, the
+     reviewer must attempt to construct a failing input or state.
+     "Looks right" is not a verdict. Findings go back to BUILD.
+   - **Simplification** — only after correctness is clean.
+   **Rule: any code change after VALIDATE re-runs VALIDATE in full.**
+   Simplification edits included — no exceptions.
+   Reviewer/builder disagreement resolves at the main thread; unresolved
+   → JP.
+
 6. **E2E** — seeded local fixtures, a real browser: programmatic
-   measurements plus screenshots plus a clean console; interactions proven
-   by real pointer only. Live-site writes only against `rt-test`.
-7. **CLOSE** — `STATE.md` and the day log updated; the drift report and
-   decisions land in the session record.
+   measurements plus screenshots plus a clean console; interactions
+   proven by real pointer only. Live-site writes only against `rt-test`.
+   **On failure:** back to the owning agent; the fix passes through
+   VALIDATE and REVIEW again for the changed files.
+
+7. **CLOSE** — `STATE.md` and the day log updated; the drift report,
+   `PLAN.md`, and decisions rotate into the session record and `PLAN.md`
+   leaves the root.
 
 Outward messages (owls, anything leaving the machine) are never sent from
 inside a workflow — per-approval, from the main thread.
