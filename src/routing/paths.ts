@@ -19,8 +19,8 @@
 
 import { posix } from 'node:path';
 
-/** The six main tabs. Identical to the frontend `activeTab` keys. */
-export const ROUTE_TABS = ['requests', 'pipeline', 'schedules', 'deadlines', 'forecast', 'admin'] as const;
+/** The five main tabs. Identical to the frontend `activeTab` keys. */
+export const ROUTE_TABS = ['requests', 'pipeline', 'schedules', 'deadlines', 'admin'] as const;
 
 export type RouteTab = (typeof ROUTE_TABS)[number];
 

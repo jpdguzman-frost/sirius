@@ -117,7 +117,7 @@ describe.each([
   });
 
   it('never emits an absolute URL, even for a value that survives validation', async () => {
-    const res = await login('/rt-test/forecast');
+    const res = await login('/rt-test/deadlines');
     expect(res.headers.location!.startsWith('/')).toBe(true);
     expect(res.headers.location).not.toMatch(/^https?:|^\/\//);
   });

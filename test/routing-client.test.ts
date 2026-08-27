@@ -41,7 +41,7 @@ describe('parseRoute — reports what the URL says, decides nothing', () => {
   it('reads the canonical form at the domain root and under a prefix', () => {
     for (const base of BASES) {
       expect(parseRoute(`${base}/rt-test/schedules`, base)).toEqual({ project: 'rt-test', tab: 'schedules' });
-      expect(parseRoute(`${base}/rt-837/forecast`, base)).toEqual({ project: 'rt-837', tab: 'forecast' });
+      expect(parseRoute(`${base}/rt-837/deadlines`, base)).toEqual({ project: 'rt-837', tab: 'deadlines' });
     }
   });
 

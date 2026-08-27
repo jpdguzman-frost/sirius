@@ -12,7 +12,7 @@
    server cannot import a browser script. test/routing-paths.test.ts asserts the
    two literals never drift apart. */
 
-const ROUTE_TABS = ['requests', 'pipeline', 'schedules', 'deadlines', 'forecast', 'admin'];
+const ROUTE_TABS = ['requests', 'pipeline', 'schedules', 'deadlines', 'admin'];
 const ROUTE_DEFAULT_TAB = 'pipeline';
 
 /**

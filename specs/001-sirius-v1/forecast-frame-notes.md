@@ -1,4 +1,20 @@
-# Forecast frame notes — build-spec v1.2 §7.2/§7.3, nodes `279:22602` / `279:16649`
+# Forecast frame notes — WITHDRAWN 2026-08-27
+
+> **THE FORECAST TAB IS WITHDRAWN.** Product dropped the screen (owl miles→jp
+> #67, confirmed by JP 2026-08-27); the tab, its view, its stylesheet and
+> `test/forecast-frame.test.ts` were removed. **Do not rebuild from this file.**
+>
+> It is kept because the R-fc-* rulings below record *why* things were decided,
+> and three of its controls were orphaned rather than dropped — confidence
+> (FR-7.4), the review SLA override (FR-7.5), and model constants plus sample
+> sizes (FR-7.7). All three still exist server-side and are parked in the BRD
+> awaiting a home. If one returns, the ruling that shaped it is here.
+>
+> **The forecast ENGINE is untouched.** `lib/forecast.ts` still keys every date
+> the other tabs show (invariant 5), the nightly model refresh is still a
+> release gate (invariant 7), and `scripts/gate-t045.ts` still reads it.
+
+## The original notes — build-spec v1.2 §7.2/§7.3, nodes `279:22602` / `279:16649`
 
 Layer-2 law for the Forecast tab, the last of the six tabs still running on its
 pre-redesign markup. Unlike every other tab in this project **there is no owl
@@ -16,7 +32,7 @@ Frames read:
 | `279:16649` | 1440 × 1175 | the same table at the real viewport, scrolled to the far right |
 | `279:15122` | 1440 × 1024 | earlier version, comparison only — it alone carries the *How this forecast works* drawer |
 
-Asserted by `test/forecast-frame.test.ts` unless the last column says otherwise.
+Was asserted by `test/forecast-frame.test.ts`, deleted with the tab.
 
 ## The column model
 

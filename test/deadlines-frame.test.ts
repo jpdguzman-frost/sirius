@@ -69,10 +69,15 @@ const week = (over: Partial<Week> = {}): Week => ({
 /* A — R-dl-a: this tab is NOT a table                                      */
 /* ---------------------------------------------------------------------- */
 
+/* The slice runs to the NEXT tab guard, whichever tab that is. It used to name
+   `forecast` literally, and when that tab was withdrawn (owl #67) the slice ran
+   on to the end of the shell and swallowed Admin — so this suite's "Deadlines
+   is not a table" assertion started failing on ADMIN's table. Asserting the
+   rule rather than today's neighbour keeps it pointed at one view. */
 const deadlinesView = (): string => {
   const at = TEMPLATE.indexOf("{{#if activeTab === 'deadlines'}}");
   expect(at).toBeGreaterThan(-1);
-  const end = TEMPLATE.indexOf("{{#if activeTab === 'forecast'}}", at);
+  const end = TEMPLATE.indexOf("{{#if activeTab === '", at + 1);
   return TEMPLATE.slice(at, end > at ? end : undefined);
 };
 

@@ -134,7 +134,6 @@ describe('the grey wash reaches only tabs that have not been rebuilt', () => {
     pipeline: 'pipeline-frame-notes.md',
     schedules: 'gantt-frame-notes.md', // the planner's law predates the tab's name
     deadlines: 'deadlines-frame-notes.md',
-    forecast: 'forecast-frame-notes.md',
   };
 
   const specDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'specs', '001-sirius-v1');
