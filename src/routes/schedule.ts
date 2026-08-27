@@ -33,18 +33,30 @@ const DATE_ONLY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const OBJECT_ID = z.string().refine((v) => Types.ObjectId.isValid(v), { message: 'not an id' });
 
 
+/**
+ * CONFIDENCE AND THE TWO REVIEW-SLA OVERRIDES ARE NOT HERE — closed 2026-08-27
+ * on JP's instruction, when the Forecast tab took their only UI with it.
+ *
+ * The engine still READS all three (`toRow` passes them to `forecast`), so a
+ * stored value would keep moving every date the remaining tabs show, with no
+ * control anywhere to see or clear it. Measured on the live board the day this
+ * closed: nothing had a value — all 395 deliverables sat at the default
+ * percentile and neither override was set anywhere — so there was nothing to
+ * clear, and this is what stops one appearing while there is nowhere to see it.
+ *
+ * Product has PARKED these controls rather than dropped them (owl #67). When
+ * they get a home, re-adding the three lines is the whole change; the storage,
+ * the engine path and the audit trail were never touched.
+ */
 const planningPatch = z
   .object({
     slotted_week: DATE_ONLY.nullable().optional(),
     pinned: z.boolean().optional(),
-    confidence: z.enum(['Average', '0.7', '0.85', '0.95']).optional(),
-    sla_sketch: z.number().min(0).max(60).nullable().optional(),
-    sla_render: z.number().min(0).max(60).nullable().optional(),
     status_note: z.string().max(500).nullable().optional(),
   })
   .strict(); // Trello-/sheet-owned fields are refused, not ignored
 
-const SIRIUS_FIELDS = ['slotted_week', 'pinned', 'confidence', 'sla_sketch', 'sla_render', 'status_note'] as const;
+const SIRIUS_FIELDS = ['slotted_week', 'pinned', 'status_note'] as const;
 
 /**
  * One sprint-save rejection. Widens `SprintIssue.kind` (lib/planner) with the

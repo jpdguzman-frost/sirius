@@ -42,21 +42,45 @@ async function setup() {
 }
 
 describe('planning writes (AC-13 API side)', () => {
-  it('slots a week, sets pin/confidence/SLA/note, audits before/after', async () => {
+  it('slots a week, sets pin and note, audits before/after', async () => {
     const { project, agent, mk } = await setup();
     await mk(1);
     await agent
       .patch(`/api/projects/${project._id}/deliverables/c1/planning`)
-      .send({ slotted_week: '2026-08-10', pinned: true, confidence: '0.85', sla_sketch: 2, status_note: 'manual: waiting on legal' })
+      .send({ slotted_week: '2026-08-10', pinned: true, status_note: 'manual: waiting on legal' })
       .expect(200);
     const d = await Deliverable.findOne({ trello_card_id: 'c1' }).orFail();
     expect(d.slotted_week).toBe('2026-08-10');
     expect(d.pinned).toBe(true);
-    expect(d.confidence).toBe('0.85');
     const log = await AuditLog.findOne({ action: 'schedule.planning' }).orFail();
     expect(log.actor).toBe('pm@frostdesigngroup.com');
     expect((log.before as Record<string, unknown>).slotted_week).toBeNull();
     expect((log.after as Record<string, unknown>).slotted_week).toBe('2026-08-10');
+  });
+
+  /* CLOSED 2026-08-27 (JP). Confidence and the two review-SLA overrides lost
+     their only UI with the Forecast tab, but the engine still READS all three —
+     so a stored value would keep moving every date on the remaining tabs with
+     nothing on screen able to show or clear it. The board had none set, so
+     there was nothing to clear; this is what stops one appearing.
+
+     Asserted as REFUSED rather than ignored, and asserted to leave the stored
+     value untouched — the storage and the engine path are deliberately intact,
+     so re-opening this is three lines when product gives the controls a home. */
+  it('refuses the three orphaned forecast controls, and stores nothing', async () => {
+    const { project, agent, mk } = await setup();
+    await mk(1);
+    for (const body of [{ confidence: '0.85' }, { sla_sketch: 2 }, { sla_render: 2 }]) {
+      await agent
+        .patch(`/api/projects/${project._id}/deliverables/c1/planning`)
+        .send({ slotted_week: '2026-08-10', ...body })
+        .expect(400);
+    }
+    const d = await Deliverable.findOne({ trello_card_id: 'c1' }).orFail();
+    expect(d.confidence).toBe('0.7'); // the default, never the refused value
+    expect(d.sla_sketch ?? null).toBeNull();
+    expect(d.sla_render ?? null).toBeNull();
+    expect(d.slotted_week ?? null).toBeNull(); // the whole body is refused, not the bad half
   });
 
   it('refuses Trello-owned fields outright (§1.2 ownership; invariant 2)', async () => {
