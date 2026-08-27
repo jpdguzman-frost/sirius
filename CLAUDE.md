@@ -111,7 +111,11 @@ names when models change, not the roles):
    `TZ=Asia/Manila` (calendar suites also America/New_York). The two
    documented environmental flakes: re-run before believing red, record,
    never mask. **Every new guard proven non-vacuous** — revert the code,
-   watch it fail, restore.
+   watch it fail, restore. **Anchor the build in a commit BEFORE any
+   revert proof**, and restore from a /tmp snapshot, never `git checkout`
+   — against uncommitted work that command restores HEAD and destroys the
+   build (it did once, 2026-08-28; recovered from the bundle's
+   concatenation markers).
    **On red:** back to the owning build agent with the failing output.
    Three rounds on the same red → stop, report to JP.
 
