@@ -124,7 +124,7 @@ describe('derivation (pure)', () => {
 
 describe('refresh + loader (integration)', () => {
   async function seedProjectWithHistory() {
-    const p = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'fxA', weekly_capacity: 120 });
+    const p = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'fxA', weekly_capacity: 120, model_frozen: false });
     await Deliverable.create({
       project_id: p._id, mc_number: 'MC-1', display_id: 'MC-1', trello_card_id: 'c1',
       name: 'D1', difficulty: 'Medium', lane: 'design',
@@ -166,7 +166,7 @@ describe('refresh + loader (integration)', () => {
     // history for ONE Easy/assets card only → the refreshed grid carries no
     // Medium or Hard design cells; lib/model's verbatim fallback walk
     // (difficulty → Medium → lane → 'design') assumes those keys exist
-    const p = await Project.create({ code: 'rt-test', name: 'Fx', trello_board_id: 'fxB', weekly_capacity: 3 });
+    const p = await Project.create({ code: 'rt-test', name: 'Fx', trello_board_id: 'fxB', weekly_capacity: 3, model_frozen: false });
     await Deliverable.create({
       project_id: p._id, mc_number: 'MC-9', display_id: 'MC-9', trello_card_id: 'c9',
       name: 'D9', difficulty: 'Easy', lane: 'assets', labels: ['Assets'],
@@ -198,7 +198,7 @@ describe('refresh + loader (integration)', () => {
     // verbatim chain is lane → 'design' → FIRST cell, so without the per-lane
     // fill a 'Working on Design' card would be forecast off the 12-day assets
     // dwell instead of the snapshot's 0.94.
-    const p = await Project.create({ code: 'rt-test', name: 'Fx', trello_board_id: 'fxB', weekly_capacity: 3 });
+    const p = await Project.create({ code: 'rt-test', name: 'Fx', trello_board_id: 'fxB', weekly_capacity: 3, model_frozen: false });
     await Deliverable.create({
       project_id: p._id, mc_number: 'MC-10', display_id: 'MC-10', trello_card_id: 'c10',
       name: 'D10', difficulty: 'Easy', lane: 'assets', labels: ['Assets'],
@@ -221,6 +221,50 @@ describe('refresh + loader (integration)', () => {
     );
     expect(f.lane).toBe('design');
     expect(f.sketchDesign).toBe(EMPIRICAL.design.Easy!.design!['0.7']); // 0.94, not the 12-day assets dwell
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* THE FREEZE (JP, 2026-08-27) — invariant 7's release gate, enforced.  */
+  /* ------------------------------------------------------------------ */
+
+  it('a FROZEN project forecasts off the snapshot and ignores its own grid', async () => {
+    const p = await seedProjectWithHistory();
+    await refreshProjectModel(p._id);
+    const measured = await ModelGrid.countDocuments({ project_id: p._id });
+    expect(measured, 'no grid was written — the guard would pass vacuously').toBeGreaterThan(0);
+
+    await Project.updateOne({ _id: p._id }, { $set: { model_frozen: true } });
+    const { model, provenance } = await loadProjectModel(p._id);
+
+    // the shipped reference figures, not the refreshed ones
+    expect(model.design.Medium!.design!['0.7']).toBe(EMPIRICAL.design.Medium!.design!['0.7']);
+    expect(provenance.fallback).toBe(true);
+    expect(provenance.source).toContain('FROZEN');
+    expect(provenance.source).toContain(`${measured} measured cells held`);
+  });
+
+  it('freezing gates the READ, never the collection — nothing measured is lost', async () => {
+    const p = await seedProjectWithHistory();
+    await Project.updateOne({ _id: p._id }, { $set: { model_frozen: true } });
+
+    /* The nightly refresh keeps running and keeps writing while frozen. That is
+       the whole point: the collected history is the raw material for the
+       ARES-sourced replacement, so a freeze that stopped it would cost exactly
+       the thing we need. */
+    const stats = await refreshProjectModel(p._id);
+    expect(stats.samples).toBeGreaterThan(0);
+    expect(await ModelGrid.countDocuments({ project_id: p._id })).toBeGreaterThan(0);
+    // …and the read is still the snapshot
+    expect((await loadProjectModel(p._id)).provenance.source).toContain('FROZEN');
+  });
+
+  it('defaults to FROZEN — a project passes the gate by decision, not by a job running', () => {
+    /* Invariant 7 says the empirical model is a release GATE. A default of
+       false would let any new project start forecasting off whatever its first
+       nightly run happened to learn, which is how the live board ended up
+       blending five bad cells into good ones. */
+    const fresh = new Project({ code: 'rt-new', name: 'N', trello_board_id: 'b', weekly_capacity: 10 });
+    expect(fresh.model_frozen).toBe(true);
   });
 
   it('serves the model with provenance over HTTP (T043; AC-11 data side)', async () => {

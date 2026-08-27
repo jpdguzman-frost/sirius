@@ -9,7 +9,7 @@
 
 import type { Types } from 'mongoose';
 import { EMPIRICAL, type DesignCell, type Difficulty, type EmpiricalModel, type Lane } from '../../lib/model.ts';
-import { ModelGrid, ThroughputGrid } from '../models/index.ts';
+import { ModelGrid, Project, ThroughputGrid } from '../models/index.ts';
 
 export interface ModelProvenance {
   source: string;
@@ -22,6 +22,26 @@ export interface ModelProvenance {
 export async function loadProjectModel(
   projectId: Types.ObjectId,
 ): Promise<{ model: EmpiricalModel; provenance: ModelProvenance }> {
+  /* THE FREEZE (JP, 2026-08-27) — invariant 7's release gate, enforced.
+     A frozen project forecasts off the shipped reference snapshot and ignores
+     its refreshed grid entirely. The grid is still WRITTEN nightly; only the
+     read is gated, so nothing measured is lost and unfreezing is one field.
+     Why: see `model_frozen` on the project schema. */
+  const project = await Project.findById(projectId).select({ model_frozen: 1 }).lean();
+  if (project?.model_frozen !== false) {
+    const waiting = await ModelGrid.countDocuments({ project_id: projectId });
+    return {
+      model: EMPIRICAL,
+      provenance: {
+        source: `${EMPIRICAL.source} · FROZEN — the refreshed grid is not in use${waiting ? ` (${waiting} measured cells held)` : ''}`,
+        computed_at: null,
+        fallback: true,
+        cells: 0,
+        sampleSizes: {},
+      },
+    };
+  }
+
   const cells = await ModelGrid.find({ project_id: projectId });
   if (cells.length === 0) {
     return {

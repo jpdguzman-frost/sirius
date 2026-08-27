@@ -253,6 +253,34 @@ export const MIGRATIONS: Migration[] = [
       await SprintItem.syncIndexes();
     },
   },
+  {
+    /**
+     * The model freeze (JP, 2026-08-27). Existing projects get
+     * `model_frozen: true` so live forecasts come off the shipped reference
+     * snapshot instead of the refreshed grid.
+     *
+     * The schema default is already `true`, so this only reaches documents
+     * written before the field existed — mongoose does not backfill a default
+     * onto stored documents, and a project loaded without the field would read
+     * `undefined`. The read path treats anything other than an explicit
+     * `false` as frozen, so an unmigrated project is safe either way; this
+     * makes the state explicit and visible in the collection rather than
+     * implied by a comparison.
+     *
+     * NOTHING IS DELETED. The measured grid, its samples and the 19,860
+     * collected card events all stay — the freeze gates the read, not the
+     * collection, and those events are the raw material for the ARES-sourced
+     * replacement model.
+     */
+    id: '010-freeze-model',
+    up: async (conn) => {
+      const db = conn.db;
+      if (!db) throw new Error('no database on connection');
+      await db
+        .collection('projects')
+        .updateMany({ model_frozen: { $exists: false } }, { $set: { model_frozen: true } });
+    },
+  },
 ];
 
 /** Applies pending migrations in order; records each in `migrations`. */

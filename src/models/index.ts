@@ -67,6 +67,27 @@ const projectSchema = new Schema(
     ref_week_most: Number,
     effective_weekly_rate: Number,
     model_window_months: { type: Number, required: true, default: 12 },
+    /**
+     * FROZEN: forecast off the shipped reference snapshot, ignoring the
+     * refreshed grid. Default TRUE, which is invariant 7 written down — the
+     * empirical model is a release GATE, and a project passes it by someone
+     * deciding it has, not by a nightly job having run.
+     *
+     * Set 2026-08-27 (JP) because the refresh is producing numbers no PM would
+     * recognise: on the live board it had learned five cells, with Medium
+     * design at 0.13 days and BELOW Easy — an hour of design work, and the
+     * wrong ordering. Everything unlearned fell back to the snapshot, so live
+     * dates were a blend of good figures and bad ones, and which cards got
+     * which shifted every night.
+     *
+     * The nightly refresh KEEPS RUNNING and keeps writing the grid: this gates
+     * the READ, not the collection, so no measurement is lost and unfreezing
+     * is one field. The cause is understood — dwell is measured between
+     * consecutive movements and open intervals are dropped, so a card still
+     * sitting in a list contributes nothing and only the fast cards are ever
+     * sampled. The replacement is the ARES-sourced, tag-classified model.
+     */
+    model_frozen: { type: Boolean, required: true, default: true },
 
     created_at: { type: Date, default: Date.now },
   },
