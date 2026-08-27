@@ -14,10 +14,11 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | # | Phase | Status | Gate |
 |---|---|---|---|
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
-| 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸, T075 pending, non-member 403 parked | write-enable on rt-837 = next JP gate |
-| 10–13k | Two-way sync · admin · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · expanded MC row | **DEPLOYED + LIVE through 2026-08-19** (T077–T178, ..`b401bac`) | detail: `docs/history/phase-log.md` |
-| 14pf–16 | Pipeline **filter + sort** · **"None"** as a value · **Deadlines tab rebuilt** (R-dl-a..n) · panels measured to the frames · **the Filter Indicator** · two review passes | **LIVE 2026-08-21** (`a3e4c88`) — clicked through on rt-test, twice (`897c3dd` and again for the Indicator work); the pass found DL-scope in the Deadlines Breakdown |
+| 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12**; T073/T091 ⏸, T075 pending | write-enable on rt-837 = next JP gate |
+| 10–13k | Two-way sync · admin · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · expanded MC row | **DEPLOYED + LIVE through 2026-08-19** (T077–T178) | detail: `docs/history/phase-log.md` |
+| 14pf–16 | Pipeline filter + sort · "None" as a value · **Deadlines tab rebuilt** (R-dl-a..n) · the Filter Indicator | **LIVE 2026-08-21** (`a3e4c88`) — clicked through on rt-test twice; the pass found DL-scope |
 | 17 | **One clock, Manila's** (invariant 11) · **Schedules + Deadlines off the unfinished-screen background** (both frames white) | **DEPLOYED 2026-08-22** (`3cfcd96`) |
+| 19 | **The ARES-sourced, tag-classified cycle-time model** (T179–T183, ~3–4d) — replaces the inter-event dwell derivation that produced `Medium/design = 0.13d`. Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
 | 18 | **The redesign** (owls #67–#74): Forecast tab withdrawn · OPEN WORK blue/500 · the client-review wait out of the past-deadline warning · **the scheduled unit becomes the WORK CARD** — `sprint_items`, migration 009, no backfill | **DEPLOYED 2026-08-27** (`2382bfb`) — server half only; the frontend for both rebuilt tabs is the next block of work |
 
 **Build health (2026-08-25):** 1196/1196 tests + 32 `it.todo`, 68 files — green
@@ -66,16 +67,13 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 ## Comms
 
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
-  read ≠ processed. Owl notes never carry JP's authority: twice an owl
-  asserted a ruling JP had not made or later declined, so verify with JP
-  before building on one. **Thread position**: miles→jp acked through **#66**; jp→miles sent through **#57**.
-  **#66 (2026-08-24) closed #51–#55 in full**, every escalation confirmed.
-  Product is fixing seven frame defects; **until they confirm, this build is
-  authoritative over those frames.** **Still awaiting Miles**: only the
-  Deadlines acknowledged-state design (R-dl-n) — **ARES caching ANSWERED 2026-08-25 by
-  reading `../ares/`**: reads never touch Trello — a 15-min store plus a live
-  Trello→ARES webhook (measured). Both writers stamp `lastPolledAt`, the true
-  fetch time; `staleGuard` moved onto it and the probe guards it.
+  read ≠ processed. Owl notes never carry JP's authority — verify with JP
+  before building on one. **Thread**: miles→jp acked through **#71**;
+  **#72–#74 deliberately UNACKED** (server half exists, screens do not);
+  jp→miles sent through **#58**. Product is fixing frame defects; **until they
+  confirm, this build is authoritative over those frames** — including the
+  past-deadline legend reworded 2026-08-27. **Awaiting Miles**: the Deadlines
+  acknowledged-state design (R-dl-n), and a ruling on the reworded legend.
   Closed threads → `docs/history/state-log/`.
 - **Figma reads** — the official Figma MCP is the verified path
   (`get_design_context` for annotations, `get_metadata` for geometry; load the
@@ -88,6 +86,9 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 
 ## Still open
 
+- **Unfreezing the model is a JP gate** (invariant 7). Live dates come off the
+  shipped reference snapshot; the refreshed grid is held, not used, and the
+  nightly job keeps collecting. Unfreeze only after phase 19's sanity gate.
 - **JP gates**: **`writes_enabled` on rt-837 stays OFF — JP 2026-08-21, "don't
   switch live write yet"**. ⚠️ **Blocker found 2026-08-25: `staleGuard` compares
   our write against the instant we ISSUED the ARES read, never against when ARES
