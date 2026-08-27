@@ -6,7 +6,7 @@
  */
 
 import mongoose, { Types } from 'mongoose';
-import { workday } from '../../lib/calendar.ts';
+import { localIso, parseDate, workday } from '../../lib/calendar.ts';
 import { forecast, type Forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
@@ -15,6 +15,10 @@ import { classifyList } from './status-rules.ts';
 import { WorkCard } from '../models/index.ts';
 import type { Milestone } from './conflicts.ts';
 import { loadSprintItems, type SprintItemsResult } from './sprint-items.ts';
+
+/** What a caller that did not ask for sprint items gets — never undefined, so
+    the payload shape is one shape and the client never branches on presence. */
+const EMPTY_SPRINT_ITEMS: SprintItemsResult = { rows: [], addable: {} };
 
 const localDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -142,6 +146,16 @@ export interface PipelineRow {
   missing: string[];
 }
 
+/**
+ * A work card as it comes back from `WorkCard.find().lean()` — the raw mirror
+ * document, not the wire shape below. Exported so `loadSprintItems` can be
+ * handed the array this module has already read rather than reading it again.
+ */
+const loadWorkCards = (projectId: Types.ObjectId) =>
+  WorkCard.find({ project_id: projectId, active: true }).lean();
+
+export type WorkCardDoc = Awaited<ReturnType<typeof loadWorkCards>>[number];
+
 /** A task card as the Pipeline wire carries it (owl #45 — the expanded MC row). */
 export interface WorkCardWire {
   cardId: string;
@@ -201,16 +215,26 @@ export interface PipelineResult {
    *
    * These rows are NOT derived from `rows` above and never can be: the unit is
    * the work card, and a row exists only because the PM added it.
+   *
+   * EMPTY unless the caller passed `withSprintItems` — see `loadPipeline`.
    */
   sprintItems: SprintItemsResult;
 }
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
+/**
+ * `withSprintItems` is opt-in because only ONE of this function's four callers
+ * returns them. `GET /deadlines`, `PUT /deadlines/day` and `POST /suggest` all
+ * load the pipeline and never look at `sprintItems` — and the client fires
+ * `/deliverables` and `/deadlines` in a single `Promise.all`, so loading them
+ * unconditionally did the work twice on every refresh and threw half away.
+ */
 export async function loadPipeline(
   projectId: Types.ObjectId,
   today: string,
   weeklyCapacity: number,
+  opts: { withSprintItems?: boolean } = {},
 ): Promise<PipelineResult> {
   const { model, provenance } = await loadProjectModel(projectId);
   const view = await mongoose.connection.db!
@@ -220,7 +244,7 @@ export async function loadPipeline(
 
   const rows = view.map((d) => toRow(d, model, today));
 
-  const workCards = await WorkCard.find({ project_id: projectId, active: true }).lean();
+  const workCards = await loadWorkCards(projectId);
   const workCardsByMc: PipelineResult['workCardsByMc'] = {};
   for (const w of workCards) {
     if (!workCardsByMc[w.mc_number]) workCardsByMc[w.mc_number] = [];
@@ -306,7 +330,9 @@ export async function loadPipeline(
     mcNumbers: unattachedMcs,
   };
 
-  const sprintItems = await loadSprintItems(projectId, model);
+  const sprintItems = opts.withSprintItems
+    ? await loadSprintItems(projectId, model, workCards, rows)
+    : EMPTY_SPRINT_ITEMS;
 
   return { rows, workCardsByMc, mcDeliverables, unattachedWork, corrections, model: { provenance }, perWeek, sprintItems };
 }
@@ -355,10 +381,28 @@ function buildPhases(slottedWeek: string | null, fc: PipelineRow['forecast']): P
  * The forecast DATES are untouched and still include review; this is a second,
  * narrower question asked of the same numbers, carried as its own field so the
  * two can never be confused for each other.
+ *
+ * ⚠️ ONE SITE STILL MEASURES THE OLD WAY, deliberately. `lib/planner.ts` tests
+ * `deadline < renderDelivery` and emits *"cannot meet deadline from any week in
+ * view"*, which the Schedules toolbar counts as "N flagged". So Suggest Plan
+ * can call a row deadline-compromised while its bar reads on time — the
+ * divergence window is exactly the review wait. It is left alone on purpose:
+ * `planner.ts` is golden-locked, and Suggest Plan itself is WITHDRAWN (owls
+ * #70/#72 — FR-5.7, FR-5.8, BR-7, AC-15, AC-16 all marked withdrawn,
+ * `suggestPlan()` kept dormant), so its toolbar goes with the Schedules
+ * rebuild. Raised to JP rather than patched, because pre-adjusting the deadline
+ * handed to the planner would be inventing behaviour for a feature product has
+ * already dropped.
  */
 function workFinishOf(f: Forecast, startDate: string): string {
   const days = f.sketchLead + f.sketchDesign + f.renderLead + f.renderDesign;
-  return localDate(workday(startDate, days));
+  /* `parseDate`, never the raw string. `new Date('2026-08-03')` is UTC
+     midnight, so west of UTC the working-day walk starts a day early —
+     measured 2026-08-04 against 2026-08-05 under America/New_York. The dual-TZ
+     suite runs UTC and Manila, both at or ahead of UTC, so it could never have
+     caught this. Every other caller in the repo parses first, the engine
+     included (lib/forecast.ts:69). */
+  return localIso(workday(parseDate(startDate), days));
 }
 
 function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string): PipelineRow {

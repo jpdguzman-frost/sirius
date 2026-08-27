@@ -20,9 +20,11 @@ import type { Types } from 'mongoose';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
-import { loadSprintItems, finishOf } from '../src/services/sprint-items.ts';
+import { loadPipeline } from '../src/services/pipeline.ts';
+import { finishOf } from '../src/services/sprint-items.ts';
 import { EMPIRICAL } from '../lib/model.ts';
-import { workday } from '../lib/calendar.ts';
+import { forecast } from '../lib/forecast.ts';
+import { localIso } from '../lib/calendar.ts';
 import {
   AuditLog,
   Deliverable,
@@ -45,9 +47,6 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearCollections();
 });
-
-const localDate = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 async function setup() {
   const project = await Project.create({
@@ -78,9 +77,27 @@ const mkCard = (projectId: Types.ObjectId, id: string, over: Record<string, unkn
     current_list: 'Working on Design', ...over,
   });
 
-const load = (projectId: Types.ObjectId) => loadSprintItems(projectId, EMPIRICAL);
+/* Through `loadPipeline`, not `loadSprintItems` directly — sprint items are
+   opt-in on that call, so going the real route also proves the one caller that
+   asks for them actually gets them. */
+const load = async (projectId: Types.ObjectId) =>
+  (await loadPipeline(projectId, '2026-08-03', 22, { withSprintItems: true })).sprintItems;
+
+const itemUrl = (pid: unknown, id: string) => `/api/projects/${pid}/sprint-items/${id}`;
 const add = (agent: ReturnType<typeof request.agent>, pid: unknown, body: Record<string, unknown>) =>
   agent.post(`/api/projects/${pid}/sprint-items`).send(body);
+/** add + plot, the pair almost every case here needs. Returns the item id. */
+const addAndPlot = async (
+  agent: ReturnType<typeof request.agent>,
+  pid: unknown,
+  cardId: string,
+  sprintId: string,
+  day: string,
+) => {
+  const res = await add(agent, pid, { sprint_id: sprintId, card_id: cardId }).expect(201);
+  await agent.patch(itemUrl(pid, res.body.id)).send({ starts_on: day }).expect(200);
+  return res.body.id as string;
+};
 
 /* ---------------------------------------------------------------------- */
 /* A — nothing is auto-populated                                           */
@@ -159,50 +176,91 @@ describe('adding a card and plotting its bar are two acts', () => {
     expect(rows[0]!.late).toBe(false);
   });
 
-  it('the click sets the START and the finish is COMPUTED from it', async () => {
+  /* THE ENGINE IS THE ORACLE, not a second copy of its arithmetic.
+     Asserting against `finishOf(...)` with the same inputs was tautological —
+     it could only fail if `loadSprintItems` stopped calling `finishOf` at all.
+     And re-deriving `workday(start, 0.5 + design)` here re-typed the engine's
+     own lead constant, so the ONE guard on that number was pinned to the copy
+     rather than to the engine, and could never have caught them drifting apart
+     (test/CLAUDE.md rule 2). Both sides now execute the shipped engine. */
+  it('the click sets the START and the finish is the ENGINE’s own phase delivery', async () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'w1');
-    const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
-    await agent
-      .patch(`/api/projects/${project._id}/sprint-items/${res.body.id}`)
-      .send({ starts_on: '2026-08-03' })
-      .expect(200);
+    await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
 
     const { rows } = await load(project._id);
     expect(rows[0]!.startsOn).toBe('2026-08-03');
-    /* Derived, not typed: `lead + design` on the working-day calendar. #72 §6 —
-       the user sets the start, the finish is computed, and if the bar and the
-       FORECASTED column can ever disagree something is wrong. Both read this. */
-    expect(rows[0]!.finish).toBe(finishOf(
-      { difficulty: 'Medium', current_list: 'Working on Design', task_prefix: 'Sketch Asset' },
-      '2026-08-03',
+
+    const engine = forecast(
+      {
+        difficulty: 'Medium',
+        currentList: 'Working on Design',
+        labels: ['Sketch Asset'],
+        startDate: '2026-08-03',
+      },
       EMPIRICAL,
-    ));
+    );
+    // #72 §6: the user sets the start, the finish is computed, and if the bar
+    // and the FORECASTED column can ever disagree something is wrong.
+    expect(rows[0]!.finish).toBe(localIso(engine.sketchDelivery));
     expect(rows[0]!.finish).not.toBeNull();
   });
 
   it('has NO review wait in the bar — one phase, and the wait belongs to neither', async () => {
     /* The reason #72 split the row in two. A single phase is lead + design;
-       the client's wait sits BETWEEN phases and so belongs to no row. */
+       the client's wait sits BETWEEN phases and so belongs to no row. Both
+       bounds come off the engine result, so the lead is never typed here. */
+    const card = {
+      difficulty: 'Medium',
+      currentList: 'Working on Design',
+      labels: ['Sketch Asset'],
+      startDate: '2026-08-03',
+    };
+    const engine = forecast(card, EMPIRICAL);
     const finish = finishOf(
       { difficulty: 'Medium', current_list: 'Working on Design', task_prefix: 'Sketch Asset' },
       '2026-08-03',
       EMPIRICAL,
     );
-    const design = EMPIRICAL.design.Medium!.design!['0.7'];
-    expect(finish).toBe(localDate(workday('2026-08-03', 0.5 + design)));
-    // and it is strictly shorter than a cycle that included the review wait
-    expect(finish! < localDate(workday('2026-08-03', 0.5 + design + EMPIRICAL.review['0.7']))).toBe(true);
+
+    expect(finish).toBe(localIso(engine.sketchDelivery));
+    // strictly earlier than the point the engine reaches once review is added
+    expect(engine.sketchReview).toBeGreaterThan(0); // or the case below is vacuous
+    expect(finish! < localIso(engine.sketchApproved)).toBe(true);
+  });
+
+  /* TIMEZONE. `new Date('2026-08-03')` is UTC midnight, so a raw string handed
+     to `workday` starts the walk a day early west of UTC — which is what the
+     first version of `finishOf` did. The dual-TZ suite runs UTC and Manila,
+     both at or ahead of UTC, so only an explicit western zone can catch it.
+     Asserted as agreement with the engine, which parses correctly, rather than
+     as a fixed date — the rule is "these two never disagree", in any zone. */
+  it('agrees with the engine in a timezone WEST of UTC', async () => {
+    const tz = process.env.TZ;
+    try {
+      process.env.TZ = 'America/New_York';
+      const card = {
+        difficulty: 'Medium',
+        currentList: 'Working on Design',
+        labels: ['Sketch Asset'],
+        startDate: '2026-08-03',
+      };
+      expect(
+        finishOf(
+          { difficulty: 'Medium', current_list: 'Working on Design', task_prefix: 'Sketch Asset' },
+          '2026-08-03',
+          EMPIRICAL,
+        ),
+      ).toBe(localIso(forecast(card, EMPIRICAL).sketchDelivery));
+    } finally {
+      process.env.TZ = tz;
+    }
   });
 
   it('draws no bar for a card with no difficulty label', async () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'w1', { difficulty: null });
-    const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
-    await agent
-      .patch(`/api/projects/${project._id}/sprint-items/${res.body.id}`)
-      .send({ starts_on: '2026-08-03' })
-      .expect(200);
+    await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
 
     const { rows } = await load(project._id);
     expect(rows[0]!.startsOn).toBe('2026-08-03'); // the row is still placed
@@ -212,10 +270,8 @@ describe('adding a card and plotting its bar are two acts', () => {
   it('un-plots back to the list rather than deleting the row', async () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'w1');
-    const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
-    const url = `/api/projects/${project._id}/sprint-items/${res.body.id}`;
-    await agent.patch(url).send({ starts_on: '2026-08-03' }).expect(200);
-    await agent.patch(url).send({ starts_on: null }).expect(200);
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+    await agent.patch(itemUrl(project._id, id)).send({ starts_on: null }).expect(200);
 
     const { rows } = await load(project._id);
     expect(rows).toHaveLength(1); // still in the sprint's list
@@ -232,11 +288,7 @@ describe('every row is placed by hand, render included (BR-1a)', () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'sketch1');
     await mkCard(project._id, 'render1', { name: 'Render Asset: GCat', task_prefix: 'Render Asset' });
-    const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'sketch1' }).expect(201);
-    await agent
-      .patch(`/api/projects/${project._id}/sprint-items/${res.body.id}`)
-      .send({ starts_on: '2026-08-03' })
-      .expect(200);
+    await addAndPlot(agent, project._id, 'sketch1', String(sprint._id), '2026-08-03');
 
     /* Auto-placing render the moment sketch is forecast to land is exactly the
        helpful thing one adds unprompted — and it removes the control this
@@ -266,11 +318,7 @@ describe('two rules that look alike and are not (#72 §5)', () => {
   it('a card that completes AFTER being scheduled STAYS', async () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'w1');
-    const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
-    await agent
-      .patch(`/api/projects/${project._id}/sprint-items/${res.body.id}`)
-      .send({ starts_on: '2026-08-03' })
-      .expect(200);
+    await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
 
     await WorkCard.updateOne({ project_id: project._id, trello_card_id: 'w1' }, { $set: { current_list: 'Done' } });
 
@@ -354,14 +402,8 @@ describe('one row = one task card = one bar', () => {
     await mkCard(project._id, 'w1', { trello_due: '2026-08-04' });
     await mkCard(project._id, 'w2');
     await Deliverable.updateOne({ trello_card_id: 'main07' }, { $unset: { sheet_deadline: 1 } });
-    const a = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
-    const b = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w2' }).expect(201);
-    for (const id of [a.body.id, b.body.id]) {
-      await agent
-        .patch(`/api/projects/${project._id}/sprint-items/${id}`)
-        .send({ starts_on: '2026-08-03' })
-        .expect(200);
-    }
+    await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+    await addAndPlot(agent, project._id, 'w2', String(sprint._id), '2026-08-03');
 
     const { rows } = await load(project._id);
     const byId = new Map(rows.map((r) => [r.cardId, r]));
@@ -380,10 +422,8 @@ describe('the routes are Sirius-owned planning writes', () => {
   it('audits add, plot and remove (invariant 10)', async () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'w1');
-    const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
-    const url = `/api/projects/${project._id}/sprint-items/${res.body.id}`;
-    await agent.patch(url).send({ starts_on: '2026-08-03' }).expect(200);
-    await agent.delete(url).expect(200);
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+    await agent.delete(itemUrl(project._id, id)).expect(200);
 
     const actions = (await AuditLog.find({ project_id: project._id }).sort({ _id: 1 }).lean()).map((a) => a.action);
     expect(actions).toEqual(['sprintItem.add', 'sprintItem.plot', 'sprintItem.remove']);
@@ -392,14 +432,55 @@ describe('the routes are Sirius-owned planning writes', () => {
   it('records the before AND after of a move, so a plot is reconstructable', async () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'w1');
-    const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
-    const url = `/api/projects/${project._id}/sprint-items/${res.body.id}`;
-    await agent.patch(url).send({ starts_on: '2026-08-03' }).expect(200);
-    await agent.patch(url).send({ starts_on: '2026-08-10' }).expect(200);
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+    await agent.patch(itemUrl(project._id, id)).send({ starts_on: '2026-08-10' }).expect(200);
 
     const moves = await AuditLog.find({ project_id: project._id, action: 'sprintItem.plot' }).sort({ _id: 1 }).lean();
     expect(moves[1]!.before).toMatchObject({ starts_on: '2026-08-03' });
     expect(moves[1]!.after).toMatchObject({ starts_on: '2026-08-10' });
+  });
+
+  /* The move-between-sprints branch. It shipped unexercised in the first pass —
+     no UI writes it yet and no test sent it — which is a write path nobody has
+     ever run. The Schedules rebuild needs it (a row moves when the PM drags it
+     to another sprint's list), so it is covered rather than deleted. */
+  it('moves a row to another sprint, keeping its bar', async () => {
+    const { project, sprint, agent } = await setup();
+    const later = await Sprint.create({
+      project_id: project._id, name: 'Sprint 13', starts_on: '2026-08-17', ends_on: '2026-08-28', position: 1,
+    });
+    await mkCard(project._id, 'w1');
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+    await agent.patch(itemUrl(project._id, id)).send({ sprint_id: String(later._id) }).expect(200);
+
+    const { rows } = await load(project._id);
+    expect(rows[0]!.sprintId).toBe(String(later._id));
+    expect(rows[0]!.startsOn).toBe('2026-08-03'); // the list moved, the bar did not
+  });
+
+  it('refuses a move into another project’s sprint', async () => {
+    const { project, sprint, agent } = await setup();
+    const other = await Project.create({
+      code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22,
+    });
+    const foreignSprint = await Sprint.create({
+      project_id: other._id, name: 'S', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 0,
+    });
+    await mkCard(project._id, 'w1');
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+    await agent.patch(itemUrl(project._id, id)).send({ sprint_id: String(foreignSprint._id) }).expect(404);
+
+    expect((await load(project._id)).rows[0]!.sprintId).toBe(String(sprint._id));
+  });
+
+  it('answers 400 for a malformed id in the BODY and 404 for one in the PATH', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkCard(project._id, 'w1');
+    // same class of bad input used to get two different answers
+    await add(agent, project._id, { sprint_id: 'not-an-id', card_id: 'w1' }).expect(400);
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+    await agent.patch(itemUrl(project._id, id)).send({ sprint_id: 'not-an-id' }).expect(400);
+    await agent.patch(itemUrl(project._id, 'not-an-id')).send({ starts_on: '2026-08-03' }).expect(404);
   });
 
   it('refuses a field Sirius does not own', async () => {
@@ -408,7 +489,7 @@ describe('the routes are Sirius-owned planning writes', () => {
     const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     // strict body: an unknown key is REFUSED, not ignored (src/CLAUDE.md §2)
     await agent
-      .patch(`/api/projects/${project._id}/sprint-items/${res.body.id}`)
+      .patch(itemUrl(project._id, res.body.id))
       .send({ starts_on: '2026-08-03', difficulty: 'Hard' })
       .expect(400);
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1', starts_on: '2026-08-03' })
@@ -419,10 +500,7 @@ describe('the routes are Sirius-owned planning writes', () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'w1');
     const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
-    await agent
-      .patch(`/api/projects/${project._id}/sprint-items/${res.body.id}`)
-      .send({ starts_on: '3 Aug' })
-      .expect(400);
+    await agent.patch(itemUrl(project._id, res.body.id)).send({ starts_on: '3 Aug' }).expect(400);
   });
 
   it('never reaches across projects (invariant 1)', async () => {
@@ -455,7 +533,7 @@ describe('the routes are Sirius-owned planning writes', () => {
       project_id: other._id, sprint_id: sprint._id, mc_number: 'MC-07',
       trello_card_id: 'x', added_by: 'someone@frostdesigngroup.com',
     });
-    const url = `/api/projects/${project._id}/sprint-items/${foreign._id}`;
+    const url = itemUrl(project._id, String(foreign._id));
     await agent.patch(url).send({ starts_on: '2026-08-03' }).expect(404);
     await agent.delete(url).expect(404);
     expect(await SprintItem.countDocuments({ _id: foreign._id })).toBe(1);

@@ -254,9 +254,9 @@ async function loadAll() {
   try {
     /* The `/model` fetch left with the Forecast tab (owl #67): the empirical
        model is applied SERVER-side in the pipeline route, so the browser never
-       needed it except to print the provenance banner. The endpoint stays — the
-       model refresh is still a release gate (invariant 7) and `scripts/gate-t045.ts`
-       reads it. */
+       needed it except to print the provenance banner. The endpoint itself
+       stays — the model refresh is still a release gate (invariant 7), and the
+       gate script reads the model through `loadProjectModel` directly. */
     const [pipeline, requests, deadlines] = await Promise.all([
       api.get(`/api/projects/${pid}/deliverables`),
       api.get(`/api/projects/${pid}/requests`), // §3: one unfiltered fetch — every filter is client-side

@@ -47,10 +47,6 @@
    so a retune cannot leave the key disagreeing with the chart. */
 
 /* ---- tables ---- */
-/* The Forecast tab ran on this sheet's legacy recipes until 2026-08-21 — the
-   green panel, the .grid/.scroll table, the SLA field, the bare `select` rule
-   and an important-flagged header tint. All of it moved to 45-forecast.css and
-   binds to tokens there; nothing else in the app used any of it. */
 
 .dim { color: var(--muted); }
 .nowrap { white-space: nowrap; }

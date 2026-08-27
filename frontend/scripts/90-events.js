@@ -5,7 +5,7 @@ function selectTab(id) {
   closeMenus();
   app.set('activeTab', id);
   if (id === 'admin' && app.get('isAdmin')) loadAdmin();
-  if (id === 'pipeline' || id === 'requests' || id === 'schedules' || id === 'forecast') {
+  if (id === 'pipeline' || id === 'requests' || id === 'schedules') {
     // returning to the tab remounts .pscroll at scrollLeft 0 — recompute the
     // slider so the affordance is never stale (review finding 5). The tab
     // remounts the whole sheet, so the requestor badges are new nodes too.

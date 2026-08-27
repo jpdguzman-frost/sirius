@@ -25,7 +25,11 @@ export function deliverablesRouter(): Router {
     ensureProjectMember,
     async (_req, res) => {
       const projectId = res.locals.project._id;
-      const pipeline = await loadPipeline(projectId, manilaToday(), res.locals.project.weekly_capacity);
+      // the ONE route that returns sprint items — the planner body reads
+      // exactly this fetch (frozen contract §1), so the tab switch stays free
+      const pipeline = await loadPipeline(projectId, manilaToday(), res.locals.project.weekly_capacity, {
+        withSprintItems: true,
+      });
       const sprints = await Sprint.find({ project_id: projectId }).sort({ position: 1 }).lean();
       const lastAres = await SyncRun.findOne({ project_id: projectId, source: 'ares' }).sort({ at: -1 }).lean();
       // FR-8.6: `at`/`ok` describe the last ATTEMPT — that is what the header

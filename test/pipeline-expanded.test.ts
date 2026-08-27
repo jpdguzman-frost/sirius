@@ -596,9 +596,9 @@ describe('a coloured metric tile colours the LABEL as well as the figure', () =>
     expect(renderMetrics(kpi)).toContain('class="metric blue"');
     const rule = cssRule('.metrics .metric.blue .mlabel, .metrics .metric.blue .mvalue', PIPELINE_CSS);
     expect(rule).toContain('var(--blue-500)');
-    // the ramp position, not a second hex: #69 names blue/500 alongside
-    // red/500, green/500 and amber/500
-    expect(TOKENS_CSS).toContain('--blue-500: #3b82f6');
+    // that the token EXISTS, not what it is worth: pinning the hex here would
+    // fail on a palette retune that has nothing to do with this tile
+    expect(TOKENS_CSS).toContain('--blue-500:');
   });
 
   /* THE RULE, not this tile. #69 says "both text nodes take the colour" and

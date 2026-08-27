@@ -486,6 +486,11 @@ const sprintItemSchema = new Schema(
 );
 sprintItemSchema.index({ project_id: 1, trello_card_id: 1 }, { unique: true });
 sprintItemSchema.index({ project_id: 1, sprint_id: 1, position: 1 });
+/* The load reads a whole project's rows in `position` order. Without this the
+   compound index above cannot serve it — `position` is not a usable prefix
+   when only `project_id` is bound — so Mongo does a blocking in-memory sort.
+   Harmless at PM-authored row counts; it is here so it stays harmless. */
+sprintItemSchema.index({ project_id: 1, position: 1 });
 
 const syncRunSchema = new Schema(
   {

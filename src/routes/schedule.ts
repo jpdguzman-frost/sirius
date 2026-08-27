@@ -23,6 +23,15 @@ import { isHolidayDate, weekDays } from '../../lib/dayplan.ts';
 
 const DATE_ONLY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+/* A Mongo id, validated IN THE SCHEMA rather than re-checked in the body.
+   Written as a `min(1)` string plus a separate `isValid` branch first, which
+   put the same four lines in two routes and — worse — answered 400 for a
+   malformed `sprint_id` while the path-parameter check answered 404 for a
+   malformed item id. Same class of bad input, two different answers. Zod owns
+   it now, so a bad id in a BODY is a 400 with issues like every other field,
+   and a bad id in a PATH stays a 404 because an unroutable id names nothing. */
+const OBJECT_ID = z.string().refine((v) => Types.ObjectId.isValid(v), { message: 'not an id' });
+
 
 const planningPatch = z
   .object({
@@ -390,7 +399,7 @@ export function scheduleRouter(): Router {
     ensureProjectMember,
     async (req, res) => {
       const body = z
-        .object({ sprint_id: z.string().min(1), card_id: z.string().min(1) })
+        .object({ sprint_id: OBJECT_ID, card_id: z.string().min(1) })
         .strict()
         .safeParse(req.body);
       if (!body.success) {
@@ -400,15 +409,20 @@ export function scheduleRouter(): Router {
       const projectId = res.locals.project._id as Types.ObjectId;
       const actor = (req.user as SessionUser).email;
 
-      if (!Types.ObjectId.isValid(body.data.sprint_id)) {
-        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
-        return;
-      }
-      /* Both looked up UNDER THE PROJECT (invariant 1) — a sprint id or a card
-         id from another project is a 404 here, not a cross-project write. */
-      const [sprint, card] = await Promise.all([
-        Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId }).lean(),
-        WorkCard.findOne({ project_id: projectId, trello_card_id: body.data.card_id, active: true }).lean(),
+      /* All three UNDER THE PROJECT (invariant 1) — a sprint id or a card id
+         from another project is a 404 here, not a cross-project write. The
+         tail probe depends only on the id already validated above, not on the
+         sprint document, so it belongs in the same round trip rather than
+         after it. */
+      const [sprint, card, last] = await Promise.all([
+        Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId }).select({ _id: 1 }).lean(),
+        WorkCard.findOne({ project_id: projectId, trello_card_id: body.data.card_id, active: true })
+          .select({ trello_card_id: 1, mc_number: 1, current_list: 1 })
+          .lean(),
+        SprintItem.findOne({ project_id: projectId, sprint_id: body.data.sprint_id })
+          .sort({ position: -1 })
+          .select({ position: 1 })
+          .lean(),
       ]);
       if (!sprint || !card) {
         res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
@@ -426,10 +440,6 @@ export function scheduleRouter(): Router {
         return;
       }
 
-      const last = await SprintItem.findOne({ project_id: projectId, sprint_id: sprint._id })
-        .sort({ position: -1 })
-        .select({ position: 1 })
-        .lean();
       try {
         const created = await SprintItem.create({
           project_id: projectId,
@@ -474,7 +484,7 @@ export function scheduleRouter(): Router {
     ensureProjectMember,
     async (req, res) => {
       const body = z
-        .object({ starts_on: DATE_ONLY.nullable().optional(), sprint_id: z.string().min(1).optional() })
+        .object({ starts_on: DATE_ONLY.nullable().optional(), sprint_id: OBJECT_ID.optional() })
         .strict()
         .safeParse(req.body);
       if (!body.success || Object.keys(body.data).length === 0) {
@@ -488,24 +498,25 @@ export function scheduleRouter(): Router {
         res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
         return;
       }
-      const item = await SprintItem.findOne({ _id: itemId, project_id: projectId });
+      /* Independent lookups, one round trip. The item stays hydrated because
+         it is saved below; only the sprint's EXISTENCE is in question, and its
+         id is the one already validated. */
+      const [item, sprint] = await Promise.all([
+        SprintItem.findOne({ _id: itemId, project_id: projectId }),
+        body.data.sprint_id === undefined
+          ? Promise.resolve(null)
+          : Sprint.exists({ _id: body.data.sprint_id, project_id: projectId }),
+      ]);
       if (!item) {
         res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
         return;
       }
-      const before = { starts_on: item.starts_on ?? null, sprint_id: String(item.sprint_id) };
-      if (body.data.sprint_id !== undefined) {
-        if (!Types.ObjectId.isValid(body.data.sprint_id)) {
-          res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
-          return;
-        }
-        const sprint = await Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId }).lean();
-        if (!sprint) {
-          res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
-          return;
-        }
-        item.sprint_id = sprint._id;
+      if (body.data.sprint_id !== undefined && !sprint) {
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+        return;
       }
+      const before = { starts_on: item.starts_on ?? null, sprint_id: String(item.sprint_id) };
+      if (body.data.sprint_id !== undefined) item.sprint_id = new Types.ObjectId(body.data.sprint_id);
       if (body.data.starts_on !== undefined) item.starts_on = body.data.starts_on ?? undefined;
       await item.save();
       await audit({

@@ -27,21 +27,12 @@
  */
 
 import { Types } from 'mongoose';
-import { workday } from '../../lib/calendar.ts';
-import { designCell, CONFIDENCE_LEVELS, type EmpiricalModel } from '../../lib/model.ts';
-import { Deliverable, SprintItem, WorkCard } from '../models/index.ts';
+import { localIso } from '../../lib/calendar.ts';
+import { forecast } from '../../lib/forecast.ts';
+import type { EmpiricalModel } from '../../lib/model.ts';
+import { SprintItem } from '../models/index.ts';
 import { classifyList } from './status-rules.ts';
-
-const localDate = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-/**
- * A phase's lead time, in working days. 0.5 for both sketch and render, from
- * `lib/forecast.ts`'s own preserved source semantics — quoted, not re-derived,
- * because the engine is a verbatim port and must stay the only place forecast
- * arithmetic happens (invariants 5-7).
- */
-const PHASE_LEAD = 0.5;
+import type { PipelineRow, WorkCardDoc } from './pipeline.ts';
 
 /** One scheduled row as the Sprint Schedules tab consumes it. */
 export interface SprintItemRow {
@@ -107,22 +98,48 @@ const laneInputs = (w: { current_list?: string | null; task_prefix?: string | nu
 });
 
 /**
- * One bar's finish. `lead + design` for the card's own difficulty × lane at
- * the project's confidence, counted on the working-day calendar (invariant
- * 11). Review is deliberately absent: this is ONE phase, and the wait between
- * phases belongs to neither of them — which is the whole reason #72 split the
- * row in two.
+ * One bar's finish: `lead + design` for the card's own difficulty × lane,
+ * counted on the working-day calendar. Review is deliberately absent — this is
+ * ONE phase, and the wait between phases belongs to neither of them, which is
+ * the whole reason #72 split the row in two.
+ *
+ * THE ENGINE COMPUTES IT, we only read it. `sketchDelivery` is precisely
+ * `WORKDAY(start, lead + design)` (`lib/forecast.ts:70`), so calling `forecast`
+ * and taking that one field is the same number the Pipeline forecast is built
+ * from rather than a second derivation of it. It is read for a RENDER row too:
+ * the engine's render lead and render design equal the sketch pair by
+ * construction, and its own note says the four fields are read separately so
+ * the day they stop being equal the tables show it.
+ *
+ * Written the short way first — `workday(startsOn, 0.5 + designCell(...))` —
+ * and that was wrong twice over. It transcribed the engine's `0.5` lead, so a
+ * change there would have moved the Pipeline warning and left these bars
+ * behind while the file's own header promised the two can never disagree; and
+ * it handed `workday` a RAW STRING, which `new Date()` reads as UTC midnight.
+ * West of UTC that starts the walk a day early: verified `2026-08-04` against
+ * `2026-08-05` under `America/New_York`. The dual-TZ suite runs UTC and Manila,
+ * both at or ahead of UTC, so nothing in CI could ever have caught it.
+ * `forecast` parses with `parseDate` (local midnight) as every other caller in
+ * the repo does.
+ *
+ * CONFIDENCE: the caller passes none, so every bar is drawn at the engine's
+ * default percentile. Deliberate but NOT ruled — confidence is a per-deliverable
+ * field and the unit here is a task card, which has none; taking the MC group's
+ * would need a rule for a group that disagrees with itself, exactly as the
+ * deadline below does. Raised to product rather than guessed at.
  */
 export function finishOf(
   card: { difficulty?: string | null; current_list?: string | null; task_prefix?: string | null },
   startsOn: string,
   model: EmpiricalModel,
-  confidence: string = CONFIDENCE_LEVELS[1]!.key,
+  confidence?: string,
 ): string | null {
   if (!card.difficulty) return null; // no label → no design cell → nothing to draw
-  const cell = designCell({ difficulty: card.difficulty, ...laneInputs(card) }, model);
-  const design = cell[confidence as keyof typeof cell] ?? cell['0.7'];
-  return localDate(workday(startsOn, PHASE_LEAD + (design as number)));
+  const f = forecast(
+    { difficulty: card.difficulty, ...laneInputs(card), startDate: startsOn, confidence },
+    model,
+  );
+  return localIso(f.sketchDelivery);
 }
 
 /**
@@ -147,20 +164,30 @@ function deadlineFor(
   return card.trello_due ?? mcDeadline.get(card.mc_number) ?? null;
 }
 
+/**
+ * ONE query. The work cards and the deliverable rows are handed in by
+ * `loadPipeline`, which has just read both.
+ *
+ * It fetched them itself at first, with `WorkCard.find({project_id, active})`
+ * byte-identical to the caller's own line and a `Deliverable.find` re-reading
+ * what the caller already had as `rows`. That cost ~478 extra documents per
+ * call — doubled in practice, because the client fires `/deliverables` and
+ * `/deadlines` in one `Promise.all` and both go through `loadPipeline`.
+ *
+ * Taking `rows` rather than raw deliverables also removes a second spelling of
+ * BR-9: `rows[].deadline` is resolved by the `deliverables_v` view, which
+ * invariant 14 names as the ONE home for "Trello due wins, else the sheet".
+ * The re-derivation here was a fourth copy of that rule.
+ */
 export async function loadSprintItems(
   projectId: Types.ObjectId,
   model: EmpiricalModel,
+  workCards: WorkCardDoc[],
+  deliverableRows: PipelineRow[],
 ): Promise<SprintItemsResult> {
-  const [items, workCards, deliverables] = await Promise.all([
-    SprintItem.find({ project_id: projectId }).sort({ position: 1 }).lean(),
-    WorkCard.find({ project_id: projectId, active: true }).lean(),
-    Deliverable.find({ project_id: projectId, active: true })
-      .select({ mc_number: 1, sheet_deadline: 1, trello_due: 1, urgency: 1 })
-      .lean(),
-  ]);
+  const items = await SprintItem.find({ project_id: projectId }).sort({ position: 1 }).lean();
 
-  /* Earliest client date per MC group — see `deadlineFor` for why earliest.
-     BR-9 precedence within a deliverable: Trello due wins, else the sheet. */
+  /* Earliest client date per MC group — see `deadlineFor` for why earliest. */
   const mcDeadline = new Map<string, string>();
   /* Urgency is an MC-GROUP attribute, not a task one: the `Urgent` label lives
      on the main card and task cards carry no labels at all. Owl #45 already
@@ -169,12 +196,12 @@ export async function loadSprintItems(
      card IS the row, so it has to show something — and the honest something is
      the group's: any urgent main card under the MC makes the group urgent. */
   const mcUrgent = new Set<string>();
-  for (const d of deliverables) {
-    if (d.urgency === 'Urgent') mcUrgent.add(d.mc_number as string);
-    const deadline = (d.trello_due as string | null) ?? (d.sheet_deadline as string | null) ?? null;
-    if (!deadline) continue;
-    const held = mcDeadline.get(d.mc_number as string);
-    if (!held || deadline < held) mcDeadline.set(d.mc_number as string, deadline);
+  for (const d of deliverableRows) {
+    if (!d.mcNumber) continue;
+    if (d.urgency === 'Urgent') mcUrgent.add(d.mcNumber);
+    if (!d.deadline) continue;
+    const held = mcDeadline.get(d.mcNumber);
+    if (!held || d.deadline < held) mcDeadline.set(d.mcNumber, d.deadline);
   }
 
   const byId = new Map(workCards.map((w) => [w.trello_card_id as string, w]));
@@ -183,7 +210,7 @@ export async function loadSprintItems(
      the list rather than vanishing — the schedule is the record of what was
      planned (#72 §5), and a card can be archived in Trello after being
      scheduled. It renders with what the row itself carries and no bar. */
-  const rows: SprintItemRow[] = items.map((it, i) => {
+  const rows: SprintItemRow[] = items.map((it) => {
     const w = byId.get(it.trello_card_id as string);
     const startsOn = (it.starts_on as string | null) ?? null;
     const finish = w && startsOn ? finishOf(w, startsOn, model) : null;
@@ -204,7 +231,7 @@ export async function loadSprintItems(
       finish,
       deadline,
       late: Boolean(finish && deadline && finish > deadline),
-      position: (it.position as number) ?? i,
+      position: it.position as number,
     };
   });
 
