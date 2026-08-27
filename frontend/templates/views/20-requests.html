@@ -121,7 +121,7 @@
                        so ran back to the checkbox's left edge. -->
                   <div class="noteedit" on-keydown="['noteKeydown']">
                     <div class="nefield">
-                      <textarea rows="3" class="{{#if noteDraft.clarify}}flagged{{/if}}" placeholder="Add a remark or a clarification" value="{{noteDraft.remark}}" autofocus></textarea>
+                      <textarea rows="1" on-input="['noteGrow']" placeholder="Add a remark or a clarification" value="{{noteDraft.remark}}" autofocus></textarea>
                       <label class="nchk"><input type="checkbox" checked="{{noteDraft.clarify}}" /><span class="nchktext"><span class="nlabel">With Clarification</span><span class="nsub">Marks the request as not fileable yet</span></span></label>
                     </div>
                     {{#if noteError}}<span class="nerr">{{noteError}}</span>{{/if}}

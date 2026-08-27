@@ -296,12 +296,17 @@ describe('frame 731:101090 — the note editor', () => {
   const editor = () => cssRule('.noteedit', REQUESTS_CSS);
 
   it('carries THREE distinct gaps, not one uniform gap', () => {
-    /* The whole block was a single 6px column. The frame is 4 between the
-       field and the checkbox, 4 between the label and its helper, and 16
-       before the buttons. One gap value cannot express that, so the miss was
-       structural rather than numeric — hence the wrapper element. */
+    /* The whole block was a single 6px column. One gap value cannot express
+       three numbers, so the miss was structural rather than numeric — hence
+       the wrapper element.
+
+       Field -> checkbox is 12 and NOT the frame's 4: JP overruled it on
+       2026-08-27 after seeing it built. At our column width the field hugs to
+       two lines rather than the frame's three, and 4px read as the checkbox
+       being stuck to the box instead of following it. The other two are the
+       frame's own — 4 label -> helper, 16 before the buttons. */
     expect(editor()).toContain('gap: var(--space-16)');
-    expect(cssRule('.noteedit .nefield', REQUESTS_CSS)).toContain('gap: var(--space-4)');
+    expect(cssRule('.noteedit .nefield', REQUESTS_CSS)).toContain('gap: var(--space-12)');
     expect(cssRule('.noteedit .nchktext', REQUESTS_CSS)).toContain('gap: var(--space-4)');
     expect(cssRule('.noteedit .nchk', REQUESTS_CSS)).toContain('gap: var(--space-8)');
   });
@@ -347,6 +352,68 @@ describe('frame 731:101090 — the note editor', () => {
 
   it('pads the resting box 12 at the sides', () => {
     expect(cssRule('.notewrap .addremark', REQUESTS_CSS)).toContain('padding: 0 12px');
+  });
+
+  it('does NOT recolour the field when the flag is ticked', () => {
+    /* Withdrawn 2026-08-27. Node 731:101140 IS the ticked state — the
+       component reads `isClicked: Yes` and the box draws ticked — and its
+       text is slate-900 at 12/140%, identical to unticked. The build turned
+       it red, which also pre-announced a treatment that belongs to the SAVED
+       state, where the badge and the quote bar carry it.
+
+       Owl #15's ruling (ONE box: the remark carries both the note and the
+       clarification, so there is no second field) is UNAFFECTED and is what
+       the single textarea still implements — the recolour was an affordance
+       laid on top of it. Asserted on the class as well as the colour, so the
+       template cannot re-stamp a hook for a rule that no longer exists. */
+    const declared = REQUESTS_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(declared).not.toContain('textarea.flagged');
+    const at = TEMPLATE.indexOf('class="noteedit"');
+    const editor = TEMPLATE.slice(at, TEMPLATE.indexOf('</div>', TEMPLATE.indexOf('nchktext', at)));
+    expect(editor).toContain('<textarea');
+    expect(editor).not.toContain('flagged');
+    // the saved state keeps its own flagged hook — a different element
+    expect(declared).toContain('.notebox.flagged');
+  });
+
+  it('lets the field HUG its text instead of offering a drag handle', () => {
+    /* The frame's Field is HUG vertically and its text auto-resizes by
+       HEIGHT, so its 75px is what three lines at 288 wide happen to make —
+       not a size. The build pinned three rows and offered `resize: vertical`,
+       which showed a drag handle the frame does not have and left visible
+       slack whenever the text wrapped to fewer lines than the pin.
+
+       Only a browser proves the sizing (test/CLAUDE.md 4); measured live on
+       2026-08-27 at the built column width: 1 line 41px, 2 lines 58px, a long
+       note 108px with no scrollbar, and back to 41px on delete. Three lines
+       at the frame's own 288 would be 76 — the frame's 75 plus the border. */
+    const ta = cssRule('.noteedit textarea', REQUESTS_CSS);
+    expect(ta).toContain('resize: none');
+    expect(ta).toContain('overflow: hidden'); // hugging means nothing to scroll
+    expect(ta).not.toMatch(/(?:^|[\s;])height:/);
+    expect(TEMPLATE).toContain("on-input=\"['noteGrow']\"");
+    expect(TEMPLATE).not.toContain('rows="3"');
+  });
+
+  it('clears the height BEFORE measuring, so the field can shrink again', () => {
+    /* The one-way-growth trap: scrollHeight reports the greater of the
+       content and the box, so a field measured without clearing grows and
+       never comes back. Executed, not read — the shipped function is run
+       against a stub that records the order of writes. */
+    const grow = new Function(`${decl(APP_JS, 'noteGrow')} return noteGrow;`)() as (
+      el: unknown,
+    ) => void;
+    const writes: string[] = [];
+    grow({
+      scrollHeight: 96,
+      style: {
+        set height(v: string) {
+          writes.push(v);
+        },
+      },
+    });
+    expect(writes).toEqual(['auto', '96px']);
+    expect(() => grow(null)).not.toThrow();
   });
 });
 

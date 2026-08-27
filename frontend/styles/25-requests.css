@@ -233,24 +233,34 @@
 
 /* ---- the editor's THREE gaps, which are three different numbers (frame
    731:101140, read through Rex 2026-08-27; the build had one uniform 6px).
-   Field -> checkbox is 4, label -> helper is 4, and the whole block -> the
-   button row is 16. A single gap cannot say that, so the field and the
-   checkbox are wrapped in their own 4px column. The error line stays a direct
-   child: it belongs with the buttons, at the 16px distance, not welded to the
-   checkbox. ---- */
+   Label -> helper is 4 and the whole block -> the button row is 16, both from
+   the frame. FIELD -> CHECKBOX IS 12, NOT THE FRAME'S 4 — JP 2026-08-27,
+   after seeing it built: at our column width the field hugs to two lines
+   rather than the frame's three, and 4px reads as the checkbox being stuck to
+   the box rather than following it. A single gap cannot say three numbers, so
+   the field and the checkbox are wrapped in their own column. The error line
+   stays a direct child: it belongs with the buttons, at the 16px distance,
+   not welded to the checkbox. ---- */
 .noteedit { display: flex; flex-direction: column; gap: var(--space-16); }
-.noteedit .nefield { display: flex; flex-direction: column; gap: var(--space-4); }
+.noteedit .nefield { display: flex; flex-direction: column; gap: var(--space-12); }
 /* padding 12, not 8 — and the frame's 75px height falls straight out of it:
    three rows at 12/1.4 (50.4) + 12 + 12 + the 1px borders. Setting the height
    as well would state the same measurement twice and fight `rows`. */
 .noteedit textarea {
   font-family: var(--font-sans); font-size: var(--text-label); line-height: 1.4; color: var(--surface-foreground);
   background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
-  padding: 12px; resize: vertical; width: 100%; box-sizing: border-box;
+  padding: 12px; resize: none; overflow: hidden; width: 100%; box-sizing: border-box;
 }
-/* ticking the flag recolours THE SAME box — there is no second field to show
-   (owl #15); unticking reverts it */
-.noteedit textarea.flagged { color: var(--red-500); }
+/* WITHDRAWN 2026-08-27 (JP, node 731:101140): ticking the flag used to
+   recolour the field's text red. The frame settles it — that node IS the
+   ticked state (`isClicked: Yes`, and the box draws ticked) and its text is
+   slate-900 at 12/140%, the same as unticked. Red in the editor also
+   pre-announced a treatment that only belongs to the SAVED state, where the
+   badge and the quote bar carry it.
+   Owl #15's actual ruling — ONE box, because the remark carries both the note
+   and the clarification and there is no second field — is untouched and is
+   what the single textarea above still implements. The recolour was our
+   affordance on top of it, not #15's words. */
 .noteedit textarea:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 0; }
 /* ---- the checkbox row. The helper line sits in the LABEL's column, not the
    checkbox's — in the frame both texts share one 21px-indented stack beside

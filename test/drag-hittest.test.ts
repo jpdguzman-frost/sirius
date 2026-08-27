@@ -729,9 +729,41 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     for (const el of TEMPLATE_ELEMENTS) expect(styleOf(el)).not.toMatch(/pointer-events/i);
     for (const src of DRAG_SOURCES) expect(styleOf(src)).not.toMatch(/pointer-events|visibility|display/i);
     for (const { js } of SCRIPTS) {
+      // the properties that actually take an element out of hit-testing:
+      // banned outright, in every script, with no way to opt out
+      expect(js).not.toMatch(/\.style\.(pointerEvents|visibility|display)\b/);
       expect(js).not.toMatch(/pointerEvents/);
-      expect(js).not.toMatch(/\.style\b/);
+      expect(js).not.toMatch(/cssText/); // sets every property at once
+      /* ...and then the BLANKET ban on touching `.style` at all, which is what
+         has kept the sweep above honest: a CSS guard cannot see an inline
+         write, so the cheapest way to keep inline writes visible is to have
+         none. That is still the rule. It is not absolute any more, because a
+         blanket ban on an entire DOM API is a proxy for the real rule and a
+         proxy eventually blocks correct work — it blocked the Requests note
+         field, which hugs its text and must therefore write its own height
+         (frame 731:101140, JP 2026-08-27).
+         The exemption is BY EXACT TEXT, not by property or by file: adding a
+         write means adding it here, in front of whoever is reading this rule.
+         Nothing on this list may touch geometry a drag reads — height on a
+         textarea in the Requests table is not a gantt drag source, is not an
+         ancestor of one, and cannot become one without this list changing. */
+      const SAFE_INLINE_WRITES = [
+        "el.style.height = 'auto';",
+        'el.style.height = `${el.scrollHeight}px`;',
+      ];
+      let rest = js;
+      for (const w of SAFE_INLINE_WRITES) rest = rest.split(w).join('');
+      expect(rest).not.toMatch(/\.style\b/);
     }
+  });
+
+  it('keeps the inline-style exemption list SHORT and used', () => {
+    /* An allow-list that outlives its entries stops being a decision and
+       becomes a hole. Both entries belong to one function; if `noteGrow` goes,
+       the list goes with it. */
+    const all = SCRIPTS.map((s) => s.js).join('\n');
+    expect(all).toContain('const noteGrow =');
+    expect([...all.matchAll(/\.style\b/g)]).toHaveLength(2);
   });
 
   /**

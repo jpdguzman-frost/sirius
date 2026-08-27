@@ -137,3 +137,17 @@ app.set('footCls', (weekKey) => {
   return t.hardWarn ? 'warn' : '';
 });
 
+/* ---- the note field hugs its text (frame 731:101140) ----------------------
+   The Field in that frame is HUG vertically and its text auto-resizes by
+   HEIGHT, so its 75px is the outcome of three lines at 288 wide, not a size
+   to pin. Hugging is also why the build offers no drag handle: `resize` was
+   ours, and a handle for something that already fits is an affordance that
+   does nothing.
+   The height is CLEARED before scrollHeight is read — scrollHeight reports
+   the greater of the content and the box, so measuring without clearing
+   makes the field one-way: it would grow and never come back. */
+const noteGrow = (el) => {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+};

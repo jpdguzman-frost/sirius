@@ -21,7 +21,7 @@ const FRONTEND_SHARED = [
   'fmtInstant', 'fmtLongIso', 'fmtMonthDay', 'fmtRange', 'fridayIso', 'HARD_CEILING',
   'HARD_IDEAL', 'initialRoute', 'isoAddDays', 'isoNextMonday', 'isoOf', 'itemCount',
   'loadAdmin', 'loadAll', 'loadShell', 'MANILA_TIME', 'manilaToday', 'mcRank',
-  'mondayIso', 'mondaysBetween', 'monthOf', 'monthOrder', 'MONTHS_LONG', 'MONTHS_SHORT', 'OVERLAY_EDGE',
+  'mondayIso', 'mondaysBetween', 'noteGrow', 'monthOf', 'monthOrder', 'MONTHS_LONG', 'MONTHS_SHORT', 'OVERLAY_EDGE',
   'monthShiftYm', 'monthShort', 'normalizeUrl', 'noteText', 'NUDGE_PX', 'openOverlay', 'openMeasured', 'openHoverOverlay', 'leaveHoverOverlay', 'OVERLAY_ANCHORED', 'scheduleHoverClose', 'OVERLAY_SHIELDS', 'OVERLAY_SHIELD', 'OVERLAY_SELF_SCROLL',
   'PIPE_COLS', 'pipeColLabel', 'PIPE_FILTERS', 'PIPE_FILTERS_EMPTY', 'PIPE_SORTS', 'PIPE_SORT_DEFAULT', 'pipeCompare', 'pipeSortRows',
   'PIPE_MENU_W', 'pipeBackToTop',

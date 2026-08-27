@@ -140,11 +140,21 @@ app.on({
       noteDraft: { remark: noteText(n), clarify: !!(n && n.clarify) },
       noteError: '',
     });
+    // the field is created by the set above, so it can only be sized on the
+    // next frame — same rAF-after-render idiom the overlays use
+    requestAnimationFrame(() => noteGrow(document.querySelector('.noteedit textarea')));
   },
   noteKeydown(ctx) {
     ctx.event.stopPropagation(); // textareas own their keys
     if (ctx.event.key === 'Escape') app.set({ noteEditing: null, noteError: '' });
   },
+  /* The field HUGS its text (frame 731:101140 — the Field is HUG vertically
+     and its text auto-resizes by HEIGHT; the frame's 75px is what three lines
+     at that width happen to make, not a size). So there is no scrollbar and
+     no drag handle to offer: `noteGrow` is what replaces `resize: vertical`.
+     Height is cleared before it is read, because scrollHeight never shrinks
+     below the height already set. */
+  noteGrow(ctx) { noteGrow(ctx.node); },
   cancelNote() { app.set({ noteEditing: null, noteError: '' }); },
   async submitNote(_ctx, mc) {
     const d = app.get('noteDraft');
