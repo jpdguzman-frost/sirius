@@ -342,14 +342,13 @@ export function scheduleRouter(): Router {
          kept rather than a surprise. An unknown id is refused, not treated as
          new: the client only ever sends ids it was handed, so an unknown one
          means the modal is editing a stale world and must reload. */
-      const alive = new Map(before.map((b) => [String(b._id), b]));
+      const alive = new Set(before.map((b) => String(b._id)));
       const sorted = [...body.data.sprints].sort((a, b) => (a.start < b.start ? -1 : 1));
-      const unknown = sorted.filter((sp) => sp.id && !alive.has(sp.id));
-      if (unknown.length > 0) {
+      const keptIds = new Set(sorted.flatMap((sp) => (sp.id ? [sp.id] : [])));
+      if ([...keptIds].some((id) => !alive.has(id))) {
         res.status(409).json({ ok: false, error: { code: 'SPRINTS_STALE', message: 'The sprint list changed since this modal opened — reload and re-apply the edit.' } });
         return;
       }
-      const keptIds = new Set(sorted.filter((sp) => sp.id).map((sp) => sp.id as string));
       const removedIds = before.filter((b) => !keptIds.has(String(b._id))).map((b) => b._id);
       const orphaned = removedIds.length
         ? await SprintItem.find({ project_id: projectId, sprint_id: { $in: removedIds } }).lean()

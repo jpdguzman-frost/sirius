@@ -42,7 +42,7 @@ function monthShiftYm(ym, delta) {
    sprint that still exists after a rename. A draft-added row has no id yet
    and sends none. sprintDirty compares this same shape, so an unchanged
    list still reads clean. */
-const sprintPayload = (s) => (s.id ? { id: s.id, name: s.name, start: s.start, end: s.end } : { name: s.name, start: s.start, end: s.end });
+const sprintPayload = (s) => ({ ...(s.id ? { id: s.id } : {}), name: s.name, start: s.start, end: s.end });
 
 function mondayIso(base) {
   const d = new Date(base + 'T00:00:00');
