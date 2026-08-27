@@ -113,10 +113,17 @@
                    read the affordance aloud and hide the note it is showing. -->
               <td class="col-rnote"><div class="notewrap">
                 {{#if noteEditing === r.mc_number}}
+                  <!-- frame 731:101140, applied 2026-08-27. The field and the
+                       checkbox share a 4px column; the whole block clears the
+                       buttons by 16. The helper line is nested INSIDE the
+                       label so it aligns under the label text rather than
+                       under the box — it was a sibling of the row before, and
+                       so ran back to the checkbox's left edge. -->
                   <div class="noteedit" on-keydown="['noteKeydown']">
-                    <textarea rows="3" class="{{#if noteDraft.clarify}}flagged{{/if}}" placeholder="Add a remark or a clarification" value="{{noteDraft.remark}}" autofocus></textarea>
-                    <label class="nchk"><input type="checkbox" checked="{{noteDraft.clarify}}" /> With Clarification</label>
-                    <div class="nsub">Marks the request as not fileable yet</div>
+                    <div class="nefield">
+                      <textarea rows="3" class="{{#if noteDraft.clarify}}flagged{{/if}}" placeholder="Add a remark or a clarification" value="{{noteDraft.remark}}" autofocus></textarea>
+                      <label class="nchk"><input type="checkbox" checked="{{noteDraft.clarify}}" /><span class="nchktext"><span class="nlabel">With Clarification</span><span class="nsub">Marks the request as not fileable yet</span></span></label>
+                    </div>
                     {{#if noteError}}<span class="nerr">{{noteError}}</span>{{/if}}
                     <div class="nbtns"><button class="nghost" on-click="['cancelNote']">Cancel</button><button class="nsubmit" on-click="['submitNote', r.mc_number]">Submit</button></div>
                   </div>

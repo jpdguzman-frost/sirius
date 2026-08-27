@@ -80,6 +80,16 @@
      number or the capped box reads as "fits now" and oscillates. */
   --warn-vclamp: 32px;
 
+  /* Checkbox-With-Label fills (Figma component 77:1127, read through Rex
+     2026-08-27, frame 731:101090). RAW fills in the design — no library
+     variable binds them, so they are named here for their ROLE rather than
+     1:1 with the file like the palette above. Deliberately NOT folded into
+     the slate ramp: both are bluer than any slate at the same lightness, and
+     aliasing them to slate-700/slate-500 is exactly the "close enough" that
+     would quietly undo the spec. */
+  --checkbox-label: #445c85;
+  --checkbox-sublabel: #6780a9;
+
   /* semantic aliases used by the annotations */
   --surface-background: var(--white);
   --surface-foreground: var(--slate-900);

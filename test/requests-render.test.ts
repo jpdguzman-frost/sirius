@@ -21,6 +21,7 @@ import {
   APP_JS,
   REQUESTS_CSS,
   TEMPLATE,
+  TOKENS_CSS,
   type ReqNote,
   type ReqRow,
   cssRule,
@@ -171,6 +172,9 @@ describe('the clarification colourway dresses one element (CSS)', () => {
     const pill = cssRule('.notewrap .clarpill', REQUESTS_CSS);
     expect(pill).toContain('var(--red-50)');
     expect(pill).toContain('var(--red-500)');
+    // ...and the three reds are three SEPARATE roles — see the frame guard at
+    // the bottom of this file. A bare `toContain('--red-500')` passed while
+    // the stroke was the wrong red, because the LABEL is red-500 too.
   });
 
   it('leaves the two surviving status recipes exactly as owl #17 tuned them', () => {
@@ -229,5 +233,160 @@ describe('a note save cannot move the status any more', () => {
     expect(APP_JS).not.toContain('STATUS_CLARIFY');
     expect(APP_JS).not.toContain('STATUS_TO_FILE');
     expect(APP_JS).not.toContain('statusClarify');
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* Frame 731:101090 — the fifteen specs validated on 2026-08-27            */
+/*                                                                         */
+/* Thirteen were applied; JP pulled two (the tick box and the button pair). */
+/* This block guards BOTH outcomes, because the dangerous move here is not  */
+/* undoing an applied spec — it is a later pass "finishing the job" from a  */
+/* frame whose remaining items were declined on purpose.                    */
+/*                                                                         */
+/* Every value below was read from the NODE through Rex, never from the     */
+/* annotation prose. That distinction is not pedantry on this file: the     */
+/* frame's own annotation states the badge's stroke and label as the same   */
+/* red when the design draws them differently, and states the tick box's    */
+/* corner as 4 when the design draws 2 — the third and fourth time          */
+/* annotation text has disagreed with its own geometry here (see owl #51    */
+/* and the Pipeline row's amber).                                           */
+/* ---------------------------------------------------------------------- */
+
+describe('frame 731:101090 — the three narrowed columns', () => {
+  it('narrows YEAR, MONTH and USE CASE, and leaves every other width alone', () => {
+    /* These three were specced in a revision and never landed, which is how
+       the drift was found: every OTHER column already matched the frame to
+       the pixel, so three misses in a row could not be coincidence. Pinned
+       with their frame nodes — 101106 / 101107 / 101111. */
+    expect(cssRule('.rtable .col-ryear', REQUESTS_CSS)).toContain('width: 80px');
+    expect(cssRule('.rtable .col-rmonth', REQUESTS_CSS)).toContain('width: 80px');
+    expect(cssRule('.rtable .col-rcase', REQUESTS_CSS)).toContain('width: 160px');
+    // the untouched ones, so a future sweep cannot "tidy" them to match
+    expect(cssRule('.rtable .col-rmc', REQUESTS_CSS)).toContain('width: 120px');
+    expect(cssRule('.rtable .col-rdue', REQUESTS_CSS)).toContain('width: 128px');
+    expect(cssRule('.rtable .col-rstatus', REQUESTS_CSS)).toContain('width: 136px');
+    expect(cssRule('.rtable .col-rnote', REQUESTS_CSS)).toContain('width: 320px');
+  });
+});
+
+describe('frame 731:101090 — the clarification badge wears THREE reds', () => {
+  it('fills red-50, strokes red-600 and labels red-500 — all different', () => {
+    /* The stroke was red-500 until 2026-08-27. It survived a green suite
+       because the old guard asked whether the rule CONTAINED red-500, and the
+       label satisfied that on its own. Each role is now asserted where it
+       lives, so no single wrong colour can hide behind a right one. */
+    const pill = cssRule('.notewrap .clarpill', REQUESTS_CSS);
+    expect(pill).toMatch(/background:\s*var\(--red-50\)/);
+    expect(pill).toMatch(/border:\s*1px solid var\(--red-600\)/);
+    expect(pill).toMatch(/color:\s*var\(--red-500\)/);
+  });
+
+  it('keeps the note text and the quote bar on the OTHER two reds', () => {
+    /* The frame's annotation has these two backwards as well; the build was
+       already right and following the prose would have swapped a correct
+       pair. Bar red-500, text red-600 — the inverse of the badge. */
+    const note = cssRule('.notewrap .clarnote', REQUESTS_CSS);
+    expect(note).toContain('border-left: 4px solid var(--red-500)');
+    expect(note).toContain('color: var(--red-600)');
+  });
+});
+
+describe('frame 731:101090 — the note editor', () => {
+  const editor = () => cssRule('.noteedit', REQUESTS_CSS);
+
+  it('carries THREE distinct gaps, not one uniform gap', () => {
+    /* The whole block was a single 6px column. The frame is 4 between the
+       field and the checkbox, 4 between the label and its helper, and 16
+       before the buttons. One gap value cannot express that, so the miss was
+       structural rather than numeric — hence the wrapper element. */
+    expect(editor()).toContain('gap: var(--space-16)');
+    expect(cssRule('.noteedit .nefield', REQUESTS_CSS)).toContain('gap: var(--space-4)');
+    expect(cssRule('.noteedit .nchktext', REQUESTS_CSS)).toContain('gap: var(--space-4)');
+    expect(cssRule('.noteedit .nchk', REQUESTS_CSS)).toContain('gap: var(--space-8)');
+  });
+
+  it('nests the helper INSIDE the label, which is what aligns it', () => {
+    /* The alignment is a consequence of the nesting, so the nesting is what
+       gets asserted — an indent measured in px would be a second statement of
+       the same fact and would drift from the gap beside it. */
+    const at = TEMPLATE.indexOf('class="nchktext"');
+    expect(at).toBeGreaterThan(-1);
+    const block = TEMPLATE.slice(at, TEMPLATE.indexOf('</label>', at));
+    expect(block).toContain('class="nlabel"');
+    expect(block).toContain('class="nsub"');
+    // and the helper is no longer a sibling of the row
+    expect(TEMPLATE).not.toMatch(/<\/label>\s*<div class="nsub">/);
+  });
+
+  it('dresses the two label lines in the frame’s own blues, via tokens', () => {
+    expect(cssRule('.noteedit .nlabel', REQUESTS_CSS)).toContain('var(--checkbox-label)');
+    expect(cssRule('.noteedit .nsub', REQUESTS_CSS)).toContain('var(--checkbox-sublabel)');
+    // they are NOT slate — aliasing them to the nearest slate is the
+    // "close enough" that would quietly undo the spec
+    expect(TOKENS_CSS).toContain('--checkbox-label: #445c85');
+    expect(TOKENS_CSS).toContain('--checkbox-sublabel: #6780a9');
+    expect(cssRule('.noteedit .nlabel', REQUESTS_CSS)).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+    expect(cssRule('.noteedit .nsub', REQUESTS_CSS)).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+  });
+
+  it('restates the helper’s weight, because its inheritance changed', () => {
+    /* It used to inherit `normal` from the editor. Nested inside the label it
+       would inherit 600 and silently render SemiBold — the frame's helper is
+       Regular. A restructure that changes what a rule inherits is exactly
+       where a correct-looking move breaks a value nobody was editing. */
+    expect(cssRule('.noteedit .nsub', REQUESTS_CSS)).toContain('font-weight: 400');
+  });
+
+  it('pads the field 12 and pins no height — the frame’s 75 is the outcome', () => {
+    const ta = cssRule('.noteedit textarea', REQUESTS_CSS);
+    expect(ta).toContain('padding: 12px');
+    expect(ta).toContain('box-sizing: border-box');
+    expect(ta).not.toMatch(/(?:^|[\s;])height:/); // line-height is not a height
+  });
+
+  it('pads the resting box 12 at the sides', () => {
+    expect(cssRule('.notewrap .addremark', REQUESTS_CSS)).toContain('padding: 0 12px');
+  });
+});
+
+describe('frame 731:101090 — the two specs JP DECLINED (2026-08-27)', () => {
+  it('leaves the tick box as the browser draws it', () => {
+    /* The frame draws a 12x12 #0f172a box, radius 2, with a 1.5px white tick.
+       JP ruled the platform default stays. Only the user-agent MARGIN is
+       zeroed, so the 8px gap beside it is the real gap — that is layout, not
+       appearance, and it is the one thing this rule may set. */
+    const box = cssRule('.noteedit .nchk input', REQUESTS_CSS);
+    expect(box).toContain('margin: 0');
+    expect(box).not.toContain('appearance');
+    expect(box).not.toContain('background');
+    expect(box).not.toMatch(/border-radius|width:|height:/);
+  });
+
+  it('leaves Cancel and Submit exactly as built', () => {
+    /* The frame has them at 66x25 and 70x27, one pixel apart vertically, and
+       its annotation pre-emptively says the mismatch is deliberate. JP kept
+       the built pair instead: same height, level, and Submit outlined in its
+       own fill rather than slate-200. Guarded so the annotation's "reproduce
+       it" does not get honoured by a later reader. */
+    const shared = cssRule('.noteedit .nghost, .noteedit .nsubmit', REQUESTS_CSS);
+    expect(shared).toContain('padding: 8px 12px 7px'); // ONE padding, so ONE height
+    expect(shared).not.toMatch(/(?:^|[\s;])height:/);
+    expect(cssRule('.noteedit .nsubmit', REQUESTS_CSS)).toContain('border: 1px solid var(--neutral-950)');
+    expect(cssRule('.noteedit .nbtns', REQUESTS_CSS)).toContain('justify-content: flex-end');
+  });
+});
+
+describe('frame 731:101090 — what the annotations get WRONG about the build', () => {
+  it('does not resurrect For Clarification as a status', () => {
+    /* Two of the frame's functionality annotations still describe the retired
+       three-valued model: "Submit ... sets the request's status to 'For
+       Clarification'" and "clearing the flag must ... revert the status".
+       Owls #34/#35 retired that on 2026-08-17 — the flag is NOTE state. The
+       frame's own DRAWING agrees with the build (every sample row reads For
+       Filing, including the flagged one); only its prose is stale. */
+    const declared = REQUESTS_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(declared).not.toContain('.sbadge.clar');
+    expect(APP_JS).not.toContain('For Clarification');
   });
 });
