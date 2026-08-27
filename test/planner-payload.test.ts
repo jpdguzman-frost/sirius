@@ -58,6 +58,14 @@ const mk = (projectId: Types.ObjectId, id: string, over: Record<string, unknown>
 const load = (p: { _id: Types.ObjectId; weekly_capacity: number }) =>
   loadPipeline(p._id, TODAY, p.weekly_capacity);
 
+/** One calendar day back from an ISO date — not a workday step; the deadline
+    is a client date and lands on whatever day it lands on. */
+const dayBefore = (isoDay: string): string => {
+  const d = new Date(isoDay + 'T00:00:00');
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const rowOf = (rows: PipelineRow[], cardId: string) => rows.find((r) => r.cardId === cardId)!;
 
 const DOW = (iso: string) => new Date(iso + 'T00:00:00').getDay();
@@ -108,20 +116,50 @@ describe('planner phases — the Gantt bar (R3, contract §1.2)', () => {
     expect(row.phases.at(-1)!.endIso).not.toBe(f.renderApproved);
   });
 
-  it('paints the render segment renderOverdue when the forecast misses the deadline (BR-9)', async () => {
+  it('paints the render segment renderOverdue when the WORK misses the deadline (BR-9)', async () => {
     const p = await newProject();
-    // Medium/design from 3 Aug renders 18 Aug — a 10 Aug deadline is missed
-    await mk(p._id, 'late', { slotted_week: '2026-08-03', sheet_deadline: '2026-08-10' });
-    await mk(p._id, 'ontime', { slotted_week: '2026-08-03', sheet_deadline: '2026-12-31' });
+    // Deadlines derived from the row's own numbers, never typed: `workFinish`
+    // is the day the work lands, so one day either side of it is the boundary
+    // the rule is actually about (test/CLAUDE.md rule 2).
+    await mk(p._id, 'probe', { slotted_week: '2026-08-03', sheet_deadline: '2026-12-31' });
+    const probe = rowOf((await load(p)).rows, 'probe').forecast!;
+    await Deliverable.deleteMany({ trello_card_id: 'probe' });
+
+    await mk(p._id, 'late', { slotted_week: '2026-08-03', sheet_deadline: dayBefore(probe.workFinish) });
+    await mk(p._id, 'ontime', { slotted_week: '2026-08-03', sheet_deadline: probe.workFinish });
     await mk(p._id, 'nodeadline', { slotted_week: '2026-08-03' });
     const { rows } = await load(p);
 
     expect(rowOf(rows, 'late').forecast!.late).toBe(true);
     expect(rowOf(rows, 'late').phases.map((s) => s.phase)).toEqual(['sketch', 'review', 'renderOverdue']);
+    // ON the deadline is not past it
+    expect(rowOf(rows, 'ontime').forecast!.late).toBe(false);
     expect(rowOf(rows, 'ontime').phases.map((s) => s.phase)).toEqual(['sketch', 'review', 'render']);
     // BR-9: no deadline is no conflict — never overdue
     expect(rowOf(rows, 'nodeadline').forecast!.late).toBe(false);
     expect(rowOf(rows, 'nodeadline').phases.map((s) => s.phase)).toEqual(['sketch', 'review', 'render']);
+  });
+
+  /* THE RULING ITSELF (JP, 2026-08-27, answering owls #72/#74). The client's
+     review wait is out of the past-deadline warning; the forecast DATES still
+     carry it. The gap between `workFinish` and `renderDelivery` is exactly that
+     wait, so a deadline landing inside it is the one case where the old rule
+     and the new one disagree — and the only case worth a test, because every
+     other deadline gives the same answer under both. */
+  it('a deadline inside the client-review wait is NOT late — the work fits', async () => {
+    const p = await newProject();
+    await mk(p._id, 'c1', { slotted_week: '2026-08-03', sheet_deadline: '2026-12-31' });
+    const f = rowOf((await load(p)).rows, 'c1').forecast!;
+
+    // the wait is real on this row, or the case below proves nothing
+    expect(f.workFinish < f.renderDelivery, 'no review wait on this fixture — the guard is vacuous').toBe(true);
+
+    await Deliverable.deleteMany({ trello_card_id: 'c1' });
+    await mk(p._id, 'c1', { slotted_week: '2026-08-03', sheet_deadline: f.renderDelivery });
+    const inWait = rowOf((await load(p)).rows, 'c1').forecast!;
+
+    expect(inWait.late).toBe(false); // would have been TRUE before the ruling
+    expect(inWait.renderDelivery > inWait.workFinish).toBe(true); // and the dates still say why
   });
 
   it('drops a zero-width segment instead of drawing it (SLA 0 collapses the review wait)', async () => {
@@ -347,12 +385,24 @@ describe('E2E probe — GET /deliverables on a seeded isolated DB', () => {
     expect(row('fxCard701').requestor).toBeNull(); // the "—, no badge" empty state
     expect(row('fxCard701').assetType).toBeNull();
 
-    // --- phases: a late Hard row draws renderOverdue -----------------------
-    expect(row('fxCard712').forecast.late).toBe(true); // renders 19 Aug against a 14 Aug deadline
+    /* --- phases, and the 2026-08-27 deadline ruling on real fixture data ---
+
+       This Hard row is the whole ruling in one example. Its WORK lands 10 Aug
+       and its deadline is 14 Aug, so the work fits with four days to spare —
+       but the render segment ends 19 Aug, because the client's review wait
+       sits between the two phases. Under the old rule it drew renderOverdue
+       and a PM was warned about a date no amount of design work could move.
+
+       The bar is UNCHANGED — the forecast dates still carry review, so the
+       row still ends 19 Aug and the reader can still see the wait. Only the
+       warning moved. `renderOverdue` itself is proved in the BR-9 case above,
+       against a deadline derived from `workFinish`. */
+    expect(row('fxCard712').forecast.workFinish).toBe('2026-08-10');
+    expect(row('fxCard712').forecast.late).toBe(false); // work lands 10 Aug, deadline 14 Aug
     expect(row('fxCard712').phases).toEqual([
       { phase: 'sketch', startIso: '2026-08-03', endIso: '2026-08-06' },
       { phase: 'review', startIso: '2026-08-06', endIso: '2026-08-13' },
-      { phase: 'renderOverdue', startIso: '2026-08-13', endIso: '2026-08-19' },
+      { phase: 'render', startIso: '2026-08-13', endIso: '2026-08-19' },
     ]);
     expectWellFormed(row('fxCard655a').phases);
 

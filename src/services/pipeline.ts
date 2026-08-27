@@ -6,6 +6,7 @@
  */
 
 import mongoose, { Types } from 'mongoose';
+import { workday } from '../../lib/calendar.ts';
 import { forecast, type Forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
@@ -127,6 +128,14 @@ export interface PipelineRow {
     renderDelivery: string;
     renderApproved: string;
     startDate: string;
+    /**
+     * The day the WORK finishes with no client-review wait in it — what
+     * `late` is measured against since the 2026-08-27 ruling. Carried
+     * alongside the four forecast dates rather than replacing any of them:
+     * those still include review and still drive the bars, so the two
+     * questions stay visibly separate. See `workFinishOf`.
+     */
+    workFinish: string;
     late: boolean;
   }) | null;
   missing: string[];
@@ -307,6 +316,38 @@ function buildPhases(slottedWeek: string | null, fc: PipelineRow['forecast']): P
   return segments.filter((s) => s.startIso < s.endIso);
 }
 
+/**
+ * The day the WORK finishes — lead and design for both phases, back to back,
+ * with no client-review wait between them. This is what "past deadline" now
+ * means (JP ruling 2026-08-27, answering the question product raised in owls
+ * #72 and #74).
+ *
+ * Why it changed. `late` used to read `renderDelivery > deadline`, and
+ * `renderDelivery` is measured from the Friday of the SKETCH-APPROVED week —
+ * so the client's review wait was inside every past-deadline warning in the
+ * product. That was defensible while the schedule drew a review segment and
+ * auto-placed render behind it. It stopped being defensible when the redesign
+ * removed the review bar from the drawing (owl #71) and made render a row the
+ * PM places by hand (BR-1a, owl #72): review time then drove a warning while
+ * being visible nowhere and adjustable nowhere, because the one control that
+ * could move it — the review SLA override — left with the Forecast tab.
+ *
+ * A warning nobody can see the input to is a warning nobody can argue with.
+ * So the wait comes out and the warning states something a PM can act on: the
+ * work itself does not fit before the date.
+ *
+ * NOT a change to the engine. `lib/forecast.ts` is a verbatim port and stays
+ * one (invariant 5) — every field read below is one it already returns, and
+ * `workday` is the same calendar the engine itself counts on (invariant 11).
+ * The forecast DATES are untouched and still include review; this is a second,
+ * narrower question asked of the same numbers, carried as its own field so the
+ * two can never be confused for each other.
+ */
+function workFinishOf(f: Forecast, startDate: string): string {
+  const days = f.sketchLead + f.sketchDesign + f.renderLead + f.renderDesign;
+  return localDate(workday(startDate, days));
+}
+
 function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string): PipelineRow {
   // display vocabulary lives with the checks (frame §4.4), not in the UI
   const missing: string[] = [];
@@ -330,6 +371,7 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
       model,
     );
     const deadline = (d.deadline as string) ?? null;
+    const workFinish = workFinishOf(f, startDate);
     fc = {
       ...f,
       sketchDelivery: localDate(f.sketchDelivery),
@@ -337,7 +379,8 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
       renderDelivery: localDate(f.renderDelivery),
       renderApproved: localDate(f.renderApproved),
       startDate,
-      late: deadline ? localDate(f.renderDelivery) > deadline : false, // BR-9: no deadline → no conflict
+      workFinish,
+      late: deadline ? workFinish > deadline : false, // BR-9: no deadline → no conflict
     };
   }
 
