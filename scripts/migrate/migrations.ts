@@ -7,7 +7,7 @@
  */
 
 import type { Connection } from 'mongoose';
-import { ALL_MODELS } from '../../src/models/index.ts';
+import { ALL_MODELS, SprintItem } from '../../src/models/index.ts';
 
 export interface Migration {
   id: string;
@@ -223,6 +223,34 @@ export const MIGRATIONS: Migration[] = [
       await db
         .collection('deliverables')
         .createIndex({ project_id: 1, trello_created_at: -1 }, { name: 'project_filed_desc' });
+    },
+  },
+  {
+    /**
+     * owl #72 — the scheduled unit becomes the WORK CARD. `sprint_items` is a
+     * new, empty collection: the PM's hand-placed rows.
+     *
+     * THERE IS NO BACKFILL, and that is the ruling rather than an omission.
+     * The obvious migration — turn every `deliverables.slotted_week` into two
+     * sprint items, sketch and render — would auto-populate the schedule on
+     * day one, and #72 §2 forbids exactly that: "work cards enter only when
+     * the PM adds them", an empty schedule is the correct starting state, and
+     * a row that is absent is not a sync failure. Backfilling would also have
+     * to invent a render start, which BR-1a hands to the PM.
+     *
+     * `slotted_week` stays on `deliverables` and is untouched. The Pipeline
+     * gantt still reads it; only Sprint Schedules moves off it.
+     */
+    id: '009-sprint-items',
+    up: async () => {
+      /* `syncIndexes` off the schema, not hand-written `createIndex` calls:
+         the indexes are declared on `sprintItemSchema` and this applies THAT,
+         so there is one definition rather than two that can disagree. Writing
+         them out here also collided with 001 on an existing database — 001
+         syncs every model in ALL_MODELS, so it had already created the same
+         keys under mongoose's own names. */
+      await SprintItem.createCollection();
+      await SprintItem.syncIndexes();
     },
   },
 ];

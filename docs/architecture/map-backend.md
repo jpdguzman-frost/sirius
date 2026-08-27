@@ -59,6 +59,7 @@ _last-verified: 2026-08-18_
 - `src/services/model-grid.ts` — per-project EmpiricalModel with fallback provenance; loadProjectModel.
 - `src/services/model-refresh.ts` — pure BR-2 derivation: card_events → samples → grids + delta; deriveSamples/computeModelGrid.
 - `src/services/pipeline.ts` — db rows → tab payload (deliverables_v + forecast + BR-10); loadPipeline/toMilestones.
+- `src/services/sprint-items.ts` — hand-placed work-card schedule rows (owl #72); loadSprintItems/finishOf.
 - `src/services/status-rules.ts` — BR-10 list name → pending/ongoing/done; classifyList.
 - `src/types/express-session.d.ts` — session returnTo typing.
 - `worker/drainPush.ts` — drains push_events → per-card reconciles; poll fallback; drainPushEvents/pushHealth.

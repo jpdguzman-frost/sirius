@@ -14,6 +14,7 @@ import { loadProjectModel } from './model-grid.ts';
 import { classifyList } from './status-rules.ts';
 import { WorkCard } from '../models/index.ts';
 import type { Milestone } from './conflicts.ts';
+import { loadSprintItems, type SprintItemsResult } from './sprint-items.ts';
 
 const localDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -192,6 +193,16 @@ export interface PipelineResult {
    * are on screen.
    */
   perWeek: Record<string, PlannerWeekTotal>;
+  /**
+   * Sprint Schedules' rows and its add-time card lists (owl #72). Carried on
+   * THIS payload rather than a fetch of its own because the planner body reads
+   * exactly one (`GET /deliverables`, frozen contract §1) and the tab switch
+   * must not become a round trip.
+   *
+   * These rows are NOT derived from `rows` above and never can be: the unit is
+   * the work card, and a row exists only because the PM added it.
+   */
+  sprintItems: SprintItemsResult;
 }
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -295,7 +306,9 @@ export async function loadPipeline(
     mcNumbers: unattachedMcs,
   };
 
-  return { rows, workCardsByMc, mcDeliverables, unattachedWork, corrections, model: { provenance }, perWeek };
+  const sprintItems = await loadSprintItems(projectId, model);
+
+  return { rows, workCardsByMc, mcDeliverables, unattachedWork, corrections, model: { provenance }, perWeek, sprintItems };
 }
 
 /**

@@ -432,6 +432,61 @@ const milestoneDayPlanSchema = new Schema(
 );
 milestoneDayPlanSchema.index({ project_id: 1, trello_card_id: 1, phase: 1 }, { unique: true });
 
+/**
+ * SPRINT ITEMS — the scheduled row. The unit is the WORK CARD (owl #72; BRD
+ * v2.7 BR-1a), not the deliverable.
+ *
+ * A Sirius-owned planning decision, so it lives in its own collection rather
+ * than as fields on `work_cards`, exactly as `milestone_day_plan` does. Three
+ * reasons, all from #72:
+ *
+ *  1. **Nothing is auto-populated.** A row exists only because the PM added
+ *     it. A field on the synced mirror would have to encode "not scheduled"
+ *     as an absence, and every sync would have to be careful not to clobber
+ *     it. A row that only exists when someone made it cannot be clobbered.
+ *  2. **A row STAYS once the card completes.** It is the record of what was
+ *     planned. Tying it to a mirror that follows Trello's own lifecycle would
+ *     eventually lose it.
+ *  3. It is a planning decision, which is the only thing Sirius owns.
+ *
+ * `starts_on` is OPTIONAL and that is the design, not laxity: adding a card to
+ * a sprint list and plotting its bar are two separate acts (#72 §6, #74 §1).
+ * Added-but-not-plotted is a real, visible state — the row shows in Sprint
+ * Schedules with no bar and the violet + waiting, and it is ABSENT from
+ * Deadlines until plotted.
+ *
+ * One row per card: `(project_id, trello_card_id)` is unique. #72's "one row =
+ * one task card = one bar" is the rule, and identity is the pair (invariant 3).
+ */
+const sprintItemSchema = new Schema(
+  {
+    project_id: projectRef,
+    /* Which sprint's LIST the row appears under. Set by the insertion point —
+       the + belongs to a specific sprint, so the row lands in that one and
+       never in a default (#72 §4). Independent of `starts_on`: the list says
+       where the row is read, the date says where the bar is drawn. */
+    sprint_id: { type: Schema.Types.ObjectId, ref: 'Sprint', required: true },
+    /* The MC group the card carries. Denormalised from the work card so the
+       list can group without a second read; work cards attach to the MC group
+       and never to one deliverable (invariant 4). */
+    mc_number: { type: String, required: true },
+    /* The WORK CARD's Trello id — the unit. Not a deliverable id. */
+    trello_card_id: { type: String, required: true },
+    /* The PM's click: the bar's left edge, and the only date they set. The
+       finish is computed (#72 §6) — a duration would need a drag, and the bar
+       and the FORECASTED column must never be able to disagree. Absent until
+       the row is plotted. */
+    starts_on: DATE_ONLY,
+    /* Order within the sprint's list. */
+    position: { type: Number, required: true, default: 0 },
+    added_by: { type: String, required: true, lowercase: true, trim: true },
+    added_at: { type: Date, required: true, default: Date.now },
+  },
+  { collection: 'sprint_items' },
+);
+sprintItemSchema.index({ project_id: 1, trello_card_id: 1 }, { unique: true });
+sprintItemSchema.index({ project_id: 1, sprint_id: 1, position: 1 });
+
 const syncRunSchema = new Schema(
   {
     project_id: { type: ObjectId, ref: 'Project' }, // nullable per source schema
@@ -465,6 +520,7 @@ export const SyncRun = mongoose.model('SyncRun', syncRunSchema);
 export const PushEvent = mongoose.model('PushEvent', pushEventSchema);
 export const FrostNote = mongoose.model('FrostNote', frostNoteSchema);
 export const MilestoneDayPlan = mongoose.model('MilestoneDayPlan', milestoneDayPlanSchema);
+export const SprintItem = mongoose.model('SprintItem', sprintItemSchema);
 
 export const ALL_MODELS = [
   Project,
@@ -485,4 +541,5 @@ export const ALL_MODELS = [
   PushEvent,
   FrostNote,
   MilestoneDayPlan,
+  SprintItem,
 ];

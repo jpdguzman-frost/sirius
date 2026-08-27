@@ -13,8 +13,9 @@ import { Types } from 'mongoose';
 import { ensureAuthenticated, type SessionUser } from '../auth/session.ts';
 import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
+import { classifyList } from '../services/status-rules.ts';
 import { loadPipeline, manilaToday, toMilestones } from '../services/pipeline.ts';
-import { ConflictAcknowledgement, Deliverable, MilestoneDayPlan, Sprint } from '../models/index.ts';
+import { ConflictAcknowledgement, Deliverable, MilestoneDayPlan, Sprint, SprintItem, WorkCard } from '../models/index.ts';
 import { sprintIssues, suggestPlan, type PlannerCard } from '../../lib/planner.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
 import { buildWeeks } from '../../lib/calendar.ts';
@@ -362,6 +363,186 @@ export function scheduleRouter(): Router {
       const actor = (req.user as SessionUser).email;
       await ConflictAcknowledgement.deleteOne({ project_id: projectId, conflict_key: body.data.conflict_key });
       await audit({ project_id: projectId, actor, action: 'conflict.restore', entity: 'conflict', entity_id: body.data.conflict_key });
+      res.json({ ok: true });
+    },
+  );
+
+  /* ------------------------------------------------------------------ */
+  /* Sprint Schedules — the scheduled row. THE UNIT IS THE WORK CARD.     */
+  /* owl miles→jp #72; BRD v2.7 / BR-1a.                                  */
+  /*                                                                      */
+  /* Sirius-owned planning data, like slotted_week and pins: no source     */
+  /* system is touched, so these are NOT gated on `writes_enabled`, which  */
+  /* guards the three-entry Trello registry alone. Audited like every      */
+  /* other state change (invariant 10).                                    */
+  /* ------------------------------------------------------------------ */
+
+  /* ADD a work card to a sprint's list. The row lands UNPLOTTED — added and
+     plotted are two separate acts (#72 §6), and the violet + is what turns
+     one into the other.
+
+     The sprint comes from the body because the insertion point carries
+     meaning: the + belongs to a specific sprint's list, so the row lands in
+     THAT sprint and never in a default one (#72 §4). */
+  router.post(
+    '/api/projects/:projectId/sprint-items',
+    ensureAuthenticated,
+    ensureProjectMember,
+    async (req, res) => {
+      const body = z
+        .object({ sprint_id: z.string().min(1), card_id: z.string().min(1) })
+        .strict()
+        .safeParse(req.body);
+      if (!body.success) {
+        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY', issues: body.error.issues } });
+        return;
+      }
+      const projectId = res.locals.project._id as Types.ObjectId;
+      const actor = (req.user as SessionUser).email;
+
+      if (!Types.ObjectId.isValid(body.data.sprint_id)) {
+        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
+        return;
+      }
+      /* Both looked up UNDER THE PROJECT (invariant 1) — a sprint id or a card
+         id from another project is a 404 here, not a cross-project write. */
+      const [sprint, card] = await Promise.all([
+        Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId }).lean(),
+        WorkCard.findOne({ project_id: projectId, trello_card_id: body.data.card_id, active: true }).lean(),
+      ]);
+      if (!sprint || !card) {
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+        return;
+      }
+      /* #72 §5: a card already complete is never OFFERED, and the server says
+         the same thing the dropdown does. This is the ADD-time filter — it
+         governs what can be added and NEVER what is removed, so a row whose
+         card completes later is untouched by it. */
+      if (classifyList(card.current_list as string | undefined) === 'done') {
+        res.status(409).json({
+          ok: false,
+          error: { code: 'CARD_COMPLETE', message: 'That task card is already complete — the schedule is for work still to be done.' },
+        });
+        return;
+      }
+
+      const last = await SprintItem.findOne({ project_id: projectId, sprint_id: sprint._id })
+        .sort({ position: -1 })
+        .select({ position: 1 })
+        .lean();
+      try {
+        const created = await SprintItem.create({
+          project_id: projectId,
+          sprint_id: sprint._id,
+          mc_number: card.mc_number,
+          trello_card_id: card.trello_card_id,
+          position: ((last?.position as number) ?? -1) + 1,
+          added_by: actor,
+        });
+        await audit({
+          project_id: projectId, actor, action: 'sprintItem.add', entity: 'sprint_item',
+          entity_id: String(created._id),
+          after: { sprint_id: String(sprint._id), card_id: card.trello_card_id, mc_number: card.mc_number },
+        });
+        res.status(201).json({ ok: true, id: String(created._id) });
+      } catch (err) {
+        // one row per card (#72: one row = one task card = one bar)
+        if ((err as { code?: number }).code === 11000) {
+          res.status(409).json({
+            ok: false,
+            error: { code: 'ALREADY_SCHEDULED', message: 'That task card is already on the schedule.' },
+          });
+          return;
+        }
+        throw err;
+      }
+    },
+  );
+
+  /* PLOT or MOVE the bar. `starts_on` is the PM's click and the ONLY date they
+     set — the finish is computed from it (#72 §6), because click-to-place has
+     no duration to give and the bar must never be able to disagree with the
+     FORECASTED column. null un-plots the row, which leaves it in the list.
+
+     There is deliberately NO cascade: placing a sketch does not create,
+     position or suggest its render (BR-1a). Auto-placing render the moment
+     sketch is forecast to land is the helpful thing one adds unprompted, and
+     it would remove the control this design exists to give. */
+  router.patch(
+    '/api/projects/:projectId/sprint-items/:itemId',
+    ensureAuthenticated,
+    ensureProjectMember,
+    async (req, res) => {
+      const body = z
+        .object({ starts_on: DATE_ONLY.nullable().optional(), sprint_id: z.string().min(1).optional() })
+        .strict()
+        .safeParse(req.body);
+      if (!body.success || Object.keys(body.data).length === 0) {
+        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
+        return;
+      }
+      const projectId = res.locals.project._id as Types.ObjectId;
+      const actor = (req.user as SessionUser).email;
+      const itemId = String(req.params.itemId ?? '');
+      if (!Types.ObjectId.isValid(itemId)) {
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+        return;
+      }
+      const item = await SprintItem.findOne({ _id: itemId, project_id: projectId });
+      if (!item) {
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+        return;
+      }
+      const before = { starts_on: item.starts_on ?? null, sprint_id: String(item.sprint_id) };
+      if (body.data.sprint_id !== undefined) {
+        if (!Types.ObjectId.isValid(body.data.sprint_id)) {
+          res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
+          return;
+        }
+        const sprint = await Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId }).lean();
+        if (!sprint) {
+          res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+          return;
+        }
+        item.sprint_id = sprint._id;
+      }
+      if (body.data.starts_on !== undefined) item.starts_on = body.data.starts_on ?? undefined;
+      await item.save();
+      await audit({
+        project_id: projectId, actor, action: 'sprintItem.plot', entity: 'sprint_item',
+        entity_id: String(item._id), before,
+        after: { starts_on: item.starts_on ?? null, sprint_id: String(item.sprint_id) },
+      });
+      res.json({ ok: true });
+    },
+  );
+
+  /* REMOVE a row. The PM's own decision to un-plan work — which is the only
+     thing that takes a row off this tab. Nothing else does: no status, no
+     sync, no tidy-up. A pass that pruned completed rows would destroy the
+     record of what was planned (#72 §5). */
+  router.delete(
+    '/api/projects/:projectId/sprint-items/:itemId',
+    ensureAuthenticated,
+    ensureProjectMember,
+    async (req, res) => {
+      const projectId = res.locals.project._id as Types.ObjectId;
+      const actor = (req.user as SessionUser).email;
+      const itemId = String(req.params.itemId ?? '');
+      if (!Types.ObjectId.isValid(itemId)) {
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+        return;
+      }
+      const item = await SprintItem.findOneAndDelete({ _id: itemId, project_id: projectId }).lean();
+      if (!item) {
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+        return;
+      }
+      await audit({
+        project_id: projectId, actor, action: 'sprintItem.remove', entity: 'sprint_item',
+        entity_id: String(item._id),
+        before: { sprint_id: String(item.sprint_id), card_id: item.trello_card_id, starts_on: item.starts_on ?? null },
+      });
       res.json({ ok: true });
     },
   );
