@@ -327,20 +327,56 @@ export function scheduleRouter(): Router {
       }
       const projectId = res.locals.project._id as Types.ObjectId;
       const before = await Sprint.find({ project_id: projectId }).sort({ position: 1 }).lean();
-      await Sprint.deleteMany({ project_id: projectId });
+      /* IDS ARE PRESERVED, NEVER REGENERATED (review 2026-08-28, finding 1 —
+         the one 'breaks' both lenses found independently). This route used to
+         deleteMany + insertMany, minting fresh ObjectIds on every save. That
+         was invisible while sprint membership was DERIVED from the slotted
+         week; the moment #72 stored membership as `sprint_items.sprint_id`, a
+         routine rename would have orphaned every scheduled row — gone from
+         every group, still counted in the footer, its card locked out of the
+         dropdown by the unique index, with no UI path back. So: a row whose id
+         matches a live sprint is UPDATED in place; a row without one is
+         inserted; a live sprint absent from the payload is removed, and its
+         scheduled items are removed WITH it — the modal's confirm banner warns
+         with the count first (Miles #30), which makes the cascade the promise
+         kept rather than a surprise. An unknown id is refused, not treated as
+         new: the client only ever sends ids it was handed, so an unknown one
+         means the modal is editing a stale world and must reload. */
+      const alive = new Map(before.map((b) => [String(b._id), b]));
       const sorted = [...body.data.sprints].sort((a, b) => (a.start < b.start ? -1 : 1));
-      /* ONE round trip, not one per sprint. insertMany and not Promise.all:
-         the writes are ordered (`position` is their index) and they land in a
-         collection this request has just emptied, so concurrent unordered
-         inserts would be the wrong shape. `project_id` is on every doc
-         (invariant 1). */
-      await Sprint.insertMany(sorted.map((s, i) => ({
-        project_id: projectId, name: s.name, starts_on: s.start, ends_on: s.end, position: i + 1,
-      })));
+      const unknown = sorted.filter((sp) => sp.id && !alive.has(sp.id));
+      if (unknown.length > 0) {
+        res.status(409).json({ ok: false, error: { code: 'SPRINTS_STALE', message: 'The sprint list changed since this modal opened — reload and re-apply the edit.' } });
+        return;
+      }
+      const keptIds = new Set(sorted.filter((sp) => sp.id).map((sp) => sp.id as string));
+      const removedIds = before.filter((b) => !keptIds.has(String(b._id))).map((b) => b._id);
+      const orphaned = removedIds.length
+        ? await SprintItem.find({ project_id: projectId, sprint_id: { $in: removedIds } }).lean()
+        : [];
+      if (removedIds.length) {
+        await SprintItem.deleteMany({ project_id: projectId, sprint_id: { $in: removedIds } });
+        await Sprint.deleteMany({ project_id: projectId, _id: { $in: removedIds } });
+      }
+      for (const [i, sp] of sorted.entries()) {
+        if (sp.id) {
+          await Sprint.updateOne(
+            { _id: sp.id, project_id: projectId },
+            { $set: { name: sp.name, starts_on: sp.start, ends_on: sp.end, position: i + 1 } },
+          );
+        } else {
+          await Sprint.create({ project_id: projectId, name: sp.name, starts_on: sp.start, ends_on: sp.end, position: i + 1 });
+        }
+      }
       await audit({
         project_id: projectId, actor: (req.user as SessionUser).email, action: 'sprints.replace', entity: 'sprint',
-        before: { sprints: before.map((s) => ({ name: s.name, start: s.starts_on, end: s.ends_on })) },
-        after: { sprints: sorted },
+        before: { sprints: before.map((s) => ({ id: String(s._id), name: s.name, start: s.starts_on, end: s.ends_on })) },
+        after: {
+          sprints: sorted,
+          // the cascade is part of the same act, so it audits in the same row:
+          // which cards left the schedule because their sprint was removed
+          removed_items: orphaned.map((o) => ({ card_id: o.trello_card_id, mc_number: o.mc_number, starts_on: o.starts_on ?? null })),
+        },
       });
       res.json({ ok: true });
     },
@@ -528,6 +564,17 @@ export function scheduleRouter(): Router {
         return;
       }
       const before = { starts_on: item.starts_on ?? null, sprint_id: String(item.sprint_id) };
+      /* No-op guard (review 2026-08-28, finding 2): a second click in the
+         client's reload window used to reach here with before == after and
+         bank an audit row for a non-change. Invariant 10 logs CHANGES, not
+         attempts — same convention as saveSprints' dirty check and dueApply's
+         staged===baseline guard. */
+      const nextStarts = body.data.starts_on !== undefined ? (body.data.starts_on ?? null) : before.starts_on;
+      const nextSprint = body.data.sprint_id !== undefined ? body.data.sprint_id : before.sprint_id;
+      if (nextStarts === before.starts_on && nextSprint === before.sprint_id) {
+        res.json({ ok: true, noop: true });
+        return;
+      }
       if (body.data.sprint_id !== undefined && body.data.sprint_id !== String(item.sprint_id)) {
         /* A move takes the TARGET list's tail position. Carrying the old
            position across let the row tie with one already there, and the load

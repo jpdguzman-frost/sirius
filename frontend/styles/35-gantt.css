@@ -265,7 +265,19 @@
    the live control in the tab order at rest. Two of the three are inert by
    RULE, not omission (ruled decision 4): duplicating is refused by the
    one-row-per-card unique index, and pinning is parked — their titles say so. */
-.gantt .gactions { display: inline-flex; align-items: center; align-self: center; gap: var(--space-8); margin-left: auto; opacity: 0; transition: opacity 0.12s ease; }
+/* align-self: flex-start + 6px, not center (review 2026-08-28, finding 13):
+   the cell stretches to the 120px row, so 'center' floated the trio over the
+   bar band ~33px under the chip. flex-start puts it on the chip's line; the
+   6px is (25 - 13) / 2 — optical centre against the 25px chip. */
+.gantt .gactions { display: inline-flex; align-items: center; align-self: flex-start; margin-top: 6px; gap: var(--space-8); margin-left: auto; opacity: 0; transition: opacity 0.12s ease; }
+
+/* The chip TRUNCATES before it can evict the trio (review 2026-08-28,
+   finding 12): .pbadge caps at 100% of the cell, so a long Trello list name
+   laid the icons past the clip — and the calendar icon is the ONLY unplot
+   control (drag and unslot were withdrawn). 87px = trio 55 + its 8px gap +
+   the 24px optical margin the frame keeps right of the chip. The full name
+   rides the title attribute in the template. */
+.gantt .c-gstatus .pbadge { max-width: calc(100% - 87px); overflow: hidden; text-overflow: ellipsis; }
 .gantt .growr:hover .gactions,
 .gantt .growr:focus-within .gactions { opacity: 1; }
 .gantt .gact {
@@ -355,6 +367,13 @@
    so the zone is pane-wide and rides `position: sticky` like every other
    pinned surface — it must not drift off with the timeline scroll while the
    columns it belongs to stay put. */
+/* The collapsed pane hides the ADD AFFORDANCE WHOLE (review 2026-08-28,
+   finding 10): the pending row's dropdown/button cells live in columns lpc
+   hides, and their display:flex tied with the hide rule at equal specificity
+   — source order let them RESURFACE and spill 568px over the timeline.
+   Collapse is a reading mode; adding needs the full pane. toggleLeftPane
+   discards an open draft for the same reason (90-events.js). */
+.gantt.lpc .gaddzone, .gantt.lpc .gaddrow { display: none; }
 .gantt .gaddzone {
   position: sticky; left: 0;
   display: flex; align-items: center;
@@ -443,6 +462,10 @@
   border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
   box-shadow: var(--shadow-xs);
 }
+/* the collision flip (finding 11): same 5px seam, mirrored. Upward stays the
+   default #73 rules; this fires only when the measured headroom to the
+   scroller's top cannot hold the 218px menu — the empty-first-sprint case. */
+.gantt .gddmenu.down { bottom: auto; top: calc(100% + 5px); }
 /* an option clamps to 2 lines as a DISPLAY courtesy; the stored value is
    always the full string (#73). Selection is weight ONLY — no tick, no fill
    (#73) — so the hover tint stays light enough to never read as selection. */

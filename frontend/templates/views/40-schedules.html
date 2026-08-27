@@ -181,7 +181,7 @@
                         is nothing to clear, because a refusal is not a state
                         change (invariant 10). }}
                     <div class="gcell c-gstatus">
-                      {{#if row.status !== null}}<span class="pbadge s-{{row.status}}">{{row.currentList}}</span>{{else}}<span class="gdim" title="This card is no longer on the board">—</span>{{/if}}
+                      {{#if row.status !== null}}<span class="pbadge s-{{row.status}}" title="{{row.currentList}}">{{row.currentList}}</span>{{else}}<span class="gdim" title="This card is no longer on the board">—</span>{{/if}}
                       <span class="gactions">
                         <button class="gact" type="button" disabled
                                 title="One row per work card — duplicating is refused"
@@ -253,7 +253,7 @@
                           <svg class="i16 gddchev" aria-hidden="true"><use href="#i-badgeChevron" /></svg>
                         </button>
                         {{#if addMenu === 'mc'}}
-                          <div class="gddmenu" role="listbox" aria-label="MC numbers with addable work cards">
+                          <div class="gddmenu {{#if addMenuFlip}}down{{/if}}" role="listbox" aria-label="MC numbers with addable work cards">
                             {{#each addMcOptions as mc}}
                               <button class="gdditem {{#if addRow.mc === mc}}on{{/if}}" type="button" role="option"
                                       aria-selected="{{ addRow.mc === mc ? 'true' : 'false' }}"
@@ -274,7 +274,7 @@
                           <svg class="i16 gddchev" aria-hidden="true"><use href="#i-badgeChevron" /></svg>
                         </button>
                         {{#if addMenu === 'card'}}
-                          <div class="gddmenu" role="listbox" aria-label="Work cards on {{addRow.mc}}">
+                          <div class="gddmenu {{#if addMenuFlip}}down{{/if}}" role="listbox" aria-label="Work cards on {{addRow.mc}}">
                             {{#each addCardOptions as c}}
                               <button class="gdditem {{#if addRow.cardId === c.cardId}}on{{/if}}" type="button" role="option"
                                       aria-selected="{{ addRow.cardId === c.cardId ? 'true' : 'false' }}"
@@ -305,7 +305,11 @@
                   </div>
                 </div>
               {{else}}
+                {{! role=button PROMISES Enter/Space (review finding 15) — a div fires
+                    no click for either, so the keydown supplies what the role
+                    advertises. }}
                 <div class="gaddzone" role="button" tabindex="0" on-click="['openAddRow', g.id]"
+                     on-keydown="['addZoneKey', g.id]"
                      aria-label="Add a work card to {{g.name}}">
                   <span class="gaddrule" aria-hidden="true"></span>
                   <span class="gaddplus" aria-hidden="true"><svg class="i16"><use href="#i-plus" /></svg></span>
@@ -351,7 +355,7 @@
       already audits it as one `sprints.replace`), Cancel discards because
       openSprints re-copies from `sprints` on the next open. Nothing is written
       per row, and no sprint reference is ever written onto a deliverable —
-      membership stays derived from the slotted week (invariant 12 / R5).
+      membership is the stored sprint reference (#72 — the derived-week era ended with the rebuild).
 
       Two rulings the frame itself does not draw: column 1 holds the remove ✕
       and NOT the frame's six-dot grip (R-f-6 — `position` is derived from the
@@ -368,7 +372,7 @@
             <svg class="i16" aria-hidden="true"><use href="#i-close" /></svg>
           </button>
         </div>
-        <p class="smexplain">Sprints are not a fixed cadence – set whatever periods the project actually runs. A deliverable belongs to whichever sprint contains  its slotted week.</p>
+        <p class="smexplain">Sprints are not a fixed cadence – set whatever periods the project actually runs. A work card belongs to the sprint you add it to.</p>
 
         {{#if sprintDraft.length}}
           <div class="stable">
@@ -440,7 +444,12 @@
                       <svg class="i15" aria-hidden="true"><use href="#i-warning" /></svg>
                       <span class="sbtitle">Remove {{sprintDeleteConfirm.name}}?</span>
                     </div>
-                    <p class="sbdesc">{{sprintDeleteConfirm.count}} deliverables will move to Outside any sprint.</p>
+                    {{! Re-worded 2026-08-28 (review finding 7): the old copy promised
+                        deliverables would "move to Outside any sprint" — a group #72
+                        removed, in a unit this tab no longer schedules. The cascade is
+                        now real (the save removes the sprint's scheduled rows with it),
+                        so the banner states exactly that, in work cards. }}
+                    <p class="sbdesc">{{sprintDeleteConfirm.count}} scheduled work card{{sprintDeleteConfirm.count === 1 ? '' : 's'}} will be removed from the schedule with it.</p>
                     <div class="sbctas">
                       <button class="smbtn ghost" type="button" on-click="['cancelRemoveSprint']">Cancel</button>
                       <button class="smbtn danger" type="button" on-click="['confirmRemoveSprint']">Remove sprint</button>

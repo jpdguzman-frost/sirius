@@ -114,7 +114,7 @@ function closeMenus({ restoreFocus = false } = {}) {
   warnPopCancelClose(); // one door out: no pending close survives a close
   const t = overlayTrigger;
   const ae = document.activeElement;
-  const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .warnpop'));
+  const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .warnpop, .gddmenu'));
   /* RETURNING focus, never STEALING it. Every overlay before this batch opened
      on a CLICK of its own <button>, so the captured trigger was also what the
      browser had just focused and the restore was a no-op or a step back inside

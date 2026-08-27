@@ -36,7 +36,13 @@ function monthShiftYm(ym, delta) {
    one contract; when each spelled it out separately, adding a fourth persisted
    field silently stopped `sprintDirty` from seeing edits to it and left Save
    dead on a real change. */
-const sprintPayload = (s) => ({ name: s.name, start: s.start, end: s.end });
+/* The id RIDES the save when the sprint has one (review 2026-08-28,
+   finding 1): it is how the server tells "update this sprint" from "make a
+   new one", and it is what keeps each scheduled row's stored sprint reference pointing at a
+   sprint that still exists after a rename. A draft-added row has no id yet
+   and sends none. sprintDirty compares this same shape, so an unchanged
+   list still reads clean. */
+const sprintPayload = (s) => (s.id ? { id: s.id, name: s.name, start: s.start, end: s.end } : { name: s.name, start: s.start, end: s.end });
 
 function mondayIso(base) {
   const d = new Date(base + 'T00:00:00');

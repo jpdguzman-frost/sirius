@@ -92,6 +92,7 @@ const app = new Ractive({
     /* which Add dropdown is open ('mc' | 'card') — an overlay key like the
        rest, registered in OVERLAY_KEYS with the `.gdd` shield. */
     addMenu: null,
+    addMenuFlip: false, // finding 11: upward hits the sheet top → open downward
     /* owl #24: block id → true = collapsed. VIEW state only, no persistence —
        keyed on sprintGroups' `id` (a sprint's own id, never the sprint NAME:
        names are free text), and cleared on a project switch because sprint

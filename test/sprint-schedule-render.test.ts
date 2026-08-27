@@ -519,7 +519,7 @@ describe('the two dropdowns — MC first, card second, full strings always', () 
     // no tick joins it in the markup either — the menu subtree alone is read,
     // so an icon elsewhere in the sheet cannot mask (or fake) a violation
     const html = renderSprintSchedule({ ...OPEN_MC, addRow: { ...OPEN_MC.addRow, mc: 'MC-07' } });
-    const menu = divFragment('<div class="gddmenu"', html);
+    const menu = divFragment('<div class="gddmenu ', html);
     expect(menu).not.toContain('<svg'); // the chevron lives on the control, not in the list
   });
 

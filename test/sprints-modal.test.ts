@@ -661,7 +661,7 @@ describe('empty state (node 528:113433)', () => {
     expect(html).toContain('<h3 class="smtitle">Sprints</h3>');
     expect(html).toContain('aria-label="Close"');
     expect(html).toContain('Sprints are not a fixed cadence');
-    expect(html).toContain('A deliverable belongs to whichever sprint contains');
+    expect(html).toContain('A work card belongs to the sprint you add it to.');
     expect(html).toContain('>Cancel</button>');
   });
 
@@ -888,7 +888,12 @@ describe('deletion warning (Miles, #30)', () => {
 
   it('states the count in the ruling’s own words', () => {
     expect(html).toContain('Remove Sprint 47?');
-    expect(html).toContain('4 deliverables will move to Outside any sprint.');
+    /* Re-pinned 2026-08-28 (review finding 7): the old sentence promised a
+       group #72 removed, in a unit this tab no longer schedules — and the
+       promise was FALSE, because nothing moved anywhere. The cascade is now
+       real (the save removes the sprint's scheduled rows, audited as
+       removed_items), so the banner states exactly that, in work cards. */
+    expect(html).toContain('4 scheduled work cards will be removed from the schedule with it.');
   });
 
   it('confirms in place, after the row it is about', () => {

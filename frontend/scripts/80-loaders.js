@@ -241,16 +241,39 @@ async function writeCapacity(next) {
     try {
       const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
       app.set('deadlinePayload', res);
-      computeDeadlines();
+      /* A refresh can invalidate the add row's picked CARD (review 2026-08-28,
+       finding 9): someone else schedules it, or it completes — either way it
+       leaves `addable`, the closed control would render neither name nor
+       placeholder, and Add Item would stay live for a POST the server now
+       refuses. Same rule as an MC re-pick (#73): the pick clears, the row
+       and the MC stay, the repopulated list tells the user why. */
+    const add = app.get('addRow');
+    if (add && add.cardId) {
+      const pool = (app.get('sprintItems').addable || {})[add.mc] || [];
+      if (!pool.some((c) => c.cardId === add.cardId)) app.set('addRow.cardId', null);
+    }
+    computeDeadlines();
     } catch {
       /* stale-until-reload is the pre-amendment behavior — never worse */
     }
   }
 }
 
+/* Monotonic guard on the ONE payload-apply (review 2026-08-28, finding 5):
+   plotPlace / unplotItem / submitAddItem each end in their own loadAll and
+   nothing serialized them, so two quick gestures could land their responses
+   out of order and the OLDER snapshot — read before the second write
+   committed — would win the final app.set and re-draw a bar the server no
+   longer has. There is no poll and no push re-render on this screen, so the
+   stale rows would have stood until the next user action. The counter makes
+   application last-CALLER-wins instead of last-RESPONSE-wins: a superseded
+   load returns without touching state. */
+let loadGen = 0;
+
 async function loadAll() {
   const pid = app.get('activeProjectId');
   if (!pid) return;
+  const gen = ++loadGen;
   try {
     /* The `/model` fetch left with the Forecast tab (owl #67): the empirical
        model is applied SERVER-side in the pipeline route, so the browser never
@@ -297,6 +320,7 @@ async function loadAll() {
       r.mcDeliverables = (pipeline.mcDeliverables || {})[r.mcNumber] || 1;
       r.sharedMc = r.mcDeliverables > 1;
     });
+    if (gen !== loadGen) return; // a newer loadAll owns the screen — drop this snapshot whole
     capServer = pipeline.capacity.weekly; // server truth — the capacity rollback target
     app.set({
       rows: pipeline.rows,

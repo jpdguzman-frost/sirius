@@ -572,38 +572,48 @@ app.on({
     /* no week means no mousemove ran before the click (a tap, or a click
        racing the first hover) — nothing to place, so nothing to send */
     if (!week || sprintItemSaving) return;
+    /* THE LOCK SPANS THE RELOAD (review 2026-08-28, finding 2). Released in
+       the old `finally`, it dropped while loadAll was still fetching — the
+       row on screen still looked placeable/clearable and a second gesture
+       sent a PATCH the server would now no-op but the click should never
+       make. `finally` runs before code after the try, so the release lives
+       after the awaited reload, on both paths. */
     sprintItemSaving = true;
     try {
       /* #72 §6: placement is by hovered WEEK, and the week's Monday is the
          start — `plotWeek` IS that Monday (plannerWeeks keys are Mondays).
          Day-granular placement is #75's rollover territory. */
       await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/sprint-items/${itemId}`, { starts_on: week });
+      /* Clear ONLY the selection this write was made under (finding 4): a
+         selection re-armed on another row during the await belongs to the
+         USER'S next placement, not to this one's cleanup. */
+      if (app.get('sprintSel') === itemId) app.set({ sprintSel: null, plotWeek: null });
+      await loadAll();
     } catch (err) {
       // nothing was optimistic and the selection survives, so the user can
       // re-click once the banner explains what refused
       flashBanner(errText(err));
-      return;
     } finally {
       sprintItemSaving = false;
     }
-    app.set({ sprintSel: null, plotWeek: null });
-    await loadAll();
   },
-  /* the calendar icon: clear the placement, the row stays (#72). The button
-     is disabled without a `startsOn`, and the in-flight lock backs it up, so
-     no no-op PATCH reaches the audit log — the rule saveSprints keeps. */
+  /* the calendar icon: clear the placement, the row stays (#72). Three locks
+     against a no-op reaching the audit log (invariant 10 logs changes, not
+     attempts): the button is disabled without a `startsOn`; this in-flight
+     lock now spans the reload (review 2026-08-28, finding 2 — released
+     early, it left a stale-enabled button clickable mid-fetch); and the
+     server's own before==after guard, the backstop the first two cannot be. */
   async unplotItem(_ctx, itemId) {
     if (sprintItemSaving) return;
     sprintItemSaving = true;
     try {
       await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/sprint-items/${itemId}`, { starts_on: null });
+      await loadAll();
     } catch (err) {
       flashBanner(errText(err));
-      return;
     } finally {
       sprintItemSaving = false;
     }
-    await loadAll();
   },
 
   /* ---- the Add row (#72 §3, #73) ----
@@ -621,6 +631,16 @@ app.on({
        mutual exclusion — and openOverlay's toggle is what closes an open
        menu on a second click of its control. */
     if (which === 'card' && !app.get('addRow.mc')) return;
+    /* UPWARD IS THE DEFAULT, FLIP ON COLLISION (#73's own allowance). The
+       menu is CSS-anchored 5px above the control at up to 218px tall, and
+       .gwrap clips it: above an EMPTY first sprint there is ~161px of sheet,
+       so the top options — the alphabetically FIRST MCs — rendered outside
+       reach (review 2026-08-28, finding 11). Measured at open against the
+       scroller's visible top, because the clip is the scroller's, not the
+       viewport's. */
+    const wrap = ctx.node.closest('.gwrap');
+    const headroom = wrap ? ctx.node.getBoundingClientRect().top - wrap.getBoundingClientRect().top : Infinity;
+    app.set('addMenuFlip', headroom < 218 + 5);
     openOverlay(ctx, which, { key: 'addMenu' });
   },
   pickAddMc(_ctx, mc) {
@@ -632,6 +652,16 @@ app.on({
   pickAddCard(_ctx, cardId) {
     closeMenus({ restoreFocus: true });
     app.set('addRow.cardId', cardId);
+  },
+  /* review finding 15: the add zone is a div with role=button, and that role
+     is a PROMISE of Enter/Space activation the element cannot keep by itself.
+     preventDefault stops Space scrolling the pane it just activated in. */
+  addZoneKey(ctx, sprintId) {
+    if (ctx.event.key !== 'Enter' && ctx.event.key !== ' ') return;
+    ctx.event.preventDefault();
+    // the same one-line state change openAddRow makes — not a re-fire, so
+    // the two paths cannot diverge in what a "click" means
+    app.set('addRow', { sprintId, mc: null, cardId: null, saving: false });
   },
   async submitAddItem() {
     const add = app.get('addRow');
@@ -645,12 +675,18 @@ app.on({
     } catch (err) {
       /* the 409s (CARD_COMPLETE / ALREADY_SCHEDULED) land here — errText
          prefers the server's own message, so it is shown verbatim. The row
-         stays open with its picks intact for another try. */
-      app.set('addRow.saving', false);
+         stays open with its picks intact for another try.
+         `addRow` IS RE-READ (review 2026-08-28, finding 3): Escape or another
+         zone's + can have replaced or nulled the draft during the await, and
+         a keypath write into a nulled addRow makes Ractive conjure a phantom
+         `{saving:false}` that matches no sprint. Only THIS draft is touched. */
+      if (app.get('addRow') === add) app.set('addRow.saving', false);
       flashBanner(errText(err));
       return;
     }
-    app.set('addRow', null);
+    // same identity rule on success: never clobber a draft the user has
+    // since opened in another sprint — the POSTed row arrives via loadAll
+    if (app.get('addRow') === add) app.set('addRow', null);
     await loadAll();
   },
   /* owl #24 — collapse is PRESENTATION only: sprintGroups, the block header's
@@ -666,6 +702,10 @@ app.on({
      moves with it; without the refresh the timeline thumb keeps the old ratio
      and lies about how much timeline is off-screen. */
   toggleLeftPane() {
+    /* the collapsed pane cannot show the add row (its controls live in
+       hidden columns — review finding 10), so an open draft is discarded
+       rather than left standing invisibly with Add Item unreachable */
+    if (app.get('addRow')) app.set('addRow', null);
     app.set('leftCollapsed', !app.get('leftCollapsed'));
     // the collapsed pane hides the three detail columns (#72 layout), so the
     // sheet's width and the thumb's ratio both change — re-measure next frame

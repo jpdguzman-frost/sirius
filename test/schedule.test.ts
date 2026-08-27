@@ -7,11 +7,12 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request, { type Agent } from 'supertest';
+import { Types } from 'mongoose';
 import { readFile } from 'node:fs/promises';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
-import { AuditLog, Deliverable, Project, Sprint, SyncRun, User, UserProject } from '../src/models/index.ts';
+import { AuditLog, Deliverable, Project, Sprint, SprintItem, SyncRun, User, UserProject, WorkCard } from '../src/models/index.ts';
 import { getHolidays, setHolidays } from '../lib/calendar.ts';
 
 const env = validateEnv({ NODE_ENV: 'test' });
@@ -227,6 +228,106 @@ describe('sprints (FR-5.14, FR-5.15, BR-5)', () => {
  * must land on the friendly 422 — never a Zod 400, whose envelope carries no
  * `issues[]` for the modal's `issues[0].text` fallback to read.
  */
+describe('sprint identity survives the save (review 2026-08-28, finding 1)', () => {
+  /* THE BUG THIS PINS: the save was deleteMany + insertMany, minting fresh
+     ObjectIds on every PUT. Invisible while membership was DERIVED from the
+     slotted week; the moment #72 stored `sprint_items.sprint_id`, a routine
+     RENAME would have orphaned every scheduled row — gone from every group,
+     still counted in the footer, its card locked out of the dropdown by the
+     unique index, with no UI path back. The fix: a row with an id UPDATES
+     that sprint; a row without one inserts; a live sprint absent from the
+     payload is removed WITH its scheduled items, in the same audited act the
+     modal's confirm banner warns about (Miles #30). */
+
+  async function seedSprintWithItem(projectId: Types.ObjectId) {
+    const sprint = await Sprint.create({ project_id: projectId, name: 'Sprint 46', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 1 });
+    await WorkCard.create({
+      project_id: projectId, trello_card_id: 'wc-1', mc_number: 'MC-655',
+      name: 'Sketch Asset: hero', task_prefix: 'Sketch Asset', current_list: 'Design', active: true,
+    });
+    const item = await SprintItem.create({
+      project_id: projectId, sprint_id: sprint._id, mc_number: 'MC-655',
+      trello_card_id: 'wc-1', starts_on: '2026-08-03', position: 0, added_by: 'pm@frostdesigngroup.com',
+    });
+    return { sprint, item };
+  }
+
+  it('a rename keeps the sprint id, and the scheduled row keeps its home', async () => {
+    const { project, agent } = await setup();
+    const { sprint, item } = await seedSprintWithItem(project._id);
+    await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [{ id: String(sprint._id), name: 'Sprint 46 — renamed', start: '2026-08-03', end: '2026-08-14' }],
+    }).expect(200);
+    const after = await Sprint.find({ project_id: project._id }).lean();
+    expect(after).toHaveLength(1);
+    expect(String(after[0]!._id)).toBe(String(sprint._id)); // THE identity
+    expect(after[0]!.name).toBe('Sprint 46 — renamed');
+    const row = await SprintItem.findById(item._id).lean();
+    expect(String(row!.sprint_id)).toBe(String(sprint._id)); // still joined
+  });
+
+  it('adding a second sprint leaves the first id — and its rows — untouched', async () => {
+    const { project, agent } = await setup();
+    const { sprint, item } = await seedSprintWithItem(project._id);
+    await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { id: String(sprint._id), name: 'Sprint 46', start: '2026-08-03', end: '2026-08-14' },
+        { name: 'Sprint 47', start: '2026-08-17', end: '2026-08-28' },
+      ],
+    }).expect(200);
+    const after = await Sprint.find({ project_id: project._id }).sort({ position: 1 }).lean();
+    expect(after).toHaveLength(2);
+    expect(String(after[0]!._id)).toBe(String(sprint._id));
+    expect(await SprintItem.countDocuments({ _id: item._id })).toBe(1);
+  });
+
+  it('removing a sprint removes its scheduled rows WITH it, in the same audit row', async () => {
+    /* the cascade is the confirm banner's promise kept: without it the rows
+       orphan — invisible in every group yet still counted, their cards
+       locked out of the dropdown forever */
+    const { project, agent } = await setup();
+    const { item } = await seedSprintWithItem(project._id);
+    await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [{ name: 'Sprint 99', start: '2026-09-07', end: '2026-09-18' }],
+    }).expect(200);
+    expect(await SprintItem.countDocuments({ _id: item._id })).toBe(0);
+    const log = await AuditLog.findOne({ action: 'sprints.replace' }).lean();
+    const removed = (log!.after as { removed_items: { card_id: string }[] }).removed_items;
+    expect(removed.map((r) => r.card_id)).toEqual(['wc-1']);
+    // and the card is addable again — the unique index no longer holds it
+    expect(await SprintItem.countDocuments({ project_id: project._id, trello_card_id: 'wc-1' })).toBe(0);
+  });
+
+  it('an id the project does not hold is refused as stale, not treated as new', async () => {
+    const { project, agent } = await setup();
+    await seedSprintWithItem(project._id);
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [{ id: '6a7c2a9f58d668316cb1ffff', name: 'Ghost', start: '2026-08-03', end: '2026-08-14' }],
+    }).expect(409);
+    expect(res.body.error.code).toBe('SPRINTS_STALE');
+    // and NOTHING moved — a refused save must leave the collection as it was
+    expect(await Sprint.countDocuments({ project_id: project._id })).toBe(1);
+  });
+});
+
+describe('the sprint-item PATCH refuses to audit a non-change (review finding 2)', () => {
+  it('an identical starts_on writes no second audit row', async () => {
+    /* invariant 10 logs CHANGES, not attempts — the client's in-flight lock
+       now spans its reload, and this is the backstop the lock cannot be:
+       before == after answers ok WITHOUT saving and WITHOUT auditing. */
+    const { project, agent } = await setup();
+    const sprint = await Sprint.create({ project_id: project._id, name: 'S', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 1 });
+    await WorkCard.create({ project_id: project._id, trello_card_id: 'wc-2', mc_number: 'MC-701', name: 'Render Asset: icons', current_list: 'Design', active: true });
+    const created = await agent.post(`/api/projects/${project._id}/sprint-items`).send({ sprint_id: String(sprint._id), card_id: 'wc-2' }).expect(201);
+    const itemId = created.body.id as string;
+    await agent.patch(`/api/projects/${project._id}/sprint-items/${itemId}`).send({ starts_on: null }).expect(200);
+    const audits = await AuditLog.countDocuments({ action: 'sprintItem.plot' });
+    const res = await agent.patch(`/api/projects/${project._id}/sprint-items/${itemId}`).send({ starts_on: null }).expect(200);
+    expect(res.body.noop).toBe(true);
+    expect(await AuditLog.countDocuments({ action: 'sprintItem.plot' })).toBe(audits); // no new row
+  });
+});
+
 describe('sprints — blank names reject (owl #37 item 2)', () => {
   it('rejects a whitespace-only name with a 422 that writes nothing and audits nothing', async () => {
     const { project, agent } = await setup();
