@@ -17,8 +17,8 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12 (observation mode)**; T073/T091 ⏸, T075 pending, non-member 403 parked | write-enable on rt-837 = next JP gate |
 | 10–13k | Two-way sync · admin · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · expanded MC row | **DEPLOYED + LIVE through 2026-08-19** (T077–T178, ..`b401bac`) | detail: `docs/history/phase-log.md` |
 | 14pf–16 | Pipeline **filter + sort** · **"None"** as a value · **Deadlines tab rebuilt** (R-dl-a..n) · panels measured to the frames · **the Filter Indicator** · two review passes | **LIVE 2026-08-21** (`a3e4c88`) — clicked through on rt-test, twice (`897c3dd` and again for the Indicator work); the pass found DL-scope in the Deadlines Breakdown |
-| 17 | **Forecast tab rebuilt to §7.2/§7.3** — the last tab on pre-redesign markup. Two-tier header, 25 columns from one column table, the model banner, search, Model Constants, §8 empty states. Law: `specs/001-sirius-v1/forecast-frame-notes.md` (R-fc-a…y) | **DEPLOYED 2026-08-22** (`3cfcd96`) — ⚠️ **LIVE BUT NEVER SEEN IN A BROWSER** (JP accepted; browser pass still owed) |
-| 17b | **One clock, Manila's** (invariant 11 — planner week, Add-sprint, Deadlines month) · **Schedules + Deadlines off the unfinished-screen background** (frames `262:33320` / `630:51389`, both white) | **DEPLOYED 2026-08-22** (`3cfcd96`) |
+| 17 | **One clock, Manila's** (invariant 11) · **Schedules + Deadlines off the unfinished-screen background** (both frames white) | **DEPLOYED 2026-08-22** (`3cfcd96`) |
+| 18 | **The redesign** (owls #67–#74): Forecast tab withdrawn · OPEN WORK blue/500 · the client-review wait out of the past-deadline warning · **the scheduled unit becomes the WORK CARD** — `sprint_items`, migration 009, no backfill | **server half committed 2026-08-27** (`96147ee`..`9c3733d`), NOT deployed — frontend for both rebuilt tabs still to build |
 
 **Build health (2026-08-25):** 1196/1196 tests + 32 `it.todo`, 68 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
@@ -80,9 +80,8 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Figma reads** — the official Figma MCP is the verified path
   (`get_design_context` for annotations, `get_metadata` for geometry; load the
   figma-design-to-code skill first). File `abDRsIVDs1XjJKeR8xYOoF`. **Rex adds
-  the component's own auto-layout and its VARIANT names** — how the 2026-08-21
-  panel work found states a screenshot cannot show; run `mcp__rex__get_status`
-  for the channel, never write the number down (it takes a free port at start).
+  auto-layout and VARIANT names** a screenshot cannot show; `mcp__rex__get_status`
+  for the channel, never write the port down.
 - **File drop `../owl/` (ARES agent)** — **ALIVE AGAIN 2026-08-25**: they
   replied (#01; our #10 back) and **`hLL7WW2V` push is live** — first events
   03:41:50Z, drained ~1s. **`../ares/` is a sibling repo — read it rather than wait.**
@@ -93,36 +92,26 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   switch live write yet"**. ⚠️ **Blocker found 2026-08-25: `staleGuard` compares
   our write against the instant we ISSUED the ARES read, never against when ARES
   actually fetched, so a reconcile could revert a user's edit. **FIXED + LIVE
-  2026-08-25** (`unstamped: 0` on 598 cards); the TEST-board edit-and-reconcile
-  check is what remains before enabling.**
-  Security review also precedes · `GOOGLE_SHEETS_CREDENTIALS` — lights up Requests plus
-  requestor/type on real data · ALT-9 sheet-row link (expose
-  `intake_sheet_id` or drop the sub-label) · ALT-1 (dead server `?filter=`
-  param) · OD-4's non-capacity remainder — the capacity slice was ruled
-  2026-08-17, the broader expiry question stays OPEN (`decisions/0019`) ·
-  loopback-listen test hardening (~21 files) · whether to draw a custom drag image so Chrome's
-  translucency/shadow go away entirely (only `setDragImage` can).
+  2026-08-25**; the TEST-board edit-and-reconcile check is what remains.**
+  Security review also precedes · `GOOGLE_SHEETS_CREDENTIALS` (lights up
+  Requests + requestor/type on real data) · ALT-9 sheet-row link · ALT-1 (dead
+  server `?filter=`) · OD-4's non-capacity remainder (`decisions/0019`) ·
+  loopback-listen test hardening (~21 files) · a custom drag image.
 - **Live browser passes owed** (JP's browser is shared — use an isolated
-  profile). **JP 2026-08-21: the Forecast build is accepted WITHOUT browser
-  validation for now — deferred deliberately, not skipped.** Do not read its
-  green suite as "it works"; the 8 `it.todo` in `test/forecast-frame.test.ts`
-  are the unanswered list. ⚠️ **PRUNED 2026-08-25 — this queue had gone stale
-  and was reported to JP as fact.** The Pipeline panels and Deadlines v2 were
-  clicked through on 2026-08-21; `56569fc` recorded that pass and left this
-  list untouched. **Prune it in the same commit that records a pass.** Queue:
-  **Forecast** · **the white background on Schedules + Deadlines** (both live
-  2026-08-22, unseen) · the task-due picker by hand · the sub-350px last-resort
-  scroll · the b13 note chip + clarification accent · drag a bar collapsed.
+  profile). **Prune this queue in the same commit that records a pass** — it
+  once went stale and was reported to JP as fact. Queue: **the white
+  background on Schedules + Deadlines** (live 2026-08-22, unseen) · the
+  task-due picker by hand · the sub-350px last-resort scroll · the b13 note
+  chip + clarification accent · drag a bar collapsed. *(The Forecast entry
+  left with the tab, 2026-08-27.)*
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
 - **Agent backlog**: T075 AC sweep · non-member 403 check · `Last Synced`
-  browser-TZ + col-done width leftovers · schedules-tab full tokenization
-  beyond the planner · per-tab URL sub-state (filters/week/sort as query
-  params; expansion state could join it — raised to Miles in #40) ·
-  `worker/CLAUDE.md` still to write (traced pass — highest-consequence
-  path) · pipeline/requests rulebook extraction from their frame-notes
-  (Layer-2 law until extracted — `docs/README.md` §Where law lives).
+  browser-TZ + col-done width · schedules-tab tokenization beyond the planner ·
+  per-tab URL sub-state (raised to Miles in #40) · `worker/CLAUDE.md` unwritten
+  (highest-consequence path) · pipeline/requests rulebook extraction from their
+  frame-notes (Layer-2 law until extracted — `docs/README.md`).
 
 ## Session log
 
@@ -131,4 +120,5 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
+- 2026-08-27 — **Six owls (#67–#74) replace the scheduling unit**: a row is now one Trello TASK CARD, not a deliverable, so sketch and render are separate rows and the Review bar leaves the drawing (not the arithmetic). **JP ruled three things**: Forecast tab OUT (screen only — engine, `/model` and the two parked controls stay), REBUILD Schedules + Deadlines on the work-card unit, and **past-deadline now means the WORK runs past the date** — the client-review wait was inside every late warning in the product while being visible and adjustable nowhere. Answered both of product's open questions from the code: the requestor rename needs no data change (already `requestor` end to end), and **ARES has no per-item forecast** — its model is a Monte-Carlo queue simulation keyed on lane/discipline, not difficulty. Server half of the rebuild shipped: `sprint_items`, migration 009 with **no backfill**, 24 tests. → docs/history/state-log/2026-08-27.md
 - 2026-08-25 — **Owl #66** → the Pipeline header said **Client** while the filter, chip and Requests table said **Requestor**; renamed, then made impossible: the header now DERIVES from a column table. **ARES caching settled by reading `../ares/`, not by owl** — reads never touch Trello (15-min store + a live webhook, measured), so `staleGuard` was comparing our write against when we ASKED, not when ARES FETCHED, and a reconcile could revert a user's edit. Fixed, live, `unstamped: 0` on 598 cards. **/simplify + /code-review: 27 findings, 24 applied** — including a bug the fix itself introduced (no stamp skipped the registry write even on INSERT, stranding a new card on schema defaults), a vacuous race test, and three faults in guards written the same day. → docs/history/state-log/2026-08-25.md
