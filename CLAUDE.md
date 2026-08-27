@@ -46,6 +46,54 @@ Do NOT: split into SPA + separate API domain · apply schema or index changes by
 
 
 
+## Build workflow — how work is executed (JP, 2026-08-28)
+
+Applies to any build — a feature, a screen, anything multi-file. One-line
+fixes and docs-only changes are exempt. **Deploy is never part of a
+workflow; it waits for JP.**
+
+**The main thread stays open.** It orchestrates, holds the gates, reads
+owls, and talks to JP; the work itself runs as background workflows. Phases
+run as SEPARATE workflows — survey, build, review — with the main thread
+(and JP, at the gate) between them, never one fire-and-forget pipeline.
+
+**Model tiers:** lower models for survey, higher for build. Readers and
+sweeps run Sonnet (Haiku for purely mechanical ones); build agents run
+Opus 5 or Fable 5, whichever fits the piece — Fable for the hardest,
+law-heavy or design-heavy work; review/verify agents run high.
+
+1. **SURVEY** — parallel readers over code, specs/owls, and Figma. Figma
+   goes through Rex when connected (`get_status` first), else the Figma
+   MCP. **Geometry is read from nodes or exported SVG, never from
+   annotation prose** — the prose has been wrong about its own design four
+   times on this project. A node id that 404s is re-found by name.
+2. **DRIFT REPORT — the gate.** Survey ends in a table: spec vs built,
+   item by item, every place the mock contradicts a ruled rule called out.
+   JP sees it before anything is built.
+3. **BUILD** — parallel agents where the work allows, each with
+   **exclusive ownership of its files** (the frontend is one concatenated
+   `<script>`: split by layer — state / template / stylesheet / tests —
+   with state keys, class names and handler names frozen in the plan
+   first). Each agent is pointed at the law for its layer
+   (`test/CLAUDE.md`, `gantt-rules.md`).
+4. **VALIDATE** — typecheck, lint, full suite `TZ=UTC` and
+   `TZ=Asia/Manila` (calendar suites also America/New_York). The two
+   documented environmental flakes: re-run before believing red, record,
+   never mask. **Every new guard proven non-vacuous** — revert the code,
+   watch it fail, restore.
+5. **REVIEW** — a simplification pass and a correctness review with
+   adversarial verification, every build.
+6. **E2E** — seeded local fixtures, a real browser: programmatic
+   measurements plus screenshots plus a clean console; interactions proven
+   by real pointer only. Live-site writes only against `rt-test`.
+7. **CLOSE** — `STATE.md` and the day log updated; the drift report and
+   decisions land in the session record.
+
+Outward messages (owls, anything leaving the machine) are never sent from
+inside a workflow — per-approval, from the main thread.
+
+
+
 ## Reply format — always
 
 Every reply to JP follows this shape, in this order:
