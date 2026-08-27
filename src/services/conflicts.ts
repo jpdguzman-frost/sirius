@@ -140,7 +140,11 @@ export function detectConflicts(milestones: Milestone[], weeklyCapacity: number)
         key: conflictKey(week, 'past-deadline', weeklyCapacity, breaching),
         week,
         rule: 'past-deadline',
-        explanation: 'Forecast dates fall after the client deadline for the items listed.',
+        // 2026-08-27 (JP): the review wait is out of this measure, so the
+        // wording says WORK rather than "forecast dates" — the forecast date
+        // on screen still carries the wait and can sit later than the deadline
+        // without being listed here.
+        explanation: 'The design work alone runs past the client deadline for the items listed.',
         items: breaching.map(({ cardId, displayId, name, phase, urgent }) => ({ cardId, displayId, name, phase, urgent })),
       });
     }

@@ -272,7 +272,13 @@ function fmtDeadlineShort(iso, refIso) {
 const DL_RULES = [
   { rule: 'urgent-overlap', word: 'overlap', chip: '⚡ Urgent overlap', label: 'URGENT OVERLAP', text: 'Two or more urgent milestones in one week.' },
   { rule: 'over-capacity', word: 'over capacity', chip: '▤ Over capacity', label: 'OVER CAPACITY', text: "Cards due exceed the week's capacity, taken from the project's typical week in ARES. Non-urgent items in that week are listed as displaced." },
-  { rule: 'past-deadline', word: 'past deadline', chip: '🛡 Past deadline', label: 'PAST DEADLINE', text: "the forecast date falls after the client's stated deadline." },
+  /* Reworded 2026-08-27 with the rule itself (JP). It used to read "the
+     forecast date falls after the client's stated deadline", which stopped
+     being what the code measures: the forecast date shown on the card still
+     includes the client's review wait, and the warning no longer does. Leaving
+     the old words would have had the legend explain a comparison the reader
+     can make on screen and get a different answer to. */
+  { rule: 'past-deadline', word: 'past deadline', chip: '🛡 Past deadline', label: 'PAST DEADLINE', text: 'the design work alone runs past the client deadline. The forecast date shown also includes the wait for client review, so it can fall later than the deadline without this being flagged.' },
 ];
 /** The one row for a rule, or a stub carrying the key so nothing renders blank. */
 const dlRule = (rule) => DL_RULES.find((r) => r.rule === rule) || { rule, word: rule, chip: rule, label: rule, text: '' };

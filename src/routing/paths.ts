@@ -28,6 +28,18 @@ export type RouteTab = (typeof ROUTE_TABS)[number];
 export const ROUTE_DEFAULT_TAB: RouteTab = 'pipeline';
 
 /**
+ * Tabs that USED to exist. The shell still answers for them; the client
+ * normalises the URL to the default tab on arrival.
+ *
+ * Withdrawing `forecast` from `ROUTE_TABS` alone made every bookmarked or
+ * pasted `/<project>/forecast` link a hard 404 from the server — the shell was
+ * never served, so the client router never ran and could not redirect. A
+ * retired tab should land you on the app, not on an error page. Entries stay
+ * here permanently; the cost is one string.
+ */
+export const ROUTE_RETIRED_TABS: readonly string[] = ['forecast'];
+
+/**
  * First segments the server owns. The shell whitelist rejects these
  * independently of registration order, so a route added AFTER the catch-all
  * still cannot be shadowed by it.
@@ -59,7 +71,7 @@ export function isShellPath(pathname: string): boolean {
   if (!SEGMENT.test(first) || ROUTE_RESERVED.has(first)) return false;
   if (segments.length === 1) return true;
 
-  return TABS.includes(segments[1]!);
+  return TABS.includes(segments[1]!) || ROUTE_RETIRED_TABS.includes(segments[1]!);
 }
 
 /** The one file in public/ — the shell, which must never be served unstamped. */

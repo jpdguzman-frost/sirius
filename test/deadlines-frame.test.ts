@@ -163,12 +163,33 @@ describe('the Model Constants legend and the engine state the same three rules',
     expect(recipe.DL_RULES.map((r) => r.rule)).toEqual(['urgent-overlap', 'over-capacity', 'past-deadline']);
   });
 
-  it('quotes the frame’s wording verbatim', () => {
+  it('quotes the frame’s wording verbatim, except where the rule moved', () => {
     const byRule = Object.fromEntries(recipe.DL_RULES.map((r) => [r.rule, r]));
     expect(byRule['urgent-overlap']!.label).toBe('URGENT OVERLAP');
     expect(byRule['urgent-overlap']!.text).toBe('Two or more urgent milestones in one week.');
-    expect(byRule['past-deadline']!.text).toBe("the forecast date falls after the client's stated deadline.");
     expect(byRule['over-capacity']!.text).toContain('taken from the project’s typical week in ARES'.replace('’', "'"));
+  });
+
+  /* THE ONE DELIBERATE DEPARTURE FROM THE FRAME (JP, 2026-08-27).
+     The frame reads "the forecast date falls after the client's stated
+     deadline", and this guard pinned that string. It stopped being true: the
+     warning now measures the design WORK, while the forecast date on the card
+     still carries the client's review wait. Keeping the frame's words would
+     have had the legend explain a comparison the reader can make on screen and
+     get the opposite answer to — the exact drift R-dl-d exists to prevent, just
+     pointed at the engine instead of at the drawing.
+
+     Asserted as the RULE — the legend says what `late` measures and warns that
+     the displayed date is not it — rather than as a new fixed string, so
+     rewording stays free and silently reverting to the old meaning does not.
+     Raised with product; until they re-word the frame this build is
+     authoritative, which is the standing arrangement for frame defects. */
+  it('the past-deadline legend describes what `late` MEASURES, not the drawn date', () => {
+    const text = recipe.DL_RULES.find((r) => r.rule === 'past-deadline')!.text as string;
+    expect(text).toMatch(/\bwork\b/i); // it is the work that runs past the date
+    expect(text).toMatch(/review/i); // and the shown date includes the wait
+    // the retired wording asserted the opposite of what the code now does
+    expect(text).not.toBe("the forecast date falls after the client's stated deadline.");
   });
 
   it('renders the legend FROM the rule table, so the two cannot be edited apart', () => {

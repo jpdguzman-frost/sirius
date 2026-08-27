@@ -47,7 +47,8 @@ export interface SprintItemRow {
   taskPrefix: string | null;
   difficulty: string | null;
   currentList: string | null;
-  status: string;
+  /** `null` when the work card has left the board — absent is not 'ongoing'. */
+  status: string | null;
   trelloUrl: string | null;
   urgent: boolean;
   /**
@@ -86,15 +87,29 @@ export interface SprintItemsResult {
 }
 
 /**
- * The lane classifier's inputs for a TASK card. `laneOf` reads a list name
- * plus label text; a task card has no labels, but `task_prefix` is exactly
- * that kind of text — 'Render Asset', 'Icon Clean Up' — and is what tells
- * `assets` from `design` here. Passing it as a label is using the classifier
- * as written rather than writing a second one.
+ * The lane classifier's inputs for a TASK card: its LIST, and nothing else.
+ *
+ * `task_prefix` was fed in as a label at first, on the reasoning that it is the
+ * same kind of text `laneOf` classifies. It is not, and the effect was severe:
+ * `laneOf` matches `/asset|illustrat|render|icon/`, and EVERY task prefix the
+ * board actually uses — 'Sketch Asset', 'Render Asset', 'Icon Clean Up' —
+ * matches it. So the lane was `assets` for every task card regardless of the
+ * work, which for an Easy card selects a 13.88-day design cell instead of a
+ * 0.94-day one. A fourteen-fold difference chosen by a title convention.
+ *
+ * The list is a fact about where the card sits on the board; the title prefix
+ * is a naming habit. Classifying on the list alone is the same signal the main
+ * card is classified on, minus labels a task card does not have.
+ *
+ * KNOWN RESIDUAL, raised not solved: a task card's list can still classify
+ * differently from its MC's main card, so a bar here and the Pipeline forecast
+ * for the same MC can key off different cells. They are different units — one
+ * phase against a whole deliverable — so some divergence is inherent, but which
+ * lane a TASK belongs to is a product question nobody has ruled.
  */
-const laneInputs = (w: { current_list?: string | null; task_prefix?: string | null }) => ({
+const laneInputs = (w: { current_list?: string | null }) => ({
   currentList: w.current_list ?? '',
-  labels: w.task_prefix ? [w.task_prefix] : [],
+  labels: [] as string[],
 });
 
 /**
@@ -158,10 +173,11 @@ export function finishOf(
  * when the group disagrees.
  */
 function deadlineFor(
-  card: { trello_due?: string | null; mc_number: string },
+  card: { trello_due?: string | null } | undefined,
+  mcNumber: string,
   mcDeadline: Map<string, string>,
 ): string | null {
-  return card.trello_due ?? mcDeadline.get(card.mc_number) ?? null;
+  return card?.trello_due ?? mcDeadline.get(mcNumber) ?? null;
 }
 
 /**
@@ -185,7 +201,11 @@ export async function loadSprintItems(
   workCards: WorkCardDoc[],
   deliverableRows: PipelineRow[],
 ): Promise<SprintItemsResult> {
-  const items = await SprintItem.find({ project_id: projectId }).sort({ position: 1 }).lean();
+  /* `_id` breaks a `position` tie. Ties are possible — two concurrent adds to
+     one sprint both read the same tail position, and a move between sprints
+     carries its old position across — and without a tiebreaker the two rows
+     swap places between requests, so the list appears to shuffle on refresh. */
+  const items = await SprintItem.find({ project_id: projectId }).sort({ position: 1, _id: 1 }).lean();
 
   /* Earliest client date per MC group — see `deadlineFor` for why earliest. */
   const mcDeadline = new Map<string, string>();
@@ -214,7 +234,12 @@ export async function loadSprintItems(
     const w = byId.get(it.trello_card_id as string);
     const startsOn = (it.starts_on as string | null) ?? null;
     const finish = w && startsOn ? finishOf(w, startsOn, model) : null;
-    const deadline = w ? deadlineFor(w, mcDeadline) : (mcDeadline.get(it.mc_number as string) ?? null);
+    /* THE ROW'S OWN `mc_number`, not the card's current one. They can differ:
+       the row snapshots the group at add time and the sync follows the card, so
+       a card re-titled into another MC in Trello would otherwise be grouped and
+       flagged under one MC while being measured against another's client date.
+       One source for identity, urgency and deadline, whichever it is. */
+    const deadline = deadlineFor(w, it.mc_number as string, mcDeadline);
     return {
       id: String(it._id),
       sprintId: String(it.sprint_id),
@@ -224,7 +249,11 @@ export async function loadSprintItems(
       taskPrefix: (w?.task_prefix as string) ?? null,
       difficulty: (w?.difficulty as string) ?? null,
       currentList: (w?.current_list as string) ?? null,
-      status: classifyList(w?.current_list as string | undefined),
+      /* `null`, not `classifyList(undefined)` — that falls through to
+         'ongoing', so a row whose card has left the board rendered an active
+         status chip beside a null list, a null bar and no name. Absent is its
+         own state and the UI must be able to say so. */
+      status: w ? classifyList(w.current_list as string | undefined) : null,
       trelloUrl: (w?.trello_url as string) ?? null,
       urgent: mcUrgent.has(it.mc_number as string),
       startsOn,

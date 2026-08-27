@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ROUTE_DEFAULT_TAB,
   ROUTE_TABS,
+  ROUTE_RETIRED_TABS,
   injectBase,
   isShellPath,
   resolvesToShellFile,
@@ -36,7 +37,28 @@ describe('isShellPath — what the html shell owns', () => {
     expect(isShellPath('/admin')).toBe(true); // row 7 — non-admin falls back client-side
   });
 
-  it('serves every one of the six tabs, under a project and bare', () => {
+  /* A RETIRED tab still gets the shell. Dropping `forecast` from ROUTE_TABS
+     alone turned every bookmarked or pasted `/<project>/forecast` into a hard
+     404 from the SERVER — the shell was never sent, so the client router never
+     ran and could not fall back. Asserted over the retired list rather than
+     over `forecast`, so the next withdrawal is covered by adding one string. */
+  it('still serves a WITHDRAWN tab, so old links land on the app not a 404', () => {
+    expect(ROUTE_RETIRED_TABS.length, 'nothing retired — this guard is vacuous').toBeGreaterThan(0);
+    for (const tab of ROUTE_RETIRED_TABS) {
+      expect(ROUTE_TABS as readonly string[]).not.toContain(tab); // retired means gone from the live set
+      expect(isShellPath(`/${tab}`), `bare /${tab} 404s`).toBe(true);
+      expect(isShellPath(`/rt-test/${tab}`), `/rt-test/${tab} 404s`).toBe(true);
+      expect(safeReturnTo(`/rt-test/${tab}`), 'a retired tab is a safe landing').toBe(`/rt-test/${tab}`);
+    }
+  });
+
+  it('the shipped router declares the same retired list', () => {
+    const match = /const ROUTE_RETIRED_TABS = (\[[^\]]*\]);/.exec(ROUTER_SRC);
+    expect(match, 'no ROUTE_RETIRED_TABS literal in the shipped router source').not.toBeNull();
+    expect(JSON.parse(match![1]!.replace(/'/g, '"'))).toEqual([...ROUTE_RETIRED_TABS]);
+  });
+
+  it('serves every one of the live tabs, under a project and bare', () => {
     for (const tab of ROUTE_TABS) {
       expect(isShellPath(`/rt-837/${tab}`)).toBe(true);
       expect(isShellPath(`/${tab}`)).toBe(true);

@@ -132,10 +132,16 @@
               {{#each w.items as m}}
                 {{! DEADLINE CARD. Two dates, two meanings: the CAPTION date is
                     the forecast milestone — it is what puts the card in this
-                    week — and the SUBTITLE date is the client's deadline.
-                    Comparing them is the past-deadline rule, so they are
-                    separately placed and separately labelled and must never be
-                    collapsed into one date (owl #64). }}
+                    week — and the SUBTITLE date is the client's deadline. They
+                    are separately placed and separately labelled and must never
+                    be collapsed into one date (owl #64).
+
+                    ⚠️ COMPARING THEM IS NOT THE PAST-DEADLINE RULE, since
+                    2026-08-27. The caption still includes the wait for client
+                    review; `m.late` measures the design work alone (JP's
+                    ruling — see `workFinishOf`). So a caption LATER than the
+                    subtitle with no late styling is correct, not a missing
+                    flag, and the legend says why. }}
                 <article class="dlcard {{#if m.urgent}}urgent{{/if}} {{#if m.late}}late{{/if}}">
                   <p class="dlcapt">
                     <span class="dlmc">{{m.displayId}}</span>

@@ -13,6 +13,12 @@
    two literals never drift apart. */
 
 const ROUTE_TABS = ['requests', 'pipeline', 'schedules', 'deadlines', 'admin'];
+/* Tabs that used to exist. `parseRoute` reports them as an UNKNOWN tab (null),
+   which the caller already resolves to the default — so a bookmarked
+   `/rt-837/forecast` opens the app on Pipeline and the URL normalises. The
+   server keeps serving the shell for these (src/routing/paths.ts); without
+   both halves the link 404s before any of this runs. */
+const ROUTE_RETIRED_TABS = ['forecast'];
 const ROUTE_DEFAULT_TAB = 'pipeline';
 
 /**

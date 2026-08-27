@@ -12,7 +12,7 @@ import globals from 'globals';
 const FRONTEND_SHARED = [
   'alphaSort',
   'api', 'fmtDate', 'mondayShift', 'ICONS', 'ICON_SPRITE',
-  'BASE', 'parseRoute', 'buildPath', 'ROUTE_TABS', 'ROUTE_DEFAULT_TAB',
+  'BASE', 'parseRoute', 'buildPath', 'ROUTE_TABS', 'ROUTE_DEFAULT_TAB', 'ROUTE_RETIRED_TABS',
   // The former 01-app.js, split into ten files (context restructure stage 5,
   // 2026-08-18): everything below is defined in one of those pieces and read
   // in a later one. Same shared-<script> scope as above.

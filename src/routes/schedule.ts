@@ -516,7 +516,18 @@ export function scheduleRouter(): Router {
         return;
       }
       const before = { starts_on: item.starts_on ?? null, sprint_id: String(item.sprint_id) };
-      if (body.data.sprint_id !== undefined) item.sprint_id = new Types.ObjectId(body.data.sprint_id);
+      if (body.data.sprint_id !== undefined && body.data.sprint_id !== String(item.sprint_id)) {
+        /* A move takes the TARGET list's tail position. Carrying the old
+           position across let the row tie with one already there, and the load
+           sorts on position — so the two swapped places between requests and
+           the row appeared to jump around the list. Same rule the insert uses. */
+        const tail = await SprintItem.findOne({ project_id: projectId, sprint_id: body.data.sprint_id })
+          .sort({ position: -1 })
+          .select({ position: 1 })
+          .lean();
+        item.sprint_id = new Types.ObjectId(body.data.sprint_id);
+        item.position = ((tail?.position as number) ?? -1) + 1;
+      }
       if (body.data.starts_on !== undefined) item.starts_on = body.data.starts_on ?? undefined;
       await item.save();
       await audit({

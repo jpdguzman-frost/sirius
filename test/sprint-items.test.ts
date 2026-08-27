@@ -253,8 +253,53 @@ describe('adding a card and plotting its bar are two acts', () => {
         ),
       ).toBe(localIso(forecast(card, EMPIRICAL).sketchDelivery));
     } finally {
-      process.env.TZ = tz;
+      /* `process.env.TZ = undefined` stores the STRING 'undefined', which Node
+         cannot parse and silently treats as UTC — dropping the rest of this
+         worker into the wrong zone, which is exactly the class of bug this
+         case exists to catch. `npm run test:run` sets no TZ, so the undefined
+         branch is the common one. */
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
     }
+  });
+
+  /* THE CELL IS NOT CHOSEN BY THE CARD'S TITLE. `laneOf` matches
+     /asset|illustrat|render|icon/, and every task prefix the board actually
+     uses — 'Sketch Asset', 'Render Asset', 'Icon Clean Up' — matches it. Feeding
+     the prefix in as a label therefore classified EVERY task card as `assets`,
+     which for an Easy card selects a 13.88-day cell instead of a 0.94-day one.
+     Fourteen times the duration, decided by a naming habit. Asserted across the
+     three real prefixes rather than on one, so a fourth prefix cannot quietly
+     reintroduce it. */
+  it('does not let the task PREFIX choose the design cell', async () => {
+    const { project, sprint, agent } = await setup();
+    const finishes = new Set<string>();
+    for (const [i, prefix] of ['Sketch Asset', 'Render Asset', 'Icon Clean Up'].entries()) {
+      const id = `p${i}`;
+      await mkCard(project._id, id, { difficulty: 'Easy', task_prefix: prefix, name: `${prefix}: X` });
+      await addAndPlot(agent, project._id, id, String(sprint._id), '2026-08-03');
+    }
+    const { rows } = await load(project._id);
+    rows.forEach((r) => finishes.add(r.finish!));
+
+    // one list, one lane, one duration — the prefix contributes nothing
+    expect(finishes.size).toBe(1);
+    // and it is the DESIGN cell the card's own list implies, not the assets one
+    const expected = localIso(
+      forecast(
+        { difficulty: 'Easy', currentList: 'Working on Design', labels: [], startDate: '2026-08-03' },
+        EMPIRICAL,
+      ).sketchDelivery,
+    );
+    expect([...finishes][0]).toBe(expected);
+    // the trap it replaces was not subtle: assets would have been ~13 days out
+    const assetsCell = localIso(
+      forecast(
+        { difficulty: 'Easy', currentList: 'Working on Design', labels: ['Sketch Asset'], startDate: '2026-08-03' },
+        EMPIRICAL,
+      ).sketchDelivery,
+    );
+    expect(assetsCell).not.toBe(expected);
   });
 
   it('draws no bar for a card with no difficulty label', async () => {

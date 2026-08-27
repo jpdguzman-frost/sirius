@@ -29,6 +29,9 @@ import { loadPipeline } from '../src/services/pipeline.ts';
 import type { PipelineRow, PlannerPhase } from '../src/services/pipeline.ts';
 import { seedDatabase } from '../scripts/seed.ts';
 import { HARD_MIX } from '../lib/planner.constants.ts';
+import { forecast } from '../lib/forecast.ts';
+import { EMPIRICAL } from '../lib/model.ts';
+import { localIso, parseDate, workday } from '../lib/calendar.ts';
 import { Deliverable, Project, Sprint, User, UserProject, WorkCard } from '../src/models/index.ts';
 
 const env = validateEnv({ NODE_ENV: 'test' });
@@ -138,6 +141,37 @@ describe('planner phases — the Gantt bar (R3, contract §1.2)', () => {
     // BR-9: no deadline is no conflict — never overdue
     expect(rowOf(rows, 'nodeadline').forecast!.late).toBe(false);
     expect(rowOf(rows, 'nodeadline').phases.map((s) => s.phase)).toEqual(['sketch', 'review', 'render']);
+  });
+
+  /* ROUNDING. `workday()` does `Math.round(days)`, so walking the two phases
+     separately and walking their sum once are DIFFERENT dates — and they differ
+     for every difficulty in the shipped model. The first version summed, which
+     ran a working day EARLY for Medium and Hard: the dangerous direction, since
+     a row whose work really does run past the deadline reports no warning.
+     Asserted as "matches the engine's own phase-by-phase walk", the rule,
+     rather than as a date. */
+  it('walks the two phases SEPARATELY, exactly as the engine does', async () => {
+    const p = await newProject();
+    for (const d of ['Easy', 'Medium', 'Hard']) {
+      await mk(p._id, `d${d}`, { difficulty: d, slotted_week: '2026-08-03', sheet_deadline: '2026-12-31' });
+    }
+    const { rows } = await load(p);
+
+    let differed = 0;
+    for (const d of ['Easy', 'Medium', 'Hard']) {
+      const f = rowOf(rows, `d${d}`).forecast!;
+      const start = f.startDate;
+      const perPhase = localIso(
+        workday(workday(parseDate(start), f.sketchLead + f.sketchDesign), f.renderLead + f.renderDesign),
+      );
+      const summedOnce = localIso(
+        workday(parseDate(start), f.sketchLead + f.sketchDesign + f.renderLead + f.renderDesign),
+      );
+      expect(f.workFinish, `${d} does not match the engine's phase walk`).toBe(perPhase);
+      if (perPhase !== summedOnce) differed++;
+    }
+    // the two spellings really are distinguishable, or the guard proves nothing
+    expect(differed, 'summing and walking agree on every fixture — this guard is vacuous').toBeGreaterThan(0);
   });
 
   /* THE RULING ITSELF (JP, 2026-08-27, answering owls #72/#74). The client's
@@ -397,8 +431,21 @@ describe('E2E probe — GET /deliverables on a seeded isolated DB', () => {
        row still ends 19 Aug and the reader can still see the wait. Only the
        warning moved. `renderOverdue` itself is proved in the BR-9 case above,
        against a deadline derived from `workFinish`. */
-    expect(row('fxCard712').forecast.workFinish).toBe('2026-08-10');
-    expect(row('fxCard712').forecast.late).toBe(false); // work lands 10 Aug, deadline 14 Aug
+    /* Derived, not pinned. `workFinish` walks the two phases SEPARATELY, as the
+       engine does — `workday()` rounds its argument, so one walk over the summed
+       days is a different date and came out a working day early for Medium and
+       Hard (the dangerous direction: a missed warning). Executing the engine
+       here means the guard tracks the rule rather than yesterday's number. */
+    const f712 = forecast(
+      { difficulty: 'Hard', currentList: 'Working on Design', labels: [], startDate: '2026-08-03' },
+      EMPIRICAL,
+    );
+    const expectedWork = localIso(
+      workday(workday(parseDate('2026-08-03'), f712.sketchLead + f712.sketchDesign), f712.renderLead + f712.renderDesign),
+    );
+    expect(row('fxCard712').forecast.workFinish).toBe(expectedWork);
+    expect(expectedWork < '2026-08-14').toBe(true); // the work fits before the deadline…
+    expect(row('fxCard712').forecast.late).toBe(false); // …so no warning, while the bar still ends 19 Aug
     expect(row('fxCard712').phases).toEqual([
       { phase: 'sketch', startIso: '2026-08-03', endIso: '2026-08-06' },
       { phase: 'review', startIso: '2026-08-06', endIso: '2026-08-13' },

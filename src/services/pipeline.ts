@@ -17,8 +17,11 @@ import type { Milestone } from './conflicts.ts';
 import { loadSprintItems, type SprintItemsResult } from './sprint-items.ts';
 
 /** What a caller that did not ask for sprint items gets — never undefined, so
-    the payload shape is one shape and the client never branches on presence. */
-const EMPTY_SPRINT_ITEMS: SprintItemsResult = { rows: [], addable: {} };
+    the payload shape is one shape and the client never branches on presence.
+    A FRESH object each time: a single shared module-level instance would be
+    handed by reference to every non-opting caller, so one future `rows.push`
+    would poison the "empty" value for the rest of the process. */
+const emptySprintItems = (): SprintItemsResult => ({ rows: [], addable: {} });
 
 const localDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -332,7 +335,7 @@ export async function loadPipeline(
 
   const sprintItems = opts.withSprintItems
     ? await loadSprintItems(projectId, model, workCards, rows)
-    : EMPTY_SPRINT_ITEMS;
+    : emptySprintItems();
 
   return { rows, workCardsByMc, mcDeliverables, unattachedWork, corrections, model: { provenance }, perWeek, sprintItems };
 }
@@ -395,14 +398,22 @@ function buildPhases(slottedWeek: string | null, fc: PipelineRow['forecast']): P
  * already dropped.
  */
 function workFinishOf(f: Forecast, startDate: string): string {
-  const days = f.sketchLead + f.sketchDesign + f.renderLead + f.renderDesign;
-  /* `parseDate`, never the raw string. `new Date('2026-08-03')` is UTC
-     midnight, so west of UTC the working-day walk starts a day early —
-     measured 2026-08-04 against 2026-08-05 under America/New_York. The dual-TZ
-     suite runs UTC and Manila, both at or ahead of UTC, so it could never have
-     caught this. Every other caller in the repo parses first, the engine
-     included (lib/forecast.ts:69). */
-  return localIso(workday(parseDate(startDate), days));
+  /* TWO WALKS, ONE PER PHASE — never one walk over the sum.
+     `workday()` rounds its argument (`Math.round(days)`), so the engine
+     walking `round(lead+design)` twice and this walking `round(2*lead+2*design)`
+     once are DIFFERENT DATES, and they differ for every difficulty in the
+     shipped model: from 2026-08-03, Easy 05 vs 06, Medium 07 vs 06, Hard 11 vs
+     10. Medium and Hard came out a working day EARLY, which is the dangerous
+     direction — a row whose work genuinely runs past the deadline reported no
+     warning. Mirroring the engine's own phase-by-phase walk is what keeps this
+     measure a reading of the engine rather than a rival to it.
+
+     `parseDate`, never the raw string: `new Date('2026-08-03')` is UTC midnight,
+     so west of UTC the walk starts a day early (measured 08-04 against 08-05
+     under America/New_York). The dual-TZ suite runs UTC and Manila, both at or
+     ahead of UTC, so it could never have caught that either. */
+  const afterSketch = workday(parseDate(startDate), f.sketchLead + f.sketchDesign);
+  return localIso(workday(afterSketch, f.renderLead + f.renderDesign));
 }
 
 function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string): PipelineRow {
