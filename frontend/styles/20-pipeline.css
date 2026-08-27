@@ -280,21 +280,11 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    of the single-line child, never a target. */
 .ptable tr.ptask td { background: var(--slate-50); border-bottom-color: var(--slate-200); }
 .ptable tr.ptask td.col-mc { border-bottom-color: transparent; }
-/* owl #52 — the shared-MC caption. It is a .ptask so it inherits the tint,
-   the indent and the border recipe rather than forking a second child-row
-   look; the only fork is that it carries no data, so its bottom border goes
-   transparent and the caption reads as a heading over the tasks beneath it
-   instead of as a task with every field empty. The text is .subtone, the same
-   voice `Main Card` already uses one row above. */
-.ptable tr.ptask.pshared td { border-bottom-color: transparent; padding-bottom: 0; }
-.ptable tr.ptask.pshared .subtone { color: var(--slate-500); font-style: italic; }
-/* Miles, owl #55: the COUNT is diagnostic, not the headline — a high N marks
-   an MC number that needs renumbering at source, which matters to whoever
-   fixes the numbering and not to the PM trying to read their tasks. So it
-   renders at every N, with no threshold rule (one treatment that degrades
-   quietly beats two that need a boundary defended) and one step quieter than
-   the sentence it trails. */
-.ptable tr.ptask.pshared .pshn { color: var(--slate-400); }
+/* WITHDRAWN 2026-08-27 (JP): the shared-MC caption row (.pshared) and its
+   trailing count (.pshn) are gone with the markup — owl #52 and #55 specced
+   them, the frame does not have them. Their rules are removed rather than
+   left orphaned: dead selectors read as a live treatment to the next person
+   pricing a change. */
 .ptable .col-mc { width: 150px; min-width: 150px; } /* 132px in frame; 150px team fine-tune 2026-08-12 */
 .ptable .col-name { width: auto; min-width: 158px; }
 .ptable .col-type { width: 140px; min-width: 140px; }
@@ -316,9 +306,6 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .ptable .mccell .chevgap { width: 16px; flex: none; }
 .ptable .mcnum { font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
 .ptable .cardname { font-size: var(--text-body); line-height: 1.5; color: var(--blue-700); }
-/* the expanded parent's 'Main Card' SubTone (owl #45): label-size, muted,
-   on its own line under the name */
-.ptable .subtone { display: block; font-size: var(--text-label); line-height: 1.4; color: var(--slate-500); }
 .ptable .plaincell { font-size: var(--text-body); line-height: 1.5; color: var(--slate-700); }
 .ptable .dimcell { font-size: var(--text-body); line-height: 1.5; color: var(--surface-muted-foreground); }
 

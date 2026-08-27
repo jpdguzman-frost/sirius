@@ -233,16 +233,13 @@
                 {{/if}}
               </div>
             </div></td>
-            <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}
-              <!-- owl #45: the SubTone reads 'Main Card' UNDER the name — the
-                   frame specs the EXPANDED state, so it renders only there,
-                   where parent-vs-children is the distinction it teaches; the
-                   collapsed table is not this spec's to change. Flagged to
-                   Miles as a default taken, not a ruling. the anchor is derived from the
-                   VISIBLE rows because mc_number repeats across siblings
-                   (invariant 3): the SubTone marks the row the list hangs
-                   under, which a filter can change. -->
-              {{#if pipeMcAnchor[row.mcNumber] === row.cardId && expanded[row.mcNumber]}}<span class="subtone">Main Card</span>{{/if}}</td>
+            <!-- WITHDRAWN 2026-08-27 (JP): the 'Main Card' SubTone under the
+                 name is gone — it is not in the frame, and owl #45 specced it
+                 as a default taken rather than a ruling. Do not restore it
+                 from #45. The parent is already distinguishable: it is the row
+                 the chevron hangs on, and the only one carrying a card name.
+                 The chevron's accessible name still says which group it opens. -->
+            <td class="col-name"><span class="cardname">{{{hl(row.name)}}}</span>{{#if row.blocker}} <span class="pbadge blocked">🛑 {{row.blocker}}</span>{{/if}}</td>
             <td class="col-type">{{#if row.assetType}}<span class="pbadge">{{{hl(row.assetType)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-diff"><div class="ubadge-wrap">
               <button class="pbadge ubadge {{#if row.difficulty}}d-{{row.difficulty}}{{else}}unset{{/if}} {{#if savingDifficulty[row.cardId]}}saving{{/if}}"
@@ -313,34 +310,19 @@
               every sibling it would duplicate the whole list — and an open task
               popover — once per row (review pass 2026-08-18). }}
           {{#if pipeMcAnchor[row.mcNumber] === row.cardId && expanded[row.mcNumber]}}
-            {{! owl #52 — THE SHARED CAPTION. Only when more than one
-                deliverable carries this MC number. The board records no
-                task→deliverable edge (probed 2026-08-20: 0 of 218 mains carry
-                a checklist, 0 description card-links, list position resolves
-                0 of 279, members 36 of 279, best name segment 60 unique
-                against 117 that match several mains). So these tasks belong
-                to the MC and to no single card, and the row says exactly that
-                rather than implying the expanded card owns them. Being
-                explicitly uncertain beats being silently wrong: a
-                misattributed task looks identical to a correct one.
-                PRESENTATION IS A FLAGGED DEFAULT — Miles specced the rule,
-                not the treatment (jp→miles #43 asks; this is the caption
-                vocabulary already used for `Main Card`). }}
-            {{#if row.sharedMc}}
-              <tr class="ptask pshared">
-                <td class="col-mc"></td>
-                <td class="col-name"><span class="subtone">Work on {{row.mcLabel}} — these tasks carry the MC number, not a link to one card<span class="pshn"> · shared by {{row.mcDeliverables}} deliverables</span></span></td>
-                <td class="col-type"></td>
-                <td class="col-diff"></td>
-                <td class="col-urgency"></td>
-                <td class="col-status"></td>
-                <td class="col-requestor"></td>
-                <td class="col-due"></td>
-                <td class="col-started"></td>
-                <td class="col-done"></td>
-                <td class="col-links"></td>
-              </tr>
-            {{/if}}
+            {{! WITHDRAWN 2026-08-27 (JP): the shared-MC caption row is gone —
+                it is not in the frame. The RULE it stated still holds and is
+                still true of the data: these tasks carry the MC number and
+                there is no task→deliverable edge on the board (probed
+                2026-08-20: 0 of 218 mains carry a checklist, 0 description
+                card-links, list position resolves 0 of 279, members 36 of 279,
+                best name segment 60 unique against 117 that match several
+                mains). Nothing here ever implied the expanded card owns them,
+                and removing the caption does not change that — the tasks sit
+                under the MC group, not under the card. `row.sharedMc` and
+                `row.mcDeliverables` are still read by the chevron's accessible
+                name, which is now the only place a screen reader is told the
+                group is shared. Do not restore this row from owl #52. }}
             {{#each workCardsByMc[row.mcNumber] as w}}
               <!-- owl #45, node 520:54192 — the expanded MC's task cards.
                    One <tr> in the SAME table: parent and child share one

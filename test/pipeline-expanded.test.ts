@@ -202,20 +202,33 @@ describe('the tint is the nesting cue (annotation: inverted — parent white, ch
   });
 });
 
-describe('the parent’s SubTone appears with the expansion, and only then', () => {
-  it('renders `Main Card` under the name only while the group is expanded', () => {
-    expect(OPEN).toContain('<span class="subtone">Main Card</span>');
+describe('the parent’s SubTone is WITHDRAWN (JP, 2026-08-27)', () => {
+  /* owl #45 specced `Main Card` under the parent name and #52 specced the
+     shared-MC caption below it; both were flagged at the time as defaults
+     taken rather than rulings, and neither is in the frame. JP withdrew both.
+     This guard exists so nobody restores them by reading those owls: the
+     RULE is that the expanded parent carries no explanatory caption at all. */
+
+  it('renders no SubTone span, expanded or collapsed', () => {
+    /* asserted on the SPAN, never on the words: the fixture parent is itself
+       named `MC-837 Main Card: GBox Nav Icons`, so a text assertion would
+       fail on the card's own name — and, once that was "fixed", would pass
+       for the wrong reason on any board whose cards drop the phrase. */
+    expect(OPEN).not.toContain('class="subtone"');
     expect(COLLAPSED).not.toContain('class="subtone"');
-    // …and on the expanded PARENT, never inside a task row
-    for (const r of taskRows(OPEN)) expect(r).not.toContain('subtone');
+    expect(OPEN).not.toContain('class="ptask pshared"');
+    expect(OPEN).not.toContain('not a link to one card');
   });
 
-  it('wears label-size muted type on its own line, tokens only', () => {
-    const rule = cssRule('.ptable .subtone', PIPELINE_CSS);
-    expect(rule).toContain('display: block');
-    expect(rule).toContain('font-size: var(--text-label)');
-    expect(rule).toContain('color: var(--slate-500)');
-    expect(rule.replace(/\/\*[\s\S]*?\*\//g, ' ')).not.toMatch(/#[0-9a-fA-F]{3,8}\b|\d+px/);
+  it('leaves no orphaned .subtone rule behind in the pipeline stylesheet', () => {
+    /* a dead selector reads as a live treatment to the next person pricing a
+       change — the markup and its recipe leave together or not at all. The
+       one surviving mention is a Figma token NAME in a comment about button
+       padding (`subtone-offset`), which is why this reads declarations only. */
+    const declarations = PIPELINE_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    expect(declarations).not.toContain('subtone');
+    expect(declarations).not.toContain('pshared');
+    expect(declarations).not.toContain('pshn');
   });
 });
 
@@ -353,11 +366,18 @@ describe('a multi-deliverable MC renders its task list ONCE (invariant 3)', () =
     expect([...multi.matchAll(/<div class="duepop"/g)]).toHaveLength(1);
   });
 
-  it('shows the SubTone on the first sibling only', () => {
-    /* counts the PARENT's SubTone by its text: owl #52's shared caption wears
-       the same `.subtone` voice one row below, so a bare class count would now
-       pass for the wrong reason (and would have hidden a duplicated caption). */
-    expect([...multi.matchAll(/class="subtone">Main Card</g)]).toHaveLength(1);
+  it('hangs the task list under the FIRST sibling, not the second', () => {
+    /* the anchor rule, probed positionally. It used to be probed by counting
+       the parent's `Main Card` SubTone — withdrawn 2026-08-27 — so the visible
+       consequence is now the only evidence: the tasks are emitted immediately
+       after the anchor row, which puts them ABOVE the sibling's own row.
+       Anchored to the sibling instead, they would appear below it; anchored to
+       both, `taskRows` above would return four. */
+    const firstTask = multi.indexOf('Render Icon: APIs');
+    const siblingRow = multi.indexOf('Second deliverable, same MC');
+    expect(firstTask).toBeGreaterThan(-1);
+    expect(siblingRow).toBeGreaterThan(-1);
+    expect(firstTask).toBeLessThan(siblingRow);
   });
 
   it('stamps hasTasks in loadAll, but DERIVES the anchor from the rendered rows', () => {
@@ -383,7 +403,9 @@ describe('a multi-deliverable MC renders its task list ONCE (invariant 3)', () =
       workCardsByMc: TASKS,
       expanded: { 'MC-837': true },
     });
-    expect([...second.matchAll(/class="subtone">Main Card</g)]).toHaveLength(1);
+    // the two halves of the defect: the visible row draws the chevron, and
+    // the expanded group's tasks render under it
+    expect([...second.matchAll(/class="chevbtn/g)]).toHaveLength(1);
     expect(taskRows(second)).toHaveLength(2);
   });
 });
@@ -461,60 +483,47 @@ const SHARED = shared();
 const captionRows = (html: string): string[] =>
   [...html.matchAll(/<tr class="ptask pshared">([\s\S]*?)<\/tr>/g)].map((m) => m[1]!);
 
-describe('a shared MC surfaces its tasks once, at MC level, and says so', () => {
-  it('renders the caption exactly once, leading with the work and not the count', () => {
-    /* Miles, owl #55: the tasks are the content and the explanation is the
-       caption — this state is 78% of task views, so it must read as "here is
-       the work on MC-837" rather than as a failure being handled. The count
-       still appears (it is diagnostic — a high N marks an MC number needing
-       renumbering at source) but it TRAILS, in its own quieter span. */
-    expect(captionRows(SHARED)).toHaveLength(1);
-    const caption = captionRows(SHARED)[0]!;
-    expect(caption).toContain('Work on MC-837');
-    expect(caption).toContain('shared by 2 deliverables');
-    // the count comes AFTER the explanation, never opens it
-    expect(caption.indexOf('Work on MC-837')).toBeLessThan(caption.indexOf('shared by 2'));
-    expect(caption).toContain('class="pshn"');
-    expect(cssRule('.ptable tr.ptask.pshared .pshn', PIPELINE_CSS)).toContain('var(--slate-400)');
+describe('a shared MC surfaces its tasks once, at MC level — the caption is WITHDRAWN', () => {
+  /* owl #52 specced a caption row explaining that these tasks carry the MC
+     number and link to no single card; #55 specced the trailing count. JP
+     withdrew the row on 2026-08-27 — it is not in the frame.
+
+     WHAT THE WITHDRAWAL DID NOT CHANGE: the underlying fact, and invariant 4.
+     There is still no task→deliverable edge (2026-08-20 probe of `hLL7WW2V`:
+     0 of 218 main cards carry a checklist, no description links a card to
+     another, list position resolves 0 of 279 ambiguous tasks, members resolve
+     36, and the best name segment resolves 60 while silently mis-resolving
+     117). The tasks still hang off the MC group and are still rendered once
+     for the group, not once per deliverable — that is the 78.4%-of-task-views
+     case and the 99× hazard invariant 3 warns about. Only the sentence went. */
+
+  it('renders no caption row at all, shared or not', () => {
+    expect(captionRows(SHARED)).toHaveLength(0);
+    expect(SHARED).not.toContain('not a link to one card');
+    expect(captionRows(OPEN)).toHaveLength(0);
+    /* `shared by` survives EXACTLY ONCE and only as the chevron's accessible
+       name — asserted as a count plus its one legitimate home, so this fails
+       both if the caption comes back and if the label quietly goes with it. */
+    expect([...SHARED.matchAll(/shared by/g)]).toHaveLength(1);
+    expect(SHARED).toContain('aria-label="Work on MC-837, shared by 2 deliverables"');
   });
 
-  it('shows the count at EVERY N — no threshold, one treatment that degrades quietly', () => {
-    /* owl #55 explicitly refuses a magic number: "one treatment that degrades
-       quietly is better than two that need a boundary defended". */
+  it('still renders each task exactly once — the sibling does not duplicate the list', () => {
+    /* THE RULE THAT SURVIVES THE CAPTION. The list hangs under the group's
+       FIRST row only; with two siblings a per-row render would double it. */
+    expect(taskRows(SHARED)).toHaveLength(2);
+  });
+
+  it('still renders each task once when THREE deliverables share the number', () => {
+    /* #55 refused a threshold on the count, so the count is gone with the
+       caption — but the de-duplication it accompanied must not degrade as N
+       grows, which is the half that actually protects MC-825's 99 rows. */
     const many = renderPipelineTable({
       pipelineRows: [PARENT, SHARED_SIBLING, row({ cardId: 'main-1c' }), CHILDLESS],
       rowWarning, workCardsByMc: TASKS, expanded: { 'MC-837': true },
     });
-    expect(captionRows(many)[0]).toContain('shared by 3 deliverables');
-    expect(captionRows(SHARED)[0]).toContain('shared by 2 deliverables');
-  });
-
-  it('still renders each task exactly once — the sibling does not duplicate the list', () => {
-    /* the list hangs under the group's FIRST row only; with two siblings a
-       per-row render would double it, which is the 99× hazard invariant 3
-       warns about */
-    expect(taskRows(SHARED)).toHaveLength(2);
-  });
-
-  it('says nothing when the MC has ONE deliverable — no caption on the attributable case', () => {
-    expect(captionRows(OPEN)).toHaveLength(0);
-    expect(OPEN).not.toContain('shared by');
-  });
-
-  it('keeps the caption inside the parent’s column model — every cell, no colspan', () => {
-    /* the promise made to Miles in #40 and defended at the top of this file:
-       parent and child are rows of ONE table. A colspan caption would be the
-       first row in the table that cannot drift WITH the columns. */
-    const caption = captionRows(SHARED)[0]!;
-    expect(caption).not.toContain('colspan');
-    const cells = [...caption.matchAll(/<td class="(col-[a-z]+)"/g)].map((m) => m[1]!);
-    const taskCells = [...taskRows(SHARED)[0]!.matchAll(/<td class="(col-[a-z]+)"/g)].map((m) => m[1]!);
-    expect(cells).toEqual(taskCells);
-  });
-
-  it('carries the caption in the SubTone voice already used one row above', () => {
-    expect(captionRows(SHARED)[0]).toContain('class="subtone"');
-    expect(cssRule('.ptable tr.ptask.pshared td', PIPELINE_CSS)).toContain('border-bottom-color: transparent');
+    expect(taskRows(many)).toHaveLength(2);
+    expect(captionRows(many)).toHaveLength(0);
   });
 });
 
@@ -526,10 +535,13 @@ describe('the chevron belongs to the MC, not to each row that shares its number'
     expect([...SHARED.matchAll(/class="chevgap"/g)].length).toBe(2);
   });
 
-  it('names the shared case in the chevron’s accessible label', () => {
-    /* the label is the only place a screen-reader user learns that expanding
-       shows MC-level tasks rather than this card's own — same framing as the
-       caption (owl #55), so the two cannot describe the state differently */
+  it('names the shared case in the chevron’s accessible label — now the ONLY place', () => {
+    /* This was one of two statements of the shared case; the caption row was
+       the other, and it was withdrawn on 2026-08-27. So this label is now the
+       only place ANY user — sighted or not — is told that expanding shows
+       MC-level tasks rather than this card's own. It was already the only
+       place a screen-reader user was told. Do not withdraw it as "duplicate
+       of the caption": there is no caption. */
     expect(SHARED).toContain('Work on MC-837, shared by 2 deliverables');
   });
 
