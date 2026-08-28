@@ -690,9 +690,11 @@ app.on({
   addZoneKey(ctx, sprintId) {
     if (ctx.event.key !== 'Enter' && ctx.event.key !== ' ') return;
     ctx.event.preventDefault();
-    // the same one-line state change openAddRow makes — not a re-fire, so
-    // the two paths cannot diverge in what a "click" means
-    app.set({ addRow: { sprintId, mc: null, cardId: null, saving: false }, plotRow: null, plotWeek: null });
+    // through the ONE open owner, the same routing the discard side uses
+    // (cancelAddRow, finding 3): the spot-fix had to grow the open's state
+    // change here and in openAddRow in lockstep — duplication is exactly
+    // how a "key" drifts from a "click"
+    app.fire('openAddRow', sprintId);
   },
   async submitAddItem() {
     const add = app.get('addRow');
