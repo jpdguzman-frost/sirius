@@ -375,6 +375,26 @@ describe('the add can arrive already PLOTTED — the draft row\u2019s + (PLAN 20
     expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(0);
     expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
   });
+
+  it('a digit-shaped non-date is refused, on POST and PATCH alike (review 2026-08-28b, finding 8)', async () => {
+    /* DATE_ONLY proves the CALENDAR now, not just the shape: a stored
+       `2026-08-32` walks the forecast into NaN and a spurious LATE flag,
+       and `new Date` would have silently normalised it to September 1. */
+    const { project, agent } = await setup();
+    const sprint = await seedAddable(project._id);
+    for (const bad of ['2026-08-32', '2026-13-01', '2026-02-30', '2026-00-15']) {
+      const res = await agent.post(`/api/projects/${project._id}/sprint-items`)
+        .send({ sprint_id: String(sprint._id), card_id: 'wc-3', starts_on: bad }).expect(400);
+      expect(res.body.error.code).toBe('INVALID_BODY');
+    }
+    // the leap day itself is REAL and passes the same gate
+    const ok = await agent.post(`/api/projects/${project._id}/sprint-items`)
+      .send({ sprint_id: String(sprint._id), card_id: 'wc-3', starts_on: '2028-02-29' }).expect(201);
+    // and PATCH shares the one definition \u2014 no second, laxer spelling
+    await agent.patch(`/api/projects/${project._id}/sprint-items/${ok.body.id}`)
+      .send({ starts_on: '2026-02-30' }).expect(400);
+    expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(1);
+  });
 });
 
 describe('sprints — blank names reject (owl #37 item 2)', () => {

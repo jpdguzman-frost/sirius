@@ -21,7 +21,22 @@ import { HARD_MIX } from '../../lib/planner.constants.ts';
 import { buildWeeks } from '../../lib/calendar.ts';
 import { isHolidayDate, weekDays } from '../../lib/dayplan.ts';
 
-const DATE_ONLY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/* Shape AND calendar validity (review 2026-08-28b, finding 8): the regex
+   alone let `2026-08-32` through, and a stored non-date walks the forecast
+   into NaN and a spurious LATE flag. Pure arithmetic — no `Date`, so no TZ
+   shift (invariant 11) and no silent normalisation (`new Date('2026-02-30')`
+   would happily answer March 2nd). One definition heals every route that
+   takes a date: sprint dates, slotted week, both starts_on paths. */
+const DATE_ONLY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => {
+  // slices, not split: the regex fixes the positions, and strict indexing
+  // would type a destructured split as possibly-undefined
+  const y = Number(s.slice(0, 4));
+  const m = Number(s.slice(5, 7));
+  const d = Number(s.slice(8, 10));
+  if (m < 1 || m > 12 || d < 1) return false;
+  const feb = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28;
+  return d <= ([31, feb, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1] as number);
+}, { message: 'not a calendar date' });
 
 /* A Mongo id, validated IN THE SCHEMA rather than re-checked in the body.
    Written as a `min(1)` string plus a separate `isValid` branch first, which

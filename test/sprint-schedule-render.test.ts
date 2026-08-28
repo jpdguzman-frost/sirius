@@ -26,9 +26,12 @@
  *      groups out of `sprintGroups`)
  *   2. no auto-population — addable cards never become rows (revert: seed
  *      `rows` from `addable` in the computed)
- *   3. the violet + gates on `plotRow === row.id && plotWeek`, and the
- *      track's handlers on `!row.startsOn` — the checkbox gates NOTHING
- *      (revert: drop any one clause, or re-gate on `sprintSel`)
+ *   3. the violet + gates on `!row.startsOn && plotRow === row.id &&
+ *      plotWeek`, and the track's handlers on `!row.startsOn` — the checkbox
+ *      gates NOTHING (revert: drop any one clause, or re-gate on `sprintSel`;
+ *      the !row.startsOn render clause is review 2026-08-28b finding 1 — a
+ *      hover re-armed during the placement reload must not strand chrome on
+ *      the freshly plotted row)
  *   4. `pickAddMc` always clears `cardId` (revert: keep the old card)
  *   5. MIN_GRAB widening anchors LEFT, slides left only in the final column
  *      (revert: `left = l` unclamped, or a CSS min-width)
@@ -46,6 +49,11 @@
  *  12. the draft track's click COMMITS AND PLACES via `draftPlace`, gated on
  *      `addRow.cardId && !addRow.saving` (revert: drop a clause, or route
  *      the click to the add-without-placement path)
+ *  13. plotHover refuses to re-arm mid-flight, and plotPlace/draftPlace
+ *      demand the hover is their OWN before writing (revert: drop the
+ *      `sprintItemSaving` return or either identity clause)
+ *  14. the draft discard has ONE owner — Escape and the pane collapse FIRE
+ *      `cancelAddRow` (revert: null `addRow` directly in 60-overlays)
  */
 
 import { describe, expect, it } from 'vitest';
@@ -299,7 +307,10 @@ describe('the selection checkbox — a row highlight; placement no longer starts
     const box = /<input[^>]*class="gsel"[^>]*>/.exec(html);
     expect(box, 'no selection checkbox rendered').not.toBeNull();
     expect(box![0]).toContain('type="checkbox"');
-    expect(html).toMatch(/aria-label="Select MC-655 Hero render for placement"/);
+    /* "Highlight", not "Select … for placement" — the label must not teach
+       the retired checkbox-arms-placement model (review 2026-08-28b,
+       finding 11) */
+    expect(html).toMatch(/aria-label="Highlight MC-655 Hero render"/);
   });
 
   it('is checked — and the row wears .sel — exactly when sprintSel is this row', () => {
@@ -445,14 +456,18 @@ describe('the violet + rides the hovered week of any unplotted row — the check
     );
   });
 
-  it('the + and the hover cell both gate on plotRow === row.id && plotWeek — the frozen strings', () => {
+  it('the + and the hover cell both gate on !row.startsOn && plotRow === row.id && plotWeek — the frozen strings', () => {
     const [committed] = trackBlocks();
+    /* !row.startsOn in the RENDER gate, not just the handler gate (review
+       2026-08-28b, finding 1): a plotRow re-armed during the placement
+       reload survives the row flipping to plotted — with its mouseleave
+       gone. The render clause is what keeps that ghost invisible. */
     expect(committed).toContain(
-      '{{#if plotRow === row.id && plotWeek}}<div class="ghovcell" style="left:{{plusLeft(plotWeek)}}%;" aria-hidden="true"></div>{{/if}}',
+      '{{#if !row.startsOn && plotRow === row.id && plotWeek}}<div class="ghovcell" style="left:{{plusLeft(plotWeek)}}%;" aria-hidden="true"></div>{{/if}}',
     );
     // the + repeats the SAME gate in its own section, so the bars and the
     // deadline tick stack between the tint and the circle by DOM order
-    expect(committed.split('{{#if plotRow === row.id && plotWeek}}').length - 1).toBe(2);
+    expect(committed.split('{{#if !row.startsOn && plotRow === row.id && plotWeek}}').length - 1).toBe(2);
     expect(committed).toContain('aria-label="Place the bar in the week of {{plotWeek}}"');
   });
 
@@ -513,6 +528,44 @@ describe('the violet + rides the hovered week of any unplotted row — the check
     for (const key of ['sprintSel', 'plotRow', 'plotWeek', 'addRow']) {
       expect(body, `${key} survives a project switch`).toMatch(new RegExp(`${key}: null`));
     }
+  });
+});
+
+/* Review 2026-08-28b: `plotRow`/`plotWeek` are one GLOBAL pair under many
+   tracks, and every defect the correctness pass confirmed was a way for that
+   pair to outlive or outreach the hover that set it. These pins hold the four
+   disciplines that close them. */
+describe('the hover pair cannot strand, and a click places only its OWN hover (review 2026-08-28b)', () => {
+  it('plotHover refuses to re-arm during a placement flight (finding 1)', () => {
+    expect(
+      handlerBody('plotHover'),
+      'a hover during the awaited reload re-arms plotRow on the row being placed — the fresh render strips its mouseleave and the ghost + never clears',
+    ).toContain('if (sprintItemSaving) return;');
+  });
+
+  it('plotPlace and draftPlace demand the hover is THEIRS before writing (finding 7)', () => {
+    expect(handlerBody('plotPlace'), 'plotPlace would place this row at a week hovered on another track')
+      .toContain("app.get('plotRow') !== itemId");
+    expect(handlerBody('draftPlace'), 'draftPlace would commit at a week hovered on a committed row')
+      .toContain("app.get('plotRow') !== 'add'");
+  });
+
+  it("draftPlace clears only the draft's own hover — on success AND on failure (findings 2, 12)", () => {
+    const clear = "if (app.get('plotRow') === 'add') app.set({ plotRow: null, plotWeek: null });";
+    expect(
+      handlerBody('draftPlace').split(clear).length - 1,
+      'an identity-guarded clear left draftPlace — a mid-flight hover on another row dies, or a failed POST strands the draft chrome',
+    ).toBe(2);
+  });
+
+  it('the draft discard has ONE owner and every path fires it (finding 3)', () => {
+    // Escape (60-overlays) and the pane collapse both route through
+    // cancelAddRow — a direct addRow-null would strand the draft's hover
+    expect(APP_JS.split("app.fire('cancelAddRow')").length - 1, 'a discard path stopped firing the owner').toBe(2);
+    expect(APP_JS, "60-overlays nulls addRow itself again — cancelAddRow's cleanup is unreachable on that path")
+      .not.toContain("app.get('addRow')) app.set('addRow', null)");
+    expect(handlerBody('cancelAddRow'), "the owner lost its identity-guarded hover clear")
+      .toContain("if (app.get('plotRow') === 'add')");
   });
 });
 

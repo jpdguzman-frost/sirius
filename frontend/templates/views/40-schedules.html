@@ -153,7 +153,7 @@
                       <input type="checkbox" class="gsel" twoway="false"
                              checked="{{ sprintSel === row.id ? true : false }}"
                              on-click="['sprintSelect', row.id]"
-                             aria-label="Select {{row.mcNumber}} {{row.name}} for placement" />
+                             aria-label="Highlight {{row.mcNumber}} {{row.name}}" />
                       <span class="gmc">{{row.mcNumber}}</span>
                     </div>
                     {{! badges, then the FULL card name: the value is never
@@ -223,10 +223,10 @@
                   <div class="gtrack"
                        {{#if !row.startsOn}}on-mousemove="['plotHover', row.id]" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{/if}}>
                     <div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div>
-                    {{#if plotRow === row.id && plotWeek}}<div class="ghovcell" style="left:{{plusLeft(plotWeek)}}%;" aria-hidden="true"></div>{{/if}}
+                    {{#if !row.startsOn && plotRow === row.id && plotWeek}}<div class="ghovcell" style="left:{{plusLeft(plotWeek)}}%;" aria-hidden="true"></div>{{/if}}
                     {{#each itemBar(row) as b}}<div class="gitem {{b.cls}} {{#if row.late}}late{{/if}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}"></div>{{/each}}
                     {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
-                    {{#if plotRow === row.id && plotWeek}}
+                    {{#if !row.startsOn && plotRow === row.id && plotWeek}}
                       <button class="gplus" type="button" tabindex="-1" style="left:{{plusLeft(plotWeek)}}%;" aria-label="Place the bar in the week of {{plotWeek}}"><svg class="i16" aria-hidden="true"><use href="#i-plus" /></svg></button>
                     {{/if}}
                   </div>

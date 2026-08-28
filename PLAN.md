@@ -71,3 +71,22 @@ the Add Sprint Item Button's + since both mean 'add something here'".
   /tmp snapshots, never `git checkout`.
 - VALIDATE dual-TZ in full after ANY post-validate edit. E2E in a real
   browser (placement by real pointer). No owls from inside a workflow.
+
+## Review amendments (2026-08-28b — 12 confirmed findings, 6 mechanisms)
+
+Frozen-interface changes, amended here by the main thread:
+- The committed-row render gates are now `{{#if !row.startsOn && plotRow ===
+  row.id && plotWeek}}` (finding 1: a hover re-armed during the placement
+  reload must not strand chrome on the freshly plotted row).
+- `plotHover` refuses to run while `sprintItemSaving` holds (same finding).
+- `plotPlace` requires `plotRow === itemId`; `draftPlace` requires
+  `plotRow === 'add'` (finding 7: the global pair must be the clicked
+  track's own hover).
+- `draftPlace` clears the hover pair identity-guarded on BOTH paths
+  (findings 2/12); `submitAddItem` clears its draft's hover the same way.
+- `cancelAddRow` is the ONE draft-discard owner — Escape (60-overlays) and
+  `toggleLeftPane` fire it; its hover clear is identity-guarded so a live
+  hover on a committed row survives the discard (finding 3 + latent variant).
+- `DATE_ONLY` proves calendar validity, pure arithmetic, at its single
+  definition (finding 8; heals PATCH and the sprints PUT too).
+- Checkbox aria-label: "Highlight …" (finding 11).

@@ -165,8 +165,10 @@ document.addEventListener('keydown', (e) => {
   /* the Add row (#72 §3): Escape cancels it — AFTER the overlays, so the
      first press closes an open dropdown and the second discards the row.
      Nothing in the row is a write in progress (only Add Item posts), so
-     discarding is always safe. */
-  if (e.key === 'Escape' && app.get('addRow')) app.set('addRow', null);
+     discarding is always safe. Routed through cancelAddRow — the ONE
+     discard owner (review 2026-08-28b, finding 3: a direct null here left
+     the draft's hover-state cleanup unreachable). */
+  if (e.key === 'Escape' && app.get('addRow')) app.fire('cancelAddRow');
 });
 document.addEventListener('scroll', (e) => {
   // the popover scrolls INSIDE itself on a viewport shorter than it is —

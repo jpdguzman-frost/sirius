@@ -564,6 +564,14 @@ app.on({
     app.set('sprintSel', app.get('sprintSel') === itemId ? null : itemId);
   },
   plotHover(ctx, rowId) {
+    /* NOT during a placement's awaited reload (review 2026-08-28b, finding
+       1): the stale DOM still binds this handler on the row being placed,
+       so a hand drifting inside the track would re-arm `plotRow` after
+       plotPlace's cleanup — and the fresh render then strips the only
+       mouseleave that could ever clear it. The lock is already up for the
+       whole flight, so it is the one fact that separates a live hover from
+       this ghost. */
+    if (sprintItemSaving) return;
     /* the same pure mapper the drop path used (weekAtX): pointer X against
        the TRACK's measured rect. `rowId` is whose track the pointer is on —
        a committed row's id, or 'add' for the draft row — so the + and the
@@ -578,8 +586,12 @@ app.on({
   async plotPlace(_ctx, itemId) {
     const week = app.get('plotWeek');
     /* no week means no mousemove ran before the click (a tap, or a click
-       racing the first hover) — nothing to place, so nothing to send */
-    if (!week || sprintItemSaving) return;
+       racing the first hover) — nothing to place, so nothing to send. And
+       the week must be THIS track's hover (review 2026-08-28b, finding 7):
+       `plotWeek` is a single global, so a click that outran its own first
+       mousemove could otherwise place this row at a week hovered on some
+       OTHER row's track. */
+    if (!week || app.get('plotRow') !== itemId || sprintItemSaving) return;
     /* THE LOCK SPANS THE RELOAD (review 2026-08-28, finding 2). Released in
        the old `finally`, it dropped while loadAll was still fetching — the
        row on screen still looked placeable/clearable and a second gesture
@@ -634,7 +646,15 @@ app.on({
     // must never survive into (or past) a draft it was not pointed at
     app.set({ addRow: { sprintId, mc: null, cardId: null, saving: false }, plotRow: null, plotWeek: null });
   },
-  cancelAddRow() { app.set({ addRow: null, plotRow: null, plotWeek: null }); }, // Escape lands here too — 60-overlays' keydown
+  /* THE one owner of "discard the draft" — Escape (60-overlays fires this)
+     and the pane collapse both route here, so the discard cannot fork
+     (review 2026-08-28b, finding 3: a direct addRow-null elsewhere left
+     this cleanup unreachable). The hover clear is identity-guarded: a live
+     hover on a COMMITTED row while the draft dies is the user's, not ours. */
+  cancelAddRow() {
+    app.set('addRow', null);
+    if (app.get('plotRow') === 'add') app.set({ plotRow: null, plotWeek: null });
+  },
   openAddMenu(ctx, which) {
     /* 'card' is INERT until an MC is picked (#73): its options are keyed by
        MC, so opening it early would show a list that belongs to nobody.
@@ -696,8 +716,10 @@ app.on({
       return;
     }
     // same identity rule on success: never clobber a draft the user has
-    // since opened in another sprint — the POSTed row arrives via loadAll
+    // since opened in another sprint — the POSTed row arrives via loadAll.
+    // The draft's own hover (if the pointer sat on its track) dies with it.
     if (app.get('addRow') === add) app.set('addRow', null);
+    if (app.get('plotRow') === 'add') app.set({ plotRow: null, plotWeek: null });
     await loadAll();
   },
   /* one click = commit AND place (#72 §6 + node 731:100277): the draft's +
@@ -709,7 +731,10 @@ app.on({
   async draftPlace() {
     const add = app.get('addRow');
     const week = app.get('plotWeek');
-    if (!add || !add.cardId || add.saving || !week || sprintItemSaving) return;
+    /* `plotRow === 'add'` for the same reason plotPlace checks its own id
+       (finding 7): the week must be THIS track's hover, not a stale global
+       from some committed row's. */
+    if (!add || !add.cardId || add.saving || !week || app.get('plotRow') !== 'add' || sprintItemSaving) return;
     app.set('addRow.saving', true);
     sprintItemSaving = true;
     try {
@@ -717,10 +742,18 @@ app.on({
         sprint_id: add.sprintId, card_id: add.cardId, starts_on: week,
       });
       if (app.get('addRow') === add) app.set('addRow', null);
-      app.set({ plotRow: null, plotWeek: null });
+      /* the finding-4 discipline on the hover pair too (review 2026-08-28b,
+         finding 2): a hover the user established on another row during the
+         await is THEIRS — only this draft's own hover is this cleanup's. */
+      if (app.get('plotRow') === 'add') app.set({ plotRow: null, plotWeek: null });
       await loadAll();
     } catch (err) {
       if (app.get('addRow') === add) app.set('addRow.saving', false);
+      /* the saving gate detached the draft track's mouseleave for the whole
+         flight (finding 12) — so a pointer that left during the await has no
+         event left to clear the chrome. Same identity guard: only the
+         draft's own hover dies. */
+      if (app.get('plotRow') === 'add') app.set({ plotRow: null, plotWeek: null });
       flashBanner(errText(err));
     } finally {
       sprintItemSaving = false;
@@ -741,8 +774,9 @@ app.on({
   toggleLeftPane() {
     /* the collapsed pane cannot show the add row (its controls live in
        hidden columns — review finding 10), so an open draft is discarded
-       rather than left standing invisibly with Add Item unreachable */
-    if (app.get('addRow')) app.set('addRow', null);
+       rather than left standing invisibly with Add Item unreachable —
+       through the ONE discard owner, so its hover cleanup rides along */
+    if (app.get('addRow')) app.fire('cancelAddRow');
     app.set('leftCollapsed', !app.get('leftCollapsed'));
     // the collapsed pane hides the three detail columns (#72 layout), so the
     // sheet's width and the thumb's ratio both change — re-measure next frame
