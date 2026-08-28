@@ -537,7 +537,10 @@ describe('the routes are Sirius-owned planning writes', () => {
       .patch(itemUrl(project._id, res.body.id))
       .send({ starts_on: '2026-08-03', difficulty: 'Hard' })
       .expect(400);
-    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1', starts_on: '2026-08-03' })
+    /* `starts_on` left this guard 2026-08-28: the add route OWNS it now —
+       one-act commit-and-place (PLAN.md, node 731:100277). The unknown-key
+       refusal is proven with a field no sprint-item route will ever own. */
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1', difficulty: 'Hard' })
       .expect(400);
   });
 

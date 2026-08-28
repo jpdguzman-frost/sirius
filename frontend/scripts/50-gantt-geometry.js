@@ -78,7 +78,7 @@ const weekAtX = (clientX, rect, weeks) => {
 
    An empty return means unplotted, unforecastable (no difficulty), or fully
    outside the drawn window — the template emits nothing and the violet +
-   (placement) takes over on the selected row. */
+   (placement) takes over on hover. */
 const itemBar = (row) => {
   if (!row.startsOn || !row.finish) return [];
   const l = clampUnits(dayIndex(row.startsOn));
@@ -106,21 +106,26 @@ const itemPhase = (row) => {
   return 'work';
 };
 
-/* The client-deadline tick — unchanged from the deliverable era except its
-   dress (owl #72, node 731:98733: 1px red-500, a RULE not a bar). Position
-   is the deadline's workday ordinal; null when the row has no deadline or
-   the window clips it. The bar-right-of-tick relationship is the row's
-   whole late signal. */
+/* The client-deadline tick (owl #72, node 731:98733: 1px red-500, a RULE not
+   a bar). Position is the deadline's workday ordinal — except that a PAST
+   deadline pins to the window's LEFT edge (JP ruling 2026-08-28): the
+   bar-right-of-tick relationship is the row's whole late signal, and every
+   real row's deadline predates the visible window, so the old before-window
+   clip meant a late row never showed its rule. Pinned, the rule always sits
+   left of a late bar; the tooltip keeps the true date. The RIGHT-edge clip
+   stays — a bar cannot sit right of a beyond-window FUTURE deadline, so an
+   off-window future tick would signal nothing. */
 app.set('deadlineTick', (row) => {
   if (!row.deadline) return null;
-  const u = dayIndex(row.deadline);
-  return u >= 0 && u <= TOTAL_UNITS ? unitPct(u) : null;
+  const u = Math.max(0, dayIndex(row.deadline));
+  return u <= TOTAL_UNITS ? unitPct(u) : null;
 });
 
-/* The violet + rides the SELECTED unplotted row and renders in whichever week
-   column the pointer is over (#72 §6: it tracks the pointer, it is not fixed
-   to the column the mock shows). Left edge of that column as a track %; the
-   CSS centres the 24px circle inside the --gw column. */
+/* The violet + rides HOVER over any UNPLOTTED row's track (node 731:100277)
+   and renders in whichever week column the pointer is over (#72 §6: it tracks
+   the pointer, it is not fixed to the column the mock shows). Left edge of
+   that column as a track %; the CSS centres the 24px circle inside the --gw
+   column, and the hovered cell's tint shares this same left. */
 app.set('plusLeft', (weekKey) => {
   const at = app.get('plannerWeeks').findIndex((w) => w.key === weekKey);
   return at < 0 ? null : unitPct(at * WORKDAYS_PER_WEEK);

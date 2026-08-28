@@ -433,9 +433,13 @@ export function scheduleRouter(): Router {
   /* other state change (invariant 10).                                    */
   /* ------------------------------------------------------------------ */
 
-  /* ADD a work card to a sprint's list. The row lands UNPLOTTED — added and
-     plotted are two separate acts (#72 §6), and the violet + is what turns
-     one into the other.
+  /* ADD a work card to a sprint's list. Without `starts_on` the row lands
+     UNPLOTTED — added and plotted are two separate acts (#72 §6), and the
+     violet + is what turns one into the other. The DRAFT row's + collapses
+     the two into ONE act (node 731:100277): it sends `starts_on`, the row is
+     created already plotted, and the add's single audit row carries the
+     placement — never an add plus a synthetic plot (invariant 10 logs the
+     act, and there was one act).
 
      The sprint comes from the body because the insertion point carries
      meaning: the + belongs to a specific sprint's list, so the row lands in
@@ -446,7 +450,7 @@ export function scheduleRouter(): Router {
     ensureProjectMember,
     async (req, res) => {
       const body = z
-        .object({ sprint_id: OBJECT_ID, card_id: z.string().min(1) })
+        .object({ sprint_id: OBJECT_ID, card_id: z.string().min(1), starts_on: DATE_ONLY.optional() })
         .strict()
         .safeParse(req.body);
       if (!body.success) {
@@ -493,13 +497,15 @@ export function scheduleRouter(): Router {
           sprint_id: sprint._id,
           mc_number: card.mc_number,
           trello_card_id: card.trello_card_id,
+          // the draft +'s one-act placement; absent → unplotted (#72 §6)
+          starts_on: body.data.starts_on,
           position: ((last?.position as number) ?? -1) + 1,
           added_by: actor,
         });
         await audit({
           project_id: projectId, actor, action: 'sprintItem.add', entity: 'sprint_item',
           entity_id: String(created._id),
-          after: { sprint_id: String(sprint._id), card_id: card.trello_card_id, mc_number: card.mc_number },
+          after: { sprint_id: String(sprint._id), card_id: card.trello_card_id, mc_number: card.mc_number, starts_on: created.starts_on ?? null },
         });
         res.status(201).json({ ok: true, id: String(created._id) });
       } catch (err) {

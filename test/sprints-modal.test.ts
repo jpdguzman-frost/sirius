@@ -1073,12 +1073,13 @@ describe('end to end — the shipped validators drive the shipped markup', () =>
 describe('batch semantics — one PUT, nothing per row', () => {
   it('sends the whole draft in a single PUT and never stamps a sprint onto a row', () => {
     expect([...APP_JS.matchAll(/api\.send\('PUT', `\/api\/projects\/\$\{app\.get\('activeProjectId'\)\}\/sprints`/g)]).toHaveLength(1);
-    /* Amended 2026-08-28 (#72): ONE legitimate `sprint_id` exists now — the
-       Add row's POST pairs a work card with the sprint list the PM opened
-       (frozen contract, PLAN.md). Sprint DEFINITIONS still travel only in
-       the batch PUT, and no client code assigns a sprintId onto a row — the
-       rows arrive from the server already carrying theirs. */
-    expect([...APP_JS.matchAll(/sprint_id/g)]).toHaveLength(1);
+    /* Amended 2026-08-28 (#72, then the spot-fix): TWO legitimate
+       `sprint_id` sites — submitAddItem's POST and draftPlace's one-act
+       commit-and-place POST (frozen contract, PLAN.md). Both pair a work
+       card with the sprint list the PM opened. Sprint DEFINITIONS still
+       travel only in the batch PUT, and no client code assigns a sprintId
+       onto a row — the rows arrive from the server already carrying theirs. */
+    expect([...APP_JS.matchAll(/sprint_id/g)]).toHaveLength(2);
     expect(APP_JS).not.toMatch(/\.sprintId\s*=[^=]/); // no property assignment, anywhere
   });
 

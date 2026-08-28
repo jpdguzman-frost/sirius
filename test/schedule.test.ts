@@ -328,6 +328,55 @@ describe('the sprint-item PATCH refuses to audit a non-change (review finding 2)
   });
 });
 
+describe('the add can arrive already PLOTTED — the draft row\u2019s + (PLAN 2026-08-28 F2)', () => {
+  async function seedAddable(projectId: Types.ObjectId, over: Record<string, unknown> = {}) {
+    const sprint = await Sprint.create({ project_id: projectId, name: 'S', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 1 });
+    await WorkCard.create({
+      project_id: projectId, trello_card_id: 'wc-3', mc_number: 'MC-702',
+      name: 'Sketch Asset: pose', task_prefix: 'Sketch Asset', current_list: 'Design', active: true, ...over,
+    });
+    return sprint;
+  }
+
+  it('creates the row already plotted, and the ONE add audit row carries the placement', async () => {
+    const { project, agent } = await setup();
+    const sprint = await seedAddable(project._id);
+    const res = await agent.post(`/api/projects/${project._id}/sprint-items`)
+      .send({ sprint_id: String(sprint._id), card_id: 'wc-3', starts_on: '2026-08-10' }).expect(201);
+    const row = await SprintItem.findById(res.body.id as string).orFail();
+    expect(row.starts_on).toBe('2026-08-10');
+    /* one act, one row (invariant 10): the placement rides the add's own
+       audit row — no synthetic sprintItem.plot lands beside it */
+    const log = await AuditLog.findOne({ action: 'sprintItem.add' }).orFail();
+    expect((log.after as Record<string, unknown>).starts_on).toBe('2026-08-10');
+    expect(await AuditLog.countDocuments({ action: 'sprintItem.add' })).toBe(1);
+    expect(await AuditLog.countDocuments({ action: 'sprintItem.plot' })).toBe(0);
+  });
+
+  it('without starts_on the row still lands UNPLOTTED — the Add Item path is untouched', async () => {
+    const { project, agent } = await setup();
+    const sprint = await seedAddable(project._id);
+    const res = await agent.post(`/api/projects/${project._id}/sprint-items`)
+      .send({ sprint_id: String(sprint._id), card_id: 'wc-3' }).expect(201);
+    const row = await SprintItem.findById(res.body.id as string).orFail();
+    expect(row.starts_on ?? null).toBeNull();
+    // the audit spells the unplotted state the PATCH route's way: an explicit null
+    const log = await AuditLog.findOne({ action: 'sprintItem.add' }).orFail();
+    expect((log.after as Record<string, unknown>).starts_on).toBeNull();
+  });
+
+  it('a complete card is refused even when the click carries a placement (#72 \u00a75)', async () => {
+    const { project, agent } = await setup();
+    const sprint = await seedAddable(project._id, { current_list: 'Done' });
+    const res = await agent.post(`/api/projects/${project._id}/sprint-items`)
+      .send({ sprint_id: String(sprint._id), card_id: 'wc-3', starts_on: '2026-08-10' }).expect(409);
+    expect(res.body.error.code).toBe('CARD_COMPLETE');
+    // the placement smuggles nothing past the ADD-time filter: no row, no audit
+    expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(0);
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
+  });
+});
+
 describe('sprints — blank names reject (owl #37 item 2)', () => {
   it('rejects a whitespace-only name with a 422 that writes nothing and audits nothing', async () => {
     const { project, agent } = await setup();

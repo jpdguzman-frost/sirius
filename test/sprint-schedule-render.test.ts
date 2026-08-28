@@ -26,8 +26,9 @@
  *      groups out of `sprintGroups`)
  *   2. no auto-population — addable cards never become rows (revert: seed
  *      `rows` from `addable` in the computed)
- *   3. the violet + gates on `sprintSel === row.id && !row.startsOn` and
- *      `plotWeek` (revert: drop any one clause)
+ *   3. the violet + gates on `plotRow === row.id && plotWeek`, and the
+ *      track's handlers on `!row.startsOn` — the checkbox gates NOTHING
+ *      (revert: drop any one clause, or re-gate on `sprintSel`)
  *   4. `pickAddMc` always clears `cardId` (revert: keep the old card)
  *   5. MIN_GRAB widening anchors LEFT, slides left only in the final column
  *      (revert: `left = l` unclamped, or a CSS min-width)
@@ -37,6 +38,14 @@
  *      (revert: strict inequalities)
  *   9. the withdrawal sweeps (revert: reintroduce `draggable`, a drop
  *      handler, or Suggest markup in the schedules view)
+ *  10. the hover cell renders in BOTH tracks only under `plotRow`+`plotWeek`
+ *      and wears slate-50 (revert: drop the `.ghovcell` element, its gate
+ *      clause, or the `var(--slate-50)` fill)
+ *  11. a PAST deadline pins to the window's LEFT edge; the right clip stays
+ *      (revert: restore the `u >= 0` left clip in `deadlineTick`)
+ *  12. the draft track's click COMMITS AND PLACES via `draftPlace`, gated on
+ *      `addRow.cardId && !addRow.saving` (revert: drop a clause, or route
+ *      the click to the add-without-placement path)
  */
 
 import { describe, expect, it } from 'vitest';
@@ -54,6 +63,7 @@ import {
   handlerBody,
   fnBody,
   divFragment,
+  cssRule,
   renderSprintSchedule,
   type SprintGroup,
   type SprintScheduleRow,
@@ -283,7 +293,7 @@ describe('the pinned pane carries FIVE heads — Requestor and Type left with th
   });
 });
 
-describe('the selection checkbox — placement starts here (ruled decision 3)', () => {
+describe('the selection checkbox — a row highlight; placement no longer starts here (jp→miles #60)', () => {
   it('renders one .gsel per row, labelled with the MC number AND the card name', () => {
     const html = renderSprintSchedule({ sprintGroups: groupsOf(PLOTTED) });
     const box = /<input[^>]*class="gsel"[^>]*>/.exec(html);
@@ -398,26 +408,62 @@ describe('the icon trio — two parked, one live (ruled decision 4)', () => {
 });
 
 /* ====================================================================== *
- * SUITE 3 — placement: the violet + rides the SELECTED unplotted row
+ * SUITE 3 — placement: the violet + rides HOVER on any UNPLOTTED row
+ * (PLAN 2026-08-28 F2; Miles's note on node 731:100277)
  * ====================================================================== */
 
-describe('the violet + renders only on the selected, unplotted row, under the pointer', () => {
-  const CASES: Array<[string, Parameters<typeof renderSprintSchedule>[0], boolean]> = [
-    ['selected + unplotted + hovered week', { sprintGroups: groupsOf(UNPLOTTED), sprintSel: 'i2', plotWeek: '2026-08-10' }, true],
-    ['selected + unplotted, pointer off the track', { sprintGroups: groupsOf(UNPLOTTED), sprintSel: 'i2', plotWeek: null }, false],
-    ['selected but already plotted', { sprintGroups: groupsOf(PLOTTED), sprintSel: 'i1', plotWeek: '2026-08-10' }, false],
-    ['unplotted but not selected', { sprintGroups: groupsOf(UNPLOTTED), sprintSel: null, plotWeek: '2026-08-10' }, false],
-  ];
-
-  for (const [label, state, expected] of CASES) {
-    it(`${label}: ${expected ? 'shows' : 'hides'} the +`, () => {
-      expect(renderSprintSchedule(state).includes('gplus')).toBe(expected);
-    });
-  }
-
-  it('names the week it would place into', () => {
+describe('the violet + rides the hovered week of any unplotted row — the checkbox gates nothing', () => {
+  /* `plotRow` cannot reach a render: the harness passes only the state the
+     template owned before the hover pair, and directives never fire in
+     `toHTML()` — so the POSITIVE (pointer on a track → + at its week) is
+     E2E's real-pointer proof, per this file's honesty note. What a render
+     CAN prove is the negative space: the retired `sprintSel` gate must not
+     summon the + — under the pre-F2 template both of these drew it. */
+  it('a selected, unplotted, hovered-week row shows NOTHING without plotRow', () => {
     const html = renderSprintSchedule({ sprintGroups: groupsOf(UNPLOTTED), sprintSel: 'i2', plotWeek: '2026-08-10' });
-    expect(html).toContain('aria-label="Place the bar in the week of 2026-08-10"');
+    expect(html).not.toContain('gplus');
+    expect(html).not.toContain('ghovcell');
+  });
+
+  it('a hovered week alone draws neither — plotRow names WHOSE track', () => {
+    const html = renderSprintSchedule({ sprintGroups: groupsOf(UNPLOTTED, PLOTTED), plotWeek: '2026-08-10' });
+    expect(html).not.toContain('gplus');
+    expect(html).not.toContain('ghovcell');
+  });
+
+  /** Both `.gtrack` subtrees of the view — the committed row's, then the draft's. */
+  const trackBlocks = (): [string, string] => {
+    const view = schedulesView();
+    const first = divFragment('<div class="gtrack"', view);
+    const second = divFragment('<div class="gtrack"', view.slice(view.indexOf(first) + first.length));
+    return [first, second];
+  };
+
+  it('the committed track carries the FROZEN handler gate — hover on any unplotted row', () => {
+    expect(schedulesView()).toContain(
+      `{{#if !row.startsOn}}on-mousemove="['plotHover', row.id]" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{/if}}`,
+    );
+  });
+
+  it('the + and the hover cell both gate on plotRow === row.id && plotWeek — the frozen strings', () => {
+    const [committed] = trackBlocks();
+    expect(committed).toContain(
+      '{{#if plotRow === row.id && plotWeek}}<div class="ghovcell" style="left:{{plusLeft(plotWeek)}}%;" aria-hidden="true"></div>{{/if}}',
+    );
+    // the + repeats the SAME gate in its own section, so the bars and the
+    // deadline tick stack between the tint and the circle by DOM order
+    expect(committed.split('{{#if plotRow === row.id && plotWeek}}').length - 1).toBe(2);
+    expect(committed).toContain('aria-label="Place the bar in the week of {{plotWeek}}"');
+  });
+
+  it('the retired sprintSel gate is GONE — the old strings, and the track blocks whole', () => {
+    const view = schedulesView();
+    expect(view, 'the pre-F2 handler gate regressed — checkbox-armed placement breaks the 731:100277 ruling')
+      .not.toContain('sprintSel === row.id && !row.startsOn}}on-mousemove');
+    expect(view, 'the pre-F2 + gate regressed').not.toContain('sprintSel === row.id && plotWeek');
+    for (const block of trackBlocks()) {
+      expect(block, 'sprintSel reached into a track block — the checkbox gates nothing in placement').not.toContain('sprintSel');
+    }
   });
 
   it('lets the TRACK take the click — the + itself is pointer-transparent (CSS)', () => {
@@ -426,11 +472,29 @@ describe('the violet + renders only on the selected, unplotted row, under the po
     expect(GANTT_CSS).toMatch(/\.gplus[^{]*\{[^}]*pointer-events: none/);
   });
 
-  it('wires hover, leave and click on the track (source)', () => {
+  it('the hover cell is a slate-50 week column, stacked by DOM order (node 731:100271)', () => {
+    const rule = cssRule('.gantt .ghovcell');
+    expect(rule).toContain('var(--slate-50)');
+    expect(rule).toContain('width: var(--gw)'); // mirrors the week column, no re-derived maths
+    expect(rule).toMatch(/position: absolute; top: 0; bottom: 0;/);
+    expect(rule).toContain('pointer-events: none'); // the TRACK owns the click, here too
+    expect(rule, 'z-index would outstack the bars — DOM order is the seating here').not.toContain('z-index');
+  });
+
+  it('wires hover, leave and click on the track, row id and all (source)', () => {
     const view = schedulesView();
-    expect(view).toContain("'plotHover'");
-    expect(view).toContain("'plotLeave'");
-    expect(view).toContain("'plotPlace'");
+    expect(view).toContain(`on-mousemove="['plotHover', row.id]"`);
+    expect(view).toContain(`on-mouseleave="['plotLeave']"`);
+    expect(view).toContain(`on-click="['plotPlace', row.id]"`);
+  });
+
+  it('plotHover names the row and maps the pointer; plotLeave clears the pair (source)', () => {
+    const hover = handlerBody('plotHover');
+    expect(hover).toContain('plotRow');
+    expect(hover).toContain('weekAtX'); // the drop era's pure mapper — rect in, week key out
+    const leave = handlerBody('plotLeave');
+    expect(leave).toContain('plotRow');
+    expect(leave).toContain('plotWeek');
   });
 
   it('plotPlace PATCHes starts_on and reloads; the geometry mapping is weekAtX (source)', () => {
@@ -446,7 +510,7 @@ describe('the violet + renders only on the selected, unplotted row, under the po
     // `addMenu` is deliberately absent here: it closes through the derived
     // NO_OVERLAYS spread, which the overlay suite in this file pins instead.
     const body = fnBody('resetForProjectSwitch');
-    for (const key of ['sprintSel', 'plotWeek', 'addRow']) {
+    for (const key of ['sprintSel', 'plotRow', 'plotWeek', 'addRow']) {
       expect(body, `${key} survives a project switch`).toMatch(new RegExp(`${key}: null`));
     }
   });
@@ -585,6 +649,46 @@ describe('Add Item — dead until a card is picked, saving while the POST runs',
     const html = renderSprintSchedule(addRow({}));
     const tail = html.slice(html.indexOf('gaddrow'));
     expect([...tail.matchAll(/—/g)].length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("the draft row's own track — one click commits AND places (node 731:100277)", () => {
+  it('carries the FROZEN draft gate: hover and click only once MC + card are chosen, no save in flight', () => {
+    expect(schedulesView()).toContain(
+      `{{#if addRow.cardId && !addRow.saving}}on-mousemove="['plotHover', 'add']" on-mouseleave="['plotLeave']" on-click="['draftPlace']"{{/if}}`,
+    );
+  });
+
+  it("gates its + and hover cell on plotRow === 'add' — the same form as a committed row's", () => {
+    const view = schedulesView();
+    const draft = view.slice(view.indexOf(`on-click="['draftPlace']"`));
+    expect(draft).toContain("{{#if plotRow === 'add' && plotWeek}}");
+    expect(draft).toContain('class="ghovcell"');
+    expect(draft).toContain('aria-label="Place the work card in the week of {{plotWeek}}"');
+    // BOTH tracks carry the hover cell — the committed row's and the draft's
+    expect([...view.matchAll(/class="ghovcell"/g)].length).toBe(2);
+  });
+
+  it('renders the draft week grid, and nothing hover-gated without plotRow', () => {
+    const html = renderSprintSchedule({
+      addRow: { sprintId: 's1', mc: 'MC-07', cardId: 'w1', saving: false },
+      plotWeek: '2026-08-10',
+    });
+    const tail = html.slice(html.indexOf('gaddrow'));
+    expect(tail).toContain('gweek');
+    expect(tail).not.toContain('gplus');
+    expect(tail).not.toContain('ghovcell');
+  });
+
+  it('draftPlace POSTs the pair WITH starts_on from the hovered week, then reloads (source)', () => {
+    const body = handlerBody('draftPlace');
+    expect(body).toContain("'POST'");
+    expect(body).toContain('/sprint-items');
+    expect(body).toContain('sprint_id');
+    expect(body).toContain('card_id');
+    expect(body).toContain('starts_on');
+    expect(body).toContain('plotWeek'); // the hovered week IS the start — its Monday (#72 §6)
+    expect(body).toContain('loadAll');
   });
 });
 
@@ -773,7 +877,7 @@ describe('itemPhase — colour only, never data (the lane-by-title lesson)', () 
   });
 });
 
-describe('the deadline tick — recipe unchanged, dress per frame 731:98733', () => {
+describe('the deadline tick — dress per 731:98733; a PAST deadline pins LEFT (JP 2026-08-28)', () => {
   it('renders through deadlineTick at the position it names', () => {
     const html = renderSprintSchedule({
       sprintGroups: groupsOf(PLOTTED),
@@ -785,6 +889,35 @@ describe('the deadline tick — recipe unchanged, dress per frame 731:98733', ()
   it('is 1px of red-500 now — was 2px slate-400; the legend swatch follows automatically', () => {
     expect(GANTT_CSS).toMatch(/\.gdl[^,{]*\{[^}]*width: 1px/);
     expect(GANTT_CSS).toMatch(/\.gdl[^,{]*\{[^}]*var\(--red-500\)/);
+  });
+
+  /** The shipped recipe, EXECUTED (rule 2) — the same stand-in app as `G()`. */
+  const tick = (): ((row: { deadline?: string | null }) => string | null) =>
+    new Function(`
+      const app = { get: (k) => { if (k !== 'weekStart') throw new Error('tick harness: unstubbed app.get(' + k + ')'); return '2026-08-03'; } };
+      ${['WEEK_COUNT', 'WORKDAYS_PER_WEEK', 'TOTAL_UNITS', 'dayIndex', 'pctOf', 'unitPct'].map((n) => fnDecl(n)).join('\n')}
+      return (${appSetArg('deadlineTick')});
+    `)() as (row: { deadline?: string | null }) => string | null;
+
+  it('pins a PAST deadline to the window LEFT EDGE instead of vanishing — the F1 fix', () => {
+    // every real row's deadline predates the window; a late row must always
+    // show its rule LEFT of the bar (bar-right-of-tick is the late signal)
+    expect(tick()({ deadline: '2026-07-20' })).toBe('0.00');
+  });
+
+  it('keeps an in-window deadline on its own workday, and the RIGHT-edge clip', () => {
+    const t = tick();
+    expect(t({ deadline: '2026-08-17' })).toBe(G().unitPct(10));
+    expect(t({ deadline: '2026-11-09' })).toBeNull(); // a beyond-window FUTURE tick signals nothing
+    expect(t({ deadline: null })).toBeNull();
+    expect(t({})).toBeNull();
+  });
+
+  it('carries the frozen left-pin, and the old before-window clip is gone (source)', () => {
+    const tickSrc = appSetArg('deadlineTick');
+    expect(tickSrc).toContain('Math.max(0, dayIndex(row.deadline))');
+    expect(tickSrc, 'the u >= 0 clip regressed — a late row loses its rule (F1 ruling, 2026-08-28)')
+      .not.toContain('u >= 0');
   });
 });
 
@@ -908,7 +1041,7 @@ describe('the schedules view carries no drag, no drop, no ghost, no Suggest', ()
 
   it('teaches the CLICK, not the drag — the standing hint is the placement sentence', () => {
     expect(schedulesView()).toContain(
-      'Select a row, then click a week to place its bar — the finish is computed.',
+      'Hover a week on an unplotted row and click to place its bar — the finish is computed.',
     );
   });
 

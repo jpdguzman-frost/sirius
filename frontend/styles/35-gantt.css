@@ -164,8 +164,9 @@
   display: flex; height: 120px;
   background: var(--surface-background); border-bottom: 1px solid var(--slate-200);
 }
-/* placement selection (sprintSel) — the checkbox toggles it, the tint says
-   which row the next track click will place */
+/* row selection (sprintSel) — the checkbox toggles the tint and the tint is
+   all it drives: placement rides hover now (Miles, 731:100277), and the
+   checkbox's wider semantics are still with Miles (#60) */
 .gantt .growr.sel { background: var(--blue-50); }
 .gantt .growr.sel .gpin { background: var(--blue-50); }
 
@@ -333,7 +334,7 @@
    by borrowing this recipe rather than declaring its own) */
 .gantt .gdl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--red-500); }
 
-/* the placement + — rides the SELECTED unplotted row's track in whichever
+/* the placement + — rides HOVER over any UNPLOTTED row's track, in whichever
    week column the pointer is over. plusLeft hands over the COLUMN's left
    edge; the margin centres the circle inside the --gw column so the CSS half
    never repeats the geometry maths. `pointer-events: none` is load-bearing:
@@ -343,6 +344,22 @@
   position: absolute; top: 50%;
   margin-left: calc((var(--gw) - 24px) / 2);
   transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* the hovered week cell — the slate-50 tint under the + (node 731:100271).
+   Placement is hover-gated on any unplotted row — Miles's note on 731:100277;
+   the checkbox gates nothing — so this and the + appear and leave together.
+   Width mirrors the week column's --gw; the template stamps the column's
+   left%, so this rule repeats none of the geometry maths. No z-index on
+   purpose: DOM order seats it under the bar, the deadline tick and the +,
+   and being positioned at all lifts it over the static week grid.
+   `pointer-events: none` for the same reason as the +'s: the TRACK owns the
+   click. */
+.gantt .ghovcell {
+  position: absolute; top: 0; bottom: 0;
+  width: var(--gw);
+  background: var(--slate-50);
   pointer-events: none;
 }
 

@@ -28,9 +28,11 @@ async function resetForProjectSwitch() {
   // Submit would write it there.
   //
   // Planner view state is per-project too (R-d, owl #25; re-based on the
-  // work-card unit, #72): `sprintSel` and a half-built `addRow` name THIS
-  // project's item and sprint ids — carried over, the next click would write
-  // them into another project. `collapsedBlocks` is keyed on sprint ids,
+  // work-card unit, #72): a half-built `addRow` names THIS project's card
+  // and sprint ids — carried over, the next click would write them into
+  // another project — and `sprintSel` (the checkbox highlight) plus the
+  // hover pair `plotRow`/`plotWeek` point at rows the next project does not
+  // have. `collapsedBlocks` is keyed on sprint ids,
   // which are per-project. `leftCollapsed` deliberately does NOT reset — it
   // is a reader preference about the pane, not project data.
   app.set({
@@ -58,6 +60,7 @@ async function resetForProjectSwitch() {
     /* Sprint Schedules placement + Add row (#72) — `addMenu` needs no entry
        of its own: it is an overlay key, so NO_OVERLAYS above already nulls it. */
     sprintSel: null,
+    plotRow: null,
     plotWeek: null,
     addRow: null,
     collapsedBlocks: {},
@@ -547,26 +550,31 @@ app.on({
      so they commit too. */
   capSlide(ctx) { app.set('capDraft', Number(ctx.node.value)); },
   async capCommit(ctx) { await writeCapacity(Number(ctx.node.value)); },
-  /* ---- Sprint Schedules placement (owls #72/#73, frame 731:98513) --------
-     Select, then click a week: the checkbox arms ONE row, the pointer names
-     a week on that row's track, and the click writes `starts_on` — the drag
-     era's five-handler dance replaced by one PATCH. The finish is computed
-     server-side, so no forecast math runs here (invariants 5–7), and the
-     bar and the FORECASTED column read the same field back. */
+  /* ---- Sprint Schedules placement (owls #72/#73, node 731:100277) --------
+     Hover, then click: the pointer over any UNPLOTTED row's track names a
+     week (the cell tints, the violet + rides the column), and the click
+     writes `starts_on` — the drag era's five-handler dance replaced by one
+     PATCH. The finish is computed server-side, so no forecast math runs here
+     (invariants 5–7), and the bar and the FORECASTED column read the same
+     field back. */
   sprintSelect(_ctx, itemId) {
-    /* toggle — the same id disarms. `plotWeek` was the pointer's answer for
-       the PREVIOUS selection's track, so any selection change voids it: left
-       standing, the violet + would paint on the next row before the pointer
-       ever entered its track. */
-    app.set({ sprintSel: app.get('sprintSel') === itemId ? null : itemId, plotWeek: null });
+    /* toggle only — the checkbox is a row HIGHLIGHT whose semantics are
+       still with product (owl jp→miles #60); it no longer arms placement,
+       which rides hover on every unplotted row (node 731:100277). */
+    app.set('sprintSel', app.get('sprintSel') === itemId ? null : itemId);
   },
-  plotHover(ctx) {
+  plotHover(ctx, rowId) {
     /* the same pure mapper the drop path used (weekAtX): pointer X against
-       the TRACK's measured rect. Per-mousemove is fine — Ractive no-ops the
-       set until the pointer actually crosses into another column. */
-    app.set('plotWeek', weekAtX(ctx.event.clientX, ctx.node.getBoundingClientRect(), app.get('plannerWeeks')));
+       the TRACK's measured rect. `rowId` is whose track the pointer is on —
+       a committed row's id, or 'add' for the draft row — so the + and the
+       cell tint render on that row alone. Per-mousemove is fine — Ractive
+       no-ops the set until something actually changes. */
+    app.set({
+      plotWeek: weekAtX(ctx.event.clientX, ctx.node.getBoundingClientRect(), app.get('plannerWeeks')),
+      plotRow: rowId,
+    });
   },
-  plotLeave() { app.set('plotWeek', null); },
+  plotLeave() { app.set({ plotWeek: null, plotRow: null }); },
   async plotPlace(_ctx, itemId) {
     const week = app.get('plotWeek');
     /* no week means no mousemove ran before the click (a tap, or a click
@@ -584,10 +592,11 @@ app.on({
          start — `plotWeek` IS that Monday (plannerWeeks keys are Mondays).
          Day-granular placement is #75's rollover territory. */
       await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/sprint-items/${itemId}`, { starts_on: week });
-      /* Clear ONLY the selection this write was made under (finding 4): a
-         selection re-armed on another row during the await belongs to the
-         USER'S next placement, not to this one's cleanup. */
-      if (app.get('sprintSel') === itemId) app.set({ sprintSel: null, plotWeek: null });
+      /* Clear the hover state ONLY if it still points at this row (the
+         finding-4 discipline): a hover that moved onto another row during
+         the await belongs to the USER'S next placement, not to this one's
+         cleanup. */
+      if (app.get('plotRow') === itemId) app.set({ plotRow: null, plotWeek: null });
       await loadAll();
     } catch (err) {
       // nothing was optimistic and the selection survives, so the user can
@@ -621,9 +630,11 @@ app.on({
      opening a zone in another sprint replaces a half-built row rather than
      accumulating drafts. Nothing is written until Add Item posts. */
   openAddRow(_ctx, sprintId) {
-    app.set('addRow', { sprintId, mc: null, cardId: null, saving: false });
+    // plot state clears with the draft's lifecycle — a stale 'add' hover
+    // must never survive into (or past) a draft it was not pointed at
+    app.set({ addRow: { sprintId, mc: null, cardId: null, saving: false }, plotRow: null, plotWeek: null });
   },
-  cancelAddRow() { app.set('addRow', null); }, // Escape lands here too — 60-overlays' keydown
+  cancelAddRow() { app.set({ addRow: null, plotRow: null, plotWeek: null }); }, // Escape lands here too — 60-overlays' keydown
   openAddMenu(ctx, which) {
     /* 'card' is INERT until an MC is picked (#73): its options are keyed by
        MC, so opening it early would show a list that belongs to nobody.
@@ -661,7 +672,7 @@ app.on({
     ctx.event.preventDefault();
     // the same one-line state change openAddRow makes — not a re-fire, so
     // the two paths cannot diverge in what a "click" means
-    app.set('addRow', { sprintId, mc: null, cardId: null, saving: false });
+    app.set({ addRow: { sprintId, mc: null, cardId: null, saving: false }, plotRow: null, plotWeek: null });
   },
   async submitAddItem() {
     const add = app.get('addRow');
@@ -688,6 +699,32 @@ app.on({
     // since opened in another sprint — the POSTed row arrives via loadAll
     if (app.get('addRow') === add) app.set('addRow', null);
     await loadAll();
+  },
+  /* one click = commit AND place (#72 §6 + node 731:100277): the draft's +
+     and the Add Item button both mean "add", and this click also sets the
+     start — the Add Item button remains the add-without-placement path.
+     Both sibling disciplines apply: submitAddItem's identity guard (only
+     THIS draft is touched after the await) and plotPlace's lock spanning
+     the reload. */
+  async draftPlace() {
+    const add = app.get('addRow');
+    const week = app.get('plotWeek');
+    if (!add || !add.cardId || add.saving || !week || sprintItemSaving) return;
+    app.set('addRow.saving', true);
+    sprintItemSaving = true;
+    try {
+      await api.send('POST', `/api/projects/${app.get('activeProjectId')}/sprint-items`, {
+        sprint_id: add.sprintId, card_id: add.cardId, starts_on: week,
+      });
+      if (app.get('addRow') === add) app.set('addRow', null);
+      app.set({ plotRow: null, plotWeek: null });
+      await loadAll();
+    } catch (err) {
+      if (app.get('addRow') === add) app.set('addRow.saving', false);
+      flashBanner(errText(err));
+    } finally {
+      sprintItemSaving = false;
+    }
   },
   /* owl #24 — collapse is PRESENTATION only: sprintGroups, the block header's
      meta/count and the capacity footer all keep reading every row, so a hidden

@@ -81,10 +81,14 @@ const app = new Ractive({
        Everything below it is VIEW state for placement and the Add row,
        never persisted. */
     sprintItems: { rows: [], addable: {} },
-    /* single selection — the checkbox arms ONE row for placement (#72 §6) */
+    /* the checkbox — a row HIGHLIGHT whose semantics are still with product
+       (owl jp→miles #60); it gates nothing in placement */
     sprintSel: null,
-    /* the week the pointer is over on the SELECTED unplotted row's track —
-       where the violet + renders. Null whenever the pointer is elsewhere. */
+    /* the hover pair (node 731:100277): `plotRow` is whose track the pointer
+       is on — a committed row's id, or the literal 'add' for the draft row —
+       and `plotWeek` the week column under it, where the cell tints and the
+       violet + renders. Both null whenever the pointer is elsewhere. */
+    plotRow: null,
     plotWeek: null,
     /* the one pending Add row: { sprintId, mc, cardId, saving } while open.
        Nothing in it is written until Add Item posts (#72 §3). */

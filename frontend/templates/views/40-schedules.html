@@ -50,7 +50,7 @@
         written for). }}
     <div class="fnbox">
       <button class="fnbtn ghost" on-click="['openSprints']"><svg class="i16" aria-hidden="true"><use href="#i-calendar" /></svg>Sprints</button>
-      <span class="fnnote">Select a row, then click a week to place its bar — the finish is computed.</span>
+      <span class="fnnote">Hover a week on an unplotted row and click to place its bar — the finish is computed.</span>
     </div>
   </div>
 
@@ -139,10 +139,11 @@
               <div class="gbrows" id="gbrows-{{g.id}}">
               {{#if !collapsedBlocks[g.id]}}
               {{! One row = one WORK CARD = at most one bar (#72 §3): no drag,
-                  no drop, no proposal overlay — placement is
-                  select-then-click. The checkbox is the placement selection
-                  (the ruled read of the frame's checkbox, flagged to
-                  product), single-select through `sprintSel`. There is no
+                  no drop, no proposal overlay — placement is hover-then-click
+                  on the track. The checkbox highlights the row (.sel) and
+                  gates NOTHING in placement — its semantics are with product
+                  (jp→miles #60), so the control stays while hover owns
+                  placement. Single-select through `sprintSel`. There is no
                   keyboard path for placement yet — pointer-only, a flagged
                   gap, not an oversight. }}
               {{#each g.rows as row}}
@@ -207,21 +208,27 @@
                       50-gantt-geometry.js; the template does no arithmetic
                       (gantt-rules rule 19's principle, carried over). An
                       empty itemBar return means unplotted, unforecastable or
-                      fully clipped — nothing draws, and on the selected row
-                      the violet + takes over. Placement (#72 §6): select the
-                      row, the pointer's week lights the +, and the CLICK
-                      lands on the TRACK — the + itself is pointer-events:
-                      none and deliberately the same 24px circle as the add
-                      zone below. The row plots on the hovered week's MONDAY;
-                      day-granular placement is #75's rollover territory. }}
+                      fully clipped — nothing draws, and the track offers
+                      placement instead. Placement rides the POINTER (Miles,
+                      node 731:100277 — hover-gated, no checkbox): hovering
+                      ANY unplotted row's track lights the violet + at the
+                      pointer's week and tints that week cell slate-50 beneath
+                      it (.ghovcell, node 731:100271), and the CLICK lands on
+                      the TRACK — the + itself is pointer-events: none and
+                      deliberately the same 24px circle as the add zone below.
+                      On the DRAFT row, once MC + work card are chosen, the
+                      same gesture commits and places in one act (draftPlace).
+                      The row plots on the hovered week's MONDAY; day-granular
+                      placement is #75's rollover territory. }}
                   <div class="gtrack"
-                       {{#if sprintSel === row.id && !row.startsOn}}on-mousemove="['plotHover']" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{/if}}>
+                       {{#if !row.startsOn}}on-mousemove="['plotHover', row.id]" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{/if}}>
                     <div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div>
+                    {{#if plotRow === row.id && plotWeek}}<div class="ghovcell" style="left:{{plusLeft(plotWeek)}}%;" aria-hidden="true"></div>{{/if}}
                     {{#each itemBar(row) as b}}<div class="gitem {{b.cls}} {{#if row.late}}late{{/if}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}"></div>{{/each}}
                     {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
-                    {{#if sprintSel === row.id && !row.startsOn}}{{#if plotWeek}}
+                    {{#if plotRow === row.id && plotWeek}}
                       <button class="gplus" type="button" tabindex="-1" style="left:{{plusLeft(plotWeek)}}%;" aria-label="Place the bar in the week of {{plotWeek}}"><svg class="i16" aria-hidden="true"><use href="#i-plus" /></svg></button>
-                    {{/if}}{{/if}}
+                    {{/if}}
                   </div>
                 </div>
               {{/each}}
@@ -301,8 +308,18 @@
                       </span>
                     </div>
                   </div>
-                  <div class="gtrack">
+                  {{! The draft row's own track (Miles, node 731:100277): once
+                      MC + work card are chosen and no save is in flight, the
+                      same hover gesture as a committed row offers placement
+                      — the click COMMITS AND PLACES in one act (draftPlace).
+                      The Add Item button still commits unplotted. }}
+                  <div class="gtrack"
+                       {{#if addRow.cardId && !addRow.saving}}on-mousemove="['plotHover', 'add']" on-mouseleave="['plotLeave']" on-click="['draftPlace']"{{/if}}>
                     <div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div>
+                    {{#if plotRow === 'add' && plotWeek}}
+                      <div class="ghovcell" style="left:{{plusLeft(plotWeek)}}%;" aria-hidden="true"></div>
+                      <button class="gplus" type="button" tabindex="-1" style="left:{{plusLeft(plotWeek)}}%;" aria-label="Place the work card in the week of {{plotWeek}}"><svg class="i16" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                    {{/if}}
                   </div>
                 </div>
               {{else}}
