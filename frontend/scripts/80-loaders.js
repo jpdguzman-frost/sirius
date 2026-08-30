@@ -437,6 +437,16 @@ app.observe('requests', () => {
   if (app.get('reqPage') > last) app.set('reqPage', last);
 }, { init: false });
 
+/* The no-results swap (owl #76) unmounts .pscrollwrap whole — slider
+   included — while `pipeThumb` keeps its last values. On the table's RETURN
+   the thumb would draw those stale pixels over a fresh node at scrollLeft 0
+   (review 2026-08-30, finding 1): a remount fires no scroll event, so no
+   other seam recomputes it. Same rule as the selectTab seam — the scroll
+   affordance is never left stale. remeasure() already defers a frame, so
+   the sweep runs after the swap renders; the entry flip sweeps zero nodes
+   and costs nothing. */
+app.observe('pipeNoResults', () => { remeasure(); }, { init: false });
+
 function computeDeadlines() {
   const payload = app.get('deadlinePayload');
   const offset = app.get('monthOffset');

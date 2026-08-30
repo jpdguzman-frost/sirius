@@ -1220,4 +1220,14 @@ describe('the no-results state replaces the whole table block (owl #76)', () => 
     expect(sub).toContain('line-height: 1.2');
     expect(sub).toContain('color: var(--slate-500)');
   });
+
+  it('re-sweeps the slider when the verdict flips — the remount seam is never stale', () => {
+    /* The swap unmounts .pscrollwrap whole while pipeThumb keeps its last
+       values; the table's RETURN fires no scroll event, so without this
+       observer the thumb re-renders its stale pixels over a fresh node at
+       scrollLeft 0 (review 2026-08-30, finding 1 — the same never-stale
+       rule the selectTab seam already keeps). */
+    expect(APP_JS_CODE, 'the pipeNoResults remeasure observer is gone — the returning table draws a stale slider')
+      .toMatch(/app\.observe\('pipeNoResults',\s*\(\)\s*=>\s*\{\s*remeasure\(\);\s*\}/);
+  });
 });
