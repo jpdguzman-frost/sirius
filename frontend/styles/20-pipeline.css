@@ -249,6 +249,31 @@
 .searchbar input::placeholder { color: var(--slate-400); }
 mark { background: var(--status-warning-light); color: var(--amber-800); border-radius: var(--radius-xs); padding: 0 1px; }
 
+/* ---- no-results state (owl #76, frame 748:18444, node 748:19608) ----
+   Renders IN PLACE of the whole table block when search or filters match
+   nothing. No fill and no border on purpose: this is the page body speaking,
+   not a card — and deliberately not the dashed-box empty-state pattern, which
+   is for empty regions inside a page. The padding is asymmetric, much heavier
+   below than above, which is what floats the message slightly above centre
+   exactly as the frame draws it; the min-height is the frame's own
+   message-frame height, so the block reads as the page body rather than as a
+   caption under the toolbar. */
+.pnores {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-12); padding: 64px 64px 180px; min-height: 606px; text-align: center;
+}
+/* the head's weight is the frame's own, HEAVIER than the house heading
+   weight. Miles flagged that as possible drift and ruled it stands — build
+   what the frame holds. Do not normalise it down. */
+.pnores-head {
+  margin: 0; font-size: var(--text-display); font-weight: 700; line-height: 1.2;
+  color: var(--slate-900);
+}
+.pnores-sub {
+  margin: 0; font-size: var(--text-title); font-weight: 400; line-height: 1.2;
+  color: var(--slate-500);
+}
+
 /* ---- table (annotations 70:10008/9/24 + cells) ---- */
 .pscrollwrap { position: relative; }
 .pscroll { overflow-x: auto; scrollbar-width: none; }

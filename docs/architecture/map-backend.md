@@ -21,6 +21,7 @@ _last-verified: 2026-08-18_
 - `scripts/batch5-probe.ts` — seeded e2e proof on in-memory mongod.
 - `scripts/create-test-board.ts` — one-off: builds the non-production mirror board.
 - `scripts/due-roundtrip.ts` — live W2 smoke vs TEST board.
+- `scripts/fix-test-board-lanes.ts` — one-off ops repair (2026-08-28): remakes the TEST board to the live main/work lane split, MC-first titles; guarded against production boards
 - `scripts/gate-t045.ts` — T045 gate report.
 - `scripts/generate-index.ts` — maintains the map set (MAP.md STATUS/AREAS/DOCMAP + each area map's MODULES from disk); `--check` = CI drift gate.
 - `scripts/migrate-open-cards.ts` — project onboarding: full sync + model refresh + summary.

@@ -141,6 +141,22 @@
     </div>
   {{/if}}
 
+  {{! owl #76, frame 748:18444 — when the search term or the applied filters
+      match nothing, the WHOLE table block below (header row included) gives
+      way to this message. The metrics strip, the search field with its term,
+      and the filter/sort toolbar all stay — they sit above it. ONE state for
+      search-only, filter-only and both, with no term echo — the frame
+      deliberately removed it; do not reintroduce one. A project with no rows
+      at all (nothing typed, nothing ticked) keeps the plain table instead:
+      this message prescribes adjusting the term or clearing filters, and that
+      reader would have neither. Deliberately NOT the dashed-box empty-state
+      pattern — this is a full-page empty, per the frame. }}
+  {{#if pipeNoResults}}
+  <div class="pnores">
+    <p class="pnores-head">No results found</p>
+    <p class="pnores-sub">Try adjusting your search term or clearing active filters</p>
+  </div>
+  {{else}}
   <div class="pscrollwrap">
     <div class="pscroll" on-scroll="['pipeScrolled']">
       <table class="ptable">
@@ -398,5 +414,6 @@
     </div>
     {{/if}}
   </div>
+  {{/if}}
   </div>
 {{/if}}

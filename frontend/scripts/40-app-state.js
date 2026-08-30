@@ -329,6 +329,19 @@ const app = new Ractive({
       }
       return first;
     },
+    /* owl #76, frame 748:18444 — the table's no-results verdict: the filtered
+       row set is empty AND the reader caused it, with a non-blank search term
+       or a live filter. "A filter is live" is read off `pipeChips` — the SAME
+       derivation the indicator row and its Clear all button render from — so
+       this verdict and the chips can never disagree about whether something
+       is filtering. Fresh-empty (a project with no rows, nothing typed,
+       nothing ticked) is deliberately FALSE: the message prescribes adjusting
+       the term or clearing filters, remedies that reader would not have, so
+       that path keeps the plain table. */
+    pipeNoResults() {
+      if (this.get('pipelineRows').length) return false;
+      return (this.get('searchQ') || '').trim() !== '' || this.get('pipeChips').length > 0;
+    },
     /* ---- Deadlines (owl #64, node 630:51389) ----------------------------
        Search filters the CARDS by MC number or deliverable name, and a week the
        search empties is DROPPED rather than left standing empty — the frame's
