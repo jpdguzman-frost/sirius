@@ -62,7 +62,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
   before building on one. **Thread**: miles→jp acked through **#71** + #76, #78, #79;
   **#72–#74 UNACKED** (screens pending), **#75/#77/#80 open** until their blocks;
-  jp→miles sent through **#58** (#59 drafted 2026-09-05, awaiting JP). Product is fixing frame defects; **until they
+  jp→miles sent through **#61** (2026-09-05, block 1 report + #80 §1 answer). Product is fixing frame defects; **until they
   confirm, this build is authoritative over those frames** — including the
   past-deadline legend reworded 2026-08-27. **Awaiting Miles**: the Deadlines
   acknowledged-state design (R-dl-n), and a ruling on the reworded legend.
