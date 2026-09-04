@@ -30,7 +30,7 @@ _last-verified: 2026-08-18_
 - `scripts/reconcile-probe.ts` — live Trello→ARES latency.
 - `scripts/seed-intake-test.ts` — fixture-only intake seed (scripts/fixtures/).
 - `scripts/seed.ts` — fixture-only seed (scripts/fixtures/).
-- `scripts/urgency-roundtrip.ts` — live W1 smoke vs TEST board.
+- `scripts/urgency-roundtrip.ts` — live W1 smoke on a WORK card of the TEST board.
 - `server.js` — entry: env → Mongo/Redis → createApp → listen; boots ARES calendar; worker owns sync.
 - `src/app.ts` — ALL Express wiring (supertest-able); Redis sessions; webhook router before json/session; createApp.
 - `src/auth/admin.ts` — ensureAdmin; re-reads users doc every request.

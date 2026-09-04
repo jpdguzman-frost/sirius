@@ -344,6 +344,7 @@ app.on({
     app.set(`savingUrgency.${cardId}`, true);
     try {
       await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/workcards/${cardId}/urgency`, { urgent: next === 'Urgent' });
+      await loadAll(); // the sprint row chip and the urgent tile read server-derived values (2026-09-05 review finding 1)
     } catch (err) {
       patchWorkCard(cardId, { urgency: current });
       flashBanner(`Urgency write failed — reverted. ${errText(err)}`);

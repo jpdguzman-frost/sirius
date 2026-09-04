@@ -37,7 +37,6 @@ interface FacetValue { value: string | null; label: string; count: number; on: b
 interface Facet { key: string; label: string; scroll: boolean; values: FacetValue[] }
 
 const recipe = new Function(`
-  ${decl(APP_JS, 'DIFF_RANK')}
   ${decl(APP_JS, 'PIPE_SORTS')}
   ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
   ${decl(APP_JS, 'pipeCompare')}
@@ -82,22 +81,29 @@ const sortBy = (key: string | null, rows: unknown[]) => {
 };
 
 /* ---------------------------------------------------------------------- */
-/* A — the eight sorts are the frame's, in the frame's order                */
+/* A — the sorts are the frame's, in the frame's order                      */
 /* ---------------------------------------------------------------------- */
 
 describe('the sort set matches the frame exactly', () => {
-  it('carries the EIGHT items in three groups, in order', () => {
+  it('carries the six surviving items in two groups, in order', () => {
+    /* AMENDED 2026-09-05 (decision D5, owl #78 §5). The Priority group —
+       'Urgent first' and 'Hardest first' — is PARKED, not deleted: both
+       ranked MAIN rows by a value #78 §1 moved onto the work card, so the
+       table now draws an em-dash where the reader would look to check the
+       order. #78 §5 restores both over work-card values with the group
+       auto-expand. The `it.todo` entries below hold that coverage open. */
     expect(recipe.PIPE_SORTS.map((s) => `${s.group}: ${s.label}`)).toEqual([
       'Dates: Due dates closest to now',
       'Dates: Due dates farthest from now',
       'Dates: Recently started',
       'Dates: Recently completed',
-      'Priority: Urgent first',
-      'Priority: Hardest first',
       'Identity: MC number, low to high',
       'Identity: Card name A–Z',
     ]);
   });
+
+  it.todo('block 4 (#78 §5): ranks WORK cards Urgent first, with the group auto-expanded');
+  it.todo('block 4 (#78 §5): ranks WORK cards Hardest first — Hard → Medium → Easy, never alphabetically');
 
   it('names sorts by the RESULTING ORDER, never column-plus-arrow', () => {
     /* the frame is explicit that the labels should read rather than need
@@ -105,11 +111,16 @@ describe('the sort set matches the frame exactly', () => {
     for (const s of recipe.PIPE_SORTS) expect(s.label).not.toMatch(/[↑↓]|asc|desc/i);
   });
 
-  it('leaves Type, Difficulty and Status OUT — they are filter axes', () => {
+  it('leaves Type and Status OUT — those two are the filter axes; Difficulty is parked', () => {
+    /* RETITLED 2026-09-05 (decision D5). Type and Status are the only filter
+       axes today, so they are the only two this rule is about; Difficulty is
+       neither a sort nor an axis until #78 §4 rebuilds it over work-card
+       values. The assertions are unchanged — a difficulty ORDER coming back
+       as a sort is legitimate (that is what #78 §5 restores), a difficulty
+       AXIS spelt into the sort list is not. */
     const labels = recipe.PIPE_SORTS.map((s) => s.label.toLowerCase());
     expect(labels.some((l) => l.includes('type'))).toBe(false);
     expect(labels.some((l) => l.includes('status'))).toBe(false);
-    // 'Hardest first' is a difficulty ORDER, not a difficulty axis — allowed
     expect(labels.some((l) => l.includes('difficulty'))).toBe(false);
   });
 
@@ -137,11 +148,12 @@ describe('an absent value never displaces a real one', () => {
     expect(sortBy('due-far', withDue).map((r) => (r as { cardId: string }).cardId)).toEqual(['far', 'near', 'none']);
   });
 
-  it('holds for started, completed, hardest and name', () => {
+  it('holds for started, completed and name', () => {
+    /* the `hardest` case left this list with the Priority group (D5, #78 §5);
+       the rule it proved is re-armed by the `it.todo` above */
     const cases: Array<[string, Record<string, unknown>]> = [
       ['started', { workStartedTs: '2026-08-02T00:00:00Z' }],
       ['completed', { workDoneTs: '2026-08-02T00:00:00Z' }],
-      ['hardest', { difficulty: 'Hard' }],
       ['name', { name: 'Zeta' }],
     ];
     for (const [key, real] of cases) {
@@ -150,15 +162,7 @@ describe('an absent value never displaces a real one', () => {
     }
   });
 
-  it('treats Non-Urgent as a VALUE, not an absence — nothing falls to the bottom', () => {
-    const rows = [row({ cardId: 'plain' }), row({ cardId: 'hot', urgency: 'Urgent' })];
-    expect(sortBy('urgent', rows).map((r) => (r as { cardId: string }).cardId)).toEqual(['hot', 'plain']);
-  });
-
-  it('orders difficulty Hard → Medium → Easy, not alphabetically', () => {
-    const rows = [row({ cardId: 'e', difficulty: 'Easy' }), row({ cardId: 'h', difficulty: 'Hard' }), row({ cardId: 'm', difficulty: 'Medium' })];
-    expect(sortBy('hardest', rows).map((r) => (r as { cardId: string }).cardId)).toEqual(['h', 'm', 'e']);
-  });
+  it.todo('block 4 (#78 §5): treats Non-Urgent as a VALUE, not an absence — nothing falls to the bottom');
 });
 
 /* ---------------------------------------------------------------------- */
@@ -166,7 +170,7 @@ describe('an absent value never displaces a real one', () => {
 /* ---------------------------------------------------------------------- */
 
 describe('the default order is by filing, newest first', () => {
-  it('is not one of the eight — it is the order they deviate FROM', () => {
+  it('is not one of the listed sorts — it is the order they deviate FROM', () => {
     expect(recipe.PIPE_SORTS.some((s) => s.key === null)).toBe(false);
     expect(recipe.PIPE_SORT_DEFAULT.key).toBe(null);
   });
@@ -501,9 +505,10 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
 
   it('renders BOTH panels’ group headings in capitals, as the frame draws them', () => {
     /* the filter axes spell their labels in capitals in the data; the sort
-       groups are `Dates`/`Priority`/`Identity`, which is what the comparator
-       table wants to be read as — so the case is applied at display, once, and
-       the sort panel stops disagreeing with the filter panel beside it */
+       groups are spelt in title case (`Dates`, `Identity`), which is what the
+       comparator table wants to be read as — so the case is applied at
+       display, once, and the sort panel stops disagreeing with the filter
+       panel beside it */
     expect(cssRule('.pipemenu .pmhead', PIPELINE_CSS)).toContain('text-transform: uppercase');
     expect(recipe.PIPE_SORTS.map((s) => s.group)).toContain('Dates');
   });
@@ -866,9 +871,11 @@ describe('the filter indicator says what is filtered, in words', () => {
 
 describe('the sort button names its selection; the filter button never does', () => {
   it('formats the sort label as `Group: Item`', () => {
-    /* the group prefix does real work — 'Urgent first' alone is ambiguous out
-       of context, and the prefix says which axis is ordering the table */
-    expect(recipe.pipeSortLabel('urgent')).toBe('Priority: Urgent first');
+    /* the group prefix does real work — 'Recently started' alone is ambiguous
+       out of context, and the prefix says which axis is ordering the table.
+       Re-pointed 2026-09-05 off the parked Priority group (D5, #78 §5) onto a
+       surviving key; the rule under test is the prefix, not the key. */
+    expect(recipe.pipeSortLabel('started')).toBe('Dates: Recently started');
     expect(recipe.pipeSortLabel(null)).toBe('');
   });
 
@@ -1113,7 +1120,6 @@ interface NoResultsHarness {
    reaches for the facet pass (its own guard above pins that ordering). */
 const noResultsHarness = (): NoResultsHarness =>
   new Function(`
-    ${decl(APP_JS, 'DIFF_RANK')}
     ${decl(APP_JS, 'PIPE_SORTS')}
     ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
     ${decl(APP_JS, 'pipeCompare')}

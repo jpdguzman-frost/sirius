@@ -710,6 +710,22 @@ describe('the urgency and difficulty writes address a WORK card, and only that',
       expect(body.lastIndexOf('patchWorkCard(cardId'), `${h} never reverts`).toBeGreaterThan(body.indexOf('api.send'));
     }
   });
+
+  it('re-reads the server after a successful write — BOTH halves, not just difficulty', () => {
+    /* 2026-09-05 review finding 1. The optimistic `patchWorkCard` moves the
+       client's own copy of the card and nothing else, but the Sprint Schedules
+       row chip and the Pipeline metric tile above the table are DERIVED
+       server-side, per row — so a write that skips the re-read leaves them
+       stating the previous value until the next load. Difficulty already
+       re-read (the sprint bar re-keys on it) and the deadline write does too;
+       urgency was the odd one out. Asserted as ORDER, not presence: a
+       `loadAll()` before the PATCH would prove nothing. */
+    for (const [h] of HALVES) {
+      const body = handlerBody(h);
+      expect(body, `${h} never re-reads`).toContain('await loadAll()');
+      expect(body.indexOf('await loadAll()'), `${h} re-reads before it writes`).toBeGreaterThan(body.indexOf('api.send('));
+    }
+  });
 });
 
 /* ---------------------------------------------------------------------- */
@@ -866,11 +882,30 @@ describe('the Pipeline urgency colour set is amber, tile and badge alike', () =>
     /* #79: "Same footprint on both, so the column does not reflow when a
        card's urgency changes." Node 842:125808 is 96 × 25; the variants may
        change paint and nothing else, which is why the box lives on the base
-       class alone. */
+       class alone.
+
+       AN ALLOW-LIST, not a deny-list (2026-09-05 review). Naming the three
+       properties that were known to resize the badge left every other one
+       through: `border-width`, `letter-spacing`, `line-height`, `zoom`, a
+       `font:` shorthand — each changes the rendered box and none matched.
+       Listing what a variant MAY set is closed by construction, and it states
+       the actual rule: a variant paints, it does not measure. */
+    const ALLOWED = ['background', 'border-color', 'border-style', 'color'];
+    /** the property NAMES a rule declares — `cssRule` hands back selector and
+        braces too, so the block comes out before the split */
+    const propsOf = (sel: string): string[] => {
+      const rule = cssRule(sel, PIPELINE_CSS);
+      return rule
+        .slice(rule.indexOf('{') + 1, rule.lastIndexOf('}'))
+        .split(';')
+        .map((d) => d.split(':')[0]!.trim())
+        .filter(Boolean);
+    };
     expect(cssRule('.ubadge', PIPELINE_CSS)).toContain('width: 96px');
     for (const v of ['.ubadge.urgent', '.ubadge.nonurgent, .ubadge.unset']) {
-      const rule = cssRule(v, PIPELINE_CSS);
-      expect(rule, `${v} resizes the badge`).not.toMatch(/(?:^|[^-])(?:width|padding|font-size):/);
+      const props = propsOf(v);
+      expect(props.length, `${v} declares nothing`).toBeGreaterThan(0);
+      for (const p of props) expect(ALLOWED, `${v} sets "${p}", which is not paint`).toContain(p);
     }
     // the difficulty badge shares it, so the two columns line up down the table
     expect(cssRule('.ptable .col-diff .pbadge', PIPELINE_CSS)).toContain('width: 96px');

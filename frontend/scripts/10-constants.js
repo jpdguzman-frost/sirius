@@ -325,30 +325,36 @@ const monthOrder = (raw) => {
    the same reason `reqFiltered` filters Requests client-side. Neither is
    gated by observation mode; neither writes anything. */
 
-/* THE EIGHT SORTS, in the frame's own order and grouping. `value` returns the
+/* THE SORTS, in the frame's own order and grouping. `value` returns the
    comparable, or null for "empty" — and empty ALWAYS sorts last regardless of
    direction (owl #62: most cards on the real board lack a due date, and a
    nulls-first order would fill the top of the table with blanks). `dir` is the
    direction applied to non-empty values only. Labels are plain descriptions of
    the resulting order, never column-plus-arrow: the frame is explicit that
-   they should read rather than need decoding. */
-const DIFF_RANK = { Hard: 3, Medium: 2, Easy: 1 };
+   they should read rather than need decoding.
+
+   TWO GROUPS TODAY, DATES AND IDENTITY. The PRIORITY pair is PARKED for the
+   same reason the two filter axes below are: both ranked MAIN rows by urgency
+   and by difficulty, and owl #78 §1 moved those values onto the WORK CARD, so
+   the table now draws an em-dash where they used to read. An order the reader
+   cannot see the basis for is worse than an order the reader cannot ask for —
+   it looks arbitrary and there is nothing on screen to explain it. Owl #78 §5
+   brings both back over work-card values together with the group auto-expand
+   that makes a work-card ordering legible; the sort keys and the difficulty
+   ranking table return with them. Coverage is held open as `it.todo` in
+   test/pipeline-sortfilter.test.ts rather than deleted. */
 const PIPE_SORTS = [
   { key: 'due-near', group: 'Dates', label: 'Due dates closest to now', dir: 1, value: (r) => r.deadline || null },
   { key: 'due-far', group: 'Dates', label: 'Due dates farthest from now', dir: -1, value: (r) => r.deadline || null },
   { key: 'started', group: 'Dates', label: 'Recently started', dir: -1, value: (r) => r.workStartedTs || r.workStarted || null },
   { key: 'completed', group: 'Dates', label: 'Recently completed', dir: -1, value: (r) => r.workDoneTs || r.workDone || null },
-  // Non-Urgent is a VALUE, not an absence — every row has an urgency, so this
-  // sort has no empties and nothing falls to the bottom.
-  { key: 'urgent', group: 'Priority', label: 'Urgent first', dir: -1, value: (r) => (r.urgency === 'Urgent' ? 1 : 0) },
-  { key: 'hardest', group: 'Priority', label: 'Hardest first', dir: -1, value: (r) => DIFF_RANK[r.difficulty] || null },
   { key: 'mc', group: 'Identity', label: 'MC number, low to high', dir: 1, value: (r) => mcRank(r.mcNumber) },
   { key: 'name', group: 'Identity', label: 'Card name A–Z', dir: 1, value: (r) => (r.name || '').toLowerCase() || null },
 ];
 
 /* THE DEFAULT ORDER — by order of filing, most recently ingested first. NOT one
-   of the eight: it is the table's natural order, the eight are deviations from
-   it, and Clear Sort returns to it (owl #62). `filedAt` is the Trello card's
+   of the listed sorts: it is the table's natural order, they are deviations
+   from it, and Clear Sort returns to it (owl #62). `filedAt` is the Trello card's
    own creation instant, added in migration 008 — deliberately not the Sirius
    row's `created_at`, which stamps 289 of the live board's rows with the single
    day it was onboarded. A row not yet re-read has none and sorts last. */

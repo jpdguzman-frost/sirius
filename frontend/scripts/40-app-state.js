@@ -311,9 +311,11 @@ const app = new Ractive({
     pipeSortLabelText() {
       return pipeSortLabel(this.get('pipeSort'));
     },
-    /* The eight sorts as their three frame groups, DERIVED from PIPE_SORTS in
-       its own order — never a second hand-written list, or the popup and the
-       comparator could disagree about what exists. */
+    /* The sorts as their frame groups, DERIVED from PIPE_SORTS in its own
+       order — never a second hand-written list, or the popup and the
+       comparator could disagree about what exists. Deriving is also why
+       parking the Priority pair (#78 §5) needed no edit here: the group it
+       named simply stopped being produced. */
     PIPE_SORT_GROUPS() {
       const out = [];
       for (const s of PIPE_SORTS) {

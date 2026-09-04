@@ -121,8 +121,8 @@ live at G7): the write registry refuses writes for it until JP flips
 
 Run after any deploy that touches auth, writes, or sync (G6 execution record in
 `docs/operations/server-setup.md` §7): sign in with a Frost account · non-Frost account
-denied · authz matrix script · urgency round-trip on the TEST board
-(`BOARD=tx8gDsTH npx tsx scripts/urgency-roundtrip.ts`) · due-date round-trip
+denied · authz matrix script · urgency round-trip on a WORK card of the TEST
+board (`BOARD=tx8gDsTH npx tsx scripts/urgency-roundtrip.ts`) · due-date round-trip
 (`BOARD=tx8gDsTH npx tsx scripts/due-roundtrip.ts`) · backup/restore drill on
 the shared mongod · log hygiene spot-check.
 

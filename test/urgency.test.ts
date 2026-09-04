@@ -173,6 +173,35 @@ describe('W1 — the urgency write, on the WORK CARD (FR-4.6; owl #78)', () => {
     expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.urgency).toBe('Non-Urgent');
   });
 
+  it('CROSS-PROJECT: a work card of ANOTHER project is a 404 on this project’s URL (invariant 1)', async () => {
+    /* 2026-09-05 review. The cross-KIND case above proves the route looks up
+       work_cards; it says nothing about the project filter, and a lookup by
+       `trello_card_id` alone would pass it. Invariant 1: every query filters
+       on `project_id`. The user is a member of BOTH projects here, so
+       membership authz cannot be what refuses the request — only the scoping
+       of the lookup itself. The positive anchor at the end stops the case
+       passing vacuously (a typo'd URL would 404 for the wrong reason). */
+    const { project, agent, trello } = await setup();
+    const other = await Project.create({ code: 'rt-999', name: 'Other', trello_board_id: 'testBoardY', weekly_capacity: 3 });
+    const user = await User.findOne({ email: 'pm@frostdesigngroup.com' });
+    await UserProject.create({ user_id: user!._id, project_id: other._id });
+    await WorkCard.create({
+      project_id: other._id, mc_number: 'MC-9', trello_card_id: 'w9',
+      name: 'Render Asset: MC-9 exports', current_list: 'Backlogs',
+    });
+
+    const res = await patchUrgency(agent, project._id, 'w9', true);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(trello.calls).toHaveLength(0);
+    expect(await AuditLog.countDocuments({})).toBe(0);
+    expect((await WorkCard.findOne({ trello_card_id: 'w9' }))?.urgency).toBe('Non-Urgent');
+
+    // the same card through its OWN project's URL still writes
+    await patchUrgency(agent, other._id, 'w9', true).expect(200);
+    expect((await WorkCard.findOne({ trello_card_id: 'w9' }))?.urgency).toBe('Urgent');
+  });
+
   it('CROSS-KIND: the deliverable-scoped route no longer exists (404), for either card id', async () => {
     const { project, agent, trello } = await setup();
     for (const id of ['card1', 'task1']) {
