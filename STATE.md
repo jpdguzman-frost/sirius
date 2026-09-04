@@ -1,6 +1,6 @@
 # STATE.md — Sirius Build State
 
-_Last updated: 2026-08-18 · Update at the end of every working session._
+_Last updated: 2026-09-05 · Update at the end of every working session._
 
 **Layer 1 — current state only.** Anything settled or narrated moves to an
 archive the session it closes, never loaded on resume:
@@ -21,20 +21,15 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 19 | **The ARES-sourced, tag-classified cycle-time model** (T179–T183, ~3–4d) — replaces the inter-event dwell derivation that produced `Medium/design = 0.13d`. Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
 | 18 | **The redesign** (owls #67–#74): Forecast tab withdrawn · OPEN WORK blue/500 · the client-review wait out of the past-deadline warning · **the scheduled unit becomes the WORK CARD** — `sprint_items`, migration 009, no backfill | **DEPLOYED 2026-08-27** (`2382bfb`) — server half only; the frontend for both rebuilt tabs is the next block of work |
 | 18b | **Frame drift closed** (JP, 2026-08-27): the expanded MC row's two captions withdrawn · **frame 731:101090's fifteen unlanded Requests specs** · the note field HUGS its text | **DEPLOYED 2026-08-27** (`a7d01f3`) |
-| 18c | **Sprint Schedules SCREEN rebuilt** (owls #72/#73, frame 731:98513) — first build under the workflow law: 4-agent fleet, adversarial review (15 confirmed findings incl. the sprint-id regeneration data-loss bug), simplify, browser E2E green | **DEPLOYED 2026-08-28** (`9128017`, JP's ship) — #72/#73 acked, miles informed (#60); Deadlines part 2 (#74) is next; **no-results state built 2026-08-30** (#76, `b14ef20`+fix, day log): one state, table swaps whole, 6 proofs, E2E green — **DEPLOYED 2026-08-30**; **spot-fix DEPLOYED 2026-08-28** (`e7ad007`, day log): deadline rule pins left, hover-gated + one-click draft place; **test-board group join repaired** (`c7f9d3c`, day log 2026-08-28): seeder regex orphaned its work cards — remade to the live lane/title/label split, proven on rt-test. |
+| 18c | **Sprint Schedules SCREEN rebuilt** (owls #72/#73, frame 731:98513) — first build under the workflow law; spot-fix + test-board group join (`c7f9d3c`); **no-results state** (#76) | **DEPLOYED 2026-08-28** (`9128017`) · spot-fix `e7ad007` · #76 **DEPLOYED 2026-08-30** — day logs 08-28 / 08-30 |
+| 18d | **Urgency + difficulty move to the WORK card** (owls #78/#79): W1/W3 re-pointed, parent routes deleted (cross-kind 404), own-card urgency on sprint rows, ten columns, node colours; urgency/difficulty axes + Priority sorts **PARKED until block 4** | **BUILT 2026-09-05** (`b40df03` · `a64d6d6` · `303e11f`): 24 proofs, review 9/14 applied, E2E real round trips on rt-test + rollback on fixtures. **NOT deployed — waits for JP.** Queue: block 4 (#78 §4/§5) → #77 §0 add flow → #74/#75 + #78 §2 → #77 §1–4 → W4 |
 
-**Build health (2026-08-28):** 1073/1073 tests + 24 `it.todo`, 63 files — green
+**Build health (2026-09-05):** 1135/1135 tests + 27 `it.todo`, 63 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **008** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
 ~1-run-in-5 loopback flake is ENVIRONMENTAL and ruled in `test/CLAUDE.md`
 rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
-
-## Live 2026-08-27 — `a7d01f3`
-
-⚠️ **NEVER OPENED IN A BROWSER (live)**: the white background on Schedules +
-Deadlines. The filter panels were once inert on the live site for a day under
-a green suite — nothing in the suite opens an overlay.
 
 ## Decisions needed from JP (blocking)
 
@@ -65,9 +60,9 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
-  before building on one. **Thread**: miles→jp acked through **#71**;
-  **#72–#74 deliberately UNACKED** (server half exists, screens do not);
-  jp→miles sent through **#58**. Product is fixing frame defects; **until they
+  before building on one. **Thread**: miles→jp acked through **#71** + #76, #78, #79;
+  **#72–#74 UNACKED** (screens pending), **#75/#77/#80 open** until their blocks;
+  jp→miles sent through **#58** (#59 drafted 2026-09-05, awaiting JP). Product is fixing frame defects; **until they
   confirm, this build is authoritative over those frames** — including the
   past-deadline legend reworded 2026-08-27. **Awaiting Miles**: the Deadlines
   acknowledged-state design (R-dl-n), and a ruling on the reworded legend.
@@ -105,7 +100,8 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
-- **Agent backlog**: T075 AC sweep · non-member 403 check · `Last Synced`
+- **Agent backlog**: badge writes drop keyboard focus after the reload · W1 has no
+  server no-op guard (contract rule 4, pre-existing) · T075 AC sweep · non-member 403 check · `Last Synced`
   browser-TZ + col-done width · schedules-tab tokenization beyond the planner ·
   per-tab URL sub-state (raised to Miles in #40) · `worker/CLAUDE.md` unwritten
   (highest-consequence path) · pipeline/requests rulebook extraction from their
@@ -118,5 +114,5 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
+- 2026-09-05 — **Urgency + difficulty to the WORK card** (owls #78/#79): four new owls → six blocks; W1/W3 re-pointed, parent routes deleted; review caught the urgency write never reloading, the Priority sorts ranking parents by hidden values, and the smoke script labelling a MAIN card. Real Trello round trips on rt-test. NOT deployed. → docs/history/state-log/2026-09-05.md
 - 2026-08-28 — **Sprint Schedules rebuilt on the work-card unit** (owls #72/#73) — first run of the new constitution workflow (JP set it as law the same day). 4-agent build off an ephemeral PLAN.md; **the adversarial review found PUT /sprints regenerating every sprint id** — latent for months, made a data-loss bug by stored membership; fixed as an id-preserving upsert with an audited cascade. Simplify caught a review fix seated in the WRONG FUNCTION (non-unique anchor). Full browser E2E incl. a live rename-survival pass. NOT deployed. → docs/history/state-log/2026-08-28.md
-- 2026-08-27b — **Frame drift, found by JP**: two expanded-row captions withdrawn; frame 731:101090's fifteen unlanded Requests specs applied (annotations wrong about their own design 3×; read the NODE); the note field hugs its text; drag-hittest's blanket `.style` ban narrowed to an exact-text allow-list. → docs/history/state-log/2026-08-27.md
