@@ -7,10 +7,18 @@
  * parent and child are rows of the SAME table, so both levels share one
  * column model BY CONSTRUCTION and nothing can drift when the table scrolls.
  * Everything else follows the annotation: the tint is the nesting cue
- * (parent white, children slate-50 — inverted from the earlier version), the
- * empty first cell is the indent (the MC# is not repeated), and the child
- * deliberately shows NO type/difficulty/urgency/requestor — MC-level
- * attributes a task must not appear able to diverge from.
+ * (parent white, children slate-50 — inverted from the earlier version) and
+ * the empty first cell is the indent (the MC# is not repeated).
+ *
+ * AMENDED 2026-09-05 — owls miles→jp #78 §1/§3 and #79 (frame `809:83486`,
+ * badge `842:125808`, metric strip `843:125889`). #45's "the child shows NO
+ * type/difficulty/urgency/requestor" is superseded in three of its four
+ * terms. Urgency and difficulty are NOT MC-level: a website request can carry
+ * an urgent screen and non-urgent assets, so the values live on the WORK CARD
+ * and the editable badge+chevron moved from the parent row down to the task
+ * rows, where W1 and W3 now write. The main row draws an em-dash in both
+ * cells. REQUESTOR left Pipeline altogether (#78 §3). TYPE is the one term of
+ * R-exp-b that survives, and it survives unchanged.
  *
  * Like every suite here: `toHTML()` has no layout, no pointer and no clock,
  * so widths, row heights and the live due write are the live pass's to
@@ -21,6 +29,7 @@ import { describe, expect, it } from 'vitest';
 import {
   APP_JS,
   APP_JS_CODE,
+  PIPE_COLS,
   PIPELINE_CSS,
   TEMPLATE,
   TOKENS_CSS,
@@ -28,6 +37,8 @@ import {
   type WorkCardRow,
   cssRule,
   fnBody,
+  handlerBody,
+  method,
   renderMetrics,
   renderPipelineTable,
 } from './helpers/gantt-render.ts';
@@ -52,6 +63,12 @@ const task = (over: Partial<WorkCardRow> = {}): WorkCardRow => ({
   status: 'pending',
   trelloUrl: 'https://trello.com/c/task-1',
   figmaUrl: null,
+  /* owl #78 §1: the work card carries its own urgency and difficulty now, so
+     the fixture carries the wire's own defaults — `Non-Urgent` is a VALUE (the
+     absence of the Urgent label), `difficulty` is genuinely absent until a
+     label says otherwise. */
+  urgency: 'Non-Urgent',
+  difficulty: null,
   due: '2026-08-07',
   started: '2026-08-02',
   startedTs: '2026-08-02T01:00:00.000Z',
@@ -99,12 +116,27 @@ describe('the task rows live in the parent’s own column grid', () => {
   });
 
   it('emits the same cell classes as the parent row, in the same order — no colspan', () => {
-    const cells = [...taskRows(OPEN)[0]!.matchAll(/<td class="([a-z-]+)"/g)].map((m) => m[1]);
-    expect(cells).toEqual([
-      'col-mc', 'col-name', 'col-type', 'col-diff', 'col-urgency',
-      'col-status', 'col-requestor', 'col-due', 'col-started', 'col-done', 'col-links',
-    ]);
+    /* DERIVED from the shipped `PIPE_COLS`, not a second hand-copied list
+       (test/CLAUDE.md rule 2). That array is where owl #78 §3's ten-column
+       ruling is asserted literally — once, in
+       `test/pipeline-sortfilter.test.ts` — and this is the promise made to
+       Miles in jp→miles #40 stated as an equality: BOTH row kinds draw the
+       header's own columns, in the header's own order, so a column added,
+       removed or reordered lands in all three or fails here. The previous
+       version of this test copied the eleven classes by hand, which is how a
+       task row could have kept `col-requestor` after #78 deleted the column. */
+    const classes = (rowMarkup: string) =>
+      [...rowMarkup.matchAll(/<td class="([a-z-]+)"/g)].map((m) => m[1]);
+    const cols = PIPE_COLS.map((c) => c.cls);
+    expect(cols, 'PIPE_COLS came back empty — the equality would hold vacuously').toHaveLength(10);
+    expect(classes(taskRows(OPEN)[0]!)).toEqual(cols);
     expect(taskRows(OPEN)[0]).not.toContain('colspan');
+
+    // the parent row, sliced from the same render, draws the same grid
+    const mainRow = /<tr class="prow[^"]*"[^>]*>([\s\S]*?)<tr class="ptask">/.exec(OPEN)?.[1];
+    expect(mainRow, 'no main row in the render').toBeTruthy();
+    expect(classes(mainRow!)).toEqual(cols);
+    expect(cols).not.toContain('col-requestor'); // #78 §3 — gone from both kinds
   });
 
   it('leaves the first cell EMPTY — the indent is the absent MC#, not a repeat of it', () => {
@@ -114,9 +146,86 @@ describe('the task rows live in the parent’s own column grid', () => {
     }
   });
 
-  it('leaves type, difficulty, urgency and requestor cells EMPTY — MC-level attributes', () => {
-    for (const cls of ['col-type', 'col-diff', 'col-urgency', 'col-requestor']) {
-      expect(cell(taskRows(OPEN)[0]!, cls)).toBe(`<td class="${cls}"></td>`);
+  it('leaves the TYPE cell EMPTY — the one MC-level attribute left (R-exp-b)', () => {
+    /* R-exp-b said type / difficulty / urgency / requestor. Owl #78 §1 kept
+       only TYPE: repeating an MC's asset type per task would still imply a
+       task can diverge from its MC, and nothing has re-ruled it. The other
+       three are asserted by the two guards below — two of them now carry
+       controls, and the fourth column no longer exists. */
+    expect(cell(taskRows(OPEN)[0]!, 'col-type')).toBe('<td class="col-type"></td>');
+    expect(OPEN).not.toContain('col-requestor');
+  });
+
+  it('carries the URGENCY and DIFFICULTY controls, bound to the WORK card (owl #78 §1)', () => {
+    /* SUPERSEDES R-exp-b for these two cells. The failing input this was
+       written against: leave the controls on the parent and give the task row
+       an em-dash, and every assertion about "the main row is a dash" below
+       still passes while W1/W3 keep writing the wrong object. So the binding
+       is read off the markup — the handler AND the card id it carries. */
+    const r = taskRows(WRITABLE)[0]!;
+    const urgency = cell(r, 'col-urgency');
+    expect(urgency).toContain('class="ubadge-wrap"');
+    expect(urgency).toContain('Non-Urgent');
+    expect(urgency).not.toContain('⚡'); // #79/D9: the node's label is the word alone
+    const diff = cell(r, 'col-diff');
+    expect(diff).toContain('class="ubadge-wrap"');
+    expect(diff).toContain('—'); // no difficulty label yet — the same dash the parent draws
+
+    // the row kind is the binding: `w.cardId`, never `row.cardId`
+    for (const h of ['openUrgencyMenu', 'openDiffMenu']) {
+      expect(TEMPLATE, `${h} lost its work-card binding`).toContain(`['${h}', w.cardId]`);
+      expect(TEMPLATE, `${h} is still bound to a main card`).not.toContain(`['${h}', row.cardId]`);
+    }
+    for (const h of ['chooseUrgency', 'chooseDifficulty']) {
+      expect(TEMPLATE).toContain(`['${h}', w.cardId, `);
+      expect(TEMPLATE, `${h} is still bound to a main card`).not.toContain(`['${h}', row.cardId, `);
+    }
+  });
+
+  it('renders the difficulty badge and the urgent fill from the card’s own values', () => {
+    /* the render, not the template text: a badge whose class never changes
+       with the data looks right in one fixture and is wrong in every other. */
+    const html = renderPipelineTable({
+      pipelineRows: [PARENT], rowWarning, expanded: { 'MC-837': true }, writesEnabled: true,
+      workCardsByMc: { 'MC-837': [task({ urgency: 'Urgent', difficulty: 'Easy' })] },
+    });
+    const r = taskRows(html)[0]!;
+    expect(cell(r, 'col-urgency')).toMatch(/class="pbadge ubadge urgent/);
+    expect(cell(r, 'col-urgency')).toContain('Urgent');
+    expect(cell(r, 'col-diff')).toMatch(/class="pbadge ubadge d-Easy/);
+    expect(cell(r, 'col-diff')).toContain('Easy');
+    // …and the default fixture takes the other branch on both
+    expect(cell(taskRows(WRITABLE)[0]!, 'col-urgency')).toMatch(/class="pbadge ubadge nonurgent/);
+    expect(cell(taskRows(WRITABLE)[0]!, 'col-diff')).toMatch(/class="pbadge ubadge unset/);
+  });
+
+  it('leaves the MAIN row’s urgency and difficulty as the static em-dash (owl #78 §1)', () => {
+    /* "Not blank-pending-a-value, not inherited, not a mixed-state marker — a
+       main card does not have these properties" (#78 §1). So the cell is the
+       existing `.dimcell` recipe and nothing else: no button, no mustache, no
+       handler. Asserted on the MAIN row only — `taskRows` is stripped out
+       first, or the work rows' own controls would satisfy every one of these
+       and the guard would pass against the defect it exists to catch. */
+    const mainOnly = WRITABLE.replace(/<tr class="ptask">[\s\S]*?<\/tr>/g, '');
+    for (const cls of ['col-urgency', 'col-diff']) {
+      expect(cell(mainOnly, cls)).toBe(`<td class="${cls}"><span class="dimcell">—</span></td>`);
+    }
+    expect(mainOnly, 'a urgency/difficulty control survived on the main row').not.toContain('ubadge');
+
+    /* `toHTML()` drops `on-*` directives, so WHICH row owns the handlers is a
+       question only the template can answer — read per row kind, because a
+       whole-file scan says nothing about placement and that is the entire
+       defect. */
+    const tpl = (open: string) => TEMPLATE.slice(TEMPLATE.indexOf(open), TEMPLATE.indexOf('</tr>', TEMPLATE.indexOf(open)));
+    const mainTpl = tpl('<tr class="prow ');
+    const workTpl = tpl('<tr class="ptask">');
+    // both slices are real rows before anything is asserted ABSENT from one of
+    // them — an empty slice satisfies every negative below
+    expect(mainTpl).toContain('col-urgency');
+    expect(workTpl).toContain('col-urgency');
+    for (const h of ['openUrgencyMenu', 'openDiffMenu', 'chooseUrgency', 'chooseDifficulty']) {
+      expect(mainTpl, `${h} is still on the main row`).not.toContain(h);
+      expect(workTpl, `${h} never reached the work row`).toContain(h);
     }
   });
 
@@ -234,36 +343,42 @@ describe('the parent’s SubTone is WITHDRAWN (JP, 2026-08-27)', () => {
 });
 
 /* ---------------------------------------------------------------------- */
-/* D — the task due date: W2's task-card half                               */
+/* D — the task due date: W2's task-card half (cell renamed col-deadline)    */
 /* ---------------------------------------------------------------------- */
 
 describe('the task due cell is the SAME W2 recipe, bound to the task card', () => {
+  /* The CLASS is `col-deadline` since owl #78 §3 renamed the column DUE →
+     DEADLINE, matching the word Sprint Schedules uses for the same date; the
+     class moved with the label so header, cells and width rule cannot drift
+     over a name only half of them changed. The W2 picker itself is untouched
+     here — #78 §2 makes Pipeline's deadline read-only, and that lands with the
+     Sprint Schedules half rather than in this block. */
   it('renders the datefield with the task’s date, keyed on the task’s own cardId', () => {
-    const due = cell(taskRows(WRITABLE)[0]!, 'col-due');
+    const due = cell(taskRows(WRITABLE)[0]!, 'col-deadline');
     expect(due).toContain('class="datefield');
     expect(due).toContain('2026-08-07');
     expect(due).toContain('write registry W2, task-card scope');
   });
 
   it('shows `Select Date` and the missing dress on a task without one', () => {
-    const due = cell(taskRows(WRITABLE)[1]!, 'col-due');
+    const due = cell(taskRows(WRITABLE)[1]!, 'col-deadline');
     expect(due).toContain('Select Date');
     expect(due).toMatch(/class="datefield[^"]*missing/);
   });
 
   it('opens the shared popover inside the task cell, Clear enabled exactly when a due exists', () => {
-    const withDue = cell(taskRows(open({ writesEnabled: true, duePopover: 'task-1' }))[0]!, 'col-due');
+    const withDue = cell(taskRows(open({ writesEnabled: true, duePopover: 'task-1' }))[0]!, 'col-deadline');
     expect(withDue).toContain('class="duepop"');
     expect(withDue).toContain('Clear Due Date');
     expect(withDue).not.toMatch(/<button class="dueclear" disabled/);
 
-    const withoutDue = cell(taskRows(open({ writesEnabled: true, duePopover: 'task-2' }))[1]!, 'col-due');
+    const withoutDue = cell(taskRows(open({ writesEnabled: true, duePopover: 'task-2' }))[1]!, 'col-deadline');
     expect(withoutDue).toContain('class="duepop"');
     expect(withoutDue).toMatch(/<button class="dueclear" disabled/);
   });
 
   it('renders read-only datefields when the project’s writes are off', () => {
-    const due = cell(taskRows(OPEN)[0]!, 'col-due')  // writesEnabled false is the default;
+    const due = cell(taskRows(OPEN)[0]!, 'col-deadline')  // writesEnabled false is the default;
     expect(due).toContain('class="datefield readonly');
     expect(due).not.toContain('<button');
   });
@@ -431,7 +546,7 @@ describe('the shared calendar really renders (the rule-6 vacuous hazard)', () =>
     const due = cell(taskRows(renderPipelineTable({
       pipelineRows: [PARENT], rowWarning, workCardsByMc: TASKS,
       expanded: { 'MC-837': true }, duePopover: 'task-1', writesEnabled: true,
-    }))[0]!, 'col-due');
+    }))[0]!, 'col-deadline');
     expect(due).toContain('class="duehead"');
     expect(due).toContain('class="dueshort"');
     expect(due).toContain('Next Monday');
@@ -445,9 +560,9 @@ describe('the task due wears the parent’s FULL dress, overdue included', () =>
       workCardsByMc: { 'MC-837': [task({ overdue: true })] },
       expanded: { 'MC-837': true },
     });
-    expect(cell(taskRows(late)[0]!, 'col-due')).toMatch(/class="datefield readonly overdue/);
+    expect(cell(taskRows(late)[0]!, 'col-deadline')).toMatch(/class="datefield readonly overdue/);
     // …and a current one stays undressed
-    expect(cell(taskRows(OPEN)[0]!, 'col-due')).not.toContain('overdue');
+    expect(cell(taskRows(OPEN)[0]!, 'col-deadline')).not.toContain('overdue');
   });
 });
 
@@ -553,7 +668,111 @@ describe('the chevron belongs to the MC, not to each row that shares its number'
 });
 
 /* ---------------------------------------------------------------------- */
-/* H — owl #61: work that belongs to no row and no week                     */
+/* H — owl #78 §1: W1 and W3 write to the WORK CARD                         */
+/* ---------------------------------------------------------------------- */
+
+describe('the urgency and difficulty writes address a WORK card, and only that', () => {
+  /* THE DEFECT #78 reported, in shipped code: "every urgency and difficulty
+     write happening now lands on the wrong object." A website request can
+     carry an urgent screen and non-urgent assets, so one value on the parent
+     cannot be true. The two enumerated writes are RE-POINTED, not widened —
+     a deliverable-scoped route left dormant beside the new one is how a defect
+     like this survives its own fix, so the old URL must be absent from the
+     client entirely, not merely unreached. */
+  const HALVES = [
+    ['chooseUrgency', 'urgency'],
+    ['chooseDifficulty', 'difficulty'],
+  ] as const;
+
+  it('PATCHes /workcards/, and names /deliverables/ in neither handler', () => {
+    for (const [h, path] of HALVES) {
+      const body = handlerBody(h);
+      expect(body, `${h} no longer PATCHes`).toContain("api.send('PATCH'");
+      expect(body, `${h} writes the wrong card kind`).toContain(`/workcards/\${cardId}/${path}`);
+      expect(body, `${h} still has a deliverable-scoped URL`).not.toContain('/deliverables/');
+    }
+    // and the retired URLs are gone from the whole shipped bundle, comments
+    // and all — the concatenated `<script>` is one scope (test/helpers/source.ts)
+    expect(APP_JS).not.toContain('/deliverables/${cardId}/urgency');
+    expect(APP_JS).not.toContain('/deliverables/${cardId}/difficulty');
+  });
+
+  it('applies and rolls back on the WORK-CARD store, not on the deliverable rows', () => {
+    /* invariant 8 unchanged, re-pointed: the optimistic set lands before the
+       network call and the revert after it, and BOTH go through
+       `patchWorkCard`. Left on `patchRow`, the badge would flip on a main row
+       that no longer draws one — a write with no visible subject. */
+    for (const [h] of HALVES) {
+      const body = handlerBody(h);
+      expect(body, `${h} does not patch the work-card store`).toContain('patchWorkCard(cardId');
+      expect(body, `${h} still patches a deliverable row`).not.toContain('patchRow(cardId');
+      expect(body.indexOf('patchWorkCard(cardId'), h).toBeLessThan(body.indexOf('api.send'));
+      expect(body.lastIndexOf('patchWorkCard(cardId'), `${h} never reverts`).toBeGreaterThan(body.indexOf('api.send'));
+    }
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* H2 — owl #78 §1 / D3: the URGENT tile counts WORK cards                  */
+/* ---------------------------------------------------------------------- */
+
+describe('the URGENT tile counts urgent WORK cards, project-wide', () => {
+  /* EXECUTED, not read: a source assertion could show the computed reaching
+     for `workCardsByMc` without showing it ever produces a different number
+     from the old main-card count. The idiom is the executed-computed one this
+     suite's siblings use (`method()` out of the shipped scripts, a `get` that
+     serves the plain data the computed reads).
+
+     WHICH population "urgent" means was never ruled — the frame gives the tile
+     no definition beyond the word — so D3 reads it project-wide, orphans
+     included, matching the population the column now shows. Asked of Miles;
+     one line changes if he wants attached cards only. */
+  const kpi = (over: Record<string, unknown>) =>
+    new Function('DATA', `
+      const computed = { ${method('kpi')} };
+      return computed.kpi.call({ get: (k) => DATA[k] });
+    `)({
+      rows: [], workCardsByMc: {}, corrections: [],
+      unattachedWork: { cards: 0, mcNumbers: [] },
+      ...over,
+    }) as { urgent: number; main: number; work: number };
+
+  const wc = (cardId: string, urgency: string) => ({ cardId, urgency });
+
+  it('reads ZERO for an urgent MAIN card whose work cards are all quiet', () => {
+    /* the exact state the defect produced: the label sits on the parent, the
+       tile counted it, and nothing a reader can see on the table agrees. */
+    const out = kpi({
+      rows: [{ cardId: 'main-1', mcNumber: 'MC-837', urgency: 'Urgent' }],
+      workCardsByMc: { 'MC-837': [wc('t1', 'Non-Urgent'), wc('t2', 'Non-Urgent')] },
+    });
+    expect(out.urgent).toBe(0);
+    expect(out.main, 'MAIN CARDS still counts rows').toBe(1);
+    expect(out.work, 'WORK CARDS still counts every work card').toBe(2);
+  });
+
+  it('reads TWO for two urgent work cards under one MC', () => {
+    expect(kpi({
+      rows: [{ cardId: 'main-1', mcNumber: 'MC-837', urgency: 'Non-Urgent' }],
+      workCardsByMc: { 'MC-837': [wc('t1', 'Urgent'), wc('t2', 'Urgent'), wc('t3', 'Non-Urgent')] },
+    }).urgent).toBe(2);
+  });
+
+  it('counts an urgent card under an MC with no row at all (D3 — orphans included)', () => {
+    /* `work` above has always totalled these (owl #61), so excluding them here
+       would make the two tiles disagree about what the board holds. */
+    expect(kpi({ rows: [], workCardsByMc: { 'MC-999': [wc('t9', 'Urgent')] } }).urgent).toBe(1);
+  });
+
+  it('treats a card with no urgency at all as quiet, not as urgent', () => {
+    // the wire defaults to 'Non-Urgent', but a lean read that missed the field
+    // must not promote the card — absence is the absence of the Urgent label
+    expect(kpi({ workCardsByMc: { 'MC-837': [{ cardId: 't1' }] } }).urgent).toBe(0);
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* I — owl #61: work that belongs to no row and no week                     */
 /* ---------------------------------------------------------------------- */
 
 describe('the UNATTACHED metric states work that is absent from capacity', () => {
@@ -563,7 +782,8 @@ describe('the UNATTACHED metric states work that is absent from capacity', () =>
 
   it('renders the tile with the count when there is unattached work', () => {
     const html = renderMetrics(kpi());
-    expect(html).toContain('UNATTACHED');
+    // owl #79 / D8: the node's own string is UNATTACHED CARDS, not UNATTACHED
+    expect(html).toContain('UNATTACHED CARDS');
     expect(html).toContain('>35</span>');
   });
 
@@ -591,10 +811,117 @@ describe('the UNATTACHED metric states work that is absent from capacity', () =>
     expect(tip(35, 11)).toContain('35 task cards across 11 MC numbers ');
   });
 
-  it('wears the warning voice, not the destructive one — a hygiene gap, not a failure', () => {
-    expect(renderMetrics(kpi())).toContain('class="metric warn"');
-    expect(cssRule('.metrics .metric.warn .mlabel, .metrics .metric.warn .mvalue', PIPELINE_CSS))
-      .toContain('var(--amber-700)');
+  it('wears the QUIETEST voice on the strip — slate-400, and never a warning again', () => {
+    /* SUPERSEDES owl #61's amber-700 reading, which this test used to pin.
+       Owl #79 (node 843:125895, #94A3B8 on both text nodes) demoted the tile:
+       unattached cards are a condition of the DATA, not of the work, and amber
+       sat one shade from URGENT — two adjacent tiles competing in the same warm
+       family while answering unrelated questions. The tooltip carries the
+       consequence (#48's reasoning, asserted above); the tile carries the
+       number. #61's hide-at-zero rule is untouched and still asserted above.
+
+       "Do not restore a warning colour here" is the ruling, so the OLD
+       modifier is asserted gone from the stylesheet rather than merely unused:
+       a live `.metric.warn` rule is exactly how the amber comes back, one
+       template edit later, under a green suite. */
+    expect(renderMetrics(kpi())).toContain('class="metric quiet"');
+    const rule = cssRule('.metrics .metric.quiet .mlabel, .metrics .metric.quiet .mvalue', PIPELINE_CSS);
+    expect(rule).toContain('var(--slate-400)');
+    expect(TOKENS_CSS).toContain('--slate-400:');
+    // the help cursor moved with the modifier — the tooltip IS the tile's point
+    expect(cssRule('.metrics .metric.quiet .mvalue', PIPELINE_CSS)).toContain('cursor: help');
+    // declarations only: a prose comment naming the retired modifier is history
+    // being kept, not a treatment (test/CLAUDE.md rule 3)
+    expect(PIPELINE_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ')).not.toContain('.metric.warn');
+    expect(renderMetrics(kpi())).not.toContain('class="metric warn"');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* URGENCY SPEAKS WITH ONE COLOUR — owls #78/#79                       */
+/* nodes 843:125889 (strip) · 842:125808 (badge) · I833:40013;40:4853  */
+/* ------------------------------------------------------------------ */
+
+describe('the Pipeline urgency colour set is amber, tile and badge alike', () => {
+  const kpi = { main: 10, work: 45, open: 4, urgent: 3, unattached: 0, unattachedMcs: 0 };
+
+  it('paints the URGENT tile amber-600 on BOTH text nodes, not red', () => {
+    /* SUPERSEDES the `.metric.red` reading the tile shipped with (and the
+       annotation `28:3666`'s "URGENT (red)"). #78 §6 flagged the inconsistency
+       — the tile was red while the badge under it is amber-600 — and #79 ruled
+       it closed: "URGENT tile is now #D97706, overline and figure both,
+       matching the Urgent badge exactly. Do not revert the tile to red."
+       Pipeline gets its OWN modifier so Deadlines' URGENT tile, which #79
+       leaves alone, keeps `.red`. */
+    expect(renderMetrics(kpi)).toContain('class="metric urgent"');
+    expect(renderMetrics(kpi), 'the Pipeline strip went back to red').not.toContain('class="metric red"');
+    const rule = cssRule('.metrics .metric.urgent .mlabel, .metrics .metric.urgent .mvalue', PIPELINE_CSS);
+    expect(rule).toContain('var(--amber-600)');
+    expect(TOKENS_CSS).toContain('--amber-600:');
+    // one colour, tile and badge: the same token the Urgent badge fills with
+    expect(cssRule('.ubadge.urgent', PIPELINE_CSS)).toContain('var(--amber-600)');
+  });
+
+  it('gives Urgent and Non-Urgent ONE footprint, so the column cannot reflow', () => {
+    /* #79: "Same footprint on both, so the column does not reflow when a
+       card's urgency changes." Node 842:125808 is 96 × 25; the variants may
+       change paint and nothing else, which is why the box lives on the base
+       class alone. */
+    expect(cssRule('.ubadge', PIPELINE_CSS)).toContain('width: 96px');
+    for (const v of ['.ubadge.urgent', '.ubadge.nonurgent, .ubadge.unset']) {
+      const rule = cssRule(v, PIPELINE_CSS);
+      expect(rule, `${v} resizes the badge`).not.toMatch(/(?:^|[^-])(?:width|padding|font-size):/);
+    }
+    // the difficulty badge shares it, so the two columns line up down the table
+    expect(cssRule('.ptable .col-diff .pbadge', PIPELINE_CSS)).toContain('width: 96px');
+  });
+
+  it('fills Urgent solid amber-600 with an amber-50 label, exactly as the node draws it', () => {
+    /* The node wins over the annotation prose twice here: #79's text says
+       "white label", the node's label AND chevron are #FFFBEB (amber-50); and
+       there is NO stroke, so the border takes the fill's own colour rather
+       than a contrasting one. The chevron inherits `currentColor`, which is
+       why one `color` covers both. */
+    const rule = cssRule('.ubadge.urgent', PIPELINE_CSS);
+    expect(rule).toContain('background: var(--amber-600)');
+    expect(rule).toContain('border-color: var(--amber-600)');
+    expect(rule).toContain('color: var(--amber-50)');
+    expect(rule, 'the red-300/destructive dress survived').not.toContain('red');
+  });
+
+  it('draws Non-Urgent as an ABSENCE, one step above the row it sits on', () => {
+    /* Two rulings in one rule. The DASH (#78 §6): Trello has an Urgent label
+       and none meaning not urgent, so Urgent asserts a value and Non-Urgent
+       draws its absence — a solid grey outline would assert a value the data
+       does not hold. The FILL: slate-100, not the slate-50 Deadlines uses,
+       because a work row's own ground is slate-50 and a slate-50 badge
+       vanishes into it. "Keep the badge one step above whatever it sits on." */
+    const rule = cssRule('.ubadge.nonurgent, .ubadge.unset', PIPELINE_CSS);
+    expect(rule).toContain('border-style: dashed');
+    expect(rule).toContain('border-color: var(--slate-400)');
+    expect(rule).toContain('background: var(--slate-100)');
+    expect(rule, 'the badge went back to the row’s own slate-50').not.toContain('var(--slate-50)');
+    // and the row underneath is what makes that necessary
+    expect(cssRule('.ptable tr.ptask td', PIPELINE_CSS)).toContain('background: var(--slate-50)');
+  });
+
+  it('draws Easy as green-100 behind a green-600 label', () => {
+    /* SUPERSEDES owl #04's "50 fill / 500 text" difficulty recipe. Node
+       `I833:40013;40:4853` reads fill #DCFCE7 (green-100), stroke #22C55E
+       (green-500) and label #16A34A (green-600) — the label is the term #04
+       had wrong. Medium and Hard rest on the Badge component set's
+       Outline/Notice and Outline/Negative variants because the frame
+       instantiates only Easy; that pairing is INFERRED from today's colour
+       families and is flagged to Miles (D10), so it is asserted as the built
+       recipe rather than as a ruling. */
+    const easy = cssRule('.pbadge.d-Easy', PIPELINE_CSS);
+    expect(easy).toContain('background: var(--green-100)');
+    expect(easy).toContain('border-color: var(--green-500)');
+    expect(easy).toContain('color: var(--green-600)');
+    expect(easy, 'the #04 recipe came back').not.toContain('var(--green-50)');
+    expect(TOKENS_CSS).toContain('--green-100:');
+    expect(cssRule('.pbadge.d-Medium', PIPELINE_CSS)).toContain('var(--amber-100)');
+    expect(cssRule('.pbadge.d-Hard', PIPELINE_CSS)).toContain('var(--red-50)');
   });
 });
 
@@ -625,6 +952,12 @@ describe('a coloured metric tile colours the LABEL as well as the figure', () =>
     const modifiers = [...markup.matchAll(/class="metric ([a-z]+)"/g)].map((m) => m[1]!);
     expect(new Set(modifiers).size, 'no coloured tiles rendered — the guard would pass vacuously')
       .toBeGreaterThan(1);
+    /* #69's promise was that the NEXT coloured tile is covered the day it is
+       added, and owls #78/#79 are that day: `urgent` and `quiet` are the two
+       modifiers they introduce, and both must be inside this walk rather than
+       beside it. Named explicitly so a renamed modifier fails here instead of
+       quietly leaving the pairing rule uncovered. */
+    expect([...new Set(modifiers)].sort()).toEqual(['blue', 'quiet', 'urgent']);
 
     for (const mod of new Set(modifiers)) {
       const selector = `.metrics .metric.${mod} .mlabel, .metrics .metric.${mod} .mvalue`;

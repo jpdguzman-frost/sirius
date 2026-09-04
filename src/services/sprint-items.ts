@@ -50,6 +50,11 @@ export interface SprintItemRow {
   /** `null` when the work card has left the board — absent is not 'ongoing'. */
   status: string | null;
   trelloUrl: string | null;
+  /**
+   * THIS card carries the `Urgent` label (owl #78, 2026-09-05). Not the MC
+   * group's — see the note at the `rows` map. False when the card has left
+   * the board: an absent card asserts nothing.
+   */
   urgent: boolean;
   /**
    * The PM's click, or null. Null is a REAL state, not missing data: a row is
@@ -209,16 +214,8 @@ export async function loadSprintItems(
 
   /* Earliest client date per MC group — see `deadlineFor` for why earliest. */
   const mcDeadline = new Map<string, string>();
-  /* Urgency is an MC-GROUP attribute, not a task one: the `Urgent` label lives
-     on the main card and task cards carry no labels at all. Owl #45 already
-     ruled that the expanded MC row must not show urgency on the child, because
-     an MC-level attribute must never look able to diverge per task. Here the
-     card IS the row, so it has to show something — and the honest something is
-     the group's: any urgent main card under the MC makes the group urgent. */
-  const mcUrgent = new Set<string>();
   for (const d of deliverableRows) {
     if (!d.mcNumber) continue;
-    if (d.urgency === 'Urgent') mcUrgent.add(d.mcNumber);
     if (!d.deadline) continue;
     const held = mcDeadline.get(d.mcNumber);
     if (!held || d.deadline < held) mcDeadline.set(d.mcNumber, d.deadline);
@@ -236,9 +233,9 @@ export async function loadSprintItems(
     const finish = w && startsOn ? finishOf(w, startsOn, model) : null;
     /* THE ROW'S OWN `mc_number`, not the card's current one. They can differ:
        the row snapshots the group at add time and the sync follows the card, so
-       a card re-titled into another MC in Trello would otherwise be grouped and
-       flagged under one MC while being measured against another's client date.
-       One source for identity, urgency and deadline, whichever it is. */
+       a card re-titled into another MC in Trello would otherwise be grouped
+       under one MC while being measured against another's client date. One
+       source for identity and deadline, whichever it is. */
     const deadline = deadlineFor(w, it.mc_number as string, mcDeadline);
     return {
       id: String(it._id),
@@ -255,7 +252,15 @@ export async function loadSprintItems(
          own state and the UI must be able to say so. */
       status: w ? classifyList(w.current_list as string | undefined) : null,
       trelloUrl: (w?.trello_url as string) ?? null,
-      urgent: mcUrgent.has(it.mc_number as string),
+      /* THE CARD'S OWN label (owl #78, 2026-09-05), and nothing inherited.
+         This retired the #58 judgement, which took the MC group's urgency —
+         "any urgent main card under the MC makes the group urgent" — on the
+         reasoning that task cards carry no labels. They do now: a website
+         request can hold an urgent screen and non-urgent assets, so the
+         group's value cannot be true of each row. Unlike the deadline just
+         above there is NO fallback to the group: an absent card, or a card
+         without the label, is simply not urgent. */
+      urgent: w?.urgency === 'Urgent',
       startsOn,
       finish,
       deadline,

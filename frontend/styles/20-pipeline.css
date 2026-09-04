@@ -80,18 +80,26 @@
 .metrics .metric .mvalue { font-size: var(--text-display); font-weight: 600; line-height: 1.2; color: var(--surface-foreground); }
 .metrics .metric.red .mlabel, .metrics .metric.red .mvalue { color: var(--status-destructive-strong); }
 .metrics .metric.green .mlabel, .metrics .metric.green .mvalue { color: var(--green-600); }
-/* owl #61 — amber, not red: unattached work is a data-hygiene gap to notice,
-   not a failure to alarm about. It borrows the warning voice the row icon and
-   the Needs Info title already use, so a reader who has learned that colour on
-   Pipeline reads this the same way. */
-.metrics .metric.warn .mlabel, .metrics .metric.warn .mvalue { color: var(--amber-700); }
-.metrics .metric.warn .mvalue { cursor: help; }
+/* Pipeline's URGENT tile — owl #79, node 843:125894. The same amber the Urgent
+   badge wears on the work-card rows, so urgency speaks with ONE colour on this
+   tab: tile and badge are the same claim at two scales. Deadlines' own URGENT
+   tile keeps `.red` (its rail ruling is still open, #79) — this modifier is
+   Pipeline's, which is why it is a new one rather than a repaint of `.red`. */
+.metrics .metric.urgent .mlabel, .metrics .metric.urgent .mvalue { color: var(--amber-600); }
+/* UNATTACHED CARDS — owl #79 (node 843:125895), which SUPERSEDES the amber
+   reading owl #61 gave this tile. Amber sat one shade from the URGENT tile:
+   two neighbours competing in the same warm family while answering unrelated
+   questions. Unattached work is a condition of the DATA, not of the work, so
+   the tile states the number and the tooltip carries the consequence (the #48
+   reasoning, unchanged). Do not restore a warning colour here. */
+.metrics .metric.quiet .mlabel, .metrics .metric.quiet .mvalue { color: var(--slate-400); }
+.metrics .metric.quiet .mvalue { cursor: help; }
 .metrics .metric.amber .mlabel, .metrics .metric.amber .mvalue { color: var(--amber-500); }
 /* OPEN WORK, owl miles→jp #69 (node 731:100892). BOTH text nodes take the
    colour, not only the figure — the annotation says so twice because "changed
    the colour of the stat" is naturally built as just the number, and a blue
    32px figure under a slate-900 label reads as a rendering fault rather than a
-   treatment. Same construction as `.red` / `.green` / `.warn` above, so the
+   treatment. Same construction as `.red` / `.green` / `.amber` above, so the
    modifier is the only place the pairing is stated.
 
    `--blue-500` is #3b82f6, the ramp the other three tiles already sit in. */
@@ -315,8 +323,11 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .ptable .col-type { width: 140px; min-width: 140px; }
 .ptable .col-diff, .ptable .col-urgency { width: 144px; min-width: 144px; }
 .ptable .col-status { width: 228px; min-width: 228px; }
-.ptable .col-requestor { width: 142px; min-width: 142px; }
-.ptable .col-due, .ptable .col-started { width: 156px; min-width: 156px; }
+/* REQUESTOR left the Pipeline table with owl #78 §3 — the column and its filter
+   axis went together, so its width rule goes too rather than lingering as a
+   dead selector. Requests keeps its own column (owl #66 is narrowed, not
+   retired). DUE is DEADLINE here now, matching Sprint Schedules (#78 §2/§3). */
+.ptable .col-deadline, .ptable .col-started { width: 156px; min-width: 156px; }
 .ptable .col-done { width: 76px; min-width: 76px; }
 .ptable .col-links { width: 94px; min-width: 94px; }
 
@@ -351,10 +362,23 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    gaps (Miles, owl #42, T152) are recorded in the state log; a returning
    clipping cell rebuilds from that ruling, not from git history alone. */
 
-.ptable .col-diff .pbadge { width: 111px; justify-content: space-between; }
-/* difficulty recipes = product's W3 tokens (Miles, owl #04 2026-08-12): 50 fill / 500 stroke+text */
-.pbadge.d-Easy { background: var(--green-50); border-color: var(--green-500); color: var(--green-500); }
-.pbadge.d-Medium { background: var(--amber-50); border-color: var(--amber-500); color: var(--amber-500); }
+.ptable .col-diff .pbadge { width: 96px; justify-content: space-between; }
+/* Difficulty recipes read from the Badge component set, node 40:4105 (owls
+   #78/#79). This SUPERSEDES the "fifty fill / five-hundred stroke and text"
+   recipe Miles gave in owl #04 on the twelfth of August: in the nodes the fill
+   sits one step above the row and the label one step DARKER than the stroke,
+   which is what keeps the label legible once the fill lifts.
+
+   Easy is read from the frame's own instance, node I833:40013;40:4853. The
+   frame instantiates no other value, so Medium and Hard are read from the
+   component set's Outline/Notice (169:22738) and Outline/Negative (169:22744)
+   variants; pairing Medium to Notice and Hard to Negative is INFERRED from the
+   colour families the two already wear here, not annotated — flagged to Miles
+   (PLAN D10). These three recipes are shared with the Sprint Schedules and
+   Deadlines badges, which carry no colour override of their own, so the new
+   reading lands on all three tabs together. */
+.pbadge.d-Easy { background: var(--green-100); border-color: var(--green-500); color: var(--green-600); }
+.pbadge.d-Medium { background: var(--amber-100); border-color: var(--amber-500); color: var(--amber-600); }
 .pbadge.d-Hard { background: var(--red-50); border-color: var(--red-500); color: var(--red-500); }
 .pbadge.s-pending { background: var(--status-warning-light); border-color: var(--amber-500); color: var(--amber-600); }
 .pbadge.s-ongoing { background: var(--blue-100); border-color: var(--blue-500); color: var(--blue-500); }
@@ -362,17 +386,34 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .pbadge.blocked { background: var(--red-50); border-color: var(--red-300); color: var(--red-600); }
 
 /* select pill = the Badge recipe (.pbadge) + interaction chrome — urgency
-   (annotations 169:26364/26074) and difficulty (W3, cell 415:54974; the
-   d-* recipes above win on specificity, so value colors carry over) */
+   (node 842:125808) and difficulty (W3, cell 415:54974; the d-* recipes above
+   win on specificity, so value colors carry over). Since owls #78/#79 the pill
+   rides the WORK-CARD rows, never the main row; the main row's two cells are
+   the static dimcell em-dash and carry no control at all. */
 .ubadge-wrap { position: relative; display: inline-block; }
 .ubadge {
-  width: 111px; justify-content: space-between; cursor: pointer;
+  width: 96px; justify-content: space-between; cursor: pointer;
   font-family: var(--font-sans); padding: 5px 5px 4px 8px;
 }
-/* annotation 169:26364: destructive-light bg, destructive-strong text,
-   solid red-300 border, ⚡ prefix (review finding 12) */
-.ubadge.urgent { background: var(--status-destructive-light); border-color: var(--red-300); color: var(--status-destructive-strong); }
-.ubadge.nonurgent, .ubadge.unset { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
+/* Urgent — node 842:125808 (owls #78/#79), SUPERSEDING the red reading the old
+   annotation 169:26364 carried, and the lightning-bolt prefix that came with
+   it: the node's characters are the word alone, and the tile above the table
+   moved to this same amber so the tab speaks one colour for urgency.
+
+   The node draws no stroke; the border colour matches the fill so the box keeps
+   the same rendered footprint as the dashed Non-Urgent state and the column
+   never reflows when a card flips. Label and chevron are the same pale amber —
+   the chevron is a currentColor stroke and `.bchev` sets no colour of its own,
+   so it follows for free. */
+.ubadge.urgent { background: var(--amber-600); border-color: var(--amber-600); color: var(--amber-50); }
+/* Non-Urgent draws an ABSENCE (owls #78 §6, #79): Trello has an Urgent label
+   and none meaning not-urgent, so a solid outline would assert a value the data
+   does not hold. Dashed is the closest CSS has to the node's three-two dash
+   pattern. The fill is one step darker than the Deadlines version on purpose —
+   the work-card row underneath is already the palest slate, and a badge must
+   stay one step above whatever it sits on. `.unset` — difficulty not yet set —
+   is the same absence and shares the treatment. */
+.ubadge.nonurgent, .ubadge.unset { background: var(--slate-100); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
 .ubadge.saving { opacity: 0.5; pointer-events: none; }
 /* all four are fixed boxes that escape the .pscroll clip (review finding 3),
    with their flipped/clamped coords set inline — one recipe, four sizes. The

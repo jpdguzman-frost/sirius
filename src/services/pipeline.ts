@@ -83,6 +83,15 @@ export interface PipelineRow {
   currentList: string | null;
   status: 'pending' | 'ongoing' | 'done';
   statusNote: string | null;
+  /**
+   * The MAIN card's own `Difficulty: …` label and `Urgent` label. Since owl
+   * #78 (2026-09-05) these are NOT editable in Sirius — W1 and W3 write the
+   * work card — and the Pipeline draws an em-dash for both on the main row.
+   * They STAY on the wire (PLAN decision D1) because they still key the
+   * forecast, Needs Info, the planner, Deadlines' milestones and the
+   * urgent-overlap conflict rule (AC-17); they reconcile from Trello and
+   * change in Trello only. Block 3 revisits them.
+   */
   difficulty: string | null;
   lane: string | null;
   urgency: string;
@@ -175,6 +184,14 @@ export interface WorkCardWire {
   startedTs: string | null;
   done: string | null;
   doneTs: string | null;
+  /**
+   * The task card's OWN urgency and difficulty (owl #78, 2026-09-05): the
+   * expanded work-card row carries the editable badge+chevron for both, and
+   * W1/W3 write THIS card. Owl #45's "child rows show no urgency/difficulty"
+   * rested on task cards carrying no labels; #78 retires that.
+   */
+  urgency: 'Urgent' | 'Non-Urgent';
+  difficulty: 'Easy' | 'Medium' | 'Hard' | null;
 }
 
 export interface PipelineResult {
@@ -273,6 +290,12 @@ export async function loadPipeline(
       startedTs: w.work_started_at ? w.work_started_at.toISOString() : null,
       done: w.work_done_at ? manilaDate(w.work_done_at) : null,
       doneTs: w.work_done_at ? w.work_done_at.toISOString() : null,
+      // owl #78: lean-safe defaults — a pre-#78 document has no `urgency`
+      // field until its next sync, and absence of the label IS Non-Urgent.
+      // Difficulty is one of the three taxonomy values or absent: the mapper
+      // normalises the label and W3 validates the body, so the cast holds.
+      urgency: (w.urgency as WorkCardWire['urgency'] | undefined) ?? 'Non-Urgent',
+      difficulty: (w.difficulty as WorkCardWire['difficulty'] | undefined) ?? null,
     });
   }
 

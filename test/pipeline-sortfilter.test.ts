@@ -12,6 +12,18 @@
  * What this file cannot prove: that a click opens the panel, that arrow keys
  * walk the items, that Escape returns focus. `toHTML()` has no pointer, focus
  * or clock — those belong to the live pass.
+ *
+ * AMENDED 2026-09-05 — owls miles→jp #78 §1/§3 and #79, frame `809:83486`.
+ * The table is TEN columns now: REQUESTOR left Pipeline for Requests, URGENCY
+ * moved ahead of DIFFICULTY, and DUE became DEADLINE. The filter panel went
+ * down to TYPE and STATUS with it, because #78 moved urgency and difficulty
+ * onto the WORK CARD — an axis narrowing MAIN rows by either would now filter
+ * parents on a value the table does not draw on them, which the reader can
+ * neither see nor undo. #78 §4 rebuilds all four axes over work-card values
+ * with auto-expand; until that lands the two are PARKED. The assertions that
+ * used to ride on them are re-pointed at the axes that survive rather than
+ * deleted, so the RULES (None is a value, counts ignore their own axis, a
+ * ticked zero stays) keep a live axis to be proven against.
  */
 
 import { readFileSync } from 'node:fs';
@@ -180,32 +192,46 @@ describe('the default order is by filing, newest first', () => {
 });
 
 /* ---------------------------------------------------------------------- */
-/* D — the five filter axes, OR within / AND across                         */
+/* D — the surviving filter axes, OR within / AND across                    */
 /* ---------------------------------------------------------------------- */
 
 describe('filtering is OR within a category and AND across them', () => {
   const rows = [
-    row({ cardId: 'a', assetType: 'Icon', urgency: 'Urgent' }),
-    row({ cardId: 'b', assetType: 'UI', urgency: 'Non-Urgent' }),
-    row({ cardId: 'c', assetType: 'Icon', urgency: 'Non-Urgent' }),
+    row({ cardId: 'a', assetType: 'Icon', currentList: 'Design' }),
+    row({ cardId: 'b', assetType: 'UI', currentList: 'Backlogs: Icon' }),
+    row({ cardId: 'c', assetType: 'Icon', currentList: 'Backlogs: Icon' }),
   ];
   const pick = (sel: Record<string, string[]>) =>
     rows.filter((r) => recipe.pipeMatches(r, { ...recipe.PIPE_FILTERS_EMPTY(), ...sel }, null)).map((r) => r.cardId);
 
-  it('carries the five axes the frame names, in order', () => {
-    expect(recipe.PIPE_FILTERS.map((f) => f.label)).toEqual(['Type', 'Difficulty', 'Urgency', 'Status', 'Requestor']);
+  it('carries TYPE and STATUS only — the other three left with owl #78', () => {
+    /* SUPERSEDES the five-axis pin taken from owl #62's frame. #78 §3 removed
+       the REQUESTOR column from Pipeline (it stays on Requests, where the row's
+       own subject is a person), and #78 §1 moved urgency and difficulty onto
+       the WORK CARD — so all three axes would now narrow MAIN rows by a value
+       the main row no longer shows. #78 §4 rebuilds urgency and difficulty over
+       work-card values with auto-expand, and that is where they come back;
+       parking them is not declining them. */
+    expect(recipe.PIPE_FILTERS.map((f) => f.label)).toEqual(['Type', 'Status']);
   });
 
-  it('REQUESTOR, not CLIENT — every row on a board shares one client', () => {
-    expect(recipe.PIPE_FILTERS.some((f) => f.label === 'CLIENT')).toBe(false);
+  it('leaves no axis pointed at a column the ten-column table stopped drawing', () => {
+    /* THE RULE #78 could have broken quietly: an axis takes its label from the
+       column it narrows, so one left behind on `col-requestor` or `col-diff`
+       renders a heading of `undefined` over a live list of checkboxes. Section
+       H proves the join from the column side; this is the axis side, and it is
+       the side that fails first when a column is deleted. */
+    const cols = recipe.PIPE_COLS.map((c) => c.cls);
+    for (const a of recipe.PIPE_FILTERS) expect(cols, `axis "${a.key}" narrows "${a.col}"`).toContain(a.col);
+    expect(cols, 'the Requestor column is gone from Pipeline (#78 §3)').not.toContain('col-requestor');
   });
 
   it('ORs within a category — Icon plus UI shows both', () => {
     expect(pick({ type: ['Icon', 'UI'] })).toEqual(['a', 'b', 'c']);
   });
 
-  it('ANDs across categories — Icon plus Urgent shows only urgent icons', () => {
-    expect(pick({ type: ['Icon'], urgency: ['Urgent'] })).toEqual(['a']);
+  it('ANDs across categories — Icon plus one list shows only that list’s icons', () => {
+    expect(pick({ type: ['Icon'], status: ['Backlogs: Icon'] })).toEqual(['c']);
   });
 
   it('an empty axis constrains nothing', () => {
@@ -233,8 +259,8 @@ describe('a category counts against the OTHER categories, never its own', () => 
     const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: ['Icon'] };
     const forType = rows.filter((r) => recipe.pipeMatches(r, sel, 'type'));
     expect(forType.map((r) => r.cardId)).toEqual(['a', 'b']); // UI still countable
-    const forOthers = rows.filter((r) => recipe.pipeMatches(r, sel, 'urgency'));
-    expect(forOthers.map((r) => r.cardId)).toEqual(['a']); // …but urgency sees the narrowing
+    const forOthers = rows.filter((r) => recipe.pipeMatches(r, sel, 'status'));
+    expect(forOthers.map((r) => r.cardId)).toEqual(['a']); // …but the other axis sees the narrowing
   });
 });
 
@@ -259,17 +285,23 @@ describe('the MC-number sort actually orders by the MC number', () => {
 const facet = (rows: unknown[], key: string, sel: Record<string, (string | null)[]> = recipe.PIPE_FILTERS_EMPTY()) =>
   recipe.pipeFacetList(rows, sel).find((f) => f.key === key)!;
 
-describe('absence is selectable on the three axes that can lack a value', () => {
-  it('offers None on TYPE, DIFFICULTY and REQUESTOR, and never on URGENCY or STATUS', () => {
-    /* every card sits in a list and `Non-Urgent` is a value rather than an
-       absence, so those two axes have no residue to collect */
-    const rows = [row({ cardId: 'a' }), row({ cardId: 'b', assetType: 'Icon', difficulty: 'Hard', requestor: 'Ana', currentList: 'Design' })];
+describe('absence is selectable on the axis that can lack a value', () => {
+  it('offers None on TYPE, and never on STATUS', () => {
+    /* AMENDED by owl #78 (2026-09-05): DIFFICULTY and REQUESTOR were the other
+       two none-bearing axes and both left the panel with their columns. The
+       RULE is untouched — an axis whose rows can carry no value must offer the
+       absence, or those rows are the only ones no filter can reach — and TYPE
+       is the axis it still applies to. STATUS is still deliberately excluded:
+       every card sits in a Trello list, so it has no residue to collect. */
+    const rows = [row({ cardId: 'a' }), row({ cardId: 'b', assetType: 'Icon', currentList: 'Design' })];
     const labels = (k: string) => facet(rows, k).values.map((v) => v.label);
     expect(labels('type')).toContain('None');
-    expect(labels('difficulty')).toContain('None');
-    expect(labels('requestor')).toContain('None');
-    expect(labels('urgency')).not.toContain('None');
     expect(labels('status')).not.toContain('None');
+    // and the parked axes are absent rather than present-and-Noneless
+    const keys = recipe.PIPE_FILTERS.map((f) => f.key);
+    expect(keys).not.toContain('difficulty');
+    expect(keys).not.toContain('requestor');
+    expect(keys).not.toContain('urgency');
   });
 
   it('DERIVES None like every other value — a complete board never shows it', () => {
@@ -280,12 +312,13 @@ describe('absence is selectable on the three axes that can lack a value', () => 
   });
 
   it('selects exactly the rows with no value there', () => {
+    // read on TYPE since #78 parked the difficulty axis; the rule is unchanged
     const rows = [
-      row({ cardId: 'a', difficulty: 'Hard' }),
+      row({ cardId: 'a', assetType: 'Icon' }),
       row({ cardId: 'b' }),
-      row({ cardId: 'c', difficulty: '' }), // empty string is absence too
+      row({ cardId: 'c', assetType: '' }), // empty string is absence too
     ];
-    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), difficulty: [null] };
+    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: [null] };
     const hit = rows.filter((r) => recipe.pipeMatches(r, sel, null)).map((r) => r.cardId);
     expect(hit).toEqual(['b', 'c']);
   });
@@ -302,37 +335,45 @@ describe('absence is selectable on the three axes that can lack a value', () => 
       row({ cardId: 'c' }),
       row({ cardId: 'd' }),
     ];
-    for (const key of ['type', 'difficulty', 'requestor']) {
+    /* TYPE is the only none-bearing axis left after owl #78; the sum is
+       asserted over `none`-marked axes rather than a named list, so the two
+       #78 §4 restores are covered the day they land. */
+    const noneAxes = recipe.PIPE_FILTERS.filter((f) => f.none).map((f) => f.key);
+    expect(noneAxes, 'no axis admits absence — the sum would hold vacuously').toContain('type');
+    for (const key of noneAxes) {
       const total = facet(rows, key).values.reduce((n, v) => n + v.count, 0);
-      expect(total).toBe(rows.length);
+      expect(total, key).toBe(rows.length);
     }
   });
 
   it('stores None as null, so a board value that IS the word stays separate', () => {
-    /* a Trello label or a sheet requestor could legitimately be called None;
-       merging the two into one checkbox would silently mis-count both */
+    /* a Trello asset-type label could legitimately be called None; merging the
+       two into one checkbox would silently mis-count both. Read on TYPE since
+       #78 — it was REQUESTOR's case before, and the axis went with its column. */
     const rows = [
-      row({ cardId: 'a', requestor: 'None' }),
+      row({ cardId: 'a', assetType: 'None' }),
       row({ cardId: 'b' }),
     ];
-    const values = facet(rows, 'requestor').values;
+    const values = facet(rows, 'type').values;
     expect(values.map((v) => v.label)).toEqual(['None', 'None']);
     expect(values.map((v) => v.value)).toEqual(['None', null]);
     expect(values.map((v) => v.count)).toEqual([1, 1]);
 
-    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), requestor: ['None'] };
+    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: ['None'] };
     expect(rows.filter((r) => recipe.pipeMatches(r, sel, null)).map((r) => r.cardId)).toEqual(['a']);
   });
 
-  it('sorts None LAST, in both the ordered and the alphabetical axes', () => {
-    /* it is the residue: alphabetically None would land mid-list and push the
-       real vocabulary down, and it has no place in Easy/Medium/Hard at all */
+  it('sorts None LAST — it is the residue, not a value in the vocabulary', () => {
+    /* alphabetically None would land mid-list and push the real vocabulary
+       down. The ORDERED half of this rule rode on DIFFICULTY (`order:
+       ['Easy','Medium','Hard']`, where None has no place at all) and parked
+       with that axis in #78 §1 — the `order` branch comes back under test when
+       #78 §4 rebuilds difficulty over work-card values. */
     const rows = [
-      row({ cardId: 'a', difficulty: 'Hard', assetType: 'Zeppelin' }),
-      row({ cardId: 'b', difficulty: 'Easy', assetType: 'Animation' }),
+      row({ cardId: 'a', assetType: 'Zeppelin' }),
+      row({ cardId: 'b', assetType: 'Animation' }),
       row({ cardId: 'c' }),
     ];
-    expect(facet(rows, 'difficulty').values.map((v) => v.label)).toEqual(['Easy', 'Hard', 'None']);
     expect(facet(rows, 'type').values.map((v) => v.label)).toEqual(['Animation', 'Zeppelin', 'None']);
   });
 
@@ -609,20 +650,25 @@ describe('the filter indicator says what is filtered, in words', () => {
   });
 
   it('names the axis from the panel’s own heading, not a second list', () => {
-    /* every axis label is one word, so the chip name is derived — a sixth axis
-       needs no entry anywhere for its chip to read correctly */
-    expect(chips({ difficulty: ['Hard'] })[0]!.label).toBe('Difficulty');
-    expect(chips({ requestor: ['ana@frostdesigngroup.com'] })[0]!.label).toBe('Requestor');
-    expect(recipe.PIPE_FILTERS.map((f) => f.label)).toContain('Difficulty');
+    /* every axis label is one word, so the chip name is derived — an axis
+       restored by #78 §4 needs no entry anywhere for its chip to read
+       correctly. Asserted as the DERIVATION rather than against two named
+       axes, which is what survives the panel shrinking to two and growing
+       back to four. */
+    expect(chips({ status: ['Design'] })[0]!.label).toBe('Status');
+    expect(chips({ type: ['Icon'] })[0]!.label).toBe('Type');
+    for (const f of recipe.PIPE_FILTERS) {
+      expect(f.label, f.key).toBe(recipe.PIPE_COLS.find((c) => c.cls === f.col)!.label);
+    }
   });
 
   it('shows the absence value as the word the panel draws it with', () => {
-    expect(chips({ requestor: [null] })[0]!.text).toBe('None');
+    expect(chips({ type: [null] })[0]!.text).toBe('None');
   });
 
   it('shows a chip for EVERY filtered axis, and none for the rest', () => {
-    const out = chips({ type: ['Icon'], urgency: ['Urgent'], status: [] });
-    expect(out.map((c) => c.key)).toEqual(['type', 'urgency']);
+    expect(chips({ type: ['Icon'], status: [] }).map((c) => c.key)).toEqual(['type']);
+    expect(chips({ type: ['Icon'], status: ['Design'] }).map((c) => c.key)).toEqual(['type', 'status']);
     expect(chips({})).toEqual([]);
   });
 
@@ -631,8 +677,9 @@ describe('the filter indicator says what is filtered, in words', () => {
   });
 
   it('WRAPS the row rather than collapsing or scrolling it (JP)', () => {
-    /* the frame only ever draws one chip; five axes can be filtered at once,
-       and wrapping is what keeps each one separately removable */
+    /* the frame only ever draws one chip; several axes can be filtered at
+       once — two today, four again after #78 §4 — and wrapping is what keeps
+       each one separately removable */
     expect(cssRule('.fchips', PIPELINE_CSS)).toContain('flex-wrap: wrap');
   });
 
@@ -873,17 +920,18 @@ describe('the panels behave like every other overlay', () => {
        filled STATUS with rows nobody could ever pick. Nothing is disabled now,
        because nothing unpickable is drawn. */
     expect(TEMPLATE).not.toContain('disabled="{{!v.count');
-    const rows = [row({ cardId: 'a', difficulty: 'Easy' }), row({ cardId: 'b', difficulty: 'Hard' })];
+    // read on STATUS since #78 parked the difficulty axis; the rule is the same
+    const rows = [row({ cardId: 'a', currentList: 'Design' }), row({ cardId: 'b', currentList: 'Backlogs: Icon' })];
     const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: ['Icon'] }; // matches nothing
-    const diff = recipe.pipeFacetList(rows, sel).find((f) => f.key === 'difficulty');
-    expect(diff, 'an axis with nothing left to offer is dropped whole').toBeUndefined();
+    const status = recipe.pipeFacetList(rows, sel).find((f) => f.key === 'status');
+    expect(status, 'an axis with nothing left to offer is dropped whole').toBeUndefined();
   });
 
   it('KEEPS a ticked value that has fallen to zero — the only way back off it', () => {
     /* the case that makes this not a bare `count > 0`: a value already applied
        can fall to zero as other axes narrow, and hiding it would strand the
        reader with a filter they can neither see nor un-tick */
-    const rows = [row({ cardId: 'a', assetType: 'UI', difficulty: 'Easy' })];
+    const rows = [row({ cardId: 'a', assetType: 'UI', currentList: 'Design' })];
     const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: ['Icon'] };
     const type = recipe.pipeFacetList(rows, sel).find((f) => f.key === 'type')!;
     const icon = type.values.find((v) => v.label === 'Icon');
@@ -911,9 +959,9 @@ describe('the panels behave like every other overlay', () => {
 
   it('resets both on project switch, like the planner’s expansion state', () => {
     /* `resetForProjectSwitch` is a `function`, not a sliceable `const`, so read
-       its BODY — the same reason fnBody exists beside decl. A Requestor or a
-       Status carried into another project names values that project may not
-       have, which would silently show an empty table (R-exp-f's reasoning). */
+       its BODY — the same reason fnBody exists beside decl. A Type or a Status
+       carried into another project names values that project may not have,
+       which would silently show an empty table (R-exp-f's reasoning). */
     const reset = fnBody('resetForProjectSwitch');
     expect(reset).toContain('pipeSort');
     expect(reset).toContain('pipeFilters');
@@ -940,13 +988,37 @@ describe('a column and the filter that narrows it use the SAME word', () => {
      yields `undefined` as its label, which would render an empty filter
      heading — visible only here.
 
-     Deliberately NOT asserted: a column COUNT (`test/pipeline-expanded.ts`
-     enumerates the eleven classes in order; a second hand-copied number is the
-     count-pin test/CLAUDE.md rule 1 forbids), and the absence of the word
-     `Client` across the table subtree (that reads raw text including comments
-     — rule 3 — so one capital in a prose comment would fail it for a reason
-     unrelated to the rule). */
+     AMENDED 2026-09-05 (owl #78 §3, frame `809:83486`): the column SET is now
+     a ruling in its own right — three columns changed at once — so the ordered
+     list is asserted here, once, out of the shipped `PIPE_COLS`. That is the
+     rule (the frame's column order), not the count-pin rule 1 forbids: nothing
+     hand-copies a NUMBER, and `test/pipeline-expanded.test.ts` no longer keeps
+     a second literal list — it now asserts both row kinds' cells AGAINST this
+     same array, which is the "one column model by construction" promise made
+     to Miles in jp→miles #40.
+
+     Deliberately NOT asserted: the absence of the word `Client` across the
+     table subtree (that reads raw text including comments — rule 3 — so one
+     capital in a prose comment would fail it for a reason unrelated to the
+     rule). */
   const COLS = recipe.PIPE_COLS as Array<{ cls: string; label: string }>;
+
+  it('is the frame’s TEN columns, in the frame’s order (owl #78 §3)', () => {
+    /* Three edits from one frame, and each one is a place the table could
+       silently keep its old shape: REQUESTOR leaves Pipeline entirely (it stays
+       on Requests, asserted below), URGENCY moves ahead of DIFFICULTY, and DUE
+       is renamed DEADLINE — class and label together, because a class naming
+       the old word is how the old word gets back into the markup (#66's own
+       lesson, applied again). */
+    expect(COLS.map((c) => c.cls)).toEqual([
+      'col-mc', 'col-name', 'col-type', 'col-urgency', 'col-diff',
+      'col-status', 'col-deadline', 'col-started', 'col-done', 'col-links',
+    ]);
+    expect(COLS.map((c) => c.label)).toEqual([
+      'MC #', 'Card Name', 'Type', 'Urgency', 'Difficulty',
+      'Status', 'Deadline', 'Started', 'Done', 'Links',
+    ]);
+  });
 
   it('draws its header FROM the column table, with nothing hand-typed', () => {
     const table = TEMPLATE.slice(TEMPLATE.indexOf('<table class="ptable">'));
@@ -999,9 +1071,28 @@ describe('a column and the filter that narrows it use the SAME word', () => {
     }
   });
 
-  it('still says Requestor — the regression this all came from', () => {
-    expect(COLS.map((c) => c.label)).toContain('Requestor');
+  it('says Requestor where the column lives — and Pipeline no longer has one', () => {
+    /* SUPERSEDES the #66 pin that read "still says Requestor" on Pipeline.
+       #66's ruling is untouched: the word is REQUESTOR and never CLIENT,
+       because the values are people. What #78 §3 changed is WHERE the column
+       is — off Pipeline, kept on Requests, where the row's own subject is the
+       person who asked. So the guard holds both ends now, since dropping a
+       column from one table is exactly how the word comes back misspelt in the
+       other, with nothing left to compare it against. */
+    expect(COLS.map((c) => c.label), 'Requestor came back to Pipeline').not.toContain('Requestor');
+    expect(COLS.map((c) => c.cls)).not.toContain('col-requestor');
     expect(COLS.map((c) => c.label)).not.toContain('Client');
+
+    /* Requests is where it went, and #66's spelling still binds there. The
+       shipped `REQ_COLS` is EXECUTED, not grepped — the comparators it names
+       are passed in as parameters because only the LABELS are under test and a
+       sort function is a different suite's business. */
+    const reqCols = new Function(
+      'numCmp', 'ciCmp', 'alphaSort',
+      `${decl(APP_JS, 'REQ_COLS')} return REQ_COLS;`,
+    )(null, null, null) as Array<{ label: string }>;
+    expect(reqCols.map((c) => c.label)).toContain('Requestor');
+    expect(reqCols.map((c) => c.label)).not.toContain('Client');
   });
 });
 

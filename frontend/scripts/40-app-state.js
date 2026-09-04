@@ -54,10 +54,14 @@ const app = new Ractive({
     savingCapacity: false,
     expanded: {},
     searchQ: '',
-    urgencyMenu: null, // cardId whose urgency select is open (annotation 169:26074)
+    /* The four urgency/difficulty keys are all keyed on a WORK CARD id since
+       owl #78 §1 — the controls left the main row, the state keys did not
+       change shape. Annotations 169:26074 / 169:26364 drew these on the main
+       row; #78 supersedes that placement, not the chrome they describe. */
+    urgencyMenu: null, // work cardId whose urgency select is open
     urgencyMenuPos: { left: 0, top: 0 }, // fixed-position anchor — escapes the scroll clip
-    savingUrgency: {}, // per-card in-flight write chrome (annotation 169:26364)
-    diffMenu: null, // cardId whose difficulty select is open (W3 — BRD-§9-A1)
+    savingUrgency: {}, // per-card in-flight write chrome
+    diffMenu: null, // work cardId whose difficulty select is open (W3 — BRD-§9-A1)
     diffMenuPos: { left: 0, top: 0 },
     savingDifficulty: {},
     duePopover: null, // cardId whose due-date popover is open (node 415:54979)
@@ -238,7 +242,17 @@ const app = new Ractive({
         // table banner is gone (owl #36) — the same corrections the per-row
         // warnings render one at a time
         open: this.get('corrections').length,
-        urgent: rows.filter((r) => r.urgency === 'Urgent').length,
+        /* owl #78 §1: urgency lives on the WORK CARD now, so the tile counts
+           urgent WORK cards — the same population `work` above totals, orphans
+           included. It counted main rows before, which was the only number on
+           this screen still reading a main card's Urgent label after the
+           column stopped showing one.
+
+           WHICH population the tile means has never been ruled — the frame
+           gives it no definition beyond the word — so project-wide is the
+           reading that matches what the column shows. Asked of Miles; this is
+           the one line that changes if he wants attached cards only. */
+        urgent: Object.values(byMc).reduce((a, l) => a + l.filter((w) => w.urgency === 'Urgent').length, 0),
       };
     },
     /* Search alone — the set every filter axis counts against, and the base

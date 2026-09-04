@@ -223,7 +223,11 @@ export async function upsertDeliverable(
   return fetchedAt !== null;
 }
 
-/** Ownership-safe work-card upsert — shared by full sync and the push drain. */
+/**
+ * Ownership-safe work-card upsert — shared by full sync and the push drain.
+ * The same two-write shape as the deliverable's: Trello-owned display fields
+ * unconditionally, then the registry-owned trio under the stale guard.
+ */
 export async function upsertWorkCard(
   projectId: Types.ObjectId,
   w: MappedWorkCard,
@@ -236,7 +240,6 @@ export async function upsertWorkCard(
         name: w.name,
         mc_number: w.mc_number,
         task_prefix: w.task_prefix ?? null,
-        difficulty: w.difficulty ?? null,
         current_list: w.current_list,
         figma_url: w.figma_url ?? null,
         trello_url: w.trello_url ?? null,
@@ -246,15 +249,25 @@ export async function upsertWorkCard(
     },
     { upsert: true },
   );
-  // W2 task-card scope (2026-08-18): Trello-owned, so a manual change in
+  // The whole write registry on a task card — W1 urgency and W3 difficulty
+  // since owl #78 (2026-09-05), W2 due since 2026-08-18 — and so the whole
+  // set a stale payload can revert. Trello-owned, so a manual change in
   // Trello — and every Sirius write's echo — reconciles here (invariant 8),
-  // under the same stale guard as the deliverable's due. Difficulty is NOT
-  // guarded on a task card: W3 writes deliverables only, so nothing here can
-  // be reverting a Sirius write.
+  // under the same stale guard as the deliverable's (owl #50). Difficulty
+  // moved INTO the guarded write with #78: until then it rode the
+  // unconditional write above on the reasoning that W3 wrote deliverables
+  // only, so nothing here could be reverting a Sirius write. Now it can.
   const fetchedAt = fetchedAtOf(w);
   await WorkCard.updateOne(
     { ...key, ...staleGuard(fetchedAt) },
-    { $set: { trello_due: w.trello_due, trello_due_at: dueInstant(w.trello_due_at) } },
+    {
+      $set: {
+        difficulty: w.difficulty ?? null,
+        trello_due: w.trello_due,
+        trello_due_at: dueInstant(w.trello_due_at),
+        urgency: w.urgent ? 'Urgent' : 'Non-Urgent',
+      },
+    },
   );
   return fetchedAt !== null;
 }

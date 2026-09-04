@@ -4,6 +4,13 @@
  * failure, no-op guard, and the label-swap mechanics — add-first ordering,
  * stale-label removal, restore on partial failure
  * (contracts/trello-write.md W3; invariants 2, 8, 17).
+ *
+ * Re-pointed at the WORK CARD 2026-09-05 (product owl #78; contracts/
+ * trello-write.md §W1/W3 scope clarification). The deliverable route is
+ * DELETED (PLAN decision D2); the cross-kind cases guard its absence. The
+ * main card's own difficulty label stays read-only and reconciled (D1) — it
+ * still keys the Pipeline forecast, which is why the cross-kind case checks
+ * the main card's value did not move.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -12,7 +19,7 @@ import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { TrelloClient, type TrelloWriter } from '../lib/trello.ts';
-import { AuditLog, Deliverable, Project, SyncRun, User, UserProject } from '../src/models/index.ts';
+import { AuditLog, Deliverable, Project, SyncRun, User, UserProject, WorkCard } from '../src/models/index.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -38,13 +45,21 @@ class StubTrello implements TrelloWriter {
   }
 }
 
-async function setup() {
-  const env = validateEnv({ NODE_ENV: 'test' });
-  const project = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'testBoardX', weekly_capacity: 3 });
+/**
+ * One MC group: the main card `card1` (Medium, which W3 must NOT touch) and
+ * the task card `task1` under it (Medium, which W3 writes).
+ */
+async function setup(envOver: Record<string, string> = {}, projectOver: Record<string, unknown> = {}, taskOver: Record<string, unknown> = {}) {
+  const env = validateEnv({ NODE_ENV: 'test', ...envOver });
+  const project = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'testBoardX', weekly_capacity: 3, ...projectOver });
   const user = await User.create({ email: 'pm@frostdesigngroup.com' });
   await UserProject.create({ user_id: user._id, project_id: project._id });
   await Deliverable.create({
     project_id: project._id, mc_number: 'MC-1', display_id: 'MC-1', trello_card_id: 'card1', name: 'D1', difficulty: 'Medium',
+  });
+  await WorkCard.create({
+    project_id: project._id, mc_number: 'MC-1', trello_card_id: 'task1',
+    name: 'Render Asset: MC-1 exports', current_list: 'Backlogs', difficulty: 'Medium', ...taskOver,
   });
   const trello = new StubTrello();
   const app = createApp({ env, redis: null, mongo: null, trello });
@@ -53,37 +68,53 @@ async function setup() {
   return { project, agent, trello };
 }
 
-describe('W3 — difficulty write (BRD-§9-A1)', () => {
-  it('persists the new value only after Trello succeeded, and everything is audited', async () => {
+const patchDifficulty = (agent: request.Agent, projectId: unknown, cardId: string, difficulty: string) =>
+  agent.patch(`/api/projects/${projectId}/workcards/${cardId}/difficulty`).send({ difficulty });
+
+describe('W3 — difficulty write, on the WORK CARD (BRD-§9-A1; owl #78)', () => {
+  it('persists the new value only after Trello succeeded, and everything is audited as work_card', async () => {
     const { project, agent, trello } = await setup();
-    await agent.patch(`/api/projects/${project._id}/deliverables/card1/difficulty`).send({ difficulty: 'Hard' }).expect(200);
-    const doc = await Deliverable.findOne({ trello_card_id: 'card1' });
+    const res = await patchDifficulty(agent, project._id, 'task1', 'Hard').expect(200);
+    expect(res.body).toEqual({ ok: true, difficulty: 'Hard' });
+    const doc = await WorkCard.findOne({ trello_card_id: 'task1' });
     expect(doc?.difficulty).toBe('Hard');
-    // the stamp a later reconcile compares its read instant against (owl #50)
+    // the stamp a later reconcile compares its fetch instant against (owl #50)
     expect(doc?.registry_written_at).toBeInstanceOf(Date);
-    expect(trello.calls).toEqual([{ cardId: 'card1', boardId: 'testBoardX', difficulty: 'Hard' }]);
-    expect(await AuditLog.countDocuments({ action: 'difficulty.set' })).toBe(1);
-    expect(await SyncRun.countDocuments({ source: 'trello_write', ok: true })).toBe(1);
+    expect(trello.calls).toEqual([{ cardId: 'task1', boardId: 'testBoardX', difficulty: 'Hard' }]);
+    const row = await AuditLog.findOne({ action: 'difficulty.set' });
+    expect(row?.entity).toBe('work_card');
+    expect(row?.entity_id).toBe('task1');
+    expect(row?.before).toEqual({ difficulty: 'Medium' });
+    expect(row?.after).toEqual({ difficulty: 'Hard' });
+    const run = await SyncRun.findOne({ source: 'trello_write', ok: true });
+    expect(run?.stats?.kind).toBe('work_card');
+    expect(await SyncRun.countDocuments({ source: 'trello_write' })).toBe(1);
+    // the main card beside it is untouched — the write went to the task
+    const main = await Deliverable.findOne({ trello_card_id: 'card1' });
+    expect(main?.difficulty).toBe('Medium');
+    expect(main?.registry_written_at).toBeUndefined();
   });
 
   it('a failed Trello write leaves local state untouched and records the failure', async () => {
     const { project, agent, trello } = await setup();
     trello.fail = true;
-    const res = await agent.patch(`/api/projects/${project._id}/deliverables/card1/difficulty`).send({ difficulty: 'Hard' });
+    const res = await patchDifficulty(agent, project._id, 'task1', 'Hard');
     expect(res.status).toBe(502);
     expect(res.body.error.code).toBe('TRELLO_WRITE_FAILED');
-    const doc = await Deliverable.findOne({ trello_card_id: 'card1' });
+    const doc = await WorkCard.findOne({ trello_card_id: 'task1' });
     expect(doc?.difficulty).toBe('Medium'); // never diverges from Trello
     // no stamp either: Trello was never changed, so there is nothing a later
     // read could contradict and nothing to shield from reconcile (owl #50)
     expect(doc?.registry_written_at).toBeUndefined();
-    expect(await AuditLog.countDocuments({ action: 'difficulty.set_failed' })).toBe(1);
+    const failRow = await AuditLog.findOne({ action: 'difficulty.set_failed' });
+    expect(failRow?.entity).toBe('work_card');
+    expect(failRow?.entity_id).toBe('task1');
     expect(await SyncRun.countDocuments({ source: 'trello_write', ok: false })).toBe(1);
   });
 
   it('no-op guard: a same-value write makes no Trello call and writes no audit row', async () => {
     const { project, agent, trello } = await setup();
-    const res = await agent.patch(`/api/projects/${project._id}/deliverables/card1/difficulty`).send({ difficulty: 'Medium' });
+    const res = await patchDifficulty(agent, project._id, 'task1', 'Medium');
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('NO_OP');
     expect(trello.calls).toHaveLength(0);
@@ -92,16 +123,63 @@ describe('W3 — difficulty write (BRD-§9-A1)', () => {
 
   it('rejects values outside Easy/Medium/Hard', async () => {
     const { project, agent } = await setup();
-    const res = await agent.patch(`/api/projects/${project._id}/deliverables/card1/difficulty`).send({ difficulty: 'Extreme' });
+    const res = await patchDifficulty(agent, project._id, 'task1', 'Extreme');
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_BODY');
   });
 
   it('a card with no difficulty label yet can be set (the missing-difficulty fix path)', async () => {
     const { project, agent } = await setup();
-    await Deliverable.updateOne({ trello_card_id: 'card1' }, { $unset: { difficulty: '' } });
-    await agent.patch(`/api/projects/${project._id}/deliverables/card1/difficulty`).send({ difficulty: 'Easy' }).expect(200);
-    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.difficulty).toBe('Easy');
+    await WorkCard.updateOne({ trello_card_id: 'task1' }, { $unset: { difficulty: '' } });
+    await patchDifficulty(agent, project._id, 'task1', 'Easy').expect(200);
+    expect((await WorkCard.findOne({ trello_card_id: 'task1' }))?.difficulty).toBe('Easy');
+  });
+
+  it('invariant 17: refuses to write to a production board outside production', async () => {
+    const { project, agent, trello } = await setup({ PROD_TRELLO_BOARD_IDS: 'testBoardX' });
+    const res = await patchDifficulty(agent, project._id, 'task1', 'Hard');
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('PRODUCTION_BOARD_GUARD');
+    expect(trello.calls).toHaveLength(0);
+  });
+
+  it('G7: a read-only project refuses through the same door with WRITES_DISABLED', async () => {
+    const { project, agent, trello } = await setup({}, { writes_enabled: false });
+    const res = await patchDifficulty(agent, project._id, 'task1', 'Hard');
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('WRITES_DISABLED');
+    expect(trello.calls).toHaveLength(0);
+    expect((await WorkCard.findOne({ trello_card_id: 'task1' }))?.difficulty).toBe('Medium');
+  });
+
+  it('a DEACTIVATED work card no longer answers writes — kind flips leave ghosts (2026-08-18 review)', async () => {
+    const { project, agent } = await setup({}, {}, { active: false });
+    const res = await patchDifficulty(agent, project._id, 'task1', 'Hard');
+    expect(res.status).toBe(404);
+  });
+
+  it('CROSS-KIND: a main-card id on the work-card route is a 404 — W3 cannot reach the main card', async () => {
+    /* PLAN decision D2. `card1` is a DELIVERABLE, active, in the same project,
+       and Hard ≠ its Medium so the no-op guard cannot be what stops it: only
+       the collection the route looks up stands between this request and a
+       wrong-target write that would silently re-key the Pipeline forecast. */
+    const { project, agent, trello } = await setup();
+    const res = await patchDifficulty(agent, project._id, 'card1', 'Hard');
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(trello.calls).toHaveLength(0);
+    expect(await AuditLog.countDocuments({})).toBe(0);
+    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.difficulty).toBe('Medium');
+  });
+
+  it('CROSS-KIND: the deliverable-scoped route no longer exists (404), for either card id', async () => {
+    const { project, agent, trello } = await setup();
+    for (const id of ['card1', 'task1']) {
+      const res = await agent.patch(`/api/projects/${project._id}/deliverables/${id}/difficulty`).send({ difficulty: 'Hard' });
+      expect(res.status, id).toBe(404);
+    }
+    expect(trello.calls).toHaveLength(0);
+    expect(await AuditLog.countDocuments({})).toBe(0);
   });
 });
 

@@ -60,6 +60,13 @@ export interface MappedWorkCard {
   /** W2 on task cards (2026-08-18): same date-only + instant pair as the deliverable */
   trello_due: string | null;
   trello_due_at: string | null;
+  /**
+   * The task card's OWN `Urgent` label (owl #78, 2026-09-05 — W1 writes the
+   * work card). Until #78 the mapper discarded it on the reasoning that task
+   * cards carry no labels; they do, and this is the read half of invariant 8
+   * for it — Trello is the truth, Sirius's write is only ever an echo.
+   */
+  urgent: boolean;
   active: boolean;
   /** Same payload-fetch instant as the deliverable's — see there. */
   trello_polled_at: string | null;
@@ -170,6 +177,7 @@ export function mapTrello(cards: AresCard[], projectLabel: string | null): MapRe
         figma_url: figmaOf(card),
         trello_due: dateOnly(card.due),
         trello_due_at: card.due ?? null,
+        urgent: labels.includes(URGENT_LABEL_NAME), // owl #78 — the card's own label
         active,
         trello_polled_at: card.lastPolledAt ?? null,
       });

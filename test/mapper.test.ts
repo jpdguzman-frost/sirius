@@ -108,6 +108,28 @@ describe('taxonomy (BRD §5)', () => {
     expect(none.workCards[0]?.trello_due_at).toBeNull();
   });
 
+  it('a task card carries its OWN Urgent label — true with it, false without (owl #78)', () => {
+    /* Until #78 the task-card branch discarded the label on the reasoning
+       that task cards carry none. W1 now writes the work card, so this is the
+       read half of invariant 8 for it: a label set or cleared in Trello must
+       reach the mirror. The main card beside it does NOT propagate — a main
+       card's Urgent is its own, and a sibling task without the label is
+       Non-Urgent. */
+    const r = mapTrello(
+      [
+        card('MC-3 / Main Card: Site', ['Main Card', 'Urgent']),
+        card('Sketch Asset: MC-3 hero screen', ['Urgent', 'Difficulty: Easy'], { cardId: 'wc-urgent' }),
+        card('Render Asset: MC-3 icon set', ['Difficulty: Easy'], { cardId: 'wc-plain' }),
+      ],
+      null,
+    );
+    const byId = new Map(r.workCards.map((w) => [w.trello_card_id, w]));
+    expect(byId.get('wc-urgent')!.urgent).toBe(true);
+    expect(byId.get('wc-plain')!.urgent).toBe(false);
+    // the label is read case-exactly, like the deliverable's (`URGENT_LABEL_NAME`)
+    expect(r.deliverables[0]!.urgent).toBe(true);
+  });
+
   it('mcNumberOf tolerates MC-57, MC 57 and mc-57 forms', () => {
     expect(mcNumberOf('MC-57 / thing')).toBe('MC-57');
     expect(mcNumberOf('MC 57 thing')).toBe('MC-57');

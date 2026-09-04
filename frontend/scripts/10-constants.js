@@ -394,15 +394,21 @@ const pipeSortRows = (rows, sort) => {
 
    The BODY cells stay hand-written: their contents are bespoke per column, and
    `col-*` there is a class name rather than a human word. */
+/* Owl #78 §3 re-cut the list to ten, in this order. Three edits at once, all
+   from the same frame (809:83486): the Requestor column LEAVES Pipeline — it
+   stays on Requests, where it is the row's own subject — URGENCY moves ahead of
+   DIFFICULTY, and DUE is renamed DEADLINE to match the word Sprint Schedules
+   uses for the same date. The class moved with the label (`col-due` →
+   `col-deadline`) so the header, the cells and the width rule cannot drift
+   apart over a name only half of them changed. */
 const PIPE_COLS = [
   { cls: 'col-mc', label: 'MC #' },
   { cls: 'col-name', label: 'Card Name' },
   { cls: 'col-type', label: 'Type' },
-  { cls: 'col-diff', label: 'Difficulty' },
   { cls: 'col-urgency', label: 'Urgency' },
+  { cls: 'col-diff', label: 'Difficulty' },
   { cls: 'col-status', label: 'Status' },
-  { cls: 'col-requestor', label: 'Requestor' },
-  { cls: 'col-due', label: 'Due' },
+  { cls: 'col-deadline', label: 'Deadline' },
   { cls: 'col-started', label: 'Started' },
   { cls: 'col-done', label: 'Done' },
   { cls: 'col-links', label: 'Links' },
@@ -412,21 +418,25 @@ const PIPE_COLS = [
     `test/pipeline-sortfilter.test.ts` turns into a failing build. */
 const pipeColLabel = (cls) => (PIPE_COLS.find((c) => c.cls === cls) || {}).label;
 
-/* THE FIVE FILTER AXES. Values are DERIVED FROM THE BOARD, never a fixed list
+/* THE FILTER AXES. Values are DERIVED FROM THE BOARD, never a fixed list
    (frame: "a type or status nobody uses simply does not appear"). `order` sets
-   the value order inside a category: the two closed vocabularies read in their
-   natural progression, the three open ones alphabetically. STATUS would ideally
-   read in Trello's own list order, but the wire carries no list position - see
-   R-pf-e. NO STATE FILTERS: blocked and missing-info were considered and
-   declined; row state stays on the rows themselves.
+   the value order inside a category; the open vocabularies read alphabetically.
+   STATUS would ideally read in Trello's own list order, but the wire carries no
+   list position - see R-pf-e. NO STATE FILTERS: blocked and missing-info were
+   considered and declined; row state stays on the rows themselves.
+
+   ONLY TYPE AND STATUS TODAY. Owl #78 moved urgency and difficulty onto the
+   WORK CARD, so the two axes that used to narrow main rows by those values now
+   narrow parents by something the table no longer shows on them - a filter
+   whose result the reader cannot see or explain. Owl #78 §4 rebuilds all four
+   axes over work-card values, with the auto-expand that makes a work-card
+   filter legible; until that lands the two are PARKED rather than left
+   filtering an invisible value. Requestor left with its column (#78 §3).
 
    `none: true` marks an axis where ABSENCE is itself a selectable value (owl
-   #63, closing R-pf-i). Without it the rows carrying no type, no difficulty or
-   no requestor are the only rows NO filter can reach, and those are the
-   incomplete rows most needing attention - a missing difficulty label is one of
-   the three Needs Info conditions. URGENCY and STATUS are deliberately NOT
-   marked: every card sits in a list, and `Non-Urgent` is a value rather than an
-   absence, so neither axis has a residue to collect. */
+   #63, closing R-pf-i). Without it the rows carrying no type are the only rows
+   NO filter can reach. STATUS is deliberately NOT marked: every card sits in a
+   list, so the axis has no residue to collect. */
 /* Labels in HUMAN case. The panel heading shouts them in CSS (`.pmhead` carries
    `text-transform: uppercase`) and the chip needs them unshouted — storing them
    shouted meant carrying a second, opposite case rule in JS to un-shout them.
@@ -437,17 +447,14 @@ const pipeColLabel = (cls) => (PIPE_COLS.find((c) => c.cls === cls) || {}).label
    place to spell it. */
 const PIPE_FILTERS = [
   { key: 'type', col: 'col-type', label: pipeColLabel('col-type'), pick: (r) => r.assetType, none: true },
-  { key: 'difficulty', col: 'col-diff', label: pipeColLabel('col-diff'), pick: (r) => r.difficulty, order: ['Easy', 'Medium', 'Hard'], none: true },
-  { key: 'urgency', col: 'col-urgency', label: pipeColLabel('col-urgency'), pick: (r) => r.urgency, order: ['Non-Urgent', 'Urgent'] },
   { key: 'status', col: 'col-status', label: pipeColLabel('col-status'), pick: (r) => r.currentList, scroll: true },
-  { key: 'requestor', col: 'col-requestor', label: pipeColLabel('col-requestor'), pick: (r) => r.requestor, none: true },
 ];
 /** Absence is DRAWN as the word None — one rule, so the chip and the panel
     cannot disagree about it (owl #63). */
 const pipeValueLabel = (v) => (v === null ? 'None' : v);
 
 /* "None" is stored as the VALUE null, never as the string `None`: a Trello
-   label or a sheet requestor could legitimately BE that word, and the two must
+   label or a board value could legitimately BE that word, and the two must
    never collapse into one checkbox. Nothing renders it - the panel draws
    `label`, which is where the word None lives. */
 /** A row's value on an axis; absence becomes null, which only a `none` axis
@@ -457,7 +464,7 @@ const pipePick = (f, row) => {
   const v = f.pick(row);
   return unranked(v) ? null : v;
 };
-/** Empty SELECTION object - one array per axis, derived so a sixth axis is one entry. */
+/** Empty SELECTION object - one array per axis, derived so another axis is one entry. */
 const PIPE_FILTERS_EMPTY = () => Object.fromEntries(PIPE_FILTERS.map((f) => [f.key, []]));
 /** Does a row satisfy every axis EXCEPT the one named? (`null` = every axis.) */
 const pipeMatches = (row, sel, exceptKey) => {
@@ -492,11 +499,12 @@ const pipeMatches = (row, sel, exceptKey) => {
    A Map, not an object: object keys stringify, and `null` as a key would become
    the string "null" and merge with a board value of that name. */
 const pipeFacetList = (rows, sel) => {
-  /* ONE PASS over the rows for all five facets. Filtering the row set once per
-     axis meant 5 × rows × 5 axis tests; at 480 rows that is 12,000 axis
-     evaluations and five throwaway arrays, on every checkbox click — and the
-     panel deliberately stays open while you build a filter, so it fires
-     repeatedly. Counting failures instead is 480 × 5.
+  /* ONE PASS over the rows for every facet. Filtering the row set once per axis
+     meant axes × rows × axis tests — with the five axes this shipped with, at
+     480 rows, twelve thousand axis evaluations and one throwaway array per
+     axis, on every checkbox click — and the panel deliberately stays open while
+     you build a filter, so it fires repeatedly. Counting failures instead is
+     one pass, one axis test per axis.
 
      The arithmetic that makes it work: a row rejected by NO axis belongs to
      every pool; a row rejected by EXACTLY ONE belongs only to that axis's pool,
@@ -544,7 +552,7 @@ const pipeFacetList = (rows, sel) => {
       key: f.key,
       label: f.label,
       // the one open-ended axis scrolls inside its own group; the flag is on
-      // the axis so a sixth one is still a single entry (R-pf-e)
+      // the axis so another one is still a single entry (R-pf-e)
       scroll: !!f.scroll,
       values: names
         .map((v) => ({
@@ -576,7 +584,7 @@ const pipeFacetList = (rows, sel) => {
    single chip listing two of them under one axis name and one ✕.
 
    The axis name is the axis's OWN label, which is why those are stored in human
-   case: the panel heading shouts them in CSS and the chip does not. A sixth axis
+   case: the panel heading shouts them in CSS and the chip does not. Another axis
    needs no entry here.
 
    Values keep the order they were ticked in, which is the order the reader built

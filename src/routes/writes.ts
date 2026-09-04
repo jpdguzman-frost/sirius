@@ -3,6 +3,21 @@
  * contracts/trello-write.md): W1 urgency (T066; FR-4.6, FR-4.7),
  * W2 deadline (T080; FR-9.1), W3 difficulty (T111; BRD-§9-A1).
  *
+ * WHICH CARD each entry writes (the registry enumerates FIELDS; the card
+ * kind is a scope note on the entry, never a registry growth):
+ *  - W1 and W3 write the WORK CARD, and only the work card, since product
+ *    owl #78 (2026-09-05; contracts/trello-write.md §W1/W3 scope
+ *    clarification). "A main card does not have these properties" — a
+ *    website request can hold an urgent screen and non-urgent assets, so one
+ *    value on the parent cannot be true. The deliverable-scoped routes were
+ *    DELETED rather than left beside the new ones: a dormant write path is
+ *    exactly how the shipped build spent three weeks labelling the wrong
+ *    object (PLAN decision D2). A main card's own labels still exist in
+ *    Trello and still reconcile IN through ARES (decision D1) — they are
+ *    read-only in Sirius, changed in Trello only.
+ *  - W2 writes either kind — the deliverable row and its expanded MC group's
+ *    task cards alike (JP 2026-08-18, §W2 scope clarification).
+ *
  * Order of operations makes the rollback guarantee structural: Trello is
  * written FIRST, and the local field changes only after Trello succeeded —
  * Sirius never displays a state Trello lacks. Every attempt, success or
@@ -42,20 +57,25 @@ type KindDoc = {
 
 /**
  * Guards shared by every registry write; responds and returns null on refusal.
- * `kind` widens the lookup to task cards for W2's task-card scope (JP
- * 2026-08-18, contracts/trello-write.md §W2 scope clarification) — every
- * refusal guard is identical for both kinds, which is the point of the ONE
- * door (src/CLAUDE.md rule 3). Generic over the kind, so `ctx.doc` is
+ * `kind` names the collection the card is looked up in — a card id of the
+ * other kind is a 404, which is the cross-kind guard every route relies on.
+ * Every refusal guard is identical for both kinds, which is the point of the
+ * ONE door (src/CLAUDE.md rule 3). Generic over the kind, so `ctx.doc` is
  * COMPILER-typed at every call site: a literal kind narrows to its doc, a
  * variable kind yields the union (fine for handlers that touch only the
- * fields both kinds share, which is exactly the shared-handler case).
+ * fields both kinds share, which is exactly W2's shared-handler case).
+ *
+ * `kind` is REQUIRED. It used to default to 'deliverable' when that was the
+ * only kind; since owl #78 no route is deliverable-only, and a default that
+ * silently picks a collection is the shape of the wrong-target write this
+ * build removed.
  */
-async function writeGuards<K extends keyof KindDoc = 'deliverable'>(
+async function writeGuards<K extends keyof KindDoc>(
   env: Env,
   trello: TrelloWriter | null,
   req: Request,
   res: Response,
-  kind?: K,
+  kind: K,
 ): Promise<WriteContext<KindDoc[K]> | null> {
   const projectId = res.locals.project._id as Types.ObjectId;
   const boardId = res.locals.project.trello_board_id as string;
@@ -110,9 +130,13 @@ async function writeGuards<K extends keyof KindDoc = 'deliverable'>(
 export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
   const router = Router();
 
-  // W1 — urgency label (FR-4.6, FR-4.7)
+  // W1 — urgency label (FR-4.6, FR-4.7) on the WORK CARD (owl #78). The
+  // label is presence-or-absence in Trello — there is no "Non-Urgent" label —
+  // so `urgent: false` removes it. No no-op guard here, and never was one:
+  // the toggle's two states are both writable at any time and a same-value
+  // set is one idempotent label call.
   router.patch(
-    '/api/projects/:projectId/deliverables/:cardId/urgency',
+    '/api/projects/:projectId/workcards/:cardId/urgency',
     ensureAuthenticated,
     ensureProjectMember,
     async (req, res) => {
@@ -121,10 +145,10 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
       }
-      const ctx = await writeGuards(env, trello, req, res);
+      const ctx = await writeGuards(env, trello, req, res, 'work_card');
       if (!ctx) return;
 
-      const doc = ctx.doc; // typed deliverable by the guard's generic — urgency exists nowhere else
+      const doc = ctx.doc; // typed work card by the guard's generic — W1's only surface since #78
       const before = doc.urgency;
       const after = body.data.urgent ? 'Urgent' : 'Non-Urgent';
       try {
@@ -132,14 +156,14 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         doc.urgency = after;
         doc.registry_written_at = new Date();
         await doc.save();
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'urgency.set', entity: 'deliverable', entity_id: ctx.cardId, before: { urgency: before }, after: { urgency: after } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, urgent: body.data.urgent } });
+        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'urgency.set', entity: 'work_card', entity_id: ctx.cardId, before: { urgency: before }, after: { urgency: after } });
+        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, kind: 'work_card', urgent: body.data.urgent } });
         res.json({ ok: true, urgency: after });
       } catch (err) {
         // local state untouched — the UI's optimistic change reverts (FR-4.7)
         const message = (err as Error).message;
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'urgency.set_failed', entity: 'deliverable', entity_id: ctx.cardId, before: { urgency: before }, after: { attempted: after, error: message } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, urgent: body.data.urgent } });
+        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'urgency.set_failed', entity: 'work_card', entity_id: ctx.cardId, before: { urgency: before }, after: { attempted: after, error: message } });
+        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, kind: 'work_card', urgent: body.data.urgent } });
         res.status(502).json({ ok: false, error: { code: 'TRELLO_WRITE_FAILED', message } });
       }
     },
@@ -220,10 +244,13 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
     dueHandler('work_card'),
   );
 
-  // W3 — difficulty label swap (BRD-§9-A1, approved 2026-08-12): the
-  // forecast re-keys from the persisted value at read time (difficulty × lane).
+  // W3 — difficulty label swap (BRD-§9-A1, approved 2026-08-12) on the WORK
+  // CARD (owl #78). The Sprint Schedules bar re-keys from the persisted value
+  // at read time (difficulty × lane, `finishOf`); the Pipeline forecast does
+  // NOT — it still keys on the main card's own label, reconciled from Trello
+  // (decision D1, revisited in block 3).
   router.patch(
-    '/api/projects/:projectId/deliverables/:cardId/difficulty',
+    '/api/projects/:projectId/workcards/:cardId/difficulty',
     ensureAuthenticated,
     ensureProjectMember,
     async (req, res) => {
@@ -232,10 +259,10 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
       }
-      const ctx = await writeGuards(env, trello, req, res);
+      const ctx = await writeGuards(env, trello, req, res, 'work_card');
       if (!ctx) return;
 
-      const doc = ctx.doc; // typed deliverable by the guard's generic (W3's surface today)
+      const doc = ctx.doc; // typed work card by the guard's generic — W3's only surface since #78
       const before = doc.difficulty ?? null;
       const after = body.data.difficulty;
       if (before === after) {
@@ -249,14 +276,14 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         doc.difficulty = after;
         doc.registry_written_at = new Date();
         await doc.save();
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'difficulty.set', entity: 'deliverable', entity_id: ctx.cardId, before: { difficulty: before }, after: { difficulty: after } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, difficulty: after } });
+        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'difficulty.set', entity: 'work_card', entity_id: ctx.cardId, before: { difficulty: before }, after: { difficulty: after } });
+        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, kind: 'work_card', difficulty: after } });
         res.json({ ok: true, difficulty: after });
       } catch (err) {
         // local state untouched — the UI's optimistic change reverts (invariant 8)
         const message = (err as Error).message;
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'difficulty.set_failed', entity: 'deliverable', entity_id: ctx.cardId, before: { difficulty: before }, after: { attempted: after, error: message } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, difficulty: after } });
+        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'difficulty.set_failed', entity: 'work_card', entity_id: ctx.cardId, before: { difficulty: before }, after: { attempted: after, error: message } });
+        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, kind: 'work_card', difficulty: after } });
         res.status(502).json({ ok: false, error: { code: 'TRELLO_WRITE_FAILED', message } });
       }
     },

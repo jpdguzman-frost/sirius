@@ -316,11 +316,22 @@ app.on({
     if (!row || !row.hasTasks) return;
     app.toggle(`expanded.${mcNumber}`);
   },
+  /* ---- W1 / W3: urgency and difficulty, on the WORK CARD -------------------
+     Owl #78 §1, from the 3 September alignment: throughput is a property of
+     the work card; a main card is tracking. One website request can hold an
+     urgent screen and non-urgent assets, so a single value on the parent
+     cannot be true — and the shipped build was writing both onto the parent,
+     which is why this is a defect fix and not a feature. `cardId` here is a
+     WORK card id in every one of these four handlers, and the optimistic set
+     and its rollback go through patchWorkCard, never patchRow: the main row's
+     own stored values are read-only in Sirius now, reconciled from that card's
+     own Trello labels. Annotations 169:26074 / 169:26364 drew these controls
+     on the main row; #78 supersedes that placement, not the chrome. */
   openUrgencyMenu(ctx, cardId) {
     openOverlay(ctx, cardId, { key: 'urgencyMenu', posKey: 'urgencyMenuPos', saving: 'savingUrgency', h: 92, gap: 3 });
   },
-  // annotations 169:26364/26074: optimistic write with 'saving…' chrome and
-  // rollback — Sirius never shows a state Trello does not hold (FR-4.7).
+  // optimistic write with 'saving…' chrome and rollback — Sirius never shows a
+  // state Trello does not hold (FR-4.7, invariant 8).
   async chooseUrgency(_ctx, cardId, next, current) {
     /* through the SHARED close path, not `app.set(key, null)`: committing a
        choice unmounts the menu exactly as Escape does, so a keyboard user who
@@ -329,12 +340,12 @@ app.on({
        detached node until the next open. Same for the four handlers below. */
     closeMenus({ restoreFocus: true });
     if (next === current || app.get(`savingUrgency.${cardId}`)) return;
-    patchRow(cardId, { urgency: next });
+    patchWorkCard(cardId, { urgency: next });
     app.set(`savingUrgency.${cardId}`, true);
     try {
-      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/urgency`, { urgent: next === 'Urgent' });
+      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/workcards/${cardId}/urgency`, { urgent: next === 'Urgent' });
     } catch (err) {
-      patchRow(cardId, { urgency: current });
+      patchWorkCard(cardId, { urgency: current });
       flashBanner(`Urgency write failed — reverted. ${errText(err)}`);
     } finally {
       app.set(`savingUrgency.${cardId}`, false);
@@ -348,13 +359,13 @@ app.on({
   async chooseDifficulty(_ctx, cardId, next, current) {
     closeMenus({ restoreFocus: true });
     if (next === current || app.get(`savingDifficulty.${cardId}`)) return;
-    patchRow(cardId, { difficulty: next });
+    patchWorkCard(cardId, { difficulty: next });
     app.set(`savingDifficulty.${cardId}`, true);
     try {
-      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/difficulty`, { difficulty: next });
-      await loadAll(); // difficulty re-keys the forecast (difficulty × lane) and the hard-mix numbers
+      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/workcards/${cardId}/difficulty`, { difficulty: next });
+      await loadAll(); // the Sprint Schedules bar re-keys on difficulty × lane
     } catch (err) {
-      patchRow(cardId, { difficulty: current });
+      patchWorkCard(cardId, { difficulty: current });
       flashBanner(`Difficulty write failed — reverted. ${errText(err)}`);
     } finally {
       app.set(`savingDifficulty.${cardId}`, false);

@@ -4,6 +4,10 @@
  * Sirius on every sync, so a manual change made in Trello surfaces here.
  * Ownership stays safe — Sirius-owned planning fields are never touched —
  * and the echo of Sirius's own write is a same-value no-op with no audit row.
+ *
+ * Since owl #78 (2026-09-05) the WORK card carries the whole registry too —
+ * W1 urgency and W3 difficulty beside W2's due — so the task-card cases below
+ * mirror the deliverable ones field for field.
  */
 
 import { readFileSync } from 'node:fs';
@@ -92,6 +96,34 @@ describe('FR-9.5 — written fields reconcile from ARES reads', () => {
     const doc = await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c1' });
     expect(doc?.urgency).toBe('Urgent');
     expect(await Deliverable.countDocuments({ project_id: project._id })).toBe(1);
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0); // reconcile is silent
+  });
+
+  it('a WORK card’s Urgent and Difficulty labels land on the work card (owl #78)', async () => {
+    const project = await makeProject();
+    await syncProject(
+      stubClient([
+        card(),
+        card({ cardId: 'w1', name: 'Render Asset: MC-1 exports', labels: [label('Urgent'), label('Difficulty: Hard')] }),
+      ]),
+      project,
+    );
+    const doc = await WorkCard.findOne({ project_id: project._id, trello_card_id: 'w1' });
+    expect(doc?.urgency, 'the mapper discarded the task card’s label again').toBe('Urgent');
+    expect(doc?.difficulty).toBe('Hard');
+    // and the label on the task does not climb to the main card
+    expect((await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c1' }))?.urgency).toBe('Non-Urgent');
+  });
+
+  it('a manual change on the WORK card in Trello (labels removed) surfaces on the next sync', async () => {
+    const project = await makeProject();
+    const task = (labels: ReturnType<typeof label>[]) =>
+      card({ cardId: 'w1', name: 'Render Asset: MC-1 exports', labels });
+    await syncProject(stubClient([card(), task([label('Urgent'), label('Difficulty: Hard')])]), project);
+    await syncProject(stubClient([card(), task([])]), project); // hand-edited in Trello
+    const doc = await WorkCard.findOne({ project_id: project._id, trello_card_id: 'w1' });
+    expect(doc?.urgency).toBe('Non-Urgent');
+    expect(doc?.difficulty).toBeNull();
     expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0); // reconcile is silent
   });
 });
@@ -264,34 +296,64 @@ describe('stale reconcile cannot revert a registry write (owl #50)', () => {
     expect(doc?.urgency).toBe('Urgent');
   });
 
-  it('the task-card due is guarded the same way (W2 task half)', async () => {
-    const project = await makeProject();
-    await WorkCard.create({
-      project_id: project._id,
+  /** A task card Sirius wrote to at `writtenAt`, holding the user's chosen values — all three registry fields (owl #78). */
+  async function writtenWorkCard(projectId: Types.ObjectId, writtenAt: Date) {
+    return WorkCard.create({
+      project_id: projectId,
       mc_number: 'MC-1',
       trello_card_id: 'w1',
       name: 'Render Asset: MC-1 exports',
+      urgency: 'Urgent',
+      difficulty: 'Hard',
       trello_due: '2026-08-25',
       trello_due_at: new Date('2026-08-25T09:00:00.000Z'),
-      registry_written_at: new Date('2026-08-18T10:00:01.000Z'),
+      registry_written_at: writtenAt,
     });
+  }
 
-    const w = mapTrello(
+  /** The same task card as ARES sends it — no labels, no due — fetched at `lastPolledAt`. */
+  const mappedTask = (lastPolledAt: string) =>
+    mapTrello(
       [card({
         cardId: 'w1',
         name: 'Render Asset: MC-1 exports',
         labels: [],
         due: null,
         currentList: 'Render',
-        lastPolledAt: '2026-08-18T10:00:00.000Z',
+        lastPolledAt,
       })],
       null,
     ).workCards[0]!;
-    await upsertWorkCard(project._id, w);
+
+  it('the task card’s registry trio is guarded the same way — due (W2), urgency (W1), difficulty (W3)', async () => {
+    /* Urgency and difficulty joined the guarded write with owl #78. Before it,
+       a task card's difficulty rode the UNCONDITIONAL write on the reasoning
+       that W3 wrote deliverables only, so nothing could be reverting a Sirius
+       write. Now W3 writes here, and this is the input that would revert it. */
+    const project = await makeProject();
+    await writtenWorkCard(project._id, new Date('2026-08-18T10:00:01.000Z'));
+
+    // ARES fetched the card one second BEFORE the write landed
+    await upsertWorkCard(project._id, mappedTask('2026-08-18T10:00:00.000Z'));
 
     const doc = await WorkCard.findOne({ project_id: project._id, trello_card_id: 'w1' });
-    expect(doc?.trello_due).toBe('2026-08-25');
+    expect(doc?.trello_due).toBe('2026-08-25'); // W2 held
+    expect(doc?.urgency, 'the stale payload reverted the task card’s urgency').toBe('Urgent'); // W1 held
+    expect(doc?.difficulty, 'the stale payload reverted the task card’s difficulty').toBe('Hard'); // W3 held
     expect(doc?.current_list).toBe('Render'); // unguarded field still reconciled
+  });
+
+  it('a task-card payload FETCHED AFTER the write applies all three — invariant 8 on the work card', async () => {
+    const project = await makeProject();
+    await writtenWorkCard(project._id, new Date('2026-08-18T10:00:00.000Z'));
+
+    // someone then cleared the labels and the due by hand in Trello, and ARES fetched it after
+    await upsertWorkCard(project._id, mappedTask('2026-08-18T10:00:01.000Z'));
+
+    const doc = await WorkCard.findOne({ project_id: project._id, trello_card_id: 'w1' });
+    expect(doc?.trello_due).toBeNull();
+    expect(doc?.urgency).toBe('Non-Urgent');
+    expect(doc?.difficulty).toBeNull();
   });
 
   it('the real race: a write landing DURING the board read survives that sync', async () => {

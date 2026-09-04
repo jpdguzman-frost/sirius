@@ -27,7 +27,7 @@ const FRONTEND_SHARED = [
   'PIPE_MENU_W', 'pipeBackToTop',
   'pipeMatches', 'pipePick', 'pipeFacetList', 'pipeChipList', 'pipeValueLabel', 'pipeSortLabel',
   'DL_RULES', 'dlRule', 'dlRuleWord', 'fmtWeekRange', 'fmtDayMonth', 'fmtDeadlineShort',
-  'NO_OVERLAYS', 'OVERLAY_KEYS', 'patchRow', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
+  'NO_OVERLAYS', 'OVERLAY_KEYS', 'patchRow', 'patchWorkCard', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
   'REQ_MENU_H', 'REQ_MENU_W', 'REQ_PAGE_SIZE', 'reqComparator', 'reqFilterKeys', 'reqFiltersCleared',
   'REQUEST_SEGMENTS', 'requestBlob', 'resetForProjectSwitch', 'rowLoad', 'rowWarning', 'scrollerOf',
   'selectTab', 'showWarnPop', 'sprintPayload', 'STATUS_FILED', 'thumbKeyOf',

@@ -389,7 +389,7 @@ describe('two rules that look alike and are not (#72 §5)', () => {
 });
 
 /* ---------------------------------------------------------------------- */
-/* E — one row per card, and the deadline it is measured against           */
+/* E — one row per card, the deadline it is measured against, its urgency  */
 /* ---------------------------------------------------------------------- */
 
 describe('one row = one task card = one bar', () => {
@@ -404,18 +404,48 @@ describe('one row = one task card = one bar', () => {
     expect(addable['MC-07'] ?? []).toEqual([]);
   });
 
-  it('inherits the MC group’s client date and urgency, not a task’s own', async () => {
+  it('inherits the MC group’s client date, not a task’s own', async () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
 
     const { rows } = await load(project._id);
-    // task cards carry no labels — urgency and the client date are the group's
+    // the client date is the group's (the deadline half of the old #58
+    // judgement — untouched by #78, revisited in block 3)
     expect(rows[0]!.deadline).toBe('2026-12-31');
+  });
+
+  it('is urgent iff ITS OWN card carries the label — never inherited (owl #78)', async () => {
+    /* #78 retired the #58 judgement that a scheduled row took the MC group's
+       urgency. Task cards carry their own `Urgent` label now, and W1 writes
+       it there. The row follows the card. */
+    const { project, sprint, agent } = await setup();
+    await mkCard(project._id, 'w1');
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
+    expect((await load(project._id)).rows[0]!.urgent).toBe(false);
+
+    await WorkCard.updateOne({ trello_card_id: 'w1' }, { $set: { urgency: 'Urgent' } });
+    expect((await load(project._id)).rows[0]!.urgent).toBe(true);
+
+    // and a card that has left the board asserts nothing — the row stays
+    // (#72 §5) but it is not urgent
+    await WorkCard.deleteOne({ trello_card_id: 'w1' });
+    const { rows } = await load(project._id);
+    expect(rows).toHaveLength(1);
     expect(rows[0]!.urgent).toBe(false);
+  });
+
+  it('a sibling main card’s Urgent no longer leaks onto the row (owl #78)', async () => {
+    /* The exact input the old inheritance turned into `urgent: true`: an
+       urgent MAIN card under the same MC, with the task card unlabelled. A
+       website request can hold an urgent screen and non-urgent assets, so
+       the group's value cannot be true of each row. */
+    const { project, sprint, agent } = await setup();
+    await mkCard(project._id, 'w1');
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
 
     await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { urgency: 'Urgent' } });
-    expect((await load(project._id)).rows[0]!.urgent).toBe(true);
+    expect((await load(project._id)).rows[0]!.urgent).toBe(false);
   });
 
   it('takes the EARLIEST date when the MC group disagrees with itself', async () => {

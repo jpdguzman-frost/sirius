@@ -235,6 +235,8 @@ const workCardSchema = new Schema(
     trello_url: String,
     name: { type: String, required: true },
     task_prefix: String, // 'Render Asset', 'Icon Clean Up'
+    // W3's target since owl #78 (2026-09-05): written by Sirius on the work
+    // card, reconciled from the card's own `Difficulty: …` label every sync.
     difficulty: String,
     current_list: String,
     stage: String,
@@ -245,8 +247,15 @@ const workCardSchema = new Schema(
     // deliverable half would.
     trello_due: DATE_ONLY,
     trello_due_at: Date,
-    // the same stale-reconcile guard as the deliverable — a task card's due is
-    // registry-owned too, so the same read-mid-write revert applies to it
+    // W1's target since owl #78 (2026-09-05): the work card carries its OWN
+    // `Urgent` label — "a main card does not have these properties". Mirror of
+    // the deliverable's field, down to the default: absence of the label IS
+    // Non-Urgent, so no migration backfills it (the schema default answers
+    // every pre-#78 document, and the next sync writes the true value).
+    urgency: { type: String, required: true, default: 'Non-Urgent' },
+    // the same stale-reconcile guard as the deliverable — a task card's due,
+    // urgency and difficulty are registry-owned too, so the same
+    // read-mid-write revert applies to them
     registry_written_at: Date,
     work_started_at: Date,
     work_done_at: Date,

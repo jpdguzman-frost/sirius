@@ -1,8 +1,14 @@
 /**
- * T064 — the one write: optimistic-with-rollback semantics, audit +
+ * T064 — W1, the urgency write: optimistic-with-rollback semantics, audit +
  * sync_runs on success AND failure, absence-means-non-urgent round-trip,
  * invariant-17 production-board guard, local-row rejection
  * (FR-4.6, FR-4.7; invariants 2, 8, 17).
+ *
+ * Re-pointed at the WORK CARD 2026-09-05 (product owl #78; contracts/
+ * trello-write.md §W1/W3 scope clarification): the shipped build had been
+ * labelling the Main Card, the wrong object. The deliverable route is
+ * DELETED, not kept beside the new one (PLAN decision D2) — so the cross-kind
+ * cases below are the guard that the wrong-target write cannot come back.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -11,7 +17,7 @@ import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { TrelloClient, type TrelloWriter } from '../lib/trello.ts';
-import { AuditLog, Deliverable, Project, SyncRun, User, UserProject } from '../src/models/index.ts';
+import { AuditLog, Deliverable, Project, SyncRun, User, UserProject, WorkCard } from '../src/models/index.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -37,13 +43,21 @@ class StubTrello implements TrelloWriter {
   async setDifficulty(): Promise<void> {} // W3 lives in difficulty-write.test.ts
 }
 
-async function setup(envOver: Record<string, string> = {}) {
+/**
+ * One MC group: the main card `card1` (which W1 must NOT touch) and the task
+ * card `task1` under it (which W1 writes).
+ */
+async function setup(envOver: Record<string, string> = {}, projectOver: Record<string, unknown> = {}, taskOver: Record<string, unknown> = {}) {
   const env = validateEnv({ NODE_ENV: 'test', ...envOver });
-  const project = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'testBoardX', weekly_capacity: 3 });
+  const project = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'testBoardX', weekly_capacity: 3, ...projectOver });
   const user = await User.create({ email: 'pm@frostdesigngroup.com' });
   await UserProject.create({ user_id: user._id, project_id: project._id });
   await Deliverable.create({
     project_id: project._id, mc_number: 'MC-1', display_id: 'MC-1', trello_card_id: 'card1', name: 'D1',
+  });
+  await WorkCard.create({
+    project_id: project._id, mc_number: 'MC-1', trello_card_id: 'task1',
+    name: 'Render Asset: MC-1 exports', current_list: 'Backlogs', ...taskOver,
   });
   const trello = new StubTrello();
   const app = createApp({ env, redis: null, mongo: null, trello });
@@ -52,52 +66,121 @@ async function setup(envOver: Record<string, string> = {}) {
   return { project, agent, trello };
 }
 
-describe('the one write (FR-4.6)', () => {
-  it('adds then removes the label — absence means non-urgent, and everything is audited', async () => {
-    const { project, agent, trello } = await setup();
-    await agent.patch(`/api/projects/${project._id}/deliverables/card1/urgency`).send({ urgent: true }).expect(200);
-    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.urgency).toBe('Urgent');
+const patchUrgency = (agent: request.Agent, projectId: unknown, cardId: string, urgent: boolean) =>
+  agent.patch(`/api/projects/${projectId}/workcards/${cardId}/urgency`).send({ urgent });
 
-    await agent.patch(`/api/projects/${project._id}/deliverables/card1/urgency`).send({ urgent: false }).expect(200);
-    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.urgency).toBe('Non-Urgent');
+describe('W1 — the urgency write, on the WORK CARD (FR-4.6; owl #78)', () => {
+  it('adds then removes the label — absence means non-urgent, and everything is audited as work_card', async () => {
+    const { project, agent, trello } = await setup();
+    const on = await patchUrgency(agent, project._id, 'task1', true).expect(200);
+    expect(on.body).toEqual({ ok: true, urgency: 'Urgent' });
+    const written = await WorkCard.findOne({ trello_card_id: 'task1' });
+    expect(written?.urgency).toBe('Urgent');
+    // the stamp a later reconcile compares its fetch instant against (owl #50)
+    expect(written?.registry_written_at).toBeInstanceOf(Date);
+
+    const off = await patchUrgency(agent, project._id, 'task1', false).expect(200);
+    expect(off.body).toEqual({ ok: true, urgency: 'Non-Urgent' });
+    expect((await WorkCard.findOne({ trello_card_id: 'task1' }))?.urgency).toBe('Non-Urgent');
 
     expect(trello.calls).toEqual([
-      { cardId: 'card1', boardId: 'testBoardX', urgent: true },
-      { cardId: 'card1', boardId: 'testBoardX', urgent: false },
+      { cardId: 'task1', boardId: 'testBoardX', urgent: true },
+      { cardId: 'task1', boardId: 'testBoardX', urgent: false },
     ]);
-    expect(await AuditLog.countDocuments({ action: 'urgency.set' })).toBe(2);
-    expect(await SyncRun.countDocuments({ source: 'trello_write', ok: true })).toBe(2);
+    const rows = await AuditLog.find({ action: 'urgency.set' });
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.entity).toBe('work_card');
+      expect(row.entity_id).toBe('task1');
+    }
+    const runs = await SyncRun.find({ source: 'trello_write', ok: true });
+    expect(runs).toHaveLength(2);
+    expect(runs[0]?.stats?.kind).toBe('work_card');
+
+    // the main card beside it is untouched — the write went to the task
+    const main = await Deliverable.findOne({ trello_card_id: 'card1' });
+    expect(main?.urgency).toBe('Non-Urgent');
+    expect(main?.registry_written_at).toBeUndefined();
   });
 
   it('FR-4.7: a failed Trello write leaves local state untouched and records the failure', async () => {
     const { project, agent, trello } = await setup();
     trello.fail = true;
-    const res = await agent.patch(`/api/projects/${project._id}/deliverables/card1/urgency`).send({ urgent: true });
+    const res = await patchUrgency(agent, project._id, 'task1', true);
     expect(res.status).toBe(502);
     expect(res.body.error.code).toBe('TRELLO_WRITE_FAILED');
-    const doc = await Deliverable.findOne({ trello_card_id: 'card1' });
+    const doc = await WorkCard.findOne({ trello_card_id: 'task1' });
     expect(doc?.urgency).toBe('Non-Urgent'); // never diverges from Trello
     expect(doc?.registry_written_at).toBeUndefined(); // nothing written, nothing to shield (owl #50)
     expect(await SyncRun.countDocuments({ source: 'trello_write', ok: false })).toBe(1);
-    expect(await AuditLog.countDocuments({ action: 'urgency.set_failed' })).toBe(1);
+    const failRow = await AuditLog.findOne({ action: 'urgency.set_failed' });
+    expect(failRow?.entity).toBe('work_card');
+    expect(failRow?.entity_id).toBe('task1');
   });
 
   it('invariant 17: refuses to write to a production board outside production', async () => {
     const { project, agent, trello } = await setup({ PROD_TRELLO_BOARD_IDS: 'testBoardX,otherProd' });
-    const res = await agent.patch(`/api/projects/${project._id}/deliverables/card1/urgency`).send({ urgent: true });
+    const res = await patchUrgency(agent, project._id, 'task1', true);
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('PRODUCTION_BOARD_GUARD');
     expect(trello.calls).toHaveLength(0);
   });
 
+  it('G7: a read-only project refuses through the same door with WRITES_DISABLED', async () => {
+    const { project, agent, trello } = await setup({}, { writes_enabled: false });
+    const res = await patchUrgency(agent, project._id, 'task1', true);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('WRITES_DISABLED');
+    expect(trello.calls).toHaveLength(0);
+    expect((await WorkCard.findOne({ trello_card_id: 'task1' }))?.urgency).toBe('Non-Urgent');
+  });
+
+  it('rejects a body outside { urgent: boolean }', async () => {
+    const { project, agent, trello } = await setup();
+    const res = await agent.patch(`/api/projects/${project._id}/workcards/task1/urgency`).send({ urgent: 'yes' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_BODY');
+    expect(trello.calls).toHaveLength(0);
+    expect(await AuditLog.countDocuments({})).toBe(0); // non-attempts never audit
+  });
+
   it('rejects local duplicated rows — no Trello card to label', async () => {
     const { project, agent } = await setup();
-    await Deliverable.create({
-      project_id: project._id, mc_number: 'MC-1', display_id: 'MC-1 (copy)', trello_card_id: 'local-abc', name: 'Copy',
+    await WorkCard.create({
+      project_id: project._id, mc_number: 'MC-1', trello_card_id: 'local-abc', name: 'Copy',
     });
-    const res = await agent.patch(`/api/projects/${project._id}/deliverables/local-abc/urgency`).send({ urgent: true });
+    const res = await patchUrgency(agent, project._id, 'local-abc', true);
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('LOCAL_ROW');
+  });
+
+  it('a DEACTIVATED work card no longer answers writes — kind flips leave ghosts (2026-08-18 review)', async () => {
+    const { project, agent } = await setup({}, {}, { active: false });
+    const res = await patchUrgency(agent, project._id, 'task1', true);
+    expect(res.status).toBe(404);
+  });
+
+  it('CROSS-KIND: a main-card id on the work-card route is a 404 — W1 cannot reach the main card', async () => {
+    /* PLAN decision D2. `card1` is a DELIVERABLE, active, in the same project:
+       the ONLY thing standing between this request and a wrong-target write
+       is that the route looks up work_cards and nothing else. */
+    const { project, agent, trello } = await setup();
+    const res = await patchUrgency(agent, project._id, 'card1', true);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(trello.calls).toHaveLength(0);
+    expect(await AuditLog.countDocuments({})).toBe(0);
+    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.urgency).toBe('Non-Urgent');
+  });
+
+  it('CROSS-KIND: the deliverable-scoped route no longer exists (404), for either card id', async () => {
+    const { project, agent, trello } = await setup();
+    for (const id of ['card1', 'task1']) {
+      const res = await agent.patch(`/api/projects/${project._id}/deliverables/${id}/urgency`).send({ urgent: true });
+      expect(res.status, id).toBe(404);
+    }
+    expect(trello.calls).toHaveLength(0);
+    expect(await AuditLog.countDocuments({})).toBe(0);
   });
 });
 

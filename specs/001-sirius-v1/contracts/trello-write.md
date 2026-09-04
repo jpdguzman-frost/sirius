@@ -10,9 +10,9 @@ to any source system exists; Google Sheets has no write path, ever.
 
 | # | Field | Trello op | Sirius surface | Audit action | Since |
 |---|---|---|---|---|---|
-| W1 | `Urgent` label | `POST /cards/{id}/idLabels` · `DELETE /cards/{id}/idLabels/{labelId}` | Pipeline urgency toggle | `urgency.set` | v1 (FR-4.6) |
+| W1 | `Urgent` label | `POST /cards/{id}/idLabels` · `DELETE /cards/{id}/idLabels/{labelId}` | Pipeline urgency control (work-card rows) | `urgency.set` | v1 (FR-4.6) |
 | W2 | Due date | `PUT /cards/{id}` with `{due}`; `{due: null}` clears | Deadline edit in Pipeline | `due.set` | 2026-08-04 (FR-9.1) |
-| W3 | `Difficulty: …` label | `POST /cards/{id}/idLabels` (new value) · `DELETE /cards/{id}/idLabels/{labelId}` (stale values) | Pipeline difficulty dropdown | `difficulty.set` | 2026-08-12 (BRD-§9-A1) |
+| W3 | `Difficulty: …` label | `POST /cards/{id}/idLabels` (new value) · `DELETE /cards/{id}/idLabels/{labelId}` (stale values) | Pipeline difficulty control (work-card rows) | `difficulty.set` | 2026-08-12 (BRD-§9-A1) |
 
 Interfaces live in `lib/trello.ts` only: `setUrgency(cardId, boardId, urgent)` (§5.3 verbatim
 shape, unchanged), `setDue(cardId, isoDateTimeOrNull)`, and
@@ -35,6 +35,33 @@ shape, unchanged), `setDue(cardId, isoDateTimeOrNull)`, and
    is idempotent — a same-value set changes nothing and writes no audit row.
 7. **Ships with tests**: rollback, board guard, audit rows, and a live round-trip on the TEST
    board (`tx8gDsTH`) before staging sign-off.
+
+## W1 / W3 scope clarification — the WORK card (2026-09-05)
+
+- **Scope clarification (product owl miles→jp #78, 2026-09-04; built 2026-09-05):** W1 and
+  W3 write the **work card** — the task cards revealed by expanding a Pipeline MC group — and
+  **only** the work card. "A main card does not have these properties": a website request can
+  hold an urgent screen and non-urgent assets, so one value on the parent cannot be true. The
+  shipped build had been writing both labels to the Main Card, so this is a *defect fix on the
+  existing entries*, exactly parallel to the §W2 scope note below: same fields, same
+  `setUrgency()` / `setDifficulty()` interfaces, same rules 1–7; only the kind of card changes.
+  Not a registry growth — the registry enumerates *fields*, and the fields are unchanged.
+- **The deliverable-scoped routes are gone, not dormant.** `PATCH …/deliverables/:cardId/urgency`
+  and `…/difficulty` no longer exist (404); the routes are `PATCH …/workcards/:cardId/urgency`
+  and `…/workcards/:cardId/difficulty`, through the same `writeGuards` door. A main-card id on
+  the work-card route is a 404. Audit rows carry `entity: 'work_card'`.
+- **A main card's own labels still exist and still reconcile IN** (invariant 8): Sirius reads
+  them from ARES on every sync and keeps them read-only — the main card's `difficulty` still
+  keys the Pipeline forecast and Needs Info, its `urgency` still feeds Deadlines and the
+  urgent-overlap rule. They change in Trello only. The Pipeline main row draws an em-dash for
+  both. (Block-1 decision D1; revisited when Deadlines moves to work cards.)
+- **Reconcile widens to match** (owl #50's stale guard): a work card's `urgency` and
+  `difficulty` now sit inside the `registry_written_at`-guarded write beside its due date, so
+  a Sirius write within the window is not clobbered and a Trello-side change outside it
+  surfaces at most one reconcile later.
+- **Sprint Schedules rows follow the card, not the group**: a row is urgent iff *its* card
+  carries the label. The MC-group inheritance of urgency (the 2026-08-2x #58 judgement) is
+  retired; deadline inheritance is untouched.
 
 ## W2 semantics — due date
 

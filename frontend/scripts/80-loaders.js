@@ -109,6 +109,26 @@ function findWorkCard(cardId) {
   return null;
 }
 
+/* patchRow's twin for the WORK CARD map (owl #78 §1: urgency and difficulty
+   are written on the work card, so their optimistic set and their rollback
+   both land here). Same rule as patchRow, for the same reason: the card is
+   RE-FOUND at every step and never held as an index or a keypath across an
+   await — a loadAll can replace the map while a PATCH is in flight, and a
+   stale keypath would write into a different card, or into another project's
+   map after a switch, fabricating an entry the server never sent.
+
+   A card that is no longer there is a NO-OP, deliberately: the entry is gone
+   or foreign and the next load owns the truth (writeTaskDue's rollback states
+   the same rule). One app.set for the whole patch, so a two-field change is
+   one render. */
+function patchWorkCard(cardId, fields) {
+  const found = findWorkCard(cardId);
+  if (!found) return;
+  const patch = {};
+  for (const k of Object.keys(fields)) patch[`${found.keypath}.${k}`] = fields[k];
+  app.set(patch);
+}
+
 /* W2 deadline write (FR-9.1): optimistic with revert, same pattern as urgency
    and difficulty; Trello is written first server-side, so a failure reverts
    here. The no-op guard compares against trelloDue because W2 owns only the
@@ -278,6 +298,10 @@ async function loadAll() {
     // The MC# cell shows the bare mcLabel (JP ruling 2026-08-13), but typing
     // 'MC-655.3' must still find its row — displayId and mcNumber both stay
     // searchable, and mcLabel is by construction one of the two.
+    // The requestor left the blob with its column (owl #78 §3): search here
+    // reaches what the table shows, and a term that matches nothing visible
+    // returns rows for a reason the reader cannot see. It is still searchable
+    // on Requests, where the column lives.
     /* `warning` rides along for the same reason: the template asked
        `rowWarning(row)` in SEVEN places, so the recipe ran seven times per row
        on every re-render — and the table re-renders on every search keystroke,
@@ -285,7 +309,7 @@ async function loadAll() {
        is a plain keypath, which also gives `{{#each row.warning.items}}` a
        stable array identity instead of a fresh one to diff each pass. */
     pipeline.rows.forEach((r) => {
-      r.blob = `${r.displayId} ${r.mcNumber || ''} ${r.name} ${r.assetType || ''} ${r.requestor || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
+      r.blob = `${r.displayId} ${r.mcNumber || ''} ${r.name} ${r.assetType || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
       r.warning = rowWarning(r);
       /* the childless-chevron test (owl #45 / R-exp-c) is derived per-row data
          too, so it is stamped, not asked in the template (performance law).
