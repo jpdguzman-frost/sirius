@@ -362,7 +362,6 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    gaps (Miles, owl #42, T152) are recorded in the state log; a returning
    clipping cell rebuilds from that ruling, not from git history alone. */
 
-.ptable .col-diff .pbadge { width: 96px; justify-content: space-between; }
 /* Difficulty recipes read from the Badge component set, node 40:4105 (owls
    #78/#79). This SUPERSEDES the "fifty fill / five-hundred stroke and text"
    recipe Miles gave in owl #04 on the twelfth of August: in the nodes the fill
@@ -389,7 +388,12 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    (node 842:125808) and difficulty (W3, cell 415:54974; the d-* recipes above
    win on specificity, so value colors carry over). Since owls #78/#79 the pill
    rides the WORK-CARD rows, never the main row; the main row's two cells are
-   the static dimcell em-dash and carry no control at all. */
+   the static dimcell em-dash and carry no control at all.
+
+   ONE footprint for both columns: the difficulty cell's pill wears this class
+   as well, so the two line up down the table off a single width — a
+   column-scoped copy of the box (there was one until the simplification pass
+   of the fifth of September) can only drift away from it. */
 .ubadge-wrap { position: relative; display: inline-block; }
 .ubadge {
   width: 96px; justify-content: space-between; cursor: pointer;

@@ -552,6 +552,10 @@ const pipeFacetList = (rows, sel) => {
     const names = [...counts.keys()];
     names.sort((a, b) => {
       if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
+      /* NO axis declares its own order today: the two that did retired with
+         the axes themselves (#78 §1), so this branch stays unexercised — and
+         the assertion that covered it stays parked — until #78 §4 rebuilds
+         them over work-card values. */
       return f.order ? f.order.indexOf(a) - f.order.indexOf(b) : alphaSort(a, b);
     });
     return {

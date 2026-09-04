@@ -16,10 +16,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
-import { createApp } from '../src/app.ts';
-import { validateEnv } from '../src/config/env.ts';
-import { TrelloClient, type TrelloWriter } from '../lib/trello.ts';
-import { AuditLog, Deliverable, Project, SyncRun, User, UserProject, WorkCard } from '../src/models/index.ts';
+import { TrelloClient } from '../lib/trello.ts';
+import { setupWriteFixture } from './helpers/write-fixture.ts';
+import { AuditLog, Deliverable, Project, SyncRun, UserProject, WorkCard } from '../src/models/index.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -31,42 +30,19 @@ beforeEach(async () => {
   await clearCollections();
 });
 
-class StubTrello implements TrelloWriter {
-  calls: Array<{ cardId: string; boardId: string; difficulty: string }> = [];
-  fail = false;
-  async ensureUrgentLabel(): Promise<string> {
-    return 'label-1';
-  }
-  async setUrgency(): Promise<void> {} // W1 lives in urgency.test.ts
-  async setDue(): Promise<void> {} // W2 lives in deadline-write.test.ts
-  async setDifficulty(cardId: string, boardId: string, difficulty: 'Easy' | 'Medium' | 'Hard'): Promise<void> {
-    if (this.fail) throw new Error('Trello POST /cards failed: HTTP 500');
-    this.calls.push({ cardId, boardId, difficulty });
-  }
-}
-
 /**
- * One MC group: the main card `card1` (Medium, which W3 must NOT touch) and
- * the task card `task1` under it (Medium, which W3 writes).
+ * The shared registry fixture (test/helpers/write-fixture.ts), with both cards
+ * seeded Medium: the main card `card1`, which W3 must NOT touch, and the task
+ * card `task1` under it, which W3 writes. Medium on both is what lets a
+ * cross-kind case ask for Hard and know the no-op guard is not what refused it.
  */
-async function setup(envOver: Record<string, string> = {}, projectOver: Record<string, unknown> = {}, taskOver: Record<string, unknown> = {}) {
-  const env = validateEnv({ NODE_ENV: 'test', ...envOver });
-  const project = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'testBoardX', weekly_capacity: 3, ...projectOver });
-  const user = await User.create({ email: 'pm@frostdesigngroup.com' });
-  await UserProject.create({ user_id: user._id, project_id: project._id });
-  await Deliverable.create({
-    project_id: project._id, mc_number: 'MC-1', display_id: 'MC-1', trello_card_id: 'card1', name: 'D1', difficulty: 'Medium',
+const setup = (envOver: Record<string, string> = {}, projectOver: Record<string, unknown> = {}, taskOver: Record<string, unknown> = {}) =>
+  setupWriteFixture({
+    env: envOver,
+    project: projectOver,
+    deliverable: { difficulty: 'Medium' },
+    task: { difficulty: 'Medium', ...taskOver },
   });
-  await WorkCard.create({
-    project_id: project._id, mc_number: 'MC-1', trello_card_id: 'task1',
-    name: 'Render Asset: MC-1 exports', current_list: 'Backlogs', difficulty: 'Medium', ...taskOver,
-  });
-  const trello = new StubTrello();
-  const app = createApp({ env, redis: null, mongo: null, trello });
-  const agent = request.agent(app);
-  await agent.post('/__test/login').send({ userId: String(user._id), email: user.email }).expect(200);
-  return { project, agent, trello };
-}
 
 const patchDifficulty = (agent: request.Agent, projectId: unknown, cardId: string, difficulty: string) =>
   agent.patch(`/api/projects/${projectId}/workcards/${cardId}/difficulty`).send({ difficulty });
@@ -80,7 +56,7 @@ describe('W3 — difficulty write, on the WORK CARD (BRD-§9-A1; owl #78)', () =
     expect(doc?.difficulty).toBe('Hard');
     // the stamp a later reconcile compares its fetch instant against (owl #50)
     expect(doc?.registry_written_at).toBeInstanceOf(Date);
-    expect(trello.calls).toEqual([{ cardId: 'task1', boardId: 'testBoardX', difficulty: 'Hard' }]);
+    expect(trello.difficultyCalls).toEqual([{ cardId: 'task1', boardId: 'testBoardX', difficulty: 'Hard' }]);
     const row = await AuditLog.findOne({ action: 'difficulty.set' });
     expect(row?.entity).toBe('work_card');
     expect(row?.entity_id).toBe('task1');
@@ -117,7 +93,7 @@ describe('W3 — difficulty write, on the WORK CARD (BRD-§9-A1; owl #78)', () =
     const res = await patchDifficulty(agent, project._id, 'task1', 'Medium');
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('NO_OP');
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.difficultyCalls).toHaveLength(0);
     expect(await AuditLog.countDocuments()).toBe(0);
   });
 
@@ -140,7 +116,7 @@ describe('W3 — difficulty write, on the WORK CARD (BRD-§9-A1; owl #78)', () =
     const res = await patchDifficulty(agent, project._id, 'task1', 'Hard');
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('PRODUCTION_BOARD_GUARD');
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.difficultyCalls).toHaveLength(0);
   });
 
   it('G7: a read-only project refuses through the same door with WRITES_DISABLED', async () => {
@@ -148,7 +124,7 @@ describe('W3 — difficulty write, on the WORK CARD (BRD-§9-A1; owl #78)', () =
     const res = await patchDifficulty(agent, project._id, 'task1', 'Hard');
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('WRITES_DISABLED');
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.difficultyCalls).toHaveLength(0);
     expect((await WorkCard.findOne({ trello_card_id: 'task1' }))?.difficulty).toBe('Medium');
   });
 
@@ -167,7 +143,7 @@ describe('W3 — difficulty write, on the WORK CARD (BRD-§9-A1; owl #78)', () =
     const res = await patchDifficulty(agent, project._id, 'card1', 'Hard');
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.difficultyCalls).toHaveLength(0);
     expect(await AuditLog.countDocuments({})).toBe(0);
     expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.difficulty).toBe('Medium');
   });
@@ -180,10 +156,9 @@ describe('W3 — difficulty write, on the WORK CARD (BRD-§9-A1; owl #78)', () =
        membership authz cannot be what refuses the request — only the scoping
        of the lookup itself. The positive anchor at the end stops the case
        passing vacuously (a typo'd URL would 404 for the wrong reason). */
-    const { project, agent, trello } = await setup();
+    const { project, agent, trello, user } = await setup();
     const other = await Project.create({ code: 'rt-999', name: 'Other', trello_board_id: 'testBoardY', weekly_capacity: 3 });
-    const user = await User.findOne({ email: 'pm@frostdesigngroup.com' });
-    await UserProject.create({ user_id: user!._id, project_id: other._id });
+    await UserProject.create({ user_id: user._id, project_id: other._id });
     await WorkCard.create({
       project_id: other._id, mc_number: 'MC-9', trello_card_id: 'w9',
       name: 'Render Asset: MC-9 exports', current_list: 'Backlogs', difficulty: 'Medium',
@@ -192,7 +167,7 @@ describe('W3 — difficulty write, on the WORK CARD (BRD-§9-A1; owl #78)', () =
     const res = await patchDifficulty(agent, project._id, 'w9', 'Hard');
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.difficultyCalls).toHaveLength(0);
     expect(await AuditLog.countDocuments({})).toBe(0);
     expect((await WorkCard.findOne({ trello_card_id: 'w9' }))?.difficulty).toBe('Medium');
 
@@ -207,7 +182,7 @@ describe('W3 — difficulty write, on the WORK CARD (BRD-§9-A1; owl #78)', () =
       const res = await agent.patch(`/api/projects/${project._id}/deliverables/${id}/difficulty`).send({ difficulty: 'Hard' });
       expect(res.status, id).toBe(404);
     }
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.difficultyCalls).toHaveLength(0);
     expect(await AuditLog.countDocuments({})).toBe(0);
   });
 });

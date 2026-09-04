@@ -14,10 +14,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
-import { createApp } from '../src/app.ts';
-import { validateEnv } from '../src/config/env.ts';
-import { TrelloClient, type TrelloWriter } from '../lib/trello.ts';
-import { AuditLog, Deliverable, Project, SyncRun, User, UserProject, WorkCard } from '../src/models/index.ts';
+import { TrelloClient } from '../lib/trello.ts';
+import { setupWriteFixture } from './helpers/write-fixture.ts';
+import { AuditLog, Deliverable, Project, SyncRun, UserProject, WorkCard } from '../src/models/index.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -29,42 +28,13 @@ beforeEach(async () => {
   await clearCollections();
 });
 
-class StubTrello implements TrelloWriter {
-  calls: Array<{ cardId: string; boardId: string; urgent: boolean }> = [];
-  fail = false;
-  async ensureUrgentLabel(): Promise<string> {
-    return 'label-1';
-  }
-  async setUrgency(cardId: string, boardId: string, urgent: boolean): Promise<void> {
-    if (this.fail) throw new Error('Trello POST /cards failed: HTTP 500');
-    this.calls.push({ cardId, boardId, urgent });
-  }
-  async setDue(): Promise<void> {} // W2 lives in deadline-write.test.ts
-  async setDifficulty(): Promise<void> {} // W3 lives in difficulty-write.test.ts
-}
-
 /**
- * One MC group: the main card `card1` (which W1 must NOT touch) and the task
- * card `task1` under it (which W1 writes).
+ * The shared registry fixture (test/helpers/write-fixture.ts): one MC group —
+ * the main card `card1`, which W1 must NOT touch, and the task card `task1`
+ * under it, which W1 writes.
  */
-async function setup(envOver: Record<string, string> = {}, projectOver: Record<string, unknown> = {}, taskOver: Record<string, unknown> = {}) {
-  const env = validateEnv({ NODE_ENV: 'test', ...envOver });
-  const project = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'testBoardX', weekly_capacity: 3, ...projectOver });
-  const user = await User.create({ email: 'pm@frostdesigngroup.com' });
-  await UserProject.create({ user_id: user._id, project_id: project._id });
-  await Deliverable.create({
-    project_id: project._id, mc_number: 'MC-1', display_id: 'MC-1', trello_card_id: 'card1', name: 'D1',
-  });
-  await WorkCard.create({
-    project_id: project._id, mc_number: 'MC-1', trello_card_id: 'task1',
-    name: 'Render Asset: MC-1 exports', current_list: 'Backlogs', ...taskOver,
-  });
-  const trello = new StubTrello();
-  const app = createApp({ env, redis: null, mongo: null, trello });
-  const agent = request.agent(app);
-  await agent.post('/__test/login').send({ userId: String(user._id), email: user.email }).expect(200);
-  return { project, agent, trello };
-}
+const setup = (envOver: Record<string, string> = {}, projectOver: Record<string, unknown> = {}, taskOver: Record<string, unknown> = {}) =>
+  setupWriteFixture({ env: envOver, project: projectOver, task: taskOver });
 
 const patchUrgency = (agent: request.Agent, projectId: unknown, cardId: string, urgent: boolean) =>
   agent.patch(`/api/projects/${projectId}/workcards/${cardId}/urgency`).send({ urgent });
@@ -83,7 +53,7 @@ describe('W1 — the urgency write, on the WORK CARD (FR-4.6; owl #78)', () => {
     expect(off.body).toEqual({ ok: true, urgency: 'Non-Urgent' });
     expect((await WorkCard.findOne({ trello_card_id: 'task1' }))?.urgency).toBe('Non-Urgent');
 
-    expect(trello.calls).toEqual([
+    expect(trello.urgencyCalls).toEqual([
       { cardId: 'task1', boardId: 'testBoardX', urgent: true },
       { cardId: 'task1', boardId: 'testBoardX', urgent: false },
     ]);
@@ -123,7 +93,7 @@ describe('W1 — the urgency write, on the WORK CARD (FR-4.6; owl #78)', () => {
     const res = await patchUrgency(agent, project._id, 'task1', true);
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('PRODUCTION_BOARD_GUARD');
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.urgencyCalls).toHaveLength(0);
   });
 
   it('G7: a read-only project refuses through the same door with WRITES_DISABLED', async () => {
@@ -131,7 +101,7 @@ describe('W1 — the urgency write, on the WORK CARD (FR-4.6; owl #78)', () => {
     const res = await patchUrgency(agent, project._id, 'task1', true);
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('WRITES_DISABLED');
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.urgencyCalls).toHaveLength(0);
     expect((await WorkCard.findOne({ trello_card_id: 'task1' }))?.urgency).toBe('Non-Urgent');
   });
 
@@ -140,7 +110,7 @@ describe('W1 — the urgency write, on the WORK CARD (FR-4.6; owl #78)', () => {
     const res = await agent.patch(`/api/projects/${project._id}/workcards/task1/urgency`).send({ urgent: 'yes' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_BODY');
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.urgencyCalls).toHaveLength(0);
     expect(await AuditLog.countDocuments({})).toBe(0); // non-attempts never audit
   });
 
@@ -168,7 +138,7 @@ describe('W1 — the urgency write, on the WORK CARD (FR-4.6; owl #78)', () => {
     const res = await patchUrgency(agent, project._id, 'card1', true);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.urgencyCalls).toHaveLength(0);
     expect(await AuditLog.countDocuments({})).toBe(0);
     expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.urgency).toBe('Non-Urgent');
   });
@@ -181,10 +151,9 @@ describe('W1 — the urgency write, on the WORK CARD (FR-4.6; owl #78)', () => {
        membership authz cannot be what refuses the request — only the scoping
        of the lookup itself. The positive anchor at the end stops the case
        passing vacuously (a typo'd URL would 404 for the wrong reason). */
-    const { project, agent, trello } = await setup();
+    const { project, agent, trello, user } = await setup();
     const other = await Project.create({ code: 'rt-999', name: 'Other', trello_board_id: 'testBoardY', weekly_capacity: 3 });
-    const user = await User.findOne({ email: 'pm@frostdesigngroup.com' });
-    await UserProject.create({ user_id: user!._id, project_id: other._id });
+    await UserProject.create({ user_id: user._id, project_id: other._id });
     await WorkCard.create({
       project_id: other._id, mc_number: 'MC-9', trello_card_id: 'w9',
       name: 'Render Asset: MC-9 exports', current_list: 'Backlogs',
@@ -193,7 +162,7 @@ describe('W1 — the urgency write, on the WORK CARD (FR-4.6; owl #78)', () => {
     const res = await patchUrgency(agent, project._id, 'w9', true);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.urgencyCalls).toHaveLength(0);
     expect(await AuditLog.countDocuments({})).toBe(0);
     expect((await WorkCard.findOne({ trello_card_id: 'w9' }))?.urgency).toBe('Non-Urgent');
 
@@ -208,7 +177,7 @@ describe('W1 — the urgency write, on the WORK CARD (FR-4.6; owl #78)', () => {
       const res = await agent.patch(`/api/projects/${project._id}/deliverables/${id}/urgency`).send({ urgent: true });
       expect(res.status, id).toBe(404);
     }
-    expect(trello.calls).toHaveLength(0);
+    expect(trello.urgencyCalls).toHaveLength(0);
     expect(await AuditLog.countDocuments({})).toBe(0);
   });
 });

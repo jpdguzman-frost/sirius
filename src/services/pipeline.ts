@@ -190,8 +190,8 @@ export interface WorkCardWire {
    * W1/W3 write THIS card. Owl #45's "child rows show no urgency/difficulty"
    * rested on task cards carrying no labels; #78 retires that.
    */
-  urgency: 'Urgent' | 'Non-Urgent';
-  difficulty: 'Easy' | 'Medium' | 'Hard' | null;
+  urgency: string;
+  difficulty: string | null;
 }
 
 export interface PipelineResult {
@@ -292,10 +292,11 @@ export async function loadPipeline(
       doneTs: w.work_done_at ? w.work_done_at.toISOString() : null,
       // owl #78: lean-safe defaults — a pre-#78 document has no `urgency`
       // field until its next sync, and absence of the label IS Non-Urgent.
-      // Difficulty is one of the three taxonomy values or absent: the mapper
-      // normalises the label and W3 validates the body, so the cast holds.
-      urgency: (w.urgency as WorkCardWire['urgency'] | undefined) ?? 'Non-Urgent',
-      difficulty: (w.difficulty as WorkCardWire['difficulty'] | undefined) ?? null,
+      // Typed and read exactly like the deliverable row's twins below: the
+      // taxonomy is enforced where it enters (the mapper's label read, W3's
+      // body schema), never re-declared as a union at the wire.
+      urgency: (w.urgency as string) ?? 'Non-Urgent',
+      difficulty: (w.difficulty as string) ?? null,
     });
   }
 

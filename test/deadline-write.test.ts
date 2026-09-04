@@ -8,10 +8,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
-import { createApp } from '../src/app.ts';
-import { validateEnv } from '../src/config/env.ts';
-import { composeDueIso, type TrelloWriter } from '../lib/trello.ts';
-import { AuditLog, Deliverable, Project, SyncRun, User, UserProject, WorkCard } from '../src/models/index.ts';
+import { composeDueIso } from '../lib/trello.ts';
+import { setupWriteFixture } from './helpers/write-fixture.ts';
+import { AuditLog, Deliverable, SyncRun, WorkCard } from '../src/models/index.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -23,35 +22,13 @@ beforeEach(async () => {
   await clearCollections();
 });
 
-class StubTrello implements TrelloWriter {
-  dueCalls: Array<{ cardId: string; dueIso: string | null }> = [];
-  fail = false;
-  async ensureUrgentLabel(): Promise<string> {
-    return 'label-1';
-  }
-  async setUrgency(): Promise<void> {}
-  async setDue(cardId: string, dueIso: string | null): Promise<void> {
-    if (this.fail) throw new Error('Trello PUT /cards failed: HTTP 500');
-    this.dueCalls.push({ cardId, dueIso });
-  }
-  async setDifficulty(): Promise<void> {} // W3 lives in difficulty-write.test.ts
-}
-
-async function setup(envOver: Record<string, string> = {}, deliverable: Record<string, unknown> = {}) {
-  const env = validateEnv({ NODE_ENV: 'test', ...envOver });
-  const project = await Project.create({ code: 'rt-837', name: 'Fx', trello_board_id: 'testBoardX', weekly_capacity: 3 });
-  const user = await User.create({ email: 'pm@frostdesigngroup.com' });
-  await UserProject.create({ user_id: user._id, project_id: project._id });
-  await Deliverable.create({
-    project_id: project._id, mc_number: 'MC-1', display_id: 'MC-1', trello_card_id: 'card1', name: 'D1',
-    ...deliverable,
-  });
-  const trello = new StubTrello();
-  const app = createApp({ env, redis: null, mongo: null, trello });
-  const agent = request.agent(app);
-  await agent.post('/__test/login').send({ userId: String(user._id), email: user.email }).expect(200);
-  return { project, agent, trello };
-}
+/**
+ * The shared registry fixture (test/helpers/write-fixture.ts) with the main
+ * card `card1` alone — W2's deliverable half. The task-card half below asks
+ * the same fixture for `task1` as well.
+ */
+const setup = (envOver: Record<string, string> = {}, deliverable: Record<string, unknown> = {}) =>
+  setupWriteFixture({ env: envOver, deliverable });
 
 const patchDeadline = (agent: request.Agent, projectId: unknown, date: string | null) =>
   agent.patch(`/api/projects/${projectId}/deliverables/card1/deadline`).send({ date });
@@ -178,14 +155,8 @@ describe('W2 — the task-card due write (owl #45 scope)', () => {
   const patchTaskDue = (agent: request.Agent, projectId: unknown, date: string | null) =>
     agent.patch(`/api/projects/${projectId}/workcards/task1/deadline`).send({ date });
 
-  async function setupTask(envOver: Record<string, string> = {}, taskOver: Record<string, unknown> = {}) {
-    const base = await setup(envOver);
-    await WorkCard.create({
-      project_id: base.project._id, mc_number: 'MC-1', trello_card_id: 'task1',
-      name: 'Render Asset: MC-1 exports', current_list: 'Backlogs', ...taskOver,
-    });
-    return base;
-  }
+  const setupTask = (envOver: Record<string, string> = {}, taskOver: Record<string, unknown> = {}) =>
+    setupWriteFixture({ env: envOver, task: taskOver });
 
   it('sets a date, persists both fields on the WORK CARD, audits as work_card', async () => {
     const { project, agent, trello } = await setupTask();

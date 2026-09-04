@@ -118,9 +118,11 @@ function findWorkCard(cardId) {
    map after a switch, fabricating an entry the server never sent.
 
    A card that is no longer there is a NO-OP, deliberately: the entry is gone
-   or foreign and the next load owns the truth (writeTaskDue's rollback states
-   the same rule). One app.set for the whole patch, so a two-field change is
-   one render. */
+   or foreign — in another project's map, where writing the old keypath would
+   fabricate an entry the server never sent — and the next load owns the truth.
+   That is why the ROLLBACK side of every optimistic work-card write comes back
+   through here rather than reusing the keypath it set on the way out. One
+   app.set for the whole patch, so a two-field change is one render. */
 function patchWorkCard(cardId, fields) {
   const found = findWorkCard(cardId);
   if (!found) return;
@@ -163,7 +165,7 @@ async function writeTaskDue(cardId, value) {
   if (!found) return;
   if ((value || null) === (found.card.due || null)) return; // no-op guard — no call, no audit
   const prev = found.card.due || null;
-  app.set(`${found.keypath}.due`, value);
+  patchWorkCard(cardId, { due: value });
   app.set(`savingDeadline.${cardId}`, true);
   try {
     await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/workcards/${cardId}/deadline`, { date: value });
@@ -174,13 +176,7 @@ async function writeTaskDue(cardId, value) {
        commit is the same self-heal the deliverable half has always had. */
     await loadAll();
   } catch (err) {
-    /* RE-FIND at write-back time — patchRow's own rule: the pre-await
-       keypath can point at a DIFFERENT card after a reload reshuffles the
-       map, or at another project's map after a switch (where setting it
-       would fabricate a phantom entry). A miss means the entry is gone or
-       foreign; reverting nothing is correct — the next load owns the truth. */
-    const still = findWorkCard(cardId);
-    if (still) app.set(`${still.keypath}.due`, prev);
+    patchWorkCard(cardId, { due: prev });
     flashBanner(`Deadline write failed — reverted. ${errText(err)}`);
   } finally {
     app.set(`savingDeadline.${cardId}`, false);

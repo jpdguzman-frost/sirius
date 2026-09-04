@@ -116,6 +116,28 @@ function staleGuard(fetchedAt: Date | null) {
   return { $or: [neverWritten, { registry_written_at: { $lt: fetchedAt } }] };
 }
 
+/**
+ * The registry-owned fields of one mapped card — W1 urgency, W2 due, W3
+ * difficulty — as the `$set` the stale-guarded write applies. ONE definition
+ * for both card kinds (simplification pass 2026-09-05): the two upserts had
+ * byte-identical objects, and the set a stale payload can revert is a property
+ * of the registry, not of the collection it lands in. A registry entry gained
+ * or dropped here reaches both kinds at once, which is what the write
+ * registry's card-kind scope notes already say (contracts/trello-write.md).
+ */
+function registryFields(card: {
+  difficulty?: string;
+  trello_due: string | null;
+  trello_due_at: string | null;
+  urgent: boolean;
+}) {
+  return {
+    difficulty: card.difficulty ?? null,
+    trello_due: card.trello_due,
+    trello_due_at: dueInstant(card.trello_due_at),
+    urgency: card.urgent ? 'Urgent' : 'Non-Urgent',
+  };
+}
 
 /**
  * The fetch instant for one mapped card, or `null` when ARES did not send one.
@@ -211,14 +233,7 @@ export async function upsertDeliverable(
   const fetchedAt = fetchedAtOf(d);
   await Deliverable.updateOne(
     { ...key, ...staleGuard(fetchedAt) },
-    {
-      $set: {
-        difficulty: d.difficulty ?? null,
-        trello_due: d.trello_due,
-        trello_due_at: dueInstant(d.trello_due_at),
-        urgency: d.urgent ? 'Urgent' : 'Non-Urgent',
-      },
-    },
+    { $set: registryFields(d) },
   );
   return fetchedAt !== null;
 }
@@ -260,14 +275,7 @@ export async function upsertWorkCard(
   const fetchedAt = fetchedAtOf(w);
   await WorkCard.updateOne(
     { ...key, ...staleGuard(fetchedAt) },
-    {
-      $set: {
-        difficulty: w.difficulty ?? null,
-        trello_due: w.trello_due,
-        trello_due_at: dueInstant(w.trello_due_at),
-        urgency: w.urgent ? 'Urgent' : 'Non-Urgent',
-      },
-    },
+    { $set: registryFields(w) },
   );
   return fetchedAt !== null;
 }

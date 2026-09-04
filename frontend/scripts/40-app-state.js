@@ -227,7 +227,25 @@ const app = new Ractive({
     kpi() {
       const rows = this.get('rows');
       const byMc = this.get('workCardsByMc');
-      const work = Object.values(byMc).reduce((a, l) => a + l.length, 0);
+      /* Both work-card totals in ONE pass over the map — WORK CARDS is every
+         entry, URGENT is the entries carrying the label, and counting them
+         apart walked every list twice and built a throwaway array per MC.
+
+         owl #78 §1: urgency lives on the WORK CARD, so the tile counts urgent
+         WORK cards project-wide — the same population `work` totals, orphans
+         included. It counted main rows before, which was the only number on
+         this screen still reading a main card's Urgent label after the column
+         stopped showing one. WHICH population the tile means has never been
+         ruled — the frame gives it no definition beyond the word — so
+         project-wide is the reading that matches what the column shows. Asked
+         of Miles; the urgency test in the loop below is the one thing that
+         changes if he wants attached cards only. */
+      let work = 0;
+      let urgent = 0;
+      for (const cards of Object.values(byMc)) {
+        work += cards.length;
+        for (const w of cards) if (w.urgency === 'Urgent') urgent += 1;
+      }
       const unattached = this.get('unattachedWork') || { cards: 0, mcNumbers: [] };
       return {
         main: rows.length,
@@ -242,17 +260,7 @@ const app = new Ractive({
         // table banner is gone (owl #36) — the same corrections the per-row
         // warnings render one at a time
         open: this.get('corrections').length,
-        /* owl #78 §1: urgency lives on the WORK CARD now, so the tile counts
-           urgent WORK cards — the same population `work` above totals, orphans
-           included. It counted main rows before, which was the only number on
-           this screen still reading a main card's Urgent label after the
-           column stopped showing one.
-
-           WHICH population the tile means has never been ruled — the frame
-           gives it no definition beyond the word — so project-wide is the
-           reading that matches what the column shows. Asked of Miles; this is
-           the one line that changes if he wants attached cards only. */
-        urgent: Object.values(byMc).reduce((a, l) => a + l.filter((w) => w.urgency === 'Urgent').length, 0),
+        urgent, // owl #78 §1 / PLAN D3 — counted above, with WORK CARDS
       };
     },
     /* Search alone — the set every filter axis counts against, and the base

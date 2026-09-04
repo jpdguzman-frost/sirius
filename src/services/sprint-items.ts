@@ -215,8 +215,7 @@ export async function loadSprintItems(
   /* Earliest client date per MC group — see `deadlineFor` for why earliest. */
   const mcDeadline = new Map<string, string>();
   for (const d of deliverableRows) {
-    if (!d.mcNumber) continue;
-    if (!d.deadline) continue;
+    if (!d.mcNumber || !d.deadline) continue;
     const held = mcDeadline.get(d.mcNumber);
     if (!held || d.deadline < held) mcDeadline.set(d.mcNumber, d.deadline);
   }

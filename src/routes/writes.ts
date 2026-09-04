@@ -18,16 +18,10 @@
  *  - W2 writes either kind — the deliverable row and its expanded MC group's
  *    task cards alike (JP 2026-08-18, §W2 scope clarification).
  *
- * Order of operations makes the rollback guarantee structural: Trello is
- * written FIRST, and the local field changes only after Trello succeeded —
- * Sirius never displays a state Trello lacks. Every attempt, success or
- * failure, writes audit_log AND sync_runs.
- *
- * Every success also stamps `registry_written_at`, which is what stops a
- * reconcile holding an older ARES read from reverting the value a moment
- * later (product owl #50; the guard itself is `staleGuard` in
- * worker/syncAres.ts). It is stamped on the SUCCESS path only: a failed write
- * left Trello unchanged, so there is nothing for a later read to contradict.
+ * What every entry SHARES — the Trello-first order, the stamp, the audit and
+ * sync_runs rows, the 502 — lives in `commitRegistryWrite` below, stated once
+ * there. Each route holds only what is its own: the body schema, the no-op
+ * guard where it has one, the setter it calls and the field it moves.
  */
 
 import { Router, type Request, type Response } from 'express';
@@ -127,6 +121,67 @@ async function writeGuards<K extends keyof KindDoc>(
   return { projectId, boardId, cardId, actor: (req.user as SessionUser).email, doc: doc as KindDoc[K], trello };
 }
 
+/** Either kind's document — the commit below touches only what both carry. */
+type RegistryDoc = KindDoc[keyof KindDoc];
+
+/** What one registry entry has to say about itself to be committed. */
+interface RegistryCommit {
+  /** the card kind written: the audit row's `entity`, and part of the run stats */
+  kind: 'deliverable' | 'work_card';
+  /** audit action stem — `<action>.set` on success, `<action>.set_failed` on failure */
+  action: 'urgency' | 'due' | 'difficulty';
+  /** the document field the audit's before/after snapshots are keyed on */
+  field: 'urgency' | 'trello_due' | 'difficulty';
+  before: string | null;
+  after: string | null;
+  /** what this entry adds to the sync_runs stats, beside cardId and kind */
+  stats: Record<string, unknown>;
+  /** Trello FIRST, then the document field — see the order note below */
+  apply: () => Promise<void>;
+  /** the success response body */
+  respond: Record<string, unknown>;
+}
+
+/**
+ * The commit half of EVERY registry write — one place, so W1, W2 and W3 cannot
+ * drift apart on the guarantees they all owe (simplification pass 2026-09-05;
+ * the three had hand-written the same shape).
+ *
+ * Order of operations makes the rollback guarantee structural: `apply()` calls
+ * Trello FIRST and changes the local field only after Trello succeeded, so a
+ * throw leaves the document exactly as it was — Sirius never displays a state
+ * Trello lacks (invariant 8), and the UI's optimistic change reverts. Every
+ * attempt, success or failure, writes audit_log AND sync_runs (invariant 10:
+ * one act, one row).
+ *
+ * Every success also stamps `registry_written_at`, which is what stops a
+ * reconcile holding an older ARES read from reverting the value a moment
+ * later (product owl #50; the guard itself is `staleGuard` in
+ * worker/syncAres.ts). It is stamped on the SUCCESS path only: a failed write
+ * left Trello unchanged, so there is nothing for a later read to contradict.
+ */
+async function commitRegistryWrite(
+  ctx: WriteContext<RegistryDoc>,
+  res: Response,
+  { kind, action, field, before, after, stats, apply, respond }: RegistryCommit,
+): Promise<void> {
+  const entry = { project_id: ctx.projectId, actor: ctx.actor, entity: kind, entity_id: ctx.cardId };
+  const runStats = { cardId: ctx.cardId, kind, ...stats };
+  try {
+    await apply();
+    ctx.doc.registry_written_at = new Date();
+    await ctx.doc.save();
+    await audit({ ...entry, action: `${action}.set`, before: { [field]: before }, after: { [field]: after } });
+    await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: runStats });
+    res.json(respond);
+  } catch (err) {
+    const message = (err as Error).message;
+    await audit({ ...entry, action: `${action}.set_failed`, before: { [field]: before }, after: { attempted: after, error: message } });
+    await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: runStats });
+    res.status(502).json({ ok: false, error: { code: 'TRELLO_WRITE_FAILED', message } });
+  }
+}
+
 export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
   const router = Router();
 
@@ -151,21 +206,19 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       const doc = ctx.doc; // typed work card by the guard's generic — W1's only surface since #78
       const before = doc.urgency;
       const after = body.data.urgent ? 'Urgent' : 'Non-Urgent';
-      try {
-        await ctx.trello.setUrgency(ctx.cardId, ctx.boardId, body.data.urgent);
-        doc.urgency = after;
-        doc.registry_written_at = new Date();
-        await doc.save();
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'urgency.set', entity: 'work_card', entity_id: ctx.cardId, before: { urgency: before }, after: { urgency: after } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, kind: 'work_card', urgent: body.data.urgent } });
-        res.json({ ok: true, urgency: after });
-      } catch (err) {
-        // local state untouched — the UI's optimistic change reverts (FR-4.7)
-        const message = (err as Error).message;
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'urgency.set_failed', entity: 'work_card', entity_id: ctx.cardId, before: { urgency: before }, after: { attempted: after, error: message } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, kind: 'work_card', urgent: body.data.urgent } });
-        res.status(502).json({ ok: false, error: { code: 'TRELLO_WRITE_FAILED', message } });
-      }
+      await commitRegistryWrite(ctx, res, {
+        kind: 'work_card',
+        action: 'urgency',
+        field: 'urgency',
+        before,
+        after,
+        stats: { urgent: body.data.urgent },
+        apply: async () => {
+          await ctx.trello.setUrgency(ctx.cardId, ctx.boardId, body.data.urgent);
+          doc.urgency = after;
+        },
+        respond: { ok: true, urgency: after },
+      });
     },
   );
 
@@ -214,21 +267,20 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       }
 
       const dueIso = after === null ? null : composeDueIso(after, doc.trello_due_at ?? null);
-      try {
-        await ctx.trello.setDue(ctx.cardId, dueIso);
-        doc.trello_due = after;
-        doc.trello_due_at = dueIso ? new Date(dueIso) : null;
-        doc.registry_written_at = new Date();
-        await doc.save();
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'due.set', entity: kind, entity_id: ctx.cardId, before: { trello_due: before }, after: { trello_due: after } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, kind, due: after } });
-        res.json({ ok: true, trello_due: after });
-      } catch (err) {
-        const message = (err as Error).message;
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'due.set_failed', entity: kind, entity_id: ctx.cardId, before: { trello_due: before }, after: { attempted: after, error: message } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, kind, due: after } });
-        res.status(502).json({ ok: false, error: { code: 'TRELLO_WRITE_FAILED', message } });
-      }
+      await commitRegistryWrite(ctx, res, {
+        kind,
+        action: 'due',
+        field: 'trello_due',
+        before,
+        after,
+        stats: { due: after },
+        apply: async () => {
+          await ctx.trello.setDue(ctx.cardId, dueIso);
+          doc.trello_due = after;
+          doc.trello_due_at = dueIso ? new Date(dueIso) : null;
+        },
+        respond: { ok: true, trello_due: after },
+      });
     };
 
   router.patch(
@@ -271,21 +323,19 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         return;
       }
 
-      try {
-        await ctx.trello.setDifficulty(ctx.cardId, ctx.boardId, after);
-        doc.difficulty = after;
-        doc.registry_written_at = new Date();
-        await doc.save();
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'difficulty.set', entity: 'work_card', entity_id: ctx.cardId, before: { difficulty: before }, after: { difficulty: after } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: true, stats: { cardId: ctx.cardId, kind: 'work_card', difficulty: after } });
-        res.json({ ok: true, difficulty: after });
-      } catch (err) {
-        // local state untouched — the UI's optimistic change reverts (invariant 8)
-        const message = (err as Error).message;
-        await audit({ project_id: ctx.projectId, actor: ctx.actor, action: 'difficulty.set_failed', entity: 'work_card', entity_id: ctx.cardId, before: { difficulty: before }, after: { attempted: after, error: message } });
-        await SyncRun.create({ project_id: ctx.projectId, source: 'trello_write', ok: false, error: message, stats: { cardId: ctx.cardId, kind: 'work_card', difficulty: after } });
-        res.status(502).json({ ok: false, error: { code: 'TRELLO_WRITE_FAILED', message } });
-      }
+      await commitRegistryWrite(ctx, res, {
+        kind: 'work_card',
+        action: 'difficulty',
+        field: 'difficulty',
+        before,
+        after,
+        stats: { difficulty: after },
+        apply: async () => {
+          await ctx.trello.setDifficulty(ctx.cardId, ctx.boardId, after);
+          doc.difficulty = after;
+        },
+        respond: { ok: true, difficulty: after },
+      });
     },
   );
 

@@ -407,10 +407,19 @@ describe('the task due cell is the SAME W2 recipe, bound to the task card', () =
     expect(oneDoor).not.toContain('/workcards/');
     /* same optimistic contract on the task half, asserted as ORDER, not as a
        source snapshot (rule 1): the no-op comparison against the task's own
-       due must come BEFORE the network call, and a failure reverts + says so */
+       due must come BEFORE the network call, and a failure reverts + says so.
+       Both the optimistic set and the revert go through `patchWorkCard`, the
+       one door that RE-FINDS the card — the same shape the urgency and
+       difficulty handlers are held to below, for the same reason: a keypath
+       held across the await can land on another card, or on another project's
+       map after a switch. */
     const guardAt = taskHalf.search(/=== \(found\.card\.due/);
     expect(guardAt, 'no no-op comparison against the task due').toBeGreaterThan(-1);
-    expect(guardAt).toBeLessThan(taskHalf.indexOf('api.send'));
+    const sendAt = taskHalf.indexOf('api.send');
+    expect(guardAt).toBeLessThan(sendAt);
+    expect(taskHalf, 'the task due write does not patch the work-card store').toContain('patchWorkCard(cardId, { due:');
+    expect(taskHalf.indexOf('patchWorkCard(cardId'), 'nothing is set optimistically').toBeLessThan(sendAt);
+    expect(taskHalf.lastIndexOf('patchWorkCard(cardId'), 'the write never reverts').toBeGreaterThan(sendAt);
     expect(taskHalf).toContain('flashBanner');
   });
 
@@ -907,8 +916,14 @@ describe('the Pipeline urgency colour set is amber, tile and badge alike', () =>
       expect(props.length, `${v} declares nothing`).toBeGreaterThan(0);
       for (const p of props) expect(ALLOWED, `${v} sets "${p}", which is not paint`).toContain(p);
     }
-    // the difficulty badge shares it, so the two columns line up down the table
-    expect(cssRule('.ptable .col-diff .pbadge', PIPELINE_CSS)).toContain('width: 96px');
+    /* The difficulty pill wears `.ubadge` too — the rendered work-row cell is
+       `pbadge ubadge d-…`, asserted where the row is rendered — so that ONE
+       rule sizes both columns and they line up down the table. It also carried
+       a column-scoped box of its own until the 2026-09-05 simplification pass;
+       a second width rule can only drift from this one, so its ABSENCE is what
+       is asserted here, not a copy of the width in two places. */
+    expect(PIPELINE_CSS, 'a column-scoped difficulty-badge box came back')
+      .not.toMatch(/\.col-diff\s+\.pbadge[^{}]*\{[^}]*width/);
   });
 
   it('fills Urgent solid amber-600 with an amber-50 label, exactly as the node draws it', () => {
