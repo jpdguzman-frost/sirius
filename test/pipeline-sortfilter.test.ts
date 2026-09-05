@@ -200,6 +200,12 @@ describe('the sort set matches the frame exactly', () => {
     expect(recipe.pipeWorkKeys(rows[4], sel()).hard).toBe(recipe.DIFF_RANK.Hard);
     expect(recipe.pipeWorkKeys(rows[1], sel()).hard, 'no labelled child is keyless').toBe(null);
     expect(recipe.PIPE_SORTS.find((s) => s.key === 'hardest')!.derived).toBe(true);
+    /* review 2026-09-05, finding C1: a label outside the taxonomy — including
+       one that happens to name an Object.prototype member — is KEYLESS (B6),
+       never an inherited property masquerading as a rank */
+    for (const bad of ['constructor', 'toString', 'Very Hard']) {
+      expect(recipe.pipeWorkKeys(row({ work: [wc({ difficulty: bad })] }), sel()).hard, bad).toBe(null);
+    }
   });
 
   it('names sorts by the RESULTING ORDER, never column-plus-arrow', () => {
