@@ -201,7 +201,10 @@
                         whatever the template drew, so the read-only branch is
                         a courtesy, never the control. }}
                     <div class="gcell c-dl">
-                      {{#if writesEnabled}}
+                      {{! …and never on a row whose card has LEFT the board (status null):
+                          there is nothing to write to, and Apply would silently do
+                          nothing (review R4-1/R5-2). The read-only span says so. }}
+                      {{#if writesEnabled && row.status !== null}}
                         <div class="duewrap">
                           <button class="datefield {{row.deadline ? '' : 'missing'}} {{#if savingDeadline[row.cardId]}}saving{{/if}}"
                                   on-click="['openDuePopover', row.cardId]" disabled="{{savingDeadline[row.cardId] ? true : false}}"

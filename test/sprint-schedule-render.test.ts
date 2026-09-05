@@ -431,6 +431,16 @@ describe('the DEADLINE cell is the W2 setter, gated on the project (PLAN.md B13)
     expect(cell).not.toContain('duepop');
   });
 
+  it('stays read-only on a row whose card has LEFT the board, whatever the switch says', () => {
+    /* Review finding R4-1 / R5-2: an off-board row (status null — the card is
+       archived or gone) armed the setter, and Apply then did nothing at all.
+       There is nothing to write to, so the cell is the read-only span. */
+    const cell = dlCells(renderSprintSchedule({ sprintGroups: groupsOf(OFF_BOARD), writesEnabled: true }))[0]!;
+    expect(cell).toContain('class="datefield readonly');
+    expect(cell, 'an off-board row still renders a pressable date field').not.toContain('<button');
+    expect(cell).not.toContain('duepop');
+  });
+
   it('arms the trigger on a project whose writes are ON', () => {
     const cell = dlCells(renderSprintSchedule({ sprintGroups: groupsOf(PLOTTED), writesEnabled: true }))[0]!;
     expect(cell).toContain('class="duewrap"');

@@ -120,8 +120,11 @@ _last-verified: 2026-09-05_
 
 - **R-d2-p Unfinished work rolls forward by itself.** After every ARES sync
   tick (15 min — so a card that went done in Trello is seen before it would
-  roll), every plotted row whose card is active, carries a difficulty and does
-  not classify done: while its finish is before Manila's today, `starts_on`
+  roll), and only for a project whose LATEST read (a full sync or a push
+  drain) succeeded within the last 65 minutes — a failed or missing read
+  sits the tick out, its rows counted as skipped (review R3-1) — every
+  plotted row whose card is active, carries a difficulty and does not
+  classify done: while its finish is before Manila's today, `starts_on`
   advances one WORKING day (`workday(d, 1)`, weekends and the ARES calendar's
   holidays skipped) and the finish is recomputed by the engine. The bar
   translates WHOLE — never stretched to cover the delay. A Friday finish
@@ -139,7 +142,12 @@ _last-verified: 2026-09-05_
   card that never completes keeps moving indefinitely; a card in a
   client-review lane classifies ongoing and therefore rolls (#80 §2 watch
   item). Catch-up after downtime happens in one pass; a second pass writes
-  and audits nothing. [jp→miles #59 §3; #75 §2; #80 §2]
+  and audits nothing. The move is ONE conditional update keyed on what the
+  job read, so a row a PM rewrote in between is left alone (raced) and
+  re-read next tick; a move whose audit row does not land is taken back
+  (failed); a walk past the step cap leaves the row (capped); every project
+  gets one `sync_runs` row per run (source `rollover`, the five counts)
+  (review R3-2/R3-3/R3-5/R5-6). [jp→miles #59 §3; #75 §2; #80 §2]
 
 ## 5. Verification law
 

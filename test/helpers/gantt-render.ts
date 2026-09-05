@@ -432,14 +432,19 @@ export interface DeadlinesState {
  * `weekAtX`). A missing partial should fail the deadlines render, and nothing
  * else.
  */
-let dlCardPartialSrc: string | undefined;
+const dlCardPartialBySrc = new Map<string, string>();
 export function dlCardPartial(src: string = TEMPLATE): string {
-  if (dlCardPartialSrc !== undefined) return dlCardPartialSrc;
+  // memoised PER SOURCE — a memo that ignored its argument let a source with
+  // no partial pass on the first caller's slice (review finding R2-3)
+  const hit = dlCardPartialBySrc.get(src);
+  if (hit !== undefined) return hit;
   const marker = '{{#partial dlCard}}';
   const open = src.indexOf(marker);
   const close = src.indexOf('{{/partial}}', open);
   if (open < 0 || close < 0) throw new Error('gantt-render: no dlCard partial in the shipped template');
-  return (dlCardPartialSrc = src.slice(open + marker.length, close));
+  const slice = src.slice(open + marker.length, close);
+  dlCardPartialBySrc.set(src, slice);
+  return slice;
 }
 
 /**

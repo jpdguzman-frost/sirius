@@ -61,7 +61,8 @@ shape, unchanged), `setDue(cardId, isoDateTimeOrNull)`, and
   surfaces at most one reconcile later.
 - **Sprint Schedules rows follow the card, not the group**: a row is urgent iff *its* card
   carries the label. The MC-group inheritance of urgency (the 2026-08-2x #58 judgement) is
-  retired; deadline inheritance is untouched.
+  retired; deadline inheritance followed it on 2026-09-05 (block 3, owl #78 §2 — see §W2 below): a
+  row's deadline is its card's own due date or none.
 
 ## W2 semantics — due date
 

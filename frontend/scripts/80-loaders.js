@@ -323,6 +323,7 @@ async function loadAll() {
     capServer = pipeline.capacity.weekly; // server truth — the capacity rollback target
     app.set({
       rows: pipeline.rows,
+      dlToday: manilaToday(), // the Deadlines month follows the clock (R1-1)
       writesEnabled: pipeline.writesEnabled !== false,
       workCardsByMc: pipeline.workCardsByMc,
       unattachedWork: pipeline.unattachedWork || { cards: 0, mcNumbers: [] },

@@ -185,6 +185,12 @@ const app = new Ractive({
        query and the per-card formatters all left with the milestone tab
        (B9): a key that nothing renders is a key a reload can leave stale. */
     monthOffset: 0,
+    /* Manila's calendar day as STATE, refreshed by every loadAll, so the
+       month the tab shows follows the clock across midnight and a project
+       switch. Read inside a computed, `manilaToday()` is a clock read Ractive
+       cannot see, so the cached value would hold yesterday's month until
+       `monthOffset` moved (review finding R1-1). */
+    dlToday: manilaToday(),
     fmt: (iso) => fmtDate(iso),
     fmtLong: fmtLongIso,
     fmtLongIso, // the schedules cells call it by its own name (PLAN 2026-08-28)
@@ -424,7 +430,7 @@ const app = new Ractive({
        keys on. The Date constructor normalises the shifted month, so
        December plus one is the next January without a second branch. */
     dlMondays() {
-      const [y, m] = manilaToday().split('-').map(Number);
+      const [y, m] = this.get('dlToday').split('-').map(Number);
       const base = new Date(y, m - 1 + this.get('monthOffset'), 1);
       return dlMonthWeeks(base.getFullYear(), base.getMonth());
     },

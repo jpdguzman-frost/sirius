@@ -171,10 +171,13 @@
    card alone — a non-urgent card carries no bar at all, pale or otherwise —
    and it is a painted path rather than an edge on the box so it can follow the
    card's own corner curve. The card clips it, which is what keeps that curve
-   honest at the top and bottom. */
+   honest at the top and bottom. The frame's export carries a two-pixel inset —
+   the card's left edge is path x = 2 — so the view box starts THERE and the
+   band is the four pixels from the edge to the inner curve (review finding
+   R2-1/R5-1: a view box starting at minus two painted eight). */
 .dlquote {
   position: absolute; left: 0; top: 0; display: block;
-  width: 12px; height: 180px;
+  width: 8px; height: 180px;
   fill: var(--red-500);
 }
 
@@ -223,7 +226,7 @@
   margin: 0; min-height: 0;
   display: -webkit-box; -webkit-box-orient: vertical;
   -webkit-line-clamp: 3; line-clamp: 3;
-  overflow: hidden;
+  overflow: hidden; overflow-wrap: anywhere; /* an unbroken token wraps, so the three-line clamp holds (review R2-2) */
   font-size: var(--text-subtitle); font-weight: 500; line-height: 1.4; color: var(--surface-foreground);
 }
 

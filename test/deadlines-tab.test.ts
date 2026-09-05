@@ -373,10 +373,14 @@ describe('a card is on this tab only because someone put it there (#74 §1)', ()
        appeared as deadlines. A row with no `startsOn` has not been plotted; a
        row with no `finish` cannot be forecast (no difficulty label, or the
        card left the board) and has no day to sit on. Neither is drawn, and
-       neither rolls. */
+       neither rolls. The unplotted fixture carries a finish ON PURPOSE: the
+       server never emits that shape (a row without a start has no finish),
+       so it is the only way to prove the client's own half of the gate — a
+       revert proof that dropped the start check passed while both were null
+       (block 3 VALIDATE, proof P4). */
     const w = oneWeek([
       row(),
-      row({ id: 'i2', cardId: 'w2', startsOn: null, finish: null }),
+      row({ id: 'i2', cardId: 'w2', startsOn: null, finish: '2026-08-06' }),
       row({ id: 'i3', cardId: 'w3', startsOn: '2026-08-03', finish: null }),
     ]);
     expect(w.cards.map((c) => c.cardId)).toEqual(['w1']);
@@ -810,6 +814,26 @@ describe('the deadlines stylesheet keeps the rules the frame is made of', () => 
     expect(body).not.toContain('min-height');
   });
 
+  it('fixes the card’s WIDTH too, and fades the done card to exactly four tenths', () => {
+    /* Review finding R5-5: the height guard alone let the width go fluid and
+       the opacity drift to anything, both green. The node is three hundred
+       and eight wide; #75 §3 says four tenths, not "faded". */
+    expect(bodyOf('dlcard')).toMatch(/(?<![\w-])width:\s*308px/);
+    const faded = RULES.filter((r) => /(^|[^-])opacity\s*:/.test(r.body));
+    expect(faded[0]!.body).toMatch(/opacity\s*:\s*0?\.4(?![\d])/);
+  });
+
+  it('paints the quote bar red-500, FOUR pixels from the card’s edge (R2-1 / R5-1)', () => {
+    /* The frame's export carries a two-pixel inset — the card's left edge is
+       path x = 2 — so a view box that starts at minus two paints eight. The
+       box starts at two, is eight wide (the inner curve reaches x = 10), and
+       the band is the four pixels from the edge to the inner curve. */
+    const quote = bodyOf('dlquote');
+    expect(quote).toContain('fill: var(--red-500)');
+    expect(quote).toMatch(/(?<![\w-])width:\s*8px/);
+    expect(TEMPLATE).toContain('class="dlquote" viewBox="2 1 8 180"');
+  });
+
   it('gives the DONE card the only opacity on the tab', () => {
     /* #75 §3: a done card is the whole card at four tenths and nothing else.
        Swept rather than spot-checked — a second faded thing anywhere on this
@@ -947,6 +971,19 @@ describe('the milestone tab is gone whole, not hidden', () => {
  * ====================================================================== */
 
 describe('the month and the open lane are per-project view state', () => {
+  it('reads the Manila day from STATE the reload refreshes, never from a clock inside the computed', () => {
+    /* Review finding R1-1: `manilaToday()` inside a cached computed is a clock
+       read Ractive cannot see — the month shown at 23:59 stayed at 00:01 until
+       `monthOffset` moved. The day is state (`dlToday`), set with the rest of
+       the payload in loadAll, so the label follows the clock across midnight
+       and a project switch. */
+    const m = APP_JS.match(/dlMondays\(\)\s*\{([\s\S]*?)\n\s{4}\},/);
+    expect(m, 'the dlMondays computed is not where the state file keeps its computeds').not.toBeNull();
+    expect(m![1]).toContain("this.get('dlToday')");
+    expect(m![1]).not.toContain('manilaToday(');
+    expect(fnBody('loadAll')).toContain('dlToday: manilaToday()');
+  });
+
   it('resets both on a project switch', () => {
     /* The pre-existing gap: neither reset, so switching projects left the
        reader on another project's month with a lane open that names a week

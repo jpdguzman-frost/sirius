@@ -58,19 +58,27 @@ async function aresTick() {
  * the sync is what shows a card went done in Trello, and a done card does
  * not roll (#75 §3) — so a card finished over the weekend is seen as done
  * before Saturday's tick would have rolled it to Monday. The health gate and
- * the sync's own catch both return before reaching here.
+ * the sync's own catch both return before reaching here — and because
+ * `runAresSync` records a per-project failure without throwing, the gate
+ * that matters is the service's own (R3-1): a project rolls only on a fresh,
+ * successful `sync_runs` row of its own, and sits the tick out otherwise.
  *
  * Its own try/catch, so a rollover failure never masks the sync's own log
  * line above, and the sync's failure never reads as a rollover one. Dynamic
- * import in calendarTick's style. The holiday set this walks on is the one
- * calendarTick loaded into this process — it runs before the first ares
- * tick and daily after, so the worker's calendar is the ARES-canonical one.
+ * import in calendarTick's style. The holiday set this walks on is the
+ * ARES-canonical one: the stored calendar is loaded at boot (R3-4, below),
+ * calendarTick refreshes it before the first ares tick and daily after. The
+ * line prints the six counts (R3-3/R3-5): a row that raced, failed, or hit
+ * the walk's cap is an operator's signal, never a silent zero.
  */
 async function rolloverTick() {
   try {
     const { rollUnfinished } = await import('../src/services/rollover.ts');
     const res = await rollUnfinished();
-    console.log(`[sirius-worker] rollover: ${res.moved} moved (${res.projects} projects)`);
+    console.log(
+      `[sirius-worker] rollover: ${res.moved} moved, ${res.skipped} skipped, ${res.raced} raced, ` +
+        `${res.failed} failed, ${res.capped} capped (${res.projects} projects)`,
+    );
   } catch (err) {
     console.error('[sirius-worker] rollover failed:', (err as Error).message);
   }
@@ -128,6 +136,30 @@ async function calendarTick() {
   }
 }
 
+/**
+ * R3-4: the STORED calendar first, the way server.js loads it at boot. A
+ * fresh process holds lib/calendar's static seed; calendarTick replaces it
+ * only when the ARES daily surface answers, and "previous calendar kept" in
+ * a fresh process would be the seed — so a restart during an ARES outage
+ * would walk rollover on holidays the web process does not have. Loading
+ * the persisted set here makes the two processes agree before the first
+ * forecast-consuming tick, whether or not the live fetch succeeds.
+ */
+async function loadStoredCalendar() {
+  try {
+    const { loadCalendar } = await import('../src/services/calendar-sync.ts');
+    const loaded = await loadCalendar(mongoose.connection);
+    console.log(
+      loaded
+        ? '[sirius-worker] calendar: stored ARES set loaded'
+        : '[sirius-worker] calendar: no stored set — seed holidays active until the first calendar sync',
+    );
+  } catch (err) {
+    console.error('[sirius-worker] calendar load failed:', (err as Error).message);
+  }
+}
+
+await loadStoredCalendar(); // the persisted ARES set, before anything forecasts (R3-4)
 await calendarTick(); // before the first forecast-consuming sync
 await aresTick();
 await intakeTick().catch((err) => console.error('[sirius-worker] intake sync failed:', err.message));

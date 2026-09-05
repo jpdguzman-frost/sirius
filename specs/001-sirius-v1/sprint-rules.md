@@ -179,7 +179,9 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
   gated on `writesEnabled` (UX only: `writeGuards` enforces server-side).
   `saving…` shows in flight and the trigger is disabled for the flight. A
   row with no deadline reads `Select Date` (writes on) / `No Due Date`
-  (writes off) — the em-dash left this cell. Pipeline only REFLECTS the date.
+  (writes off) — the em-dash left this cell. A row whose card has LEFT the
+  board is read-only whatever the switch says: nothing to write to (review
+  R4-1). Pipeline only REFLECTS the date.
   [#78 §2;
   PLAN block 3 B12/B13; `test/sprint-schedule-render.test.ts`]
 - **R9-b** A row's deadline is the card's OWN Trello due date or none. The MC
@@ -190,6 +192,10 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
 - **R9-c** The write's reload is what re-derives the tick and `late`; nothing
   client-side recomputes either. The cell wears the `missing` dress only — no
   overdue tint here, because the tick and the red bar already say late.
+  Known, kept for parity with Pipeline: a scroll outside the popover — the
+  gantt's sideways scroll included, although the sticky trigger does not move —
+  dismisses it and discards a staged date (the shared dismisser; review R4-2,
+  backlog).
 - **R9-d** Rollover (deadlines-rules.md §4) moves `starts_on` server-side; the
   bar translates whole and the FORECASTED cell moves with it by construction;
   sprint membership follows the card's finish day. No marker on the row.
