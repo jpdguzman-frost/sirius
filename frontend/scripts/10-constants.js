@@ -395,8 +395,9 @@ const pipeTiebreak = (a, b, keyless) => {
 
 /* Keyless last, always — before direction is applied, so it holds both ways.
    Compares two DECORATED entries `{ r, v, f, m }` — row, sort value, filedAt,
-   MC rank — never two rows: see pipeSortRows. Every tie goes to pipeTiebreak,
-   so the order is total and never falls back to the array's own. */
+   MC rank — never two rows: see pipeSortRows. Every tie goes to pipeTiebreak;
+   only a pair equal on key, filedAt AND MC rank keeps the array's own order
+   (2026-09-05 block 4 review, finding 2). */
 const pipeCompare = (sort, a, b) => {
   const ae = unranked(a.v);
   const be = unranked(b.v);
@@ -576,7 +577,9 @@ const pipeWorkKeys = (row, sel) => {
   let hard = null;
   for (const w of kids) {
     if (w.due && (due === null || w.due < due)) due = w.due;
-    const rank = DIFF_RANK[w.difficulty] || null;
+    // own keys only (2026-09-05 block 4 review, finding 1): the mapper and W3 hold the wire
+    // vocabulary; this holds the key to number|null as B6 promises, never an inherited function
+    const rank = Object.hasOwn(DIFF_RANK, w.difficulty) ? DIFF_RANK[w.difficulty] : null;
     if (rank !== null && (hard === null || rank > hard)) hard = rank;
   }
   return { due, urgent: kids.length ? (kids.some((w) => w.urgency === 'Urgent') ? 1 : 0) : null, hard };

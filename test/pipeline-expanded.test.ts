@@ -493,6 +493,7 @@ interface OpenHarness {
   auto(): boolean;
   open(): Record<string, boolean>;
   kids(): Record<string, WorkCardRow[]>;
+  rows(): PipeRow[];
 }
 
 /* The four block-4 computeds EXECUTED out of the shipped scripts, with the
@@ -537,6 +538,7 @@ const openHarness = (): OpenHarness =>
       auto: () => computed.pipeAutoOpen.call(ctx),
       open: () => computed.pipeOpen.call(ctx),
       kids: () => computed.pipeKids.call(ctx),
+      rows: () => computed.pipelineRows.call(ctx),
     };
   `)() as OpenHarness;
 
@@ -576,7 +578,30 @@ describe('a work-card axis or a work-card-derived sort opens the groups it expla
     expect(h.auto()).toBe(true);
     const open = h.open();
     expect(open['MC-837']).toBe(true);
-    expect(open['MC-901'], 'a childless MC opened').toBeFalsy();
+    // drift E2: under a work axis a childless group is not in the table at
+    // all — it has no child to match — so pipeOpen carries no entry for it;
+    // the hasTasks gate itself is proven by the derived-sort loop below, where
+    // nothing filters it out (2026-09-05 block 4 review, finding 9)
+    expect('MC-901' in open).toBe(false);
+  });
+
+  it('ORDERS the table by the key read over the MATCHING children — through the shipped computed, selection and all (B5)', () => {
+    /* `pipelineRows` had never been executed for ORDER here: the sort, or the
+       `sel` its pipeSortRows call passes, could go and every test stayed
+       green (2026-09-05 block 4 review, finding 5). The rule: a Deadline key
+       is the earliest MATCHING child's `due`, so the same group keys
+       differently once Urgent narrows its children. */
+    const h = openHarness();
+    h.set('workCardsByMc', {
+      'MC-a': [task({ cardId: 'a-quiet', due: '2026-09-01' }), task({ cardId: 'a-urgent', urgency: 'Urgent', due: '2026-09-20' })],
+      'MC-b': [task({ cardId: 'b-urgent', urgency: 'Urgent', due: '2026-09-10' })],
+    });
+    h.set('rows', [row({ cardId: 'a', mcNumber: 'MC-a' }), row({ cardId: 'b', mcNumber: 'MC-b' })]);
+    h.set('pipeSort', 'due-near');
+    const order = () => h.rows().map((r) => r.cardId);
+    expect(order(), 'nothing live: a leads on its quiet child').toEqual(['a', 'b']);
+    filters(h, { urgency: ['Urgent'] });
+    expect(order(), 'Urgent live: a keys on its urgent child and trails').toEqual(['b', 'a']);
   });
 
   it('opens under EACH work-card-derived sort — the Deadline pair and the Priority pair — and under no other', () => {
@@ -683,11 +708,20 @@ describe('a work-card axis or a work-card-derived sort opens the groups it expla
        hand-collapse (auto-open on → `pipeShut`) or a hand-open (off →
        `expanded`); a handler that toggled a map directly would write the
        wrong truth half the time. The keyboard path keeps its childless
-       refusal in front of the door (R-exp-c). */
-    const door = fnBody('toggleMc');
-    expect(door).toContain("app.get('pipeAutoOpen')");
-    expect(door).toContain('pipeShut.${mc}');
-    expect(door).toContain('expanded.${mc}');
+       refusal in front of the door (R-exp-c). EXECUTED, not read for its
+       keypaths — the two maps swapped still contained both names (2026-09-05
+       block 4 review, finding 6). */
+    const calls: string[] = [];
+    const reads: string[] = [];
+    const knock = (auto: boolean) =>
+      new Function('app', `function toggleMc(mc) ${fnBody('toggleMc')}\n toggleMc('MC-837');`)({
+        get: (k: string) => { reads.push(k); return auto; },
+        toggle: (k: string) => calls.push(k),
+      });
+    knock(true);
+    knock(false);
+    expect(calls, 'auto-open on → pipeShut, off → expanded').toEqual(['pipeShut.MC-837', 'expanded.MC-837']);
+    expect(reads).toEqual(['pipeAutoOpen', 'pipeAutoOpen']);
     for (const h of ['toggleGroup', 'pipeRowKey']) {
       const body = handlerBody(h);
       expect(body, `${h} does not use the door`).toContain('toggleMc(');

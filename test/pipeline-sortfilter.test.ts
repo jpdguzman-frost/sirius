@@ -313,14 +313,16 @@ describe('the Deadline sorts key on the EARLIEST matching child, and ignore the 
     expect(recipe.pipeWorkKeys(r, sel()).due).toBe('2026-03-15');
   });
 
-  it('compares the Manila day strings AS STRINGS — the same key in both TZs', () => {
-    /* test/CLAUDE.md rule 5: a Date built from '2026-03-15' lands on the 14th
-       or the 15th depending on the process TZ. The key is the wire string
-       itself, unchanged — asserted by identity, which a Date round-trip
-       cannot pass. */
+  it('keys on the wire string ITSELF — pipeWorkKeys never touches Date, so the key is the same in both TZs', () => {
+    /* test/CLAUDE.md rule 5: no Date math on `due`. Identity alone does not
+       prove it — UTC and Asia/Manila both sit at or ahead of UTC, so a Date
+       plus local getters round-trips '2026-03-15' intact under either — hence
+       the assertion on the comment-stripped body (2026-09-05 block 4 review,
+       finding 7). */
     const r = row({ work: [wc({ due: '2026-03-15' })] });
     expect(recipe.pipeWorkKeys(r, sel()).due).toBe('2026-03-15');
     expect(typeof recipe.pipeWorkKeys(r, sel()).due).toBe('string');
+    expect(decl(APP_JS_CODE, 'pipeWorkKeys')).not.toMatch(/\bDate\b/);
   });
 
   it('reads the key over the MATCHING children only — a filtered-out sibling cannot set it', () => {
@@ -572,7 +574,7 @@ describe('a category counts against the OTHER categories, never its own', () => 
     expect(forOthers.map((r) => r.cardId)).toEqual(['a']); // …but the other axis sees the narrowing
   });
 
-  it('counts GROUPS on a work-card axis — a group with two Urgent cards is one Urgent (B4)', () => {
+  it('counts MAIN ROWS on a work-card axis — two Urgent cards in one group is one Urgent, two rows on one MC are two (B4)', () => {
     /* the row unit the table draws and pages is the main row; a count of
        cards would read "3 Urgent" over a table that shows one group. */
     const rows = [
@@ -582,6 +584,14 @@ describe('a category counts against the OTHER categories, never its own', () => 
     ];
     const urgency = recipe.pipeFacetList(rows, sel()).find((f) => f.key === 'urgency')!;
     expect(urgency.values.map((v) => [v.label, v.count])).toEqual([['Non-Urgent', 2], ['Urgent', 1]]);
+    /* …and the unit is the ROW, not the MC: siblings on a shared MC carry the
+       same `work` (invariant 3 — MC-825's 99 rows read Urgent 99 with one
+       urgent card), and every one is a row the table draws (2026-09-05 block 4
+       review, finding 4) */
+    const shared = [wc({ urgency: 'Urgent' })];
+    const siblings = [row({ cardId: 'a', mcNumber: 'MC-825', work: shared }), row({ cardId: 'b', mcNumber: 'MC-825', work: shared })];
+    const onShared = recipe.pipeFacetList(siblings, sel()).find((f) => f.key === 'urgency')!;
+    expect(onShared.values.map((v) => [v.label, v.count])).toEqual([['Urgent', 2]]);
   });
 
   it('ignores its OWN axis on a work axis too, and sees the other work axis’s narrowing', () => {
@@ -731,9 +741,12 @@ describe('absence is selectable on the axis that can lack a value', () => {
        for. The RULE is untouched: an axis whose subject can carry no value
        must offer the absence. URGENCY offers none because every card carries
        one (Non-Urgent IS the absence of the label, and it is a value); STATUS
-       because every card sits in a Trello list. */
+       because every card sits in a Trello list. The URGENCY half was vacuous
+       while every fixture card carried an urgency: `w3` carries none at all,
+       and the axis still offers no None (2026-09-05 block 4 review,
+       finding 8). */
     const rows = [
-      row({ cardId: 'a', mcNumber: 'MC-1', work: [wc()] }),
+      row({ cardId: 'a', mcNumber: 'MC-1', work: [wc(), { cardId: 'w3', name: 'lean', difficulty: null, due: null }] }),
       row({ cardId: 'b', mcNumber: 'MC-2', assetType: 'Icon', currentList: 'Design', work: [wc({ difficulty: 'Easy' })] }),
     ];
     const labels = (k: string) => facet(rows, k).values.map((v) => v.label);
@@ -1210,10 +1223,13 @@ describe('the filter indicator says what is filtered, in words', () => {
   it('counts the axes in its prose the way the consts count them', () => {
     /* the template and the stylesheet both explain the wrap by saying how
        many axes can be filtered at once; the number is the axis table's, and
-       "five" (owl #62's panel) survived block 1 unread */
+       "five" (owl #62's panel) survived block 1 unread. DERIVED from the
+       table's length, not a ban on one word (2026-09-05 block 4 review,
+       finding 10); both read RAW prose by design (test/CLAUDE.md rule 3). */
     expect(recipe.PIPE_FILTERS).toHaveLength(4);
-    expect(TEMPLATE).not.toContain('five axes');
-    expect(PIPELINE_CSS).not.toContain('five axes');
+    const word = ['zero', 'one', 'two', 'three', 'four', 'five', 'six'][recipe.PIPE_FILTERS.length]!;
+    expect(TEMPLATE).toContain(word + ' axes');
+    expect(PIPELINE_CSS).toContain(word + ' axes');
   });
 
   it('TRIMS a long value instead of letting one chip take the row', () => {
@@ -1396,6 +1412,26 @@ describe('the filter indicator says what is filtered, in words', () => {
     const at = APP_JS_CODE.indexOf("app.observe('searchQ'");
     expect(at, 'no observer on searchQ').toBeGreaterThan(-1);
     expect(APP_JS_CODE.slice(at, APP_JS_CODE.indexOf(');', at))).toContain('pipeBackToTop()');
+  });
+
+  it('returns the PAGE to the top, not only the table box — the box scrolls sideways, the page scrolls down', () => {
+    /* 2026-09-05 block 4 review, finding 3: `.pscroll` has no vertical
+       overflow, so resetting its scrollTop alone left every R-pf-h caller and
+       the searchQ observer returning nobody anywhere. The shipped body runs
+       against a fake resolver and a fake document; that the page really lands
+       at scrollY 0 is the live pass's to measure. */
+    const run = (doc: Record<string, unknown>) => {
+      const box = { scrollTop: 480 };
+      new Function('scrollerOf', 'document', `function pipeBackToTop() ${fnBody('pipeBackToTop')}\n pipeBackToTop();`)(() => box, doc);
+      return box.scrollTop;
+    };
+    const page = { scrollTop: 900 };
+    expect(run({ scrollingElement: page, documentElement: { scrollTop: 1 } }), 'the table box').toBe(0);
+    expect(page.scrollTop, 'the page').toBe(0);
+    // no scrollingElement (an older engine): the root element is the page
+    const root = { scrollTop: 900 };
+    expect(run({ scrollingElement: null, documentElement: root })).toBe(0);
+    expect(root.scrollTop).toBe(0);
   });
 
   it('names the axis in each ✕’s accessible name', () => {

@@ -95,6 +95,11 @@ function pipeBackToTop() {
   // to find a different one tomorrow.
   const el = scrollerOf(null);
   if (el) el.scrollTop = 0;
+  // the PAGE is the vertical scroller — the table box only scrolls sideways —
+  // so without this line nobody was returned anywhere (2026-09-05 block 4
+  // review, finding 3)
+  const doc = document.scrollingElement || document.documentElement;
+  if (doc) doc.scrollTop = 0;
 }
 
 /* THE ONE DOOR FOR A GROUP TOGGLE — the chevron and the row's Enter both come
