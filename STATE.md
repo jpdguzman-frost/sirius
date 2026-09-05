@@ -15,7 +15,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 |---|---|---|---|
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12**; T073/T091 ⏸, T075 pending | write-enable on rt-837 = next JP gate |
-| 18g | **Deadlines part 2 · the W2 setter on Sprint Schedules · Pipeline DEADLINE read-only** (owls #74/#75/#78 §2, #80 §2): the tab rebuilt on the work-card unit over the schedule's own rows; the ROLLOVER job (gated on a fresh read, conditional update, audit-or-revert, a `sync_runs` row per project); W2's deliverable half deleted, inheritance retired; conflicts/acks/day-plan PARKED server-side (JP 2026-09-05) | **BUILT + E2E'd 2026-09-05, NOT deployed — JP's gate** (build `36e1976` · review `4086dc3` · simplify `7a930d8`): VALIDATE ×4, 30 proofs, review 18 (13 stood), simplify 24/31, real pointer on the local rt-test copy. Queue: #77 §1–4 → W4 |
+| 18g | **Deadlines part 2 · the W2 setter on Sprint Schedules · Pipeline DEADLINE read-only** (owls #74/#75/#78 §2, #80 §2): the tab rebuilt on the work-card unit over the schedule's own rows; the ROLLOVER job (gated on a fresh read, conditional update, audit-or-revert, a `sync_runs` row per project); W2's deliverable half deleted, inheritance retired; conflicts/acks/day-plan PARKED server-side (JP 2026-09-05) | **DEPLOYED 2026-09-05** (`6b113c1`, JP's ship; build `36e1976` · review `4086dc3` · simplify `7a930d8`): VALIDATE ×4, 30 proofs, review 18 (13 stood), simplify 24/31, real pointer on the local rt-test copy; live healthz 200 ×3, every new marker in the bundle and none of the old, the worker's first tick rolled two rt-test rows (rt-837: none), urgency smoke green. Queue: #77 §1–4 → W4 |
 | 19 | **The ARES-sourced, tag-classified cycle-time model** (T179–T183, ~3–4d) — replaces the inter-event dwell derivation that produced `Medium/design = 0.13d`. Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
 
 **Build health (2026-09-05):** 1335/1335 tests + 24 `it.todo`, 64 files — green
@@ -55,8 +55,8 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
   before building on one. **Thread**: miles→jp acked through **#71** + #76, #78, #79;
-  **#72/#73 UNACKED** (screens pending), **#74/#75 processed** (ack rides with #64), **#77 open** (block 5), **#80 §2 processed**, §1/§3/§4 open (W4);
-  jp→miles sent through **#63**; **#64 DRAFTED** (block 3: six calls to veto, three node-vs-prose findings, the acks retirement, the lane-mapping reminder) — send on JP's word; **#62 sent** 2026-09-05 on JP's yes (block 4); **#63 sent** 2026-09-05 on JP's yes (block 2: five calls to veto, three held, the §4 checks answered). Product is fixing frame defects; **until they
+  **#72/#73 UNACKED** (screens pending), **#74/#75 ACKED** with #64, **#77 open** (block 5), **#80 §2 processed**, §1/§3/§4 open (W4);
+  jp→miles sent through **#64** (block 3, 2026-09-05 on JP's yes: six calls to veto, three node-vs-prose findings, the acks retirement, the lane-mapping reminder); **#62 sent** 2026-09-05 on JP's yes (block 4); **#63 sent** 2026-09-05 on JP's yes (block 2: five calls to veto, three held, the §4 checks answered). Product is fixing frame defects; **until they
   confirm, this build is authoritative over those frames** — including the
   past-deadline legend reworded 2026-08-27. **Awaiting Miles**: the Deadlines
   acknowledged-state design (R-dl-n), and a ruling on the reworded legend.
@@ -108,6 +108,6 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
-- 2026-09-05 (evening) — **Deadlines part 2 + the W2 setter + Pipeline read-only** (owls #74/#75/#78 §2): 46-row drift, two asks (acks retired from the screen; build); review's headline the 8px quote bar (the frame's 2px export inset) and the rollover's four gaps; real pointer end to end incl. a roll across a sprint boundary. NOT deployed — JP's gate. → docs/history/state-log/2026-09-05.md
+- 2026-09-05 (evening) — **Deadlines part 2 + the W2 setter + Pipeline read-only** (owls #74/#75/#78 §2): 46-row drift, two asks (acks retired from the screen; build); review's headline the 8px quote bar (the frame's 2px export inset) and the rollover's four gaps; real pointer end to end incl. a roll across a sprint boundary. DEPLOYED 2026-09-05. → docs/history/state-log/2026-09-05.md
 - 2026-09-05 (later still) — **Sprint Schedules search-based add + Add All** (owl #77 §0): 31-row drift, the batch route re-asserts the sprint, real pointer on the local rt-test copy. DEPLOYED 2026-09-05. → docs/history/state-log/2026-09-05.md
 - 2026-09-05 (later) — **Pipeline filter + sort rework** (owl #78 §4/§5): 49-row drift, B12 facet arithmetic amended mid-build, the back-to-top rule fixed. DEPLOYED 2026-09-05. → docs/history/state-log/2026-09-05.md
