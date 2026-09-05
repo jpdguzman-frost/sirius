@@ -293,3 +293,33 @@ one home instead of two.
     a note, which can be any length — uncapped, a long one runs off the
     viewport where no pointer can reach it. This is the note chip's one
     documented deviation from the shared recipe.
+
+## 8. Adding work cards — the search row (owl #77 §0, 2026-09-05)
+
+Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns. Add All is the point: no confirmation, no count-check.
+
+- **R8-a** One always-visible search row at the END of every sprint's rows,
+  inside the collapse gate; 77px in every state, field FILLs, placeholder
+  `Search by MC# or Work Card to add to sprint`; nothing below it at rest,
+  no Add All. Only the field's right edge moves on the first keystroke.
+- **R8-b** Query: trim, lowercase, whitespace-split; a card matches when
+  EVERY token is a substring of `MC-NNN: <full name>`. No cap: the list IS the
+  set.
+- **R8-c** Pool = the server's `addable`; order MC rank ascending, unrankable
+  last, then the server's order inside an MC — never re-sorted client-side.
+- **R8-d** Matches: Add All blue-600; rows 54px, Add blue-300 → blue-600
+  WITH the label → 600 on ROW hover/focus-within. No matches: Add All
+  slate-400 inert; one muted `No cards found for this query` row. Two blue
+  TOKENS, never opacity.
+- **R8-e** Add All = ONE batch request, the listed ids in list order; skips
+  never fail it and are bannered AFTER the reload; the query clears iff
+  something landed and the field still holds the query sent. A single Add
+  keeps the query.
+- **R8-f** Rows land UNPLOTTED (#72 §6); no + on the search or result rows.
+- **R8-g** One add in flight per screen: every sprint's links inert until
+  the reload. Not the placement lock.
+- **R8-h** Escape empties the query; Enter inert. Focus RETURNS to the field
+  after a reload only when nothing holds it. A stale refusal reloads first.
+- **R8-i** Server: the sprint is re-asserted AFTER the batch (gone → rows
+  taken back, audited, 409); an audit row failing takes its row back (500
+  PARTIAL says how far it got); one audit row per created row.
