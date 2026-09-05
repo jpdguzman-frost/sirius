@@ -307,13 +307,16 @@ async function loadAll() {
     pipeline.rows.forEach((r) => {
       r.blob = `${r.displayId} ${r.mcNumber || ''} ${r.name} ${r.assetType || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
       r.warning = rowWarning(r);
-      /* the childless-chevron test (owl #45 / R-exp-c) is derived per-row data
-         too, so it is stamped, not asked in the template (performance law).
-         Truthiness suffices: the server only creates a key by pushing into it,
-         so a present key always holds at least one task. rows and
-         workCardsByMc land in the same app.set below, so the stamp cannot
-         desync from the map it derives from. */
-      r.hasTasks = !!pipeline.workCardsByMc[r.mcNumber];
+      /* the row's own WORK CARDS (owl #78 §4/§5; PLAN.md B2/B5): the two
+         work-card filter axes and the four derived sorts read them per row
+         through pipeWorkKids, so the list is stamped here once rather than
+         looked up by MC inside every match and every sort key. The SAME
+         array the map holds, not a copy — rows and workCardsByMc land in the
+         same app.set below, so the two cannot desync. The childless-chevron
+         test (owl #45 / R-exp-c) derives from it: stamped, not asked in the
+         template (performance law). */
+      r.work = pipeline.workCardsByMc[r.mcNumber] || [];
+      r.hasTasks = r.work.length > 0;
       /* WHICH row the task list hangs under is NOT stamped here. It depends
          on the rows as rendered, and a filter or a sort changes them — see the
          `pipeMcAnchor` computed, which derives it from the visible order. A
@@ -451,6 +454,17 @@ app.observe('pipeFilters', () => {
   const open = app.get('chipPop');
   if (open && !(app.get(`pipeFilters.${open}`) || []).length) app.set('chipPop', null);
 }, { init: false });
+/* THE HAND-COLLAPSE OVERRIDES RESET WITH THEIR TRIGGER (owl #78 §4/§5;
+   PLAN.md B10). `pipeShut` means something only while a work-card axis or a
+   derived sort is live; a change to either is a new question, and a group the
+   reader folded under the last one reopens under this one. Once nothing is
+   live any more, `expanded` is the whole truth again, with nothing carried
+   over from the auto-open spell. */
+app.observe('pipeFilters pipeSort', () => app.set('pipeShut', {}), { init: false });
+/* R-pf-h closed for search (PLAN.md, item 7): every other narrowing returns
+   the reader to the top from its own handler; the search box writes `searchQ`
+   through its binding and has no handler, so the rule is stated here. */
+app.observe('searchQ', () => pipeBackToTop(), { init: false });
 
 app.observe('requests', () => {
   const last = app.get('reqPageCount');

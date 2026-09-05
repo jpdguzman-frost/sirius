@@ -20,6 +20,15 @@
  * cells. REQUESTOR left Pipeline altogether (#78 §3). TYPE is the one term of
  * R-exp-b that survives, and it survives unchanged.
  *
+ * BLOCK 4, same day (owl #78 §4/§5): expansion is no longer the reader's
+ * hand alone. A work-card filter axis or a work-card-DERIVED sort opens every
+ * group it explains (`pipeOpen`), a hand-collapse survives until the trigger
+ * changes (`pipeShut`, B10), a childless MC never opens, and inside an
+ * auto-opened group only the MATCHING children are drawn (`pipeKids`, B3).
+ * The template gates on those two computeds now, not on `expanded` and
+ * `workCardsByMc` — section E executes the computeds out of the shipped
+ * scripts and renders the gate both ways.
+ *
  * Like every suite here: `toHTML()` has no layout, no pointer and no clock,
  * so widths, row heights and the live due write are the live pass's to
  * prove. This file proves structure, wiring and recipes.
@@ -36,6 +45,8 @@ import {
   type PipeRow,
   type WorkCardRow,
   cssRule,
+  decl,
+  divFragment,
   fnBody,
   handlerBody,
   method,
@@ -454,6 +465,10 @@ describe('expansion is per-project view state', () => {
     // project B. The reset block is the same one the other per-project view
     // state uses.
     expect(fnBody('resetForProjectSwitch')).toContain('expanded: {}');
+    /* block 4: the hand-collapse map is keyed on mc_number too, so it carries
+       the same cross-project hazard and resets beside `expanded` — not
+       instead of it: the two are different truths (auto-open on / off) */
+    expect(fnBody('resetForProjectSwitch')).toContain('pipeShut: {}');
   });
 
   it('keeps multi-expand — the template keys each group on its own mcNumber', () => {
@@ -464,6 +479,260 @@ describe('expansion is per-project view state', () => {
       expanded: { 'MC-837': true, 'MC-850': true },
     });
     expect(taskRows(both)).toHaveLength(3);
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* E2 — block 4 (owl #78 §4/§5): auto-open, hand-collapse, narrowed kids   */
+/* ---------------------------------------------------------------------- */
+
+interface OpenHarness {
+  set(key: string, value: unknown): void;
+  empty(): Record<string, (string | null)[]>;
+  live(): boolean;
+  auto(): boolean;
+  open(): Record<string, boolean>;
+  kids(): Record<string, WorkCardRow[]>;
+}
+
+/* The four block-4 computeds EXECUTED out of the shipped scripts, with the
+   computeds they read resolved through the same `get` — the executed-computed
+   idiom the `kpi` block below and test/pipeline-sortfilter.test.ts share. A
+   source-text assertion could show `pipeOpen` exists without showing it ever
+   opens a group, or that it refuses a childless one.
+
+   `set` re-stamps `work`/`hasTasks` on the rows the way `loadAll` does, so
+   the computeds read the row shape the browser hands them; the stamp itself
+   is guarded at its source below ("stamps hasTasks in loadAll"). */
+const openHarness = (): OpenHarness =>
+  new Function(`
+    ${decl(APP_JS, 'DIFF_RANK')}
+    ${decl(APP_JS, 'PIPE_SORTS')}
+    ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
+    ${decl(APP_JS, 'pipeTiebreak')}
+    ${decl(APP_JS, 'pipeCompare')}
+    ${decl(APP_JS, 'pipeSortRows')}
+    ${decl(APP_JS, 'PIPE_COLS')}
+    ${decl(APP_JS, 'pipeColLabel')}
+    ${decl(APP_JS, 'PIPE_FILTERS')}
+    ${decl(APP_JS, 'unranked')}
+    ${decl(APP_JS, 'alphaSort')}
+    ${decl(APP_JS, 'pipePick')}
+    ${decl(APP_JS, 'pipeValueLabel')}
+    ${decl(APP_JS, 'PIPE_FILTERS_EMPTY')}
+    ${decl(APP_JS, 'pipeWorkMatch')}
+    ${decl(APP_JS, 'pipeWorkKids')}
+    ${decl(APP_JS, 'pipeValues')}
+    ${decl(APP_JS, 'pipeWorkKeys')}
+    ${decl(APP_JS, 'pipeMatches')}
+    ${decl(APP_JS, 'mcRank')}
+    const computed = { ${['pipeSearched', 'pipelineRows', 'pipeWorkLive', 'pipeAutoOpen', 'pipeOpen', 'pipeKids'].map((n) => method(n)).join(', ')} };
+    const DATA = { rows: [], searchQ: '', pipeFilters: PIPE_FILTERS_EMPTY(), pipeSort: null, expanded: {}, pipeShut: {}, workCardsByMc: {} };
+    const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k) ? computed[k].call(ctx) : DATA[k]) };
+    const stamp = () => DATA.rows.forEach((r) => { r.work = DATA.workCardsByMc[r.mcNumber] || []; r.hasTasks = r.work.length > 0; });
+    return {
+      set: (k, v) => { DATA[k] = v; stamp(); },
+      empty: () => PIPE_FILTERS_EMPTY(),
+      live: () => computed.pipeWorkLive.call(ctx),
+      auto: () => computed.pipeAutoOpen.call(ctx),
+      open: () => computed.pipeOpen.call(ctx),
+      kids: () => computed.pipeKids.call(ctx),
+    };
+  `)() as OpenHarness;
+
+describe('a work-card axis or a work-card-derived sort opens the groups it explains (block 4)', () => {
+  const URGENT_HARD = task({ cardId: 'task-u', name: 'MC-837 Render Icon: Urgent one', urgency: 'Urgent', difficulty: 'Hard' });
+  const QUIET = task({ cardId: 'task-q', name: 'MC-837 Render Icon: Quiet one', due: null });
+  const KIDS: Record<string, WorkCardRow[]> = { 'MC-837': [URGENT_HARD, QUIET] };
+  const DERIVED = ['due-near', 'due-far', 'urgent', 'hardest'];
+  const PLAIN = ['started', 'completed', 'mc', 'mc-desc', 'name', 'name-desc', null];
+
+  /** a harness holding the two-group table: MC-837 with work, MC-901 with none */
+  const table = () => {
+    const h = openHarness();
+    h.set('workCardsByMc', KIDS);
+    h.set('rows', [{ ...PARENT }, { ...CHILDLESS }]);
+    return h;
+  };
+  const filters = (h: OpenHarness, over: Record<string, (string | null)[]>) => h.set('pipeFilters', { ...h.empty(), ...over });
+
+  it('reads "a work axis is live" off the WORK axes only — a Type or Status pick opens nothing', () => {
+    const h = table();
+    filters(h, { type: ['Icon'] });
+    expect(h.live()).toBe(false);
+    expect(h.auto()).toBe(false);
+    filters(h, { urgency: ['Urgent'] });
+    expect(h.live()).toBe(true);
+    filters(h, { difficulty: [null] });
+    expect(h.live(), 'None on DIFFICULTY is a live work selection too').toBe(true);
+  });
+
+  it('opens every group with a matching child under a work filter — and never a childless MC', () => {
+    /* Miles: "filtering auto-expands main cards" (E1). The reader asked for
+       urgent work; the group opens on it. `expanded` stays EMPTY throughout,
+       so nothing but the filter can be what opened it. */
+    const h = table();
+    filters(h, { urgency: ['Urgent'] });
+    expect(h.auto()).toBe(true);
+    const open = h.open();
+    expect(open['MC-837']).toBe(true);
+    expect(open['MC-901'], 'a childless MC opened').toBeFalsy();
+  });
+
+  it('opens under EACH work-card-derived sort — the Deadline pair and the Priority pair — and under no other', () => {
+    /* S6: an order the reader cannot see the basis for looks arbitrary, so
+       every reordered group opens to show it. A childless MC is still in the
+       table under a sort (nothing filters it out) and still stays shut —
+       there is nothing to show. Under the six main-row sorts and the default,
+       the hand state is the only truth, and here it is empty. */
+    for (const key of DERIVED) {
+      const h = table();
+      h.set('pipeSort', key);
+      expect(h.auto(), `${key} does not auto-open`).toBe(true);
+      expect(h.open()['MC-837'], `${key} left the group shut`).toBe(true);
+      expect(h.open()['MC-901'], `${key} opened a childless MC`).toBeFalsy();
+    }
+    for (const key of PLAIN) {
+      const h = table();
+      h.set('pipeSort', key);
+      expect(h.auto(), `${key} auto-opens`).toBe(false);
+      expect(h.open()['MC-837'], `${key} opened a group by itself`).toBeFalsy();
+    }
+  });
+
+  it('keeps a HAND-collapsed group shut while the trigger is live — and ignores `expanded` meanwhile', () => {
+    /* E4/B10: the reader closed MC-837 by hand under Urgent first; it stays
+       closed. `expanded` is set TRUE here on purpose — while auto-open is on,
+       the manual map is not consulted at all, so a stale manual flag cannot
+       re-open what the reader just closed. */
+    const h = table();
+    h.set('pipeSort', 'urgent');
+    h.set('pipeShut', { 'MC-837': true });
+    h.set('expanded', { 'MC-837': true });
+    expect(h.open()['MC-837']).toBe(false);
+    // a filter trigger, same rule
+    const g = table();
+    filters(g, { difficulty: ['Hard'] });
+    g.set('pipeShut', { 'MC-837': true });
+    expect(g.open()['MC-837']).toBe(false);
+  });
+
+  it('returns to the reader’s own `expanded` truth when no trigger is live — pipeShut is not consulted', () => {
+    /* B10's other half. Clear the filter and the sort, and the table is the
+       table the reader left by hand — a group they closed under the filter
+       is not held closed after it. */
+    const h = table();
+    h.set('pipeShut', { 'MC-837': true });
+    h.set('expanded', { 'MC-837': true });
+    expect(h.auto()).toBe(false);
+    expect(h.open()['MC-837']).toBe(true);
+    h.set('expanded', {});
+    expect(h.open()['MC-837']).toBe(false);
+  });
+
+  it('resets the hand-collapses on EVERY filter or sort change (B10)', () => {
+    /* the override is keyed to the trigger that was live when the reader
+       closed the group; a different filter or a different sort is a different
+       question, and the group it explains should open again. One observer on
+       both keys — asserted as a call whose keypath names both and whose body
+       empties the map, not as a text snapshot of the line. */
+    const observers = [...APP_JS_CODE.matchAll(/app\.observe\('([^']+)'/g)];
+    const hit = observers.find((m) => {
+      const keys = m[1]!.split(/\s+/);
+      if (!keys.includes('pipeFilters') || !keys.includes('pipeSort')) return false;
+      // the call, paren-balanced from `app.observe(`
+      let depth = 0;
+      for (let i = m.index! + 'app.observe'.length; i < APP_JS_CODE.length; i++) {
+        if (APP_JS_CODE[i] === '(') depth++;
+        else if (APP_JS_CODE[i] === ')' && --depth === 0) return /app\.set\('pipeShut',\s*\{\}\)/.test(APP_JS_CODE.slice(m.index, i));
+      }
+      return false;
+    });
+    expect(hit, 'no observer on pipeFilters AND pipeSort that empties pipeShut').toBeTruthy();
+  });
+
+  it('draws only the MATCHING children inside an opened group under a live work axis (B3)', () => {
+    /* MC-825 carries 99 work cards; showing all of them to find the two
+       urgent ones defeats the filter. The same conjunction the matcher
+       applies: a card is drawn iff it satisfies EVERY live work axis. */
+    const h = table();
+    filters(h, { urgency: ['Urgent'] });
+    expect(h.kids()['MC-837']!.map((w) => w.cardId)).toEqual(['task-u']);
+    filters(h, { urgency: ['Urgent'], difficulty: ['Easy'] });
+    expect(h.kids()['MC-837'], 'no child is both Urgent and Easy').toEqual([]);
+    filters(h, { difficulty: [null] });
+    expect(h.kids()['MC-837']!.map((w) => w.cardId), 'None reaches the unlabelled child').toEqual(['task-q']);
+  });
+
+  it('hands back the SAME arrays when no work axis is live — a derived sort narrows nothing', () => {
+    /* identity, not equality: Ractive diffs `{{#each}}` on array identity, so
+       a fresh copy per render would re-key every task row on each keystroke.
+       A sort explains an order, it does not exclude a card; a MAIN axis
+       narrows groups, not the cards inside them. */
+    const h = table();
+    h.set('pipeSort', 'urgent');
+    expect(h.kids()['MC-837']).toBe(KIDS['MC-837']);
+    filters(h, { type: ['Icon'] });
+    expect(h.kids()['MC-837']).toBe(KIDS['MC-837']);
+    h.set('pipeSort', null);
+    expect(h.kids()['MC-837']).toBe(KIDS['MC-837']);
+  });
+
+  it('routes the chevron AND the Enter key through ONE door that picks the map the trigger owns', () => {
+    /* `toggleMc` is the single place that decides whether a click is a
+       hand-collapse (auto-open on → `pipeShut`) or a hand-open (off →
+       `expanded`); a handler that toggled a map directly would write the
+       wrong truth half the time. The keyboard path keeps its childless
+       refusal in front of the door (R-exp-c). */
+    const door = fnBody('toggleMc');
+    expect(door).toContain("app.get('pipeAutoOpen')");
+    expect(door).toContain('pipeShut.${mc}');
+    expect(door).toContain('expanded.${mc}');
+    for (const h of ['toggleGroup', 'pipeRowKey']) {
+      const body = handlerBody(h);
+      expect(body, `${h} does not use the door`).toContain('toggleMc(');
+      expect(body, `${h} toggles a map on its own`).not.toContain('app.toggle(');
+    }
+  });
+});
+
+describe('the template gates on the DERIVED maps, not on the raw state (block 4)', () => {
+  const rows = [PARENT, CHILDLESS];
+
+  it('opens a group off `pipeOpen` — `expanded` alone opens nothing, `pipeOpen` alone opens it', () => {
+    /* rendered both ways so the assertion cannot pass on a template that
+       still reads `expanded`: that template opens the second render and not
+       the first, which is exactly backwards */
+    const derived = renderPipelineTable({ pipelineRows: rows, rowWarning, workCardsByMc: TASKS, expanded: {}, pipeOpen: { 'MC-837': true } });
+    expect(taskRows(derived)).toHaveLength(2);
+    const chev = /<button class="chevbtn[^"]*"[^>]*>/.exec(derived)![0];
+    expect(chev).toMatch(/class="chevbtn open"/);
+    expect(chev).toContain('aria-expanded="true"');
+
+    const manual = renderPipelineTable({ pipelineRows: rows, rowWarning, workCardsByMc: TASKS, expanded: { 'MC-837': true }, pipeOpen: {} });
+    expect(taskRows(manual)).toHaveLength(0);
+    expect(/<button class="chevbtn[^"]*"[^>]*>/.exec(manual)![0]).toContain('aria-expanded="false"');
+  });
+
+  it('draws the children off `pipeKids` — the full map is not what an opened group iterates', () => {
+    const narrowed = renderPipelineTable({
+      pipelineRows: rows, rowWarning, workCardsByMc: TASKS,
+      pipeOpen: { 'MC-837': true }, pipeKids: { 'MC-837': [TASKS['MC-837']![0]!] },
+    });
+    expect(taskRows(narrowed)).toHaveLength(1);
+    expect(narrowed).toContain('Render Icon: APIs');
+    expect(narrowed).not.toContain('Render Icon: My Groups');
+  });
+
+  it('names the two computeds in the table subtree and the two raw maps nowhere in it', () => {
+    /* the render above proves the wiring; this pins WHERE, so a second
+       `{{#each workCardsByMc[...]}}` cannot come back beside the first under
+       a render that happened to pass on the narrowed fixture */
+    const tableTpl = divFragment('<div class="pscrollwrap">');
+    expect(tableTpl).toContain('pipeOpen[row.mcNumber]');
+    expect(tableTpl).toContain('{{#each pipeKids[row.mcNumber] as w}}');
+    expect(tableTpl).not.toContain('expanded[row.mcNumber]');
+    expect(tableTpl).not.toContain('workCardsByMc[row.mcNumber]');
   });
 });
 
@@ -514,6 +783,13 @@ describe('a multi-deliverable MC renders its task list ONCE (invariant 3)', () =
     expect(stamp).toContain('r.hasTasks');
     expect(stamp).not.toContain('firstOfMc');
     expect(APP_JS).toContain('pipeMcAnchor()');
+    /* block 4: the row carries its OWN work cards (`r.work`), stamped here
+       beside blob/warning from the same map — the work-card axes and the
+       derived sort keys read the row, never the map, so a filter pass costs
+       no lookup per row per axis. `hasTasks` is that array's length. */
+    expect(stamp).toContain('r.work =');
+    expect(stamp).toContain('workCardsByMc[r.mcNumber]');
+    expect(stamp).toMatch(/r\.hasTasks = r\.work\.length > 0/);
   });
 
   it('MOVES THE ANCHOR when a filter hides the group’s first row', () => {
@@ -539,11 +815,13 @@ describe('the keyboard path refuses exactly where the chevron refuses (R-exp-c)'
   it('pipeRowKey checks hasTasks before toggling expansion', () => {
     // Enter on a childless row used to set a stale expanded flag that showed
     // the SubTone with zero task rows and pre-expanded the group if tasks
-    // later arrived — the affordance-that-lies, back through the keyboard
-    const at = jsCode.indexOf('pipeRowKey(');
-    const body = jsCode.slice(at, jsCode.indexOf('\n  },', at));
+    // later arrived — the affordance-that-lies, back through the keyboard.
+    // Block 4 moved the toggle itself behind `toggleMc` (it picks the map);
+    // the refusal stays in front of that door.
+    const body = handlerBody('pipeRowKey');
     expect(body).toContain('hasTasks');
-    expect(body.indexOf('hasTasks')).toBeLessThan(body.indexOf('app.toggle'));
+    expect(body.indexOf('toggleMc('), 'no toggle in the keyboard path').toBeGreaterThan(-1);
+    expect(body.indexOf('hasTasks')).toBeLessThan(body.indexOf('toggleMc('));
   });
 });
 

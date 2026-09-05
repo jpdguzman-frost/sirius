@@ -69,6 +69,9 @@ async function resetForProjectSwitch() {
     // MC-655 arrived pre-expanded in project B. Per-project view state, so it
     // resets with the rest.
     expanded: {},
+    // the hand-collapse overrides go with it (PLAN.md B10): keyed on the same
+    // per-project mc_number, and meaningless against another project's groups
+    pipeShut: {},
   });
   await loadAll();
 }
@@ -92,6 +95,16 @@ function pipeBackToTop() {
   // to find a different one tomorrow.
   const el = scrollerOf(null);
   if (el) el.scrollTop = 0;
+}
+
+/* THE ONE DOOR FOR A GROUP TOGGLE — the chevron and the row's Enter both come
+   here (owl #78 §4/§5; PLAN.md B10). While auto-open is on, a click is a
+   hand-collapse (or its undo) recorded in `pipeShut`, and the reader's own
+   `expanded` map is left exactly as it was; with nothing live it is the plain
+   toggle it always was. The template reads `pipeOpen`, which is where the two
+   maps are reconciled. */
+function toggleMc(mc) {
+  app.toggle(app.get('pipeAutoOpen') ? `pipeShut.${mc}` : `expanded.${mc}`);
 }
 
 /* ONE placement write in flight (the savingUrgency discipline, invariant 8's
@@ -222,7 +235,7 @@ app.on({
       flashBanner(`Note saved. The refresh failed, so the counts may be stale until the next load. ${errText(err)}`);
     }
   },
-  toggleGroup(_ctx, mc) { app.toggle(`expanded.${mc}`); },
+  toggleGroup(_ctx, mc) { toggleMc(mc); },
 
 
   /* ---- owl #62: Pipeline sort + filter ------------------------------------
@@ -314,7 +327,7 @@ app.on({
     // a stale flag that pre-expands the group when tasks later arrive
     const row = app.get('rows').find((r) => r.mcNumber === mcNumber);
     if (!row || !row.hasTasks) return;
-    app.toggle(`expanded.${mcNumber}`);
+    toggleMc(mcNumber);
   },
   /* ---- W1 / W3: urgency and difficulty, on the WORK CARD -------------------
      Owl #78 §1, from the 3 September alignment: throughput is a property of

@@ -108,7 +108,7 @@
       ✕ that clears the axis.
 
       A WRAPPING ROW (JP, 2026-08-21): the frame only ever draws one chip, but
-      five axes can be filtered at once. Wrapping keeps every filter separately
+      four axes can be filtered at once. Wrapping keeps every filter separately
       removable, which is what the ✕ is for — collapsing them into a summary
       would take that away. }}
   {{#if pipeChips.length}}
@@ -197,14 +197,21 @@
                    asked in the template), so no wire change either. -->
               {{! owl #52: the chevron belongs to the MC, so it renders on the
                   group's FIRST row only. It always did control MC-level state
-                  (`expanded` is keyed on mcNumber) and the list always did
+                  (the open flag is keyed on mcNumber) and the list always did
                   render under the first row — so on a shared MC a sibling's
                   chevron opened a list somewhere else on screen, which is the
                   bug Miles reported. One chevron per MC makes the affordance
                   tell the truth. A single-deliverable MC is unaffected: its
                   only row IS the first. The label says which case it is. }}
+              {{! owl #78 §4/§5: what the chevron REFLECTS is now DERIVED, not
+                  the hand-toggled map — a live work-card axis, or a sort keyed
+                  on the work cards, opens every group that has any, and
+                  pressing the chevron then records a hand-collapse instead
+                  (decision B10, 2026-09-05). The condition below is untouched,
+                  so a childless MC still gets no affordance and nothing to
+                  open. }}
               {{#if row.hasTasks && pipeMcAnchor[row.mcNumber] === row.cardId}}
-                <button class="chevbtn {{#if expanded[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{#if row.sharedMc}}Work on {{row.mcLabel}}, shared by {{row.mcDeliverables}} deliverables{{else}}{{row.displayId}} work cards{{/if}}" aria-expanded="{{expanded[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+                <button class="chevbtn {{#if pipeOpen[row.mcNumber]}}open{{/if}}" on-click="['toggleGroup', row.mcNumber]" aria-label="{{#if row.sharedMc}}Work on {{row.mcLabel}}, shared by {{row.mcDeliverables}} deliverables{{else}}{{row.displayId}} work cards{{/if}}" aria-expanded="{{pipeOpen[row.mcNumber] ? 'true' : 'false'}}"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
               {{else}}
                 <span class="chevgap" aria-hidden="true"></span>
               {{/if}}
@@ -327,8 +334,12 @@
               carry 99 deliverable rows) and expansion is per-MC, so the task
               list renders under the group's first VISIBLE row only; under
               every sibling it would duplicate the whole list — and an open task
-              popover — once per row (review pass 2026-08-18). }}
-          {{#if pipeMcAnchor[row.mcNumber] === row.cardId && expanded[row.mcNumber]}}
+              popover — once per row (review pass 2026-08-18).
+
+              The second half of the gate is the same derived open flag the
+              chevron reads (owl #78 §4/§5), so what the chevron says and what
+              the table draws cannot disagree. }}
+          {{#if pipeMcAnchor[row.mcNumber] === row.cardId && pipeOpen[row.mcNumber]}}
             {{! WITHDRAWN 2026-08-27 (JP): the shared-MC caption row is gone —
                 it is not in the frame. The RULE it stated still holds and is
                 still true of the data: these tasks carry the MC number and
@@ -342,7 +353,15 @@
                 `row.mcDeliverables` are still read by the chevron's accessible
                 name, which is now the only place a screen reader is told the
                 group is shared. Do not restore this row from owl #52. }}
-            {{#each workCardsByMc[row.mcNumber] as w}}
+            {{! decision B3 (2026-09-05): while a work-card axis is filtering,
+                a group draws only the children that satisfy EVERY live one at
+                once — an MC can carry ninety-nine work cards, and listing all
+                of them to reach the two urgent ones is not a filter. With no
+                such axis on this is the group's own list, the same array and
+                all of it, so the unfiltered case is unchanged. The narrowing
+                is done where the list is derived, never here (performance
+                law). }}
+            {{#each pipeKids[row.mcNumber] as w}}
               <!-- owl #45, node 520:54192 — the expanded MC's task cards.
                    One <tr> in the SAME table: parent and child share one
                    column model by construction (promised in jp→miles #40),

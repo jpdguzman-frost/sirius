@@ -426,10 +426,26 @@ export interface PipelineTableState {
   warnPopPos?: { left: number; top: number; up?: boolean; over?: boolean };
   /** the SHIPPED recipe, executed out of the app scripts — never a stub */
   rowWarning: (row: PipeRow) => unknown;
-  /** expanded MC groups (owl #45): mcNumber → true renders that group's task rows */
+  /** expanded MC groups (owl #45): mcNumber → true is the reader's HAND-opened state */
   expanded?: Record<string, boolean>;
   /** the wire's task-card map, as src/services/pipeline.ts shapes it */
   workCardsByMc?: Record<string, WorkCardRow[]>;
+  /**
+   * Block 4 (owl #78 §4/§5): the template gates a group on the DERIVED
+   * `pipeOpen` computed, not on `expanded` — auto-open under a work-card axis
+   * or a work-card-derived sort, hand state otherwise. When a caller does not
+   * supply it, the harness derives it the way the shipped computed does with
+   * no trigger live (`!!expanded[mc]`), so every render written before the
+   * rework still says what it said. The computed's own arithmetic is executed
+   * out of the shipped scripts in test/pipeline-expanded.test.ts.
+   */
+  pipeOpen?: Record<string, boolean>;
+  /**
+   * Same contract for the children an open group DRAWS: `pipeKids` narrows
+   * `workCardsByMc` to the cards matching the live work-card axes (PLAN B3)
+   * and is the whole map otherwise — which is the default here.
+   */
+  pipeKids?: Record<string, WorkCardRow[]>;
   /** false takes the read-only due branch on task rows too */
   writesEnabled?: boolean;
   /** cardId whose due popover is open (parent or task — one global key) */
@@ -462,7 +478,12 @@ const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, byMc: Rec
   for (const r of rows) if (r.mcNumber) perMc.set(r.mcNumber, (perMc.get(r.mcNumber) ?? 0) + 1);
   return rows.map((r) => {
     const mcDeliverables = perMc.get(r.mcNumber) ?? 1;
-    return { ...r, warning: recipe(r), hasTasks: !!byMc[r.mcNumber], mcDeliverables, sharedMc: mcDeliverables > 1 };
+    /* block 4: the row carries its own work cards (`r.work`, stamped in
+       loadAll beside blob/warning) and `hasTasks` is that array's length —
+       the same truth as the key-presence test it replaces, since the server
+       only creates a key by pushing into it */
+    const work = byMc[r.mcNumber] ?? [];
+    return { ...r, warning: recipe(r), work, hasTasks: work.length > 0, mcDeliverables, sharedMc: mcDeliverables > 1 };
   });
 };
 
@@ -533,6 +554,10 @@ export function renderPipelineTable(state: PipelineTableState): string {
       warnPopPos: state.warnPopPos ?? { left: 0, top: 0, up: false },
       expanded: state.expanded ?? {},
       workCardsByMc: state.workCardsByMc ?? {},
+      // the two DERIVED gates the table reads (block 4); absent, they are what
+      // the shipped computeds yield with no work axis and no derived sort live
+      pipeOpen: state.pipeOpen ?? state.expanded ?? {},
+      pipeKids: state.pipeKids ?? state.workCardsByMc ?? {},
       writesEnabled: state.writesEnabled ?? false,
       savingUrgency: {},
       savingDifficulty: {},

@@ -53,6 +53,13 @@ const app = new Ractive({
     capDraft: 0,
     savingCapacity: false,
     expanded: {},
+    /* owl #78 §4/§5 (PLAN.md B10): mcNumber → true = collapsed BY HAND while
+       auto-open is on. `expanded` above is the reader's own map and stays the
+       whole truth whenever no work-card axis and no derived sort is live;
+       while one is, every group with tasks opens and this map holds the
+       exceptions. Reset on every pipeFilters/pipeSort change (observer in
+       80-loaders.js) and on a project switch, like `expanded`. */
+    pipeShut: {},
     searchQ: '',
     /* The four urgency/difficulty keys are all keyed on a WORK CARD id since
        owl #78 §1 — the controls left the main row, the state keys did not
@@ -277,13 +284,15 @@ const app = new Ractive({
     /* owl #62: search, filter and sort all apply together (AND). Sort runs over
        the whole filtered set, never the visible page — the client holds every
        row, so sorting a page would order the page and not the table. `slice()`
-       because Array.sort mutates and the source array is Ractive's own. */
+       because Array.sort mutates and the source array is Ractive's own. The
+       selection goes into the sort as well as the filter: a derived sort keys
+       on the children the work-card axes admit (owl #78 §5; PLAN.md B5). */
     pipelineRows() {
       const sel = this.get('pipeFilters');
       const rows = this.get('pipeSearched').filter((r) => pipeMatches(r, sel, null));
       const key = this.get('pipeSort');
       const sort = key ? PIPE_SORTS.find((s) => s.key === key) : PIPE_SORT_DEFAULT;
-      return sort ? pipeSortRows(rows, sort) : rows;
+      return sort ? pipeSortRows(rows, sort, sel) : rows;
     },
     /* The facet counts live in `pipeFacetList` beside the axes and the matcher
        they depend on (10-constants), so the panel and the table cannot disagree
@@ -321,9 +330,10 @@ const app = new Ractive({
     },
     /* The sorts as their frame groups, DERIVED from PIPE_SORTS in its own
        order — never a second hand-written list, or the popup and the
-       comparator could disagree about what exists. Deriving is also why
-       parking the Priority pair (#78 §5) needed no edit here: the group it
-       named simply stopped being produced. */
+       comparator could disagree about what exists. Deriving is also why the
+       Priority pair left and came back (#78 §5, block 4) with no edit here: a
+       group exists exactly while the table produces it. Three today — Dates,
+       Priority, Identity — in array order (frame 841:58731). */
     PIPE_SORT_GROUPS() {
       const out = [];
       for (const s of PIPE_SORTS) {
@@ -352,6 +362,52 @@ const app = new Ractive({
         if (r.mcNumber && !(r.mcNumber in first)) first[r.mcNumber] = r.cardId;
       }
       return first;
+    },
+    /* ---- auto-open (owl #78 §4/§5; PLAN.md B3, B10, B11) -----------------
+       A work-card axis filters, and a derived sort orders, by values the
+       table shows only INSIDE a group — so the groups open, or the reader is
+       looking at a result with nothing on screen to explain it. Three
+       questions, one computed each; the template reads pipeOpen and
+       pipeKids, never `expanded` or `workCardsByMc` directly. */
+    /** Is any WORK-CARD axis filtering? */
+    pipeWorkLive() {
+      const sel = this.get('pipeFilters');
+      return PIPE_FILTERS.some((f) => !!f.work && (sel[f.key] || []).length > 0);
+    },
+    /** Should the groups open on their own — a live work-card axis, or a derived sort. */
+    pipeAutoOpen() {
+      return this.get('pipeWorkLive') || (PIPE_SORTS.find((s) => s.key === this.get('pipeSort')) || {}).derived === true;
+    },
+    /* WHICH GROUPS ARE OPEN, per MC, over the rows as rendered. Auto-open on:
+       every group with tasks, minus the ones collapsed by hand (`pipeShut`);
+       a childless MC never opens — R-exp-c's rule, kept. Auto-open off: the
+       reader's own `expanded` map, untouched by anything that happened while
+       it was on (B10). */
+    pipeOpen() {
+      const auto = this.get('pipeAutoOpen');
+      const shut = this.get('pipeShut');
+      const expanded = this.get('expanded');
+      const open = {};
+      for (const r of this.get('pipelineRows')) {
+        if (!r.mcNumber || r.mcNumber in open) continue;
+        open[r.mcNumber] = auto ? !!(r.hasTasks && !shut[r.mcNumber]) : !!expanded[r.mcNumber];
+      }
+      return open;
+    },
+    /* WHICH CHILDREN AN OPEN GROUP DRAWS, per MC (B3): under a live work-card
+       axis, only the cards every live work-card axis admits — MC-825 has 99,
+       and showing all of them to find the two urgent ones defeats the filter.
+       With no work-card axis live this is the store's own map, arrays and
+       all, so `{{#each}}` has nothing new to diff. It re-derives on the
+       optimistic badge write too, because that write lands on a
+       `workCardsByMc` keypath (B11). */
+    pipeKids() {
+      const byMc = this.get('workCardsByMc') || {};
+      if (!this.get('pipeWorkLive')) return byMc;
+      const sel = this.get('pipeFilters');
+      const out = {};
+      for (const [mc, kids] of Object.entries(byMc)) out[mc] = kids.filter((w) => pipeWorkMatch(w, sel, null));
+      return out;
     },
     /* owl #76, frame 748:18444 — the table's no-results verdict: the filtered
        row set is empty AND the reader caused it, with a non-blank search term

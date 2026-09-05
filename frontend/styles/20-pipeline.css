@@ -118,7 +118,7 @@
    and the table, 16px from each — the Content frame's own gap.
 
    A WRAPPING ROW rather than the single chip the frame draws (JP, 2026-08-21):
-   five axes can be filtered at once, and wrapping keeps each one separately
+   four axes can be filtered at once, and wrapping keeps each one separately
    removable instead of collapsing them into a summary. */
 .fchips {
   display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;

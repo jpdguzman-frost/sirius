@@ -15,15 +15,24 @@
  *
  * AMENDED 2026-09-05 — owls miles→jp #78 §1/§3 and #79, frame `809:83486`.
  * The table is TEN columns now: REQUESTOR left Pipeline for Requests, URGENCY
- * moved ahead of DIFFICULTY, and DUE became DEADLINE. The filter panel went
- * down to TYPE and STATUS with it, because #78 moved urgency and difficulty
- * onto the WORK CARD — an axis narrowing MAIN rows by either would now filter
- * parents on a value the table does not draw on them, which the reader can
- * neither see nor undo. #78 §4 rebuilds all four axes over work-card values
- * with auto-expand; until that lands the two are PARKED. The assertions that
- * used to ride on them are re-pointed at the axes that survive rather than
- * deleted, so the RULES (None is a value, counts ignore their own axis, a
- * ticked zero stays) keep a live axis to be proven against.
+ * moved ahead of DIFFICULTY, and DUE became DEADLINE. Block 1 parked the
+ * URGENCY and DIFFICULTY axes and the Priority sorts with it, because #78
+ * moved those values onto the WORK CARD and an axis narrowing MAIN rows by
+ * either would have filtered parents on a value the table no longer draws.
+ *
+ * BLOCK 4, same day (owl #78 §4/§5, frames 841:53782 / 841:58731): the parked
+ * coverage is BACK. The four axes are TYPE · DIFFICULTY · URGENCY · STATUS in
+ * the frame's order; DIFFICULTY and URGENCY read the WORK CARDS (a group
+ * matches through a child, PLAN B2/B3), the Priority pair ranks by the group's
+ * children (B6), the two Deadline sorts key on the earliest matching child's
+ * `due` (B5), and Identity has both directions (ten sorts). Keyless rows sort
+ * last either way and MC-ascending among themselves; equal keys fall back to
+ * newest-filed then MC (B7). The `it.todo` entries block 1 left are live
+ * tests again, and the rules that were re-pointed at TYPE while the axes were
+ * parked are proven on the restored axes as well.
+ *
+ * Every `due` is a Manila day string and compares AS A STRING (test/CLAUDE.md
+ * rule 5) — no Date is constructed anywhere in this file.
  */
 
 import { readFileSync } from 'node:fs';
@@ -31,14 +40,22 @@ import RactiveModule from 'ractive';
 import { describe, expect, it } from 'vitest';
 import { APP_JS, APP_JS_CODE, PIPELINE_CSS, TEMPLATE, cssRule, decl, divFragment, fnBody, handlerBody, method } from './helpers/gantt-render.ts';
 
-interface Sort { key: string; group: string; label: string; dir: number; value: (r: unknown) => unknown }
-interface Axis { key: string; col: string; label: string; pick: (r: unknown) => unknown; order?: string[]; none?: boolean }
+type Sel = Record<string, (string | null)[]>;
+interface Sort { key: string; group: string; label: string; dir: number; derived?: boolean; value: (r: unknown, sel?: Sel) => unknown }
+interface Axis { key: string; col: string; label: string; pick?: (r: unknown) => unknown; work?: string; order?: string[]; none?: boolean; scroll?: boolean }
 interface FacetValue { value: string | null; label: string; count: number; on: boolean }
 interface Facet { key: string; label: string; scroll: boolean; values: FacetValue[] }
+interface WorkKeys { due: string | null; urgent: 0 | 1 | null; hard: number | null }
 
+/* The block-4 helpers ride in the same recipe: `DIFF_RANK` and the five
+   `pipeWork*`/`pipeValues`/`pipeTiebreak` consts are what the ten sorts and
+   the four axes call, so a decl-list without them would throw at the first
+   derived key. Names are the frozen ones (PLAN.md block 4). */
 const recipe = new Function(`
+  ${decl(APP_JS, 'DIFF_RANK')}
   ${decl(APP_JS, 'PIPE_SORTS')}
   ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
+  ${decl(APP_JS, 'pipeTiebreak')}
   ${decl(APP_JS, 'pipeCompare')}
   ${decl(APP_JS, 'pipeSortRows')}
   ${decl(APP_JS, 'PIPE_COLS')}
@@ -49,35 +66,57 @@ const recipe = new Function(`
   ${decl(APP_JS, 'pipePick')}
   ${decl(APP_JS, 'pipeValueLabel')}
   ${decl(APP_JS, 'PIPE_FILTERS_EMPTY')}
+  ${decl(APP_JS, 'pipeWorkMatch')}
+  ${decl(APP_JS, 'pipeWorkKids')}
+  ${decl(APP_JS, 'pipeValues')}
+  ${decl(APP_JS, 'pipeWorkKeys')}
   ${decl(APP_JS, 'pipeMatches')}
   ${decl(APP_JS, 'pipeFacetList')}
   ${decl(APP_JS, 'pipeChipList')}
   ${decl(APP_JS, 'pipeSortLabel')}
   ${decl(APP_JS, 'mcRank')}
-  return { PIPE_COLS, pipeChipList, PIPE_SORTS, PIPE_SORT_DEFAULT, pipeSortRows, PIPE_FILTERS, PIPE_FILTERS_EMPTY, pipeMatches, pipeFacetList, pipeSortLabel };
+  return { DIFF_RANK, PIPE_COLS, pipeChipList, PIPE_SORTS, PIPE_SORT_DEFAULT, pipeSortRows, PIPE_FILTERS, PIPE_FILTERS_EMPTY, pipeMatches, pipeFacetList, pipeSortLabel, pipeWorkMatch, pipeWorkKids, pipeValues, pipeWorkKeys, pipeTiebreak };
 `)() as {
+  DIFF_RANK: Record<string, number>;
   PIPE_COLS: Array<{ cls: string; label: string }>;
   PIPE_SORTS: Sort[];
   PIPE_SORT_DEFAULT: Sort;
-  pipeSortRows: (rows: unknown[], s: Sort) => unknown[];
+  pipeSortRows: (rows: unknown[], s: Sort, sel: Sel) => unknown[];
   PIPE_FILTERS: Axis[];
-  PIPE_FILTERS_EMPTY: () => Record<string, (string | null)[]>;
-  pipeMatches: (r: unknown, sel: Record<string, (string | null)[]>, except: string | null) => boolean;
-  pipeFacetList: (rows: unknown[], sel: Record<string, (string | null)[]>) => Facet[];
-  pipeChipList: (sel: Record<string, (string | null)[]>) => Array<{ key: string; label: string; text: string; on: boolean }>;
+  PIPE_FILTERS_EMPTY: () => Sel;
+  pipeMatches: (r: unknown, sel: Sel, except: string | null) => boolean;
+  pipeFacetList: (rows: unknown[], sel: Sel) => Facet[];
+  pipeChipList: (sel: Sel) => Array<{ key: string; label: string; text: string; on: boolean }>;
   pipeSortLabel: (k: string | null) => string;
+  pipeWorkMatch: (w: unknown, sel: Sel, except: string | null) => boolean;
+  pipeWorkKids: (r: unknown, sel: Sel, except: string | null) => unknown[];
+  pipeValues: (f: Axis, r: unknown, sel: Sel) => (string | null)[];
+  pipeWorkKeys: (r: unknown, sel: Sel) => WorkKeys;
+  pipeTiebreak: (a: unknown, b: unknown, keyless: boolean) => number;
 };
 
+/* A main row as `loadAll` stamps it: `work` is the row's own task cards
+   (block 4 stamp, beside blob/warning), empty by default so a fixture that
+   is not about work cards states nothing about them. */
 const row = (over: Record<string, unknown> = {}) => ({
   cardId: 'c1', mcNumber: 'MC-800', name: 'A card', deadline: null, workStarted: null,
   workStartedTs: null, workDone: null, workDoneTs: null, urgency: 'Non-Urgent',
-  difficulty: null, assetType: null, currentList: null, requestor: null, filedAt: null, ...over,
+  difficulty: null, assetType: null, currentList: null, requestor: null, filedAt: null, work: [], ...over,
 });
-const sortBy = (key: string | null, rows: unknown[]) => {
+/* A work card as WorkCardWire carries it — the wire's own defaults:
+   `Non-Urgent` is a VALUE (the absence of the Urgent label), `difficulty` and
+   `due` genuinely absent until a label or a date says otherwise. */
+const wc = (over: Record<string, unknown> = {}) => ({
+  cardId: 'w1', name: 'A task', urgency: 'Non-Urgent', difficulty: null, due: null, ...over,
+});
+const sel = (over: Sel = {}): Sel => ({ ...recipe.PIPE_FILTERS_EMPTY(), ...over });
+const ids = (rows: unknown[]) => rows.map((r) => (r as { cardId: string }).cardId);
+const sortBy = (key: string | null, rows: unknown[], live: Sel = sel()) => {
   const s = key ? recipe.PIPE_SORTS.find((x) => x.key === key)! : recipe.PIPE_SORT_DEFAULT;
   // the SHIPPED sort path, decorate-sort-undecorate and all — not a
-  // re-implementation of it around the bare comparator
-  return recipe.pipeSortRows(rows, s);
+  // re-implementation of it around the bare comparator. The selection rides
+  // along because a work-card key is read over the MATCHING children (B5).
+  return recipe.pipeSortRows(rows, s, live);
 };
 
 /* ---------------------------------------------------------------------- */
@@ -85,25 +124,83 @@ const sortBy = (key: string | null, rows: unknown[]) => {
 /* ---------------------------------------------------------------------- */
 
 describe('the sort set matches the frame exactly', () => {
-  it('carries the six surviving items in two groups, in order', () => {
-    /* AMENDED 2026-09-05 (decision D5, owl #78 §5). The Priority group —
-       'Urgent first' and 'Hardest first' — is PARKED, not deleted: both
-       ranked MAIN rows by a value #78 §1 moved onto the work card, so the
-       table now draws an em-dash where the reader would look to check the
-       order. #78 §5 restores both over work-card values with the group
-       auto-expand. The `it.todo` entries below hold that coverage open. */
+  it('carries the ten items in three groups, in the frame’s order and words', () => {
+    /* AMENDED 2026-09-05, block 4 (owl #78 §5, frame 841:58731). Block 1 had
+       parked the Priority pair and pinned six; the parked coverage is back and
+       the set is the frame's TEN — the Priority group between Dates and
+       Identity, Identity in BOTH directions, and the labels as the frame's
+       nodes spell them ('Deadline …', 'MC Number: …', 'Deliverable Name: …').
+       The strings are pinned because the frame ruled them and Requests will
+       copy them (S12); the ORDER is pinned because the panel derives its
+       groups from this array's order and nothing else. */
     expect(recipe.PIPE_SORTS.map((s) => `${s.group}: ${s.label}`)).toEqual([
-      'Dates: Due dates closest to now',
-      'Dates: Due dates farthest from now',
+      'Dates: Deadline closest to now',
+      'Dates: Deadline farthest from now',
       'Dates: Recently started',
       'Dates: Recently completed',
-      'Identity: MC number, low to high',
-      'Identity: Card name A–Z',
+      'Priority: Urgent first',
+      'Priority: Hardest first',
+      'Identity: MC Number: Low to High',
+      'Identity: MC Number: High to Low',
+      'Identity: Deliverable Name: A–Z',
+      'Identity: Deliverable Name: Z–A',
     ]);
   });
 
-  it.todo('block 4 (#78 §5): ranks WORK cards Urgent first, with the group auto-expanded');
-  it.todo('block 4 (#78 §5): ranks WORK cards Hardest first — Hard → Medium → Easy, never alphabetically');
+  it('marks EXACTLY the work-card-derived sorts `derived` — the flag the auto-open reads', () => {
+    /* The Deadline pair and the Priority pair rank a group by its CHILDREN,
+       so the table opens every reordered group (S6, PLAN B-decisions) or the
+       order is illegible. `derived` is how `pipeAutoOpen` knows which sorts
+       those are; a fifth sort flagged, or one of these four unflagged, is a
+       table that opens for no visible reason or stays shut over an order the
+       reader cannot check. Named by key rather than counted. */
+    const derived = recipe.PIPE_SORTS.filter((s) => s.derived === true).map((s) => s.key);
+    expect(derived).toEqual(['due-near', 'due-far', 'urgent', 'hardest']);
+  });
+
+  it('ranks WORK cards Urgent first, with the group auto-expanded (block 4, #78 §5)', () => {
+    /* LIVE again. Any Urgent child ranks the group 1; a group whose children
+       are ALL Non-Urgent ranks 0 — a VALUE, not an absence — and only a group
+       with no matching child at all is keyless (B6). The auto-open half of the
+       promise is the `derived` flag pinned above; the computed that acts on it
+       is executed in test/pipeline-expanded.test.ts. */
+    const rows = [
+      row({ cardId: 'quiet', mcNumber: 'MC-2', work: [wc(), wc({ cardId: 'w2' })] }),
+      row({ cardId: 'none', mcNumber: 'MC-1' }),
+      row({ cardId: 'mixed', mcNumber: 'MC-3', work: [wc(), wc({ cardId: 'w2', urgency: 'Urgent' })] }),
+    ];
+    expect(ids(sortBy('urgent', rows))).toEqual(['mixed', 'quiet', 'none']);
+    expect(recipe.pipeWorkKeys(rows[2], sel()).urgent).toBe(1);
+    expect(recipe.pipeWorkKeys(rows[0], sel()).urgent, 'all Non-Urgent is the value 0').toBe(0);
+    expect(recipe.pipeWorkKeys(rows[1], sel()).urgent, 'no children is keyless').toBe(null);
+    expect(recipe.PIPE_SORTS.find((s) => s.key === 'urgent')!.derived).toBe(true);
+  });
+
+  it('ranks WORK cards Hardest first — Hard → Medium → Easy, never alphabetically (block 4, #78 §5)', () => {
+    /* LIVE again. Alphabetically Hard sits between Easy and Medium, so an
+       implementation that forgot the ranking table would read Medium, Hard,
+       Easy under a descending sort — and look plausible. A group ranks by its
+       HARDEST labelled child (max rank, B6); unlabelled children contribute
+       nothing, and a group with no labelled child is keyless. */
+    const rows = [
+      row({ cardId: 'easy', mcNumber: 'MC-1', work: [wc({ difficulty: 'Easy' })] }),
+      row({ cardId: 'unlabelled', mcNumber: 'MC-2', work: [wc(), wc({ cardId: 'w2' })] }),
+      row({ cardId: 'medium', mcNumber: 'MC-3', work: [wc({ difficulty: 'Medium' })] }),
+      row({ cardId: 'hard', mcNumber: 'MC-4', work: [wc({ difficulty: 'Hard' })] }),
+      // the max rule: an Easy sibling does not soften a Hard one
+      row({ cardId: 'mixed', mcNumber: 'MC-5', work: [wc({ difficulty: 'Easy' }), wc({ cardId: 'w2', difficulty: 'Hard' }), wc({ cardId: 'w3' })] }),
+    ];
+    // `hard` and `mixed` share the top key; the tiebreak (B7, proven below)
+    // puts the lower MC first
+    expect(ids(sortBy('hardest', rows))).toEqual(['hard', 'mixed', 'medium', 'easy', 'unlabelled']);
+    // the ranking table itself: a strict Hard > Medium > Easy, so the sort
+    // cannot be alphabetical by construction
+    expect(recipe.DIFF_RANK.Hard).toBeGreaterThan(recipe.DIFF_RANK.Medium!);
+    expect(recipe.DIFF_RANK.Medium).toBeGreaterThan(recipe.DIFF_RANK.Easy!);
+    expect(recipe.pipeWorkKeys(rows[4], sel()).hard).toBe(recipe.DIFF_RANK.Hard);
+    expect(recipe.pipeWorkKeys(rows[1], sel()).hard, 'no labelled child is keyless').toBe(null);
+    expect(recipe.PIPE_SORTS.find((s) => s.key === 'hardest')!.derived).toBe(true);
+  });
 
   it('names sorts by the RESULTING ORDER, never column-plus-arrow', () => {
     /* the frame is explicit that the labels should read rather than need
@@ -111,17 +208,16 @@ describe('the sort set matches the frame exactly', () => {
     for (const s of recipe.PIPE_SORTS) expect(s.label).not.toMatch(/[↑↓]|asc|desc/i);
   });
 
-  it('leaves Type and Status OUT — those two are the filter axes; Difficulty is parked', () => {
-    /* RETITLED 2026-09-05 (decision D5). Type and Status are the only filter
-       axes today, so they are the only two this rule is about; Difficulty is
-       neither a sort nor an axis until #78 §4 rebuilds it over work-card
-       values. The assertions are unchanged — a difficulty ORDER coming back
-       as a sort is legitimate (that is what #78 §5 restores), a difficulty
-       AXIS spelt into the sort list is not. */
+  it('spells no filter AXIS into the sort list — the four axes are the panel’s, not a sort’s', () => {
+    /* RETITLED 2026-09-05 twice — block 1 (D5) and block 4. A difficulty
+       ORDER as a sort is legitimate (that is 'Hardest first'); a difficulty or
+       urgency AXIS spelt into the sort list is not, and neither is Type or
+       Status. The word list is derived from the axes the panel declares, so
+       an axis added later is covered without an edit here. */
     const labels = recipe.PIPE_SORTS.map((s) => s.label.toLowerCase());
-    expect(labels.some((l) => l.includes('type'))).toBe(false);
-    expect(labels.some((l) => l.includes('status'))).toBe(false);
-    expect(labels.some((l) => l.includes('difficulty'))).toBe(false);
+    const axisWords = recipe.PIPE_FILTERS.map((f) => f.label.toLowerCase());
+    expect(axisWords, 'no axes — the walk below would prove nothing').toHaveLength(4);
+    for (const word of axisWords) expect(labels.some((l) => l.includes(word)), word).toBe(false);
   });
 
   it('has no phase-progression sort — considered and removed', () => {
@@ -135,34 +231,166 @@ describe('the sort set matches the frame exactly', () => {
 /* ---------------------------------------------------------------------- */
 
 describe('an absent value never displaces a real one', () => {
-  const withDue = [row({ cardId: 'none' }), row({ cardId: 'far', deadline: '2026-12-01' }), row({ cardId: 'near', deadline: '2026-08-01' })];
+  /* the deadline lives on the WORK CARD since block 4 (B5): `work` carries
+     it, and the parent's own `deadline` is deliberately NOT set here */
+  const withDue = [
+    row({ cardId: 'none', mcNumber: 'MC-1' }),
+    row({ cardId: 'far', mcNumber: 'MC-2', work: [wc({ due: '2026-12-01' })] }),
+    row({ cardId: 'near', mcNumber: 'MC-3', work: [wc({ due: '2026-08-01' })] }),
+  ];
 
-  it('sorts empties last ASCENDING (due dates closest to now)', () => {
-    expect(sortBy('due-near', withDue).map((r) => (r as { cardId: string }).cardId)).toEqual(['near', 'far', 'none']);
+  it('sorts empties last ASCENDING (deadline closest to now)', () => {
+    expect(ids(sortBy('due-near', withDue))).toEqual(['near', 'far', 'none']);
   });
 
   it('sorts empties last DESCENDING too — the direction must not flip them up', () => {
     /* this is the assertion that matters: on the real board most cards lack a
        due date, so a naive nulls-first descending order fills the top of the
        table with blanks and looks broken */
-    expect(sortBy('due-far', withDue).map((r) => (r as { cardId: string }).cardId)).toEqual(['far', 'near', 'none']);
+    expect(ids(sortBy('due-far', withDue))).toEqual(['far', 'near', 'none']);
   });
 
-  it('holds for started, completed and name', () => {
-    /* the `hardest` case left this list with the Priority group (D5, #78 §5);
-       the rule it proved is re-armed by the `it.todo` above */
+  it('holds for every other sort — both Identity directions and the Priority pair included', () => {
+    /* `hardest` is back in this list (block 4); `urgent` joins it, and so do
+       the two Identity directions the frame added — a descending name sort
+       is exactly where a naive comparator would float the empties up */
     const cases: Array<[string, Record<string, unknown>]> = [
       ['started', { workStartedTs: '2026-08-02T00:00:00Z' }],
       ['completed', { workDoneTs: '2026-08-02T00:00:00Z' }],
       ['name', { name: 'Zeta' }],
+      ['name-desc', { name: 'Zeta' }],
+      ['urgent', { work: [wc()] }],
+      ['hardest', { work: [wc({ difficulty: 'Easy' })] }],
     ];
     for (const [key, real] of cases) {
-      const rows = [row({ cardId: 'empty', name: '' }), row({ cardId: 'real', ...real })];
-      expect(sortBy(key, rows).map((r) => (r as { cardId: string }).cardId), key).toEqual(['real', 'empty']);
+      const rows = [row({ cardId: 'empty', mcNumber: 'MC-1', name: '' }), row({ cardId: 'real', mcNumber: 'MC-2', name: '', ...real })];
+      expect(ids(sortBy(key, rows)), key).toEqual(['real', 'empty']);
+    }
+    // the MC pair: a row with no number is the empty one, in both directions
+    for (const key of ['mc', 'mc-desc']) {
+      const rows = [row({ cardId: 'empty', mcNumber: '' }), row({ cardId: 'real', mcNumber: 'MC-7' })];
+      expect(ids(sortBy(key, rows)), key).toEqual(['real', 'empty']);
     }
   });
 
-  it.todo('block 4 (#78 §5): treats Non-Urgent as a VALUE, not an absence — nothing falls to the bottom');
+  it('treats Non-Urgent as a VALUE, not an absence — nothing falls to the bottom (block 4, #78 §5)', () => {
+    /* LIVE again. Every card on the wire carries an urgency (the default IS
+       Non-Urgent), so a group of quiet cards has a key — 0 — and ranks above
+       a group with nothing to rank, never beside it. Read through the sort
+       path AND the key, so a comparator that coerced 0 to "empty" fails here
+       rather than quietly pushing every quiet group to the bottom. */
+    const rows = [
+      row({ cardId: 'childless', mcNumber: 'MC-1' }),
+      row({ cardId: 'quiet', mcNumber: 'MC-2', work: [wc()] }),
+    ];
+    expect(ids(sortBy('urgent', rows))).toEqual(['quiet', 'childless']);
+    expect(recipe.pipeWorkKeys(rows[1], sel()).urgent).toBe(0);
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* B2 — the work-card keys and the tiebreak (PLAN B5/B7)                    */
+/* ---------------------------------------------------------------------- */
+
+describe('the Deadline sorts key on the EARLIEST matching child, and ignore the parent', () => {
+  it('reads the earliest child `due` as the key — the parent’s own deadline is not consulted', () => {
+    /* #78 §2: "main cards have no deadline at all" (B5). The failing input:
+       a parent whose BR-9 `deadline` is early but whose work is due late. On
+       the parent key it leads; on the children's it trails. */
+    const rows = [
+      row({ cardId: 'parent-early', mcNumber: 'MC-1', deadline: '2026-01-01', work: [wc({ due: '2026-12-01' })] }),
+      row({ cardId: 'child-early', mcNumber: 'MC-2', deadline: null, work: [wc({ due: '2026-06-01' })] }),
+    ];
+    expect(ids(sortBy('due-near', rows))).toEqual(['child-early', 'parent-early']);
+    expect(ids(sortBy('due-far', rows))).toEqual(['parent-early', 'child-early']);
+    // a parent with a deadline and no dated child is KEYLESS, not early
+    const orphan = row({ cardId: 'p', deadline: '2026-01-01', work: [wc()] });
+    expect(recipe.pipeWorkKeys(orphan, sel()).due).toBe(null);
+  });
+
+  it('takes the EARLIEST of several children, skipping the undated ones', () => {
+    const r = row({ work: [wc({ due: '2026-09-01' }), wc({ cardId: 'w2' }), wc({ cardId: 'w3', due: '2026-03-15' }), wc({ cardId: 'w4', due: '2026-03-16' })] });
+    expect(recipe.pipeWorkKeys(r, sel()).due).toBe('2026-03-15');
+  });
+
+  it('compares the Manila day strings AS STRINGS — the same key in both TZs', () => {
+    /* test/CLAUDE.md rule 5: a Date built from '2026-03-15' lands on the 14th
+       or the 15th depending on the process TZ. The key is the wire string
+       itself, unchanged — asserted by identity, which a Date round-trip
+       cannot pass. */
+    const r = row({ work: [wc({ due: '2026-03-15' })] });
+    expect(recipe.pipeWorkKeys(r, sel()).due).toBe('2026-03-15');
+    expect(typeof recipe.pipeWorkKeys(r, sel()).due).toBe('string');
+  });
+
+  it('reads the key over the MATCHING children only — a filtered-out sibling cannot set it', () => {
+    /* B5's "matching": with Urgency = Urgent live, the group's earliest date
+       is the earliest URGENT card's, or the table would open a group on its
+       urgent children and order it by a card it does not show */
+    const r = row({ work: [wc({ due: '2026-02-01' }), wc({ cardId: 'w2', urgency: 'Urgent', due: '2026-11-01' })] });
+    expect(recipe.pipeWorkKeys(r, sel()).due).toBe('2026-02-01');
+    expect(recipe.pipeWorkKeys(r, sel({ urgency: ['Urgent'] })).due).toBe('2026-11-01');
+    // the same narrowing reaches the sort path through `sel`
+    const rows = [
+      row({ cardId: 'a', mcNumber: 'MC-1', work: [wc({ due: '2026-01-01' }), wc({ cardId: 'w2', urgency: 'Urgent', due: '2026-12-01' })] }),
+      row({ cardId: 'b', mcNumber: 'MC-2', work: [wc({ urgency: 'Urgent', due: '2026-06-01' })] }),
+    ];
+    expect(ids(sortBy('due-near', rows))).toEqual(['a', 'b']);
+    expect(ids(sortBy('due-near', rows, sel({ urgency: ['Urgent'] })))).toEqual(['b', 'a']);
+  });
+});
+
+describe('the tiebreak — keyless last, then MC; equal keys by filing, then MC (B7)', () => {
+  it('puts the keyless rows last in BOTH directions, MC ascending among themselves', () => {
+    /* the server order is the trap: keyless rows used to keep whatever order
+       they arrived in, so the bottom of the table reshuffled between loads.
+       Fed in the WRONG order on purpose. */
+    const rows = [
+      row({ cardId: 'k30', mcNumber: 'MC-30' }),
+      row({ cardId: 'dated', mcNumber: 'MC-99', work: [wc({ due: '2026-05-05' })] }),
+      row({ cardId: 'k10', mcNumber: 'MC-10' }),
+      row({ cardId: 'k20', mcNumber: 'MC-20' }),
+    ];
+    expect(ids(sortBy('due-near', rows))).toEqual(['dated', 'k10', 'k20', 'k30']);
+    expect(ids(sortBy('due-far', rows))).toEqual(['dated', 'k10', 'k20', 'k30']);
+    // a non-work key follows the same rule: no name, in both directions
+    const named = [
+      row({ cardId: 'k30', mcNumber: 'MC-30', name: '' }),
+      row({ cardId: 'named', mcNumber: 'MC-99', name: 'Zed' }),
+      row({ cardId: 'k10', mcNumber: 'MC-10', name: '' }),
+    ];
+    expect(ids(sortBy('name', named))).toEqual(['named', 'k10', 'k30']);
+    expect(ids(sortBy('name-desc', named))).toEqual(['named', 'k10', 'k30']);
+  });
+
+  it('falls back on EQUAL keys to the table’s natural order — newest filed first, never-read last — then MC', () => {
+    /* four rows sharing one deadline, fed in an order that satisfies none of
+       the three steps so each one has to do its work: filing decides first
+       (B before A), a tie on filing goes to the lower MC (D before B), and a
+       row never re-read sorts after every filed one (C last). */
+    const due = '2026-07-07';
+    const rows = [
+      row({ cardId: 'A', mcNumber: 'MC-5', filedAt: '2026-01-01T00:00:00Z', work: [wc({ due })] }),
+      row({ cardId: 'B', mcNumber: 'MC-9', filedAt: '2026-03-01T00:00:00Z', work: [wc({ due })] }),
+      row({ cardId: 'C', mcNumber: 'MC-1', filedAt: null, work: [wc({ due })] }),
+      row({ cardId: 'D', mcNumber: 'MC-2', filedAt: '2026-03-01T00:00:00Z', work: [wc({ due })] }),
+    ];
+    expect(ids(sortBy('due-near', rows))).toEqual(['D', 'B', 'A', 'C']);
+    // and the same fallback under a Priority key, where ties are the common case
+    const urgent = rows.map((r) => ({ ...r, work: [wc({ urgency: 'Urgent' })] }));
+    expect(ids(sortBy('urgent', urgent))).toEqual(['D', 'B', 'A', 'C']);
+  });
+
+  it('applies the tiebreak to the MC sorts too — a duplicated number orders by filing', () => {
+    // mc_number is not unique (invariant 3): two MC-837 rows share a key
+    const rows = [
+      row({ cardId: 'old', mcNumber: 'MC-837', filedAt: '2026-01-01T00:00:00Z' }),
+      row({ cardId: 'new', mcNumber: 'MC-837', filedAt: '2026-02-01T00:00:00Z' }),
+      row({ cardId: 'low', mcNumber: 'MC-100' }),
+    ];
+    expect(ids(sortBy('mc', rows))).toEqual(['low', 'new', 'old']);
+    expect(ids(sortBy('mc-desc', rows))).toEqual(['new', 'old', 'low']);
+  });
 });
 
 /* ---------------------------------------------------------------------- */
@@ -208,15 +436,92 @@ describe('filtering is OR within a category and AND across them', () => {
   const pick = (sel: Record<string, string[]>) =>
     rows.filter((r) => recipe.pipeMatches(r, { ...recipe.PIPE_FILTERS_EMPTY(), ...sel }, null)).map((r) => r.cardId);
 
-  it('carries TYPE and STATUS only — the other three left with owl #78', () => {
-    /* SUPERSEDES the five-axis pin taken from owl #62's frame. #78 §3 removed
-       the REQUESTOR column from Pipeline (it stays on Requests, where the row's
-       own subject is a person), and #78 §1 moved urgency and difficulty onto
-       the WORK CARD — so all three axes would now narrow MAIN rows by a value
-       the main row no longer shows. #78 §4 rebuilds urgency and difficulty over
-       work-card values with auto-expand, and that is where they come back;
-       parking them is not declining them. */
-    expect(recipe.PIPE_FILTERS.map((f) => f.label)).toEqual(['Type', 'Status']);
+  it('carries the FOUR axes in the frame’s order — Type, Difficulty, Urgency, Status', () => {
+    /* SUPERSEDES block 1's two-axis pin. #78 §4 (frame 841:53782) rebuilds
+       DIFFICULTY and URGENCY over WORK-CARD values — a group matches through a
+       child (B2/B3) — and that is what brings them back; REQUESTOR stays gone
+       with its column (#78 §3). The order is the frame's (B1). */
+    expect(recipe.PIPE_FILTERS.map((f) => f.label)).toEqual(['Type', 'Difficulty', 'Urgency', 'Status']);
+    const keys = recipe.PIPE_FILTERS.map((f) => f.key);
+    expect(keys).toContain('difficulty');
+    expect(keys).toContain('urgency');
+    expect(keys).not.toContain('requestor');
+  });
+
+  it('reads TYPE and STATUS off the MAIN row and DIFFICULTY and URGENCY off the WORK cards (B2)', () => {
+    /* the axis says which field of WorkCardWire it reads (`work`), and the
+       main-row axes keep `pick`; an axis with both, or neither, is an axis
+       the matcher cannot evaluate */
+    const by = Object.fromEntries(recipe.PIPE_FILTERS.map((f) => [f.key, f]));
+    expect(by.difficulty!.work).toBe('difficulty');
+    expect(by.urgency!.work).toBe('urgency');
+    expect(by.type!.work).toBeUndefined();
+    expect(by.status!.work).toBeUndefined();
+    expect(typeof by.type!.pick).toBe('function');
+    expect(typeof by.status!.pick).toBe('function');
+  });
+
+  it('a group matches a work-card axis through ONE child that satisfies EVERY live work axis (B3)', () => {
+    /* child-level conjunction. The tempting shape is row-level: "some child is
+       Urgent AND some child is Hard". That admits a group whose urgent card is
+       easy and whose hard card is quiet — and the reader, looking for urgent
+       hard work, opens it to find neither. */
+    const split = row({ cardId: 'split', work: [wc({ urgency: 'Urgent', difficulty: 'Easy' }), wc({ cardId: 'w2', difficulty: 'Hard' })] });
+    const one = row({ cardId: 'one', work: [wc({ urgency: 'Urgent', difficulty: 'Hard' }), wc({ cardId: 'w2' })] });
+    const both = sel({ urgency: ['Urgent'], difficulty: ['Hard'] });
+    expect(recipe.pipeMatches(split, both, null)).toBe(false);
+    expect(recipe.pipeMatches(one, both, null)).toBe(true);
+    // each axis alone still admits the split group — it is the conjunction that fails
+    expect(recipe.pipeMatches(split, sel({ urgency: ['Urgent'] }), null)).toBe(true);
+    expect(recipe.pipeMatches(split, sel({ difficulty: ['Hard'] }), null)).toBe(true);
+    // the same rule at the card level, which is what `pipeKids` draws (B3)
+    expect(recipe.pipeWorkKids(split, both, null)).toEqual([]);
+    expect(recipe.pipeWorkKids(one, both, null).map((w) => (w as { cardId: string }).cardId)).toEqual(['w1']);
+  });
+
+  it('hides a group with NO matching child — a childless MC cannot pass a work-card axis (E2)', () => {
+    /* undrawn in the frame, decided at the gate: a main row matches a
+       work-card axis only through a child, so a group with no children — or
+       none matching — is not shown under that axis at all. Shown, it would be
+       a row the reader cannot explain and cannot open. */
+    const childless = row({ cardId: 'lone' });
+    expect(recipe.pipeMatches(childless, sel({ urgency: ['Urgent'] }), null)).toBe(false);
+    expect(recipe.pipeMatches(childless, sel({ urgency: ['Non-Urgent'] }), null)).toBe(false);
+    expect(recipe.pipeMatches(childless, sel({ difficulty: [null] }), null)).toBe(false);
+    // …and is untouched by a main-row axis it does satisfy
+    expect(recipe.pipeMatches(row({ assetType: 'Icon' }), sel({ type: ['Icon'] }), null)).toBe(true);
+  });
+
+  it('ORs within a WORK axis and ANDs it against a MAIN axis, the same as before', () => {
+    const rows = [
+      row({ cardId: 'a', assetType: 'Icon', work: [wc({ difficulty: 'Easy' })] }),
+      row({ cardId: 'b', assetType: 'UI', work: [wc({ difficulty: 'Hard' })] }),
+      row({ cardId: 'c', assetType: 'Icon', work: [wc({ difficulty: 'Hard' })] }),
+    ];
+    const hit = (s: Sel) => rows.filter((r) => recipe.pipeMatches(r, s, null)).map((r) => r.cardId);
+    expect(hit(sel({ difficulty: ['Easy', 'Hard'] }))).toEqual(['a', 'b', 'c']);
+    expect(hit(sel({ type: ['Icon'], difficulty: ['Hard'] }))).toEqual(['c']);
+  });
+
+  it('pipeValues: a main axis yields one value (or nothing where None is not offered); a work axis the DISTINCT child values', () => {
+    /* the value SET is what the counts and the matcher both read, so its
+       shape is a rule: a STATUS-less row has NO value on STATUS (the axis
+       offers no None), a type-less row has [null] on TYPE (it does), and a
+       group with two Hard cards and one Easy carries {Hard, Easy} once each —
+       which is what makes a count a count of GROUPS (B4). */
+    const by = Object.fromEntries(recipe.PIPE_FILTERS.map((f) => [f.key, f]));
+    const r = row({ work: [wc({ difficulty: 'Hard' }), wc({ cardId: 'w2', difficulty: 'Hard' }), wc({ cardId: 'w3', difficulty: 'Easy' })] });
+    expect(recipe.pipeValues(by.type!, r, sel())).toEqual([null]);
+    expect(recipe.pipeValues(by.status!, r, sel())).toEqual([]);
+    expect(recipe.pipeValues(by.difficulty!, r, sel()).slice().sort()).toEqual(['Easy', 'Hard']);
+    expect(recipe.pipeValues(by.urgency!, r, sel())).toEqual(['Non-Urgent']);
+    // a childless group has NO value on a work axis — not None, nothing
+    expect(recipe.pipeValues(by.difficulty!, row(), sel())).toEqual([]);
+    // the set on one work axis is read over the children matching the OTHER
+    // live work axes — the axis's own selection is ignored (R-pf-c)
+    const mixed = row({ work: [wc({ urgency: 'Urgent', difficulty: 'Easy' }), wc({ cardId: 'w2', difficulty: 'Hard' })] });
+    expect(recipe.pipeValues(by.difficulty!, mixed, sel({ urgency: ['Urgent'] }))).toEqual(['Easy']);
+    expect(recipe.pipeValues(by.difficulty!, mixed, sel({ urgency: ['Urgent'], difficulty: ['Hard'] }))).toEqual(['Easy']);
   });
 
   it('leaves no axis pointed at a column the ten-column table stopped drawing', () => {
@@ -266,6 +571,126 @@ describe('a category counts against the OTHER categories, never its own', () => 
     const forOthers = rows.filter((r) => recipe.pipeMatches(r, sel, 'status'));
     expect(forOthers.map((r) => r.cardId)).toEqual(['a']); // …but the other axis sees the narrowing
   });
+
+  it('counts GROUPS on a work-card axis — a group with two Urgent cards is one Urgent (B4)', () => {
+    /* the row unit the table draws and pages is the main row; a count of
+       cards would read "3 Urgent" over a table that shows one group. */
+    const rows = [
+      row({ cardId: 'a', mcNumber: 'MC-1', work: [wc({ urgency: 'Urgent' }), wc({ cardId: 'w2', urgency: 'Urgent' }), wc({ cardId: 'w3' })] }),
+      row({ cardId: 'b', mcNumber: 'MC-2', work: [wc()] }),
+      row({ cardId: 'c', mcNumber: 'MC-3' }), // childless: on no pool of a work axis
+    ];
+    const urgency = recipe.pipeFacetList(rows, sel()).find((f) => f.key === 'urgency')!;
+    expect(urgency.values.map((v) => [v.label, v.count])).toEqual([['Non-Urgent', 2], ['Urgent', 1]]);
+  });
+
+  it('ignores its OWN axis on a work axis too, and sees the other work axis’s narrowing', () => {
+    /* R-pf-c with two work axes live at once. Picking Urgent must leave
+       Non-Urgent countable (own axis ignored), while DIFFICULTY — another
+       axis — counts only the children that ARE urgent (B3's conjunction
+       reaching the counts). */
+    const rows = [
+      row({ cardId: 'a', mcNumber: 'MC-1', assetType: 'Icon', work: [wc({ urgency: 'Urgent', difficulty: 'Hard' }), wc({ cardId: 'w2', difficulty: 'Easy' })] }),
+      row({ cardId: 'b', mcNumber: 'MC-2', assetType: 'UI', work: [wc({ difficulty: 'Easy' })] }),
+    ];
+    const facets = recipe.pipeFacetList(rows, sel({ urgency: ['Urgent'] }));
+    const of = (k: string) => facets.find((f) => f.key === k)!.values.map((v) => [v.label, v.count]);
+    expect(of('urgency'), 'own axis ignored: Non-Urgent still reachable').toEqual([['Non-Urgent', 2], ['Urgent', 1]]);
+    expect(of('difficulty'), 'the other work axis counts urgent children only').toEqual([['Hard', 1]]);
+    expect(of('type'), 'a main axis sees the narrowing').toEqual([['Icon', 1]]);
+    // …and a MAIN axis's selection narrows the WORK axes' counts in turn
+    const byType = recipe.pipeFacetList(rows, sel({ type: ['UI'] }));
+    expect(byType.find((f) => f.key === 'difficulty')!.values.map((v) => [v.label, v.count])).toEqual([['Easy', 1]]);
+  });
+
+  /* ---- BOTH work-card axes live (PLAN.md B12; owl #78 §4; R-pf-c) ----------
+     THE RULE every number below is derived from:
+       pool_j = the rows matching the selection with axis j REMOVED, each
+       counted once per value it carries on j over the children the OTHER
+       work axes admit.
+     The work-card axes are ONE conjunction (B3), so a row fails them together
+     and that is ONE failure: it still counts in every WORK pool with its
+     own-ignoring set, and in no MAIN pool. Counted per axis instead, `split`
+     fell out of both work pools the moment Urgent and Hard were ticked, and
+     Easy read zero on a panel where ticking it would have widened the table —
+     R-pf-c's "accurate and unusable", found on 446 of 1000 random boards.
+     The board: `both` has ONE child that is Urgent AND Hard; `split` has an
+     Urgent Easy card and a quiet Hard card; `far` is `split` under a TYPE the
+     selection below does not pick. */
+  const both = row({ cardId: 'both', mcNumber: 'MC-1', assetType: 'Icon', work: [wc({ urgency: 'Urgent', difficulty: 'Hard' })] });
+  const split = row({ cardId: 'split', mcNumber: 'MC-2', assetType: 'Icon', work: [wc({ urgency: 'Urgent', difficulty: 'Easy' }), wc({ cardId: 'w2', difficulty: 'Hard' })] });
+  const far = row({ cardId: 'far', mcNumber: 'MC-3', assetType: 'UI', work: [wc({ urgency: 'Urgent', difficulty: 'Easy' }), wc({ cardId: 'w2', difficulty: 'Hard' })] });
+  const facetOf = (facets: Facet[], key: string): FacetValue[] => facets.find((f) => f.key === key)?.values ?? [];
+  const counts = (facets: Facet[], key: string) => facetOf(facets, key).map((v) => [v.label, v.count]);
+  const asMap = (facets: Facet[], key: string) => new Map(facetOf(facets, key).map((v) => [v.value, v.count] as const));
+  /* the rule EXECUTED from the shipped matcher and value set, so the facet
+     pass is checked against the rule and not against a copy of its own
+     arithmetic (test/CLAUDE.md rule 2): `pipeMatches(…, null)` over the
+     selection with j removed IS pool_j, and `pipeValues` on j reads the
+     children the other work axes admit */
+  const byRule = (rows: unknown[], live: Sel, key: string) => {
+    const f = recipe.PIPE_FILTERS.find((x) => x.key === key)!;
+    const pool = rows.filter((r) => recipe.pipeMatches(r, { ...live, [key]: [] }, null));
+    const m = new Map<string | null, number>();
+    for (const r of pool) for (const v of recipe.pipeValues(f, r, live)) m.set(v, (m.get(v) || 0) + 1);
+    return m;
+  };
+
+  it('counts with BOTH work axes live — the conjunction fails as ONE, so a failed group still counts in every WORK pool (B12)', () => {
+    /* Urgent + Hard ticked. By the rule:
+         table      = rows matching Urgent AND Hard → `both` (its one child is
+                      both); `split` has no such child
+         DIFFICULTY = rows matching Urgent alone → both, split; values over the
+                      URGENT children: both → Hard, split → Easy   ⇒ Easy 1, Hard 1
+         URGENCY    = rows matching Hard alone → both, split; values over the
+                      HARD children: both → Urgent, split → Non-Urgent ⇒ Non-Urgent 1, Urgent 1
+         TYPE       = rows matching Urgent AND Hard → both only    ⇒ Icon 1
+       `split` reaches Easy and Non-Urgent, and no MAIN pool. */
+    const rows = [both, split];
+    const live = sel({ urgency: ['Urgent'], difficulty: ['Hard'] });
+    expect(ids(rows.filter((r) => recipe.pipeMatches(r, live, null)))).toEqual(['both']);
+    const facets = recipe.pipeFacetList(rows, live);
+    expect(counts(facets, 'difficulty'), 'split reaches Easy through its Urgent child').toEqual([['Easy', 1], ['Hard', 1]]);
+    expect(counts(facets, 'urgency'), 'split reaches Non-Urgent through its Hard child').toEqual([['Non-Urgent', 1], ['Urgent', 1]]);
+    expect(counts(facets, 'type'), 'a MAIN pool keeps the conjunction — split is not in it').toEqual([['Icon', 1]]);
+    for (const f of recipe.PIPE_FILTERS) expect(asMap(facets, f.key), `pool ${f.key}, by the rule`).toEqual(byRule(rows, live, f.key));
+  });
+
+  it('a MAIN miss on top of the conjunction miss is TWO failures — the group counts nowhere (B12)', () => {
+    /* Type=Icon, Urgent, Hard. `far` fails TYPE and fails the conjunction.
+       By the rule every pool removes ONE axis and the other failure remains,
+       so `far` is in none of them: UI never appears under TYPE, and the work
+       pools read exactly what `split` (Icon — one failure) gives them:
+         DIFFICULTY = matching Icon + Urgent → both (Hard), split (Easy)
+         URGENCY    = matching Icon + Hard   → both (Urgent), split (Non-Urgent)
+         TYPE       = matching Urgent + Hard → both                ⇒ Icon 1 */
+    const rows = [both, split, far];
+    const live = sel({ type: ['Icon'], urgency: ['Urgent'], difficulty: ['Hard'] });
+    expect(ids(rows.filter((r) => recipe.pipeMatches(r, live, null)))).toEqual(['both']);
+    const facets = recipe.pipeFacetList(rows, live);
+    expect(counts(facets, 'type'), 'UI is nowhere — far failed two axes').toEqual([['Icon', 1]]);
+    expect(counts(facets, 'difficulty')).toEqual([['Easy', 1], ['Hard', 1]]);
+    expect(counts(facets, 'urgency')).toEqual([['Non-Urgent', 1], ['Urgent', 1]]);
+    for (const f of recipe.PIPE_FILTERS) expect(asMap(facets, f.key), `pool ${f.key}, by the rule`).toEqual(byRule(rows, live, f.key));
+  });
+
+  it('"except axis j" IS the selection with j removed — on a work axis too, with the other one live (B12)', () => {
+    /* the definition the pools are drawn from. Before B12, "except
+       difficulty" skipped DIFFICULTY's own test but handed the FULL selection
+       to URGENCY's child filter, so `split` was asked for a child that is
+       Urgent AND Hard after all — j leaked back in through the other work
+       axis, and the rule above could not hold. */
+    const rows = [both, split, far, row({ cardId: 'lone', mcNumber: 'MC-4', assetType: 'Icon' })];
+    const live = sel({ type: ['Icon'], urgency: ['Urgent'], difficulty: ['Hard'] });
+    for (const r of rows) for (const f of recipe.PIPE_FILTERS) {
+      expect(recipe.pipeMatches(r, live, f.key), `${ids([r])[0]} except ${f.key}`).toBe(recipe.pipeMatches(r, { ...live, [f.key]: [] }, null));
+    }
+    // the concrete case: split has an Urgent child and a Hard child, so it
+    // survives either work axis being ignored — only the conjunction fails it
+    expect(recipe.pipeMatches(split, live, 'difficulty')).toBe(true);
+    expect(recipe.pipeMatches(split, live, 'urgency')).toBe(true);
+    expect(recipe.pipeMatches(split, live, null)).toBe(false);
+  });
 });
 
 describe('the MC-number sort actually orders by the MC number', () => {
@@ -276,9 +701,17 @@ describe('the MC-number sort actually orders by the MC number', () => {
        stub of `mcRank` instead of slicing the shipped one — so the guard now
        executes the real helper, and this case is what the stub was hiding. */
     const rows = [row({ cardId: 'a', mcNumber: 'MC-10' }), row({ cardId: 'b', mcNumber: 'MC-9' }), row({ cardId: 'c', mcNumber: 'MC-655.3' })];
-    expect(sortBy('mc', rows).map((r) => (r as { cardId: string }).cardId)).toEqual(['b', 'a', 'c']);
+    expect(ids(sortBy('mc', rows))).toEqual(['b', 'a', 'c']);
+    // the frame's second direction is the same key reversed (block 4)
+    expect(ids(sortBy('mc-desc', rows))).toEqual(['c', 'a', 'b']);
     // a row with no MC number is empty, and empty still sorts last
-    expect(sortBy('mc', [row({ cardId: 'x' }), row({ cardId: 'y', mcNumber: 'MC-1' })]).map((r) => (r as { cardId: string }).cardId)).toEqual(['y', 'x']);
+    expect(ids(sortBy('mc', [row({ cardId: 'x', mcNumber: '' }), row({ cardId: 'y', mcNumber: 'MC-1' })]))).toEqual(['y', 'x']);
+  });
+
+  it('orders the name sort in both directions, case-insensitively', () => {
+    const rows = [row({ cardId: 'b', mcNumber: 'MC-1', name: 'beta' }), row({ cardId: 'a', mcNumber: 'MC-2', name: 'Alpha' }), row({ cardId: 'c', mcNumber: 'MC-3', name: 'Charlie' })];
+    expect(ids(sortBy('name', rows))).toEqual(['a', 'b', 'c']);
+    expect(ids(sortBy('name-desc', rows))).toEqual(['c', 'b', 'a']);
   });
 });
 
@@ -290,22 +723,47 @@ const facet = (rows: unknown[], key: string, sel: Record<string, (string | null)
   recipe.pipeFacetList(rows, sel).find((f) => f.key === key)!;
 
 describe('absence is selectable on the axis that can lack a value', () => {
-  it('offers None on TYPE, and never on STATUS', () => {
-    /* AMENDED by owl #78 (2026-09-05): DIFFICULTY and REQUESTOR were the other
-       two none-bearing axes and both left the panel with their columns. The
-       RULE is untouched — an axis whose rows can carry no value must offer the
-       absence, or those rows are the only ones no filter can reach — and TYPE
-       is the axis it still applies to. STATUS is still deliberately excluded:
-       every card sits in a Trello list, so it has no residue to collect. */
-    const rows = [row({ cardId: 'a' }), row({ cardId: 'b', assetType: 'Icon', currentList: 'Design' })];
+  it('offers None on TYPE and DIFFICULTY, and never on URGENCY or STATUS', () => {
+    /* AMENDED twice on 2026-09-05. Block 1 parked DIFFICULTY with its column
+       and left TYPE the one none-bearing axis; block 4 (owl #78 §4, F11)
+       brings DIFFICULTY back over the WORK cards, and None with it — a card
+       with no difficulty label is exactly the incomplete work a PM filters
+       for. The RULE is untouched: an axis whose subject can carry no value
+       must offer the absence. URGENCY offers none because every card carries
+       one (Non-Urgent IS the absence of the label, and it is a value); STATUS
+       because every card sits in a Trello list. */
+    const rows = [
+      row({ cardId: 'a', mcNumber: 'MC-1', work: [wc()] }),
+      row({ cardId: 'b', mcNumber: 'MC-2', assetType: 'Icon', currentList: 'Design', work: [wc({ difficulty: 'Easy' })] }),
+    ];
     const labels = (k: string) => facet(rows, k).values.map((v) => v.label);
     expect(labels('type')).toContain('None');
+    expect(labels('difficulty')).toContain('None');
+    expect(labels('urgency')).not.toContain('None');
     expect(labels('status')).not.toContain('None');
-    // and the parked axes are absent rather than present-and-Noneless
-    const keys = recipe.PIPE_FILTERS.map((f) => f.key);
-    expect(keys).not.toContain('difficulty');
-    expect(keys).not.toContain('requestor');
-    expect(keys).not.toContain('urgency');
+    // the flags say the same, so the chip and the matcher agree with the panel
+    const none = Object.fromEntries(recipe.PIPE_FILTERS.map((f) => [f.key, !!f.none]));
+    expect(none).toEqual({ type: true, difficulty: true, urgency: false, status: false });
+  });
+
+  it('offers None on DIFFICULTY only through an unlabelled MATCHING child — never for a childless group', () => {
+    /* the work-axis half of "None is derived": a childless MC has no card to
+       lack a label, so it contributes no None; a group whose only unlabelled
+       card is filtered out by ANOTHER live work axis does not either — the
+       reader would tick None and see a group with nothing unlabelled in it */
+    const childless = [row({ cardId: 'a', mcNumber: 'MC-1' })];
+    expect(recipe.pipeFacetList(childless, sel()).find((f) => f.key === 'difficulty')).toBeUndefined();
+
+    const labelled = [row({ cardId: 'a', mcNumber: 'MC-1', work: [wc({ difficulty: 'Hard' }), wc({ cardId: 'w2', difficulty: 'Easy' })] })];
+    expect(facet(labelled, 'difficulty').values.map((v) => v.label)).not.toContain('None');
+
+    const oneUnlabelled = [row({ cardId: 'a', mcNumber: 'MC-1', work: [wc({ difficulty: 'Hard', urgency: 'Urgent' }), wc({ cardId: 'w2' })] })];
+    expect(facet(oneUnlabelled, 'difficulty').values.map((v) => [v.label, v.count])).toEqual([['Hard', 1], ['None', 1]]);
+    // the quiet unlabelled card is not a match under Urgency = Urgent, so None goes
+    expect(facet(oneUnlabelled, 'difficulty', sel({ urgency: ['Urgent'] })).values.map((v) => v.label)).toEqual(['Hard']);
+    // …and selecting None reaches exactly the groups with an unlabelled matching card
+    const rows = [...labelled, ...oneUnlabelled.map((r) => ({ ...r, cardId: 'b', mcNumber: 'MC-2' })), ...childless.map((r) => ({ ...r, cardId: 'c', mcNumber: 'MC-3' }))];
+    expect(rows.filter((r) => recipe.pipeMatches(r, sel({ difficulty: [null] }), null)).map((r) => r.cardId)).toEqual(['b']);
   });
 
   it('DERIVES None like every other value — a complete board never shows it', () => {
@@ -339,14 +797,37 @@ describe('absence is selectable on the axis that can lack a value', () => {
       row({ cardId: 'c' }),
       row({ cardId: 'd' }),
     ];
-    /* TYPE is the only none-bearing axis left after owl #78; the sum is
-       asserted over `none`-marked axes rather than a named list, so the two
-       #78 §4 restores are covered the day they land. */
-    const noneAxes = recipe.PIPE_FILTERS.filter((f) => f.none).map((f) => f.key);
-    expect(noneAxes, 'no axis admits absence — the sum would hold vacuously').toContain('type');
-    for (const key of noneAxes) {
+    /* The sum is asserted over the `none`-marked MAIN-row axes rather than
+       a named list. Block 4's DIFFICULTY is none-bearing too but counts
+       GROUPS through children (B4): a group with a Hard card and an
+       unlabelled one is counted under BOTH values, so its sum is not a row
+       count — the reachability it owes is proven as a union, below. */
+    const noneMain = recipe.PIPE_FILTERS.filter((f) => f.none && !f.work).map((f) => f.key);
+    expect(noneMain, 'no main axis admits absence — the sum would hold vacuously').toContain('type');
+    for (const key of noneMain) {
       const total = facet(rows, key).values.reduce((n, v) => n + v.count, 0);
       expect(total, key).toBe(rows.length);
+    }
+  });
+
+  it('THE POINT on a WORK axis — every group with a child is reachable through the values the panel offers', () => {
+    /* the same reachability, stated the way a group axis can honour it: tick
+       every value DIFFICULTY offers and every group that has a child comes
+       back — the unlabelled ones through None. The childless group is the one
+       exception, by construction (E2), and it is asserted as one. */
+    const rows = [
+      row({ cardId: 'a', mcNumber: 'MC-1', work: [wc({ difficulty: 'Hard' })] }),
+      row({ cardId: 'b', mcNumber: 'MC-2', work: [wc()] }),
+      row({ cardId: 'c', mcNumber: 'MC-3', work: [wc({ difficulty: 'Easy' }), wc({ cardId: 'w2' })] }),
+      row({ cardId: 'd', mcNumber: 'MC-4' }),
+    ];
+    const noneWork = recipe.PIPE_FILTERS.filter((f) => f.none && f.work).map((f) => f.key);
+    expect(noneWork, 'no work axis admits absence — the union would hold vacuously').toContain('difficulty');
+    for (const key of noneWork) {
+      const all = facet(rows, key).values.map((v) => v.value);
+      expect(all, key).toContain(null);
+      const reached = rows.filter((r) => recipe.pipeMatches(r, sel({ [key]: all }), null)).map((r) => r.cardId);
+      expect(reached, key).toEqual(['a', 'b', 'c']);
     }
   });
 
@@ -370,15 +851,46 @@ describe('absence is selectable on the axis that can lack a value', () => {
   it('sorts None LAST — it is the residue, not a value in the vocabulary', () => {
     /* alphabetically None would land mid-list and push the real vocabulary
        down. The ORDERED half of this rule rode on DIFFICULTY (`order:
-       ['Easy','Medium','Hard']`, where None has no place at all) and parked
-       with that axis in #78 §1 — the `order` branch comes back under test when
-       #78 §4 rebuilds difficulty over work-card values. */
+       ['Easy','Medium','Hard']`, where None has no place at all), parked with
+       that axis in block 1, and is back under test below (block 4, F2). */
     const rows = [
       row({ cardId: 'a', assetType: 'Zeppelin' }),
       row({ cardId: 'b', assetType: 'Animation' }),
       row({ cardId: 'c' }),
     ];
     expect(facet(rows, 'type').values.map((v) => v.label)).toEqual(['Animation', 'Zeppelin', 'None']);
+  });
+
+  it('reads DIFFICULTY in its own progression — Easy, Medium, Hard — then None; URGENCY Non-Urgent then Urgent', () => {
+    /* the `order` branch, live again: alphabetically Hard would sit between
+       Easy and Medium, and the panel would read as a list of words rather
+       than a scale. Fed in reverse so the sort has to do the work. */
+    const rows = [
+      row({ cardId: 'a', mcNumber: 'MC-1', work: [wc()] }),
+      row({ cardId: 'b', mcNumber: 'MC-2', work: [wc({ difficulty: 'Hard', urgency: 'Urgent' })] }),
+      row({ cardId: 'c', mcNumber: 'MC-3', work: [wc({ difficulty: 'Medium' })] }),
+      row({ cardId: 'd', mcNumber: 'MC-4', work: [wc({ difficulty: 'Easy' })] }),
+    ];
+    expect(facet(rows, 'difficulty').values.map((v) => v.label)).toEqual(['Easy', 'Medium', 'Hard', 'None']);
+    expect(facet(rows, 'urgency').values.map((v) => v.label)).toEqual(['Non-Urgent', 'Urgent']);
+    // the orders are the axes' own, derived — not a second list typed here
+    const by = Object.fromEntries(recipe.PIPE_FILTERS.map((f) => [f.key, f]));
+    expect(by.difficulty!.order).toEqual(['Easy', 'Medium', 'Hard']);
+    expect(by.urgency!.order).toEqual(['Non-Urgent', 'Urgent']);
+  });
+
+  it('keeps STATUS alphabetical — the wire carries no list position (R-pf-e stands, B8)', () => {
+    /* #78 §4 asks for Trello LIST order; nothing on the wire says what that
+       is, and inventing one from the names would be a second order the board
+       could contradict. Alphabetical until the ARES read API carries a
+       position (backlog). Asserted as "no `order` declared" plus the result. */
+    const rows = [
+      row({ cardId: 'a', mcNumber: 'MC-1', currentList: 'Working on design' }),
+      row({ cardId: 'b', mcNumber: 'MC-2', currentList: 'Backlogs: Icon' }),
+      row({ cardId: 'c', mcNumber: 'MC-3', currentList: 'Render: Ready for Client Review' }),
+    ];
+    expect(recipe.PIPE_FILTERS.find((f) => f.key === 'status')!.order).toBeUndefined();
+    expect(facet(rows, 'status').values.map((v) => v.label)).toEqual(['Backlogs: Icon', 'Render: Ready for Client Review', 'Working on design']);
   });
 
   it('still ignores its own axis when None is the selection', () => {
@@ -682,10 +1194,26 @@ describe('the filter indicator says what is filtered, in words', () => {
   });
 
   it('WRAPS the row rather than collapsing or scrolling it (JP)', () => {
-    /* the frame only ever draws one chip; several axes can be filtered at
-       once — two today, four again after #78 §4 — and wrapping is what keeps
-       each one separately removable */
+    /* the frame only ever draws one chip; four axes can be filtered at once
+       (block 4) and wrapping is what keeps each one separately removable */
     expect(cssRule('.fchips', PIPELINE_CSS)).toContain('flex-wrap: wrap');
+  });
+
+  it('names a WORK axis chip the way it names a main one — "Difficulty is Hard"', () => {
+    // the chip derives from PIPE_FILTERS, so the restored axes need no entry;
+    // asserted so a restore that forgot the label would show here, not in E2E
+    expect(chips({ difficulty: ['Hard'] })).toEqual([{ key: 'difficulty', label: 'Difficulty', text: 'Hard', on: true }]);
+    expect(chips({ urgency: ['Urgent'], type: ['Icon'] }).map((c) => c.key)).toEqual(['type', 'urgency']); // panel order, not tick order
+    expect(chips({ difficulty: [null] })[0]!.text).toBe('None');
+  });
+
+  it('counts the axes in its prose the way the consts count them', () => {
+    /* the template and the stylesheet both explain the wrap by saying how
+       many axes can be filtered at once; the number is the axis table's, and
+       "five" (owl #62's panel) survived block 1 unread */
+    expect(recipe.PIPE_FILTERS).toHaveLength(4);
+    expect(TEMPLATE).not.toContain('five axes');
+    expect(PIPELINE_CSS).not.toContain('five axes');
   });
 
   it('TRIMS a long value instead of letting one chip take the row', () => {
@@ -859,6 +1387,17 @@ describe('the filter indicator says what is filtered, in words', () => {
     expect(TEMPLATE).toContain("on-click=\"['clearPipeFilters']\">Clear all");
   });
 
+  it('returns the reader to the top on a SEARCH change as well (R-pf-h, closed in block 4)', () => {
+    /* I7: every filter and sort handler called `pipeBackToTop()`; the search
+       field is two-way bound and had no handler, so it was the one narrowing
+       that left the reader halfway down a list that was no longer the list.
+       Stated once, as an observer on the bound key — the same shape the
+       chipPop observer takes — rather than a keystroke handler. */
+    const at = APP_JS_CODE.indexOf("app.observe('searchQ'");
+    expect(at, 'no observer on searchQ').toBeGreaterThan(-1);
+    expect(APP_JS_CODE.slice(at, APP_JS_CODE.indexOf(');', at))).toContain('pipeBackToTop()');
+  });
+
   it('names the axis in each ✕’s accessible name', () => {
     // the icon carries no text, so this is the only route to which filter goes
     expect(TEMPLATE).toContain('aria-label="Remove the {{c.label}} filter"');
@@ -870,12 +1409,16 @@ describe('the filter indicator says what is filtered, in words', () => {
 /* ---------------------------------------------------------------------- */
 
 describe('the sort button names its selection; the filter button never does', () => {
-  it('formats the sort label as `Group: Item`', () => {
+  it('formats the sort label as `Group: Item`, for every sort', () => {
     /* the group prefix does real work — 'Recently started' alone is ambiguous
        out of context, and the prefix says which axis is ordering the table.
-       Re-pointed 2026-09-05 off the parked Priority group (D5, #78 §5) onto a
-       surviving key; the rule under test is the prefix, not the key. */
+       Block 4 keeps the format (B9): the Identity items carry a colon of their
+       own, so the button reads 'Identity: MC Number: Low to High' — flagged to
+       Miles as a question, built as the frame draws it, pinned as built. */
     expect(recipe.pipeSortLabel('started')).toBe('Dates: Recently started');
+    expect(recipe.pipeSortLabel('urgent')).toBe('Priority: Urgent first');
+    expect(recipe.pipeSortLabel('mc')).toBe('Identity: MC Number: Low to High');
+    for (const s of recipe.PIPE_SORTS) expect(recipe.pipeSortLabel(s.key)).toBe(`${s.group}: ${s.label}`);
     expect(recipe.pipeSortLabel(null)).toBe('');
   });
 
@@ -962,6 +1505,22 @@ describe('the panels behave like every other overlay', () => {
     expect(scrolling.map((f) => f.key)).toEqual(['status']);
     expect(cssRule('.pipemenu .pmscroll', PIPELINE_CSS)).toContain('overflow-y: auto');
     expect(cssRule('.pipemenu', PIPELINE_CSS)).not.toContain('overflow-y');
+  });
+
+  it('groups the sort panel as Dates, Priority, Identity — derived from the sort array, in its order', () => {
+    /* the panel's headings come from the `PIPE_SORT_GROUPS` computed, which
+       walks PIPE_SORTS and opens a group at every change of `group`. Executed
+       out of the shipped scripts; the items are asserted to be the sorts
+       themselves, flattened back, so a group cannot hold a sort the array
+       does not, and the Priority group sits where the frame draws it. */
+    const groups = new Function(`
+      ${decl(APP_JS, 'PIPE_SORTS')}
+      const computed = { ${method('PIPE_SORT_GROUPS')} };
+      return computed.PIPE_SORT_GROUPS.call({ get: () => undefined });
+    `)() as Array<{ group: string; items: Sort[] }>;
+    expect(groups.map((g) => g.group)).toEqual(['Dates', 'Priority', 'Identity']);
+    expect(groups.flatMap((g) => g.items.map((s) => s.key))).toEqual(recipe.PIPE_SORTS.map((s) => s.key));
+    expect(groups.map((g) => g.items.length)).toEqual([4, 2, 4]);
   });
 
   it('resets both on project switch, like the planner’s expansion state', () => {
@@ -1120,8 +1679,10 @@ interface NoResultsHarness {
    reaches for the facet pass (its own guard above pins that ordering). */
 const noResultsHarness = (): NoResultsHarness =>
   new Function(`
+    ${decl(APP_JS, 'DIFF_RANK')}
     ${decl(APP_JS, 'PIPE_SORTS')}
     ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
+    ${decl(APP_JS, 'pipeTiebreak')}
     ${decl(APP_JS, 'pipeCompare')}
     ${decl(APP_JS, 'pipeSortRows')}
     ${decl(APP_JS, 'PIPE_COLS')}
@@ -1132,6 +1693,10 @@ const noResultsHarness = (): NoResultsHarness =>
     ${decl(APP_JS, 'pipePick')}
     ${decl(APP_JS, 'pipeValueLabel')}
     ${decl(APP_JS, 'PIPE_FILTERS_EMPTY')}
+    ${decl(APP_JS, 'pipeWorkMatch')}
+    ${decl(APP_JS, 'pipeWorkKids')}
+    ${decl(APP_JS, 'pipeValues')}
+    ${decl(APP_JS, 'pipeWorkKeys')}
     ${decl(APP_JS, 'pipeMatches')}
     ${decl(APP_JS, 'pipeChipList')}
     ${decl(APP_JS, 'mcRank')}
@@ -1177,6 +1742,8 @@ const renderPipestack = (state: { pipeNoResults: boolean; pipelineRows?: unknown
       pipeMcAnchor: {},
       expanded: {},
       workCardsByMc: {},
+      pipeOpen: {},
+      pipeKids: {},
       writesEnabled: false,
       savingUrgency: {},
       savingDifficulty: {},
