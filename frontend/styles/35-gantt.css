@@ -401,7 +401,12 @@
 .gantt .gsearch { height: 77px; }
 .gantt .gsearchpane {
   display: flex; align-items: center;
-  padding: var(--space-16) var(--space-24) var(--space-16) var(--space-16);
+  /* 16 / 24 / 15 / 16 — the node's 16 below the field is the padding PLUS
+     the row's own 1px rule: Figma draws that stroke INSIDE the box over the
+     last padding pixel, and border-box does the same only if the padding
+     yields it. 16 + 45 + 15 + 1 = the row's 77, nothing overflows
+     (review 2026-09-05, surface-5). */
+  padding: var(--space-16) var(--space-24) 15px var(--space-16);
   gap: var(--space-24);
 }
 /* the field FILLS the pane and gives way to the link beside it, so it flexes
@@ -458,6 +463,16 @@
 .gantt .gaddone { color: var(--blue-300); }
 .gantt .gresult:hover .gaddone, .gantt .gresult:focus-within .gaddone { color: var(--blue-600); }
 .gantt .gresult:hover .glabel, .gantt .gresult:focus-within .glabel { font-weight: 600; }
+/* while an add is in the air the links are inert (B10), and an inert link
+   must not keep the live grammar: it greys like the dead Add All and the row
+   hover raises nothing — colour and weight are the affordance, and the
+   affordance is off (review 2026-09-05, surface-1 / B2-R3). Later in the
+   file than the rise on purpose: same specificity, order decides. */
+.gantt .gresult.busy .galink { color: var(--slate-400); cursor: default; }
+.gantt .gresult.busy .glabel { font-weight: 400; }
+/* the status line a screen reader hears when the panel answers — visually
+   nothing, one line of text off-screen (review 2026-09-05, surface-3) */
+.gantt .gvh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 /* the empty answer is one muted line where the first result would be (node
    841:33689) — a row of this table, not the full-page empty state the
    Pipeline draws */
@@ -481,6 +496,10 @@
    a class nothing emits reads as a live treatment (sprintFootCls,
    70-measure.js, is the only writer). */
 .gantt .gfoot { display: flex; min-height: 63px; border-top: 1px solid var(--slate-200); background: var(--slate-50); }
+/* the row above the footer — a search row, a result row, or a shut block's
+   head — already draws the seam as its bottom rule; the footer's own top rule
+   doubled it to a 2px hairline (review 2026-09-05, surface-2) */
+.gantt .gblock + .gfoot { border-top: none; }
 .gantt .gfoot .gpin { background: var(--slate-50); }
 .gantt .gfootcap {
   display: flex; flex-direction: column; justify-content: center; gap: var(--space-4);

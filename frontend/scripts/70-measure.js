@@ -9,6 +9,17 @@ function patchRow(cardId, fields) {
 }
 
 const errText = (err) => (err.detail && err.detail.message) || err.message;
+/* After an add's reload the element that held focus can be GONE — the Add
+   the user clicked left with its row, Add All left with the emptied panel —
+   and the browser drops focus to <body>, restarting the next Tab from the top
+   of the document (the hazard 60-overlays.js names for a dismissed overlay).
+   Focus is RETURNED to that sprint's field, never stolen: only when nothing
+   holds it (review 2026-09-05, B2-R7). */
+function addRefocus(sprintId) {
+  if (document.activeElement && document.activeElement !== document.body) return;
+  const field = document.getElementById(`gaddq-${sprintId}`);
+  if (field) field.focus();
+}
 function flashBanner(msg) {
   app.set('banner', msg);
   setTimeout(() => app.set('banner', ''), 6000);

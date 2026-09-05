@@ -254,32 +254,33 @@
                   old picker cells sat in (B9). }}
               <div class="growr gsearch">
                 <div class="gpin gdetails gsearchpane">
-                  <input class="gaddq {{#if addPanels[g.id]}}typed{{/if}}" type="text"
+                  <input class="gaddq {{#if addPanels[g.id]}}typed{{/if}}" type="text" id="gaddq-{{g.id}}" lazy="250"
                          value="{{addQ[g.id]}}" placeholder="Search by MC# or Work Card to add to sprint"
                          aria-label="Search work cards to add to {{g.name}}"
                          on-keydown="['addKey', g.id]" />
                   {{#if addPanels[g.id]}}
                     <button class="galink gaddall" type="button" on-click="['addAll', g.id]"
-                            disabled="{{ addPanels[g.id].items.length && addBusy !== g.id ? false : true }}"
+                            disabled="{{ addPanels[g.id].items.length && !addBusy ? false : true }}"
                             aria-label="Add every listed work card to {{g.name}}">Add All</button>
+                    {{#if addPanels[g.id].items.length}}<span class="gvh" role="status">{{ addPanels[g.id].items.length === 1 ? '1 work card matches' : addPanels[g.id].items.length + ' work cards match' }}</span>{{/if}}
                   {{/if}}
                 </div>
                 <div class="gtrack"><div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div></div>
               </div>
               {{#if addPanels[g.id]}}
                 {{#each addPanels[g.id].items as m}}
-                  <div class="growr gresult">
+                  <div class="growr gresult {{#if addBusy}}busy{{/if}}">
                     <div class="gpin gdetails gresultpane">
                       <span class="glabel">{{m.label}}</span>
                       <button class="galink gaddone" type="button" on-click="['addOne', g.id, m.cardId]"
-                              disabled="{{ addBusy === g.id ? true : false }}"
+                              disabled="{{ addBusy ? true : false }}"
                               aria-label="Add {{m.label}} to {{g.name}}">Add</button>
                     </div>
                     <div class="gtrack"><div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div></div>
                   </div>
                 {{else}}
                   <div class="growr gresult gnomatch">
-                    <div class="gpin gdetails gresultpane"><span class="gmuted">No cards found for this query</span></div>
+                    <div class="gpin gdetails gresultpane"><span class="gmuted" role="status">No cards found for this query</span></div>
                     <div class="gtrack"><div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div></div>
                   </div>
                 {{/each}}

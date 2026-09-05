@@ -829,4 +829,74 @@ describe('Add All is one request that answers per card', () => {
     const adds = await AuditLog.find({ project_id: project._id, action: 'sprintItem.add' }).lean();
     expect(adds.map((a) => (a.after as { card_id: string }).card_id)).toEqual(['w2']);
   });
+
+  it('takes its own rows back and refuses when the sprint vanished mid-batch (review 2026-09-05, S1)', async () => {
+    const { project, sprint, agent } = await setup();
+    for (const id of ['w1', 'w2']) await mkCard(project._id, id);
+    /* The sprints editor removes a sprint and cascades its rows in one act.
+       Simulated at the seam: the route's FIRST insert is preceded by exactly
+       that act, so every row the batch creates hangs off a sprint that is
+       gone — drawn nowhere, holding its card out of the pool. */
+    const original = SprintItem.create.bind(SprintItem) as (doc: Record<string, unknown>) => Promise<unknown>;
+    const spy = vi.spyOn(SprintItem, 'create').mockImplementationOnce((async (doc: Record<string, unknown>) => {
+      await SprintItem.deleteMany({ project_id: project._id, sprint_id: sprint._id });
+      await Sprint.deleteOne({ _id: sprint._id, project_id: project._id });
+      return original(doc);
+    }) as never);
+    try {
+      const res = await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['w1', 'w2'] }).expect(409);
+      expect(res.body.ok).toBe(false);
+      expect(res.body.error.code).toBe('SPRINT_GONE');
+      expect(typeof res.body.error.message).toBe('string');
+    } finally {
+      spy.mockRestore();
+    }
+    // no orphan: both cards are back in the pool, and the log holds the add AND the removal of each
+    expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(0);
+    expect(Object.keys((await load(project._id)).addable['MC-07'] ? { x: 1 } : {})).toHaveLength(1);
+    const log = (await AuditLog.find({ project_id: project._id }).sort({ _id: 1 }).lean()).map((a) => a.action);
+    expect(log).toEqual(['sprintItem.add', 'sprintItem.add', 'sprintItem.remove', 'sprintItem.remove']);
+  });
+
+  it('rolls back a row whose audit row failed and says how far it got (review 2026-09-05, S2)', async () => {
+    const { project, sprint, agent } = await setup();
+    for (const id of ['w1', 'w2', 'w3']) await mkCard(project._id, id);
+    // the SECOND audit write fails: w1 stands with its row, w2 is taken back, w3 is never reached
+    const original = AuditLog.create.bind(AuditLog) as (doc: Record<string, unknown>) => Promise<unknown>;
+    let calls = 0;
+    const spy = vi.spyOn(AuditLog, 'create').mockImplementation((async (doc: Record<string, unknown>) => {
+      calls += 1;
+      if (calls === 2) throw new Error('audit store unreachable');
+      return original(doc);
+    }) as never);
+    try {
+      const res = await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['w1', 'w2', 'w3'] }).expect(500);
+      expect(res.body).toMatchObject({ ok: false, error: { code: 'PARTIAL' }, added: 1, skipped: [] });
+      expect(res.body.error.message).toContain('Added 1 of 3');
+    } finally {
+      spy.mockRestore();
+    }
+    // invariant 10: no row without its audit row — w2's row went with its failed audit
+    expect((await SprintItem.find({ project_id: project._id }).lean()).map((r) => r.trello_card_id)).toEqual(['w1']);
+    const adds = await AuditLog.find({ project_id: project._id, action: 'sprintItem.add' }).lean();
+    expect(adds.map((a) => (a.after as { card_id: string }).card_id)).toEqual(['w1']);
+  });
+
+  it('answers a vanished sprint with plain words, on both add routes (review 2026-09-05, B2-R5)', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkCard(project._id, 'w1');
+    const gone = await Sprint.create({
+      project_id: project._id, name: 'Gone', starts_on: '2026-09-07', ends_on: '2026-09-18', position: 1,
+    });
+    await Sprint.deleteOne({ _id: gone._id });
+    for (const res of [
+      await batch(agent, project._id, { sprint_id: String(gone._id), card_ids: ['w1'] }).expect(404),
+      await add(agent, project._id, { sprint_id: String(gone._id), card_id: 'w1' }).expect(404),
+    ]) {
+      expect(res.body.error.code).toBe('NOT_FOUND');
+      // the client prints the server's own message; a bare code reached the banner before
+      expect(res.body.error.message).toMatch(/no longer exists/);
+    }
+    void sprint;
+  });
 });

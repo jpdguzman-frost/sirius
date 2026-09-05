@@ -500,7 +500,9 @@ export function scheduleRouter(): Router {
           .lean(),
       ]);
       if (!sprint || !card) {
-        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+        // a MESSAGE, as the 409s beside it carry: the client prints the server's
+        // words, and a bare code reached the banner (review 2026-09-05, B2-R5)
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND', message: 'That sprint or task card no longer exists — reload the schedule.' } });
         return;
       }
       /* #72 §5: a card already complete is never OFFERED, and the server says
@@ -601,7 +603,7 @@ export function scheduleRouter(): Router {
           .lean(),
       ]);
       if (!sprint) {
-        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND', message: 'That sprint no longer exists — reload the schedule.' } });
         return;
       }
       const cardById = new Map(cards.map((c) => [c.trello_card_id as string, c]));
@@ -612,6 +614,14 @@ export function scheduleRouter(): Router {
       let position = ((last?.position as number) ?? -1) + 1;
       let added = 0;
       const skipped: Array<{ card_id: string; code: BatchSkipCode }> = [];
+      const createdIds: Types.ObjectId[] = [];
+      /* A create failing for any reason but the unique index, or an audit row
+         failing to land, STOPS the batch (review 2026-09-05, S2): the rows
+         before it stand, each with its audit row; a row whose audit row did
+         not land is taken back, because a state change without its audit row
+         is exactly what invariant 10 forbids; and the answer says how far the
+         batch got rather than a bare 500 over a half-written list. */
+      let failure: unknown = null;
 
       for (const id of ids) {
         const card = cardById.get(id);
@@ -628,8 +638,9 @@ export function scheduleRouter(): Router {
           skipped.push({ card_id: id, code: 'ALREADY_SCHEDULED' });
           continue;
         }
+        let created;
         try {
-          const created = await SprintItem.create({
+          created = await SprintItem.create({
             project_id: projectId,
             sprint_id: sprint._id,
             mc_number: card.mc_number,
@@ -637,13 +648,6 @@ export function scheduleRouter(): Router {
             // no `starts_on` — unplotted by construction (#72 §6)
             position,
             added_by: actor,
-          });
-          position += 1;
-          added += 1;
-          await audit({
-            project_id: projectId, actor, action: 'sprintItem.add', entity: 'sprint_item',
-            entity_id: String(created._id),
-            after: { sprint_id: String(sprint._id), card_id: card.trello_card_id, mc_number: card.mc_number, starts_on: created.starts_on ?? null },
           });
         } catch (err) {
           /* ONE BY ONE, never insertMany: the `scheduled` read above is a
@@ -655,8 +659,56 @@ export function scheduleRouter(): Router {
             skipped.push({ card_id: id, code: 'ALREADY_SCHEDULED' });
             continue;
           }
-          throw err;
+          failure = err;
+          break;
         }
+        try {
+          await audit({
+            project_id: projectId, actor, action: 'sprintItem.add', entity: 'sprint_item',
+            entity_id: String(created._id),
+            after: { sprint_id: String(sprint._id), card_id: card.trello_card_id, mc_number: card.mc_number, starts_on: created.starts_on ?? null },
+          });
+        } catch (err) {
+          await SprintItem.deleteOne({ _id: created._id, project_id: projectId });
+          failure = err;
+          break;
+        }
+        createdIds.push(created._id as Types.ObjectId);
+        position += 1;
+        added += 1;
+      }
+
+      /* The sprint was asserted BEFORE the loop, and the sprints editor can
+         remove it — cascading its rows — while the loop runs; every row
+         inserted after that point would hang off a sprint that no longer
+         exists: drawn nowhere, yet holding its card out of the pool through
+         the unique index (review 2026-09-05, S1). So the sprint is asserted
+         again AFTER the act: gone → this request's own rows are taken back,
+         each removal audited, and the answer is a refusal, never an ok. */
+      if (!(await Sprint.exists({ _id: sprint._id, project_id: projectId }))) {
+        for (const _id of createdIds) {
+          const gone = await SprintItem.findOneAndDelete({ _id, project_id: projectId }).lean();
+          if (!gone) continue; // the cascade already took it, and audited the act
+          await audit({
+            project_id: projectId, actor, action: 'sprintItem.remove', entity: 'sprint_item',
+            entity_id: String(_id),
+            before: { sprint_id: String(gone.sprint_id), card_id: gone.trello_card_id, starts_on: gone.starts_on ?? null },
+          });
+        }
+        res.status(409).json({
+          ok: false,
+          error: { code: 'SPRINT_GONE', message: 'That sprint was removed while the cards were being added — nothing was added. Reload the schedule.' },
+        });
+        return;
+      }
+      if (failure) {
+        res.status(500).json({
+          ok: false,
+          error: { code: 'PARTIAL', message: `Added ${added} of ${ids.length} before the server failed — reload to see what landed.` },
+          added,
+          skipped,
+        });
+        return;
       }
       res.json({ ok: true, added, skipped });
     },

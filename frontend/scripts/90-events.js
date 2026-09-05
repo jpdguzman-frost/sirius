@@ -121,6 +121,14 @@ let sprintItemSaving = false;
    only when the server skipped something — 'Added N of M — K already on the
    schedule, J complete.' The codes are the server's own; one this map does
    not know reads as itself, lowercased, rather than dropping out of the count. */
+/* A refusal that means the LIST ON SCREEN is stale — the card is already on
+   the schedule, complete, gone from the board, or its sprint is gone — is
+   answered with a reload before the banner: the pool the server just refused
+   is replaced, so the row that was refused leaves the list and the same click
+   cannot refuse twice (review 2026-09-05, B2-R6). Any other failure (network,
+   a 500) leaves the list standing for another try. */
+const ADD_STALE = new Set(['NOT_FOUND', 'CARD_COMPLETE', 'ALREADY_SCHEDULED', 'SPRINT_GONE']);
+const addStale = (err) => Boolean(err && err.detail && ADD_STALE.has(err.detail.code));
 const ADD_SKIP_WHY = { ALREADY_SCHEDULED: 'already on the schedule', CARD_COMPLETE: 'complete', NOT_FOUND: 'no longer on the board' };
 function addSkipSummary(added, asked, skipped) {
   const counts = new Map();
@@ -674,22 +682,20 @@ app.on({
     }
   },
 
-  /* ---- the search-based add (owl #77 §0; nodes 840:31597 / 841:33668 /
-     833:68629) ----
-     An always-visible field at the end of every sprint. Typing lists the
-     addable cards the query matches (addPanels, 40-app-state.js); each result
-     row has Add, the field row has Add All. Both land the card UNPLOTTED —
-     two acts (#72 §6, PLAN.md B5): placement stays the + on the committed
-     row, which arrives with the reload. Two locks for the flight: `addBusy`
-     names the sprint whose links go inert, and `sprintItemSaving` is shared
-     with placement so an add and a placement never race one loadAll against
-     another (B10). Both span the reload, on plotPlace's discipline: released
-     early, the links would re-arm while the pool on screen is still the old
-     one, and a second click would POST a card the server now refuses. */
+  /* ONE add in flight per screen (B10, amended at review 2026-09-05, B2-R2):
+     `addBusy` names the sprint whose act is in the air, and while it is set
+     EVERY sprint's links render inert — the template disables on the same
+     truth this guard reads, so a link never renders live and then answers a
+     click with nothing. The adds do NOT take the placement lock
+     (`sprintItemSaving`): that lock exists for the hover ghost a PLACEMENT
+     reload can strand on the row whose track just lost its handlers, and an
+     add's reload strips no track. Two writes racing is what `loadGen` is for.
+     The lock spans the reload: released early, the links would re-arm while
+     the pool on screen is still the old one, and a second click would POST a
+     card the server now refuses. */
   async addOne(_ctx, sprintId, cardId) {
-    if (app.get('addBusy') || sprintItemSaving) return;
+    if (app.get('addBusy')) return;
     app.set('addBusy', sprintId);
-    sprintItemSaving = true;
     try {
       await api.send('POST', `/api/projects/${app.get('activeProjectId')}/sprint-items`, {
         sprint_id: sprintId, card_id: cardId,
@@ -697,12 +703,12 @@ app.on({
       /* the query STAYS (B4): the added card leaves the list when the reload
          replaces the pool, and the rest of the set is still what was asked for */
       await loadAll();
+      addRefocus(sprintId);
     } catch (err) {
-      // the 409s (CARD_COMPLETE / ALREADY_SCHEDULED) land here — errText
-      // prefers the server's own message, and the list stays for another try
+      if (addStale(err)) await loadAll();
+      // errText prefers the server's own message — the 409s and 404s carry one
       flashBanner(errText(err));
     } finally {
-      sprintItemSaving = false;
       app.set('addBusy', null);
     }
   },
@@ -710,37 +716,46 @@ app.on({
      the list on screen IS the set. No confirmation, no count-check, no review
      pass (Miles). The server SKIPS what it cannot add — already scheduled,
      complete, gone — with a code per card and never fails the batch for it,
-     so a partial result is reported in a banner, not thrown. */
+     so a partial result is reported in a banner, not thrown. The banner comes
+     AFTER the reload (review 2026-09-05, B2-R1): the reload writes the banner
+     slot itself, and a summary flashed before it lived only as long as the
+     fetch. */
   async addAll(_ctx, sprintId) {
     const panel = app.get('addPanels')[sprintId];
     const ids = panel ? panel.items.map((m) => m.cardId) : [];
     if (!ids.length) return;
-    if (app.get('addBusy') || sprintItemSaving) return;
+    if (app.get('addBusy')) return;
     app.set('addBusy', sprintId);
-    sprintItemSaving = true;
+    /* the query as SENT: the field stays typeable during the flight, and the
+       clear below must never wipe text the user typed while the batch was in
+       the air — it clears the query that was consumed, not whatever the field
+       holds by the time the answer lands (review 2026-09-05, B2-R4) */
+    const sent = app.get(`addQ.${sprintId}`);
     try {
       const res = await api.send('POST', `/api/projects/${app.get('activeProjectId')}/sprint-items/batch`, {
         sprint_id: sprintId, card_ids: ids,
       });
       const added = Number(res.added) || 0;
       const skipped = Array.isArray(res.skipped) ? res.skipped : [];
-      /* the set was consumed, so the field returns to rest (B4) — but only
+      /* the set was consumed, so the field returns to rest (B4) — and only
          when something landed: a query that added nothing is still the
          user's, and clearing it would hide the list that explains why */
-      if (added >= 1) app.set(`addQ.${sprintId}`, '');
-      if (skipped.length) flashBanner(addSkipSummary(added, ids.length, skipped));
+      if (added >= 1 && app.get(`addQ.${sprintId}`) === sent) app.set(`addQ.${sprintId}`, '');
       await loadAll();
+      if (skipped.length) flashBanner(addSkipSummary(added, ids.length, skipped));
+      addRefocus(sprintId);
     } catch (err) {
+      if (addStale(err)) await loadAll();
       flashBanner(errText(err));
     } finally {
-      sprintItemSaving = false;
       app.set('addBusy', null);
     }
   },
-  /* B6: Escape clears THAT sprint's query and nothing else — focus stays in
-     the field, which the template keeps mounted in every state. Enter is
-     inert (Enter-as-Add-All went to Miles as a suggestion, not a rule), and
-     every other key falls through to the two-way binding. */
+  /* Escape empties THAT sprint's query (B6) — the resting state, not a
+     dismissal: nothing closes, and focus stays where it was, in the field,
+     which the template keeps mounted in every state. Enter is inert
+     (Enter-as-Add-All went to Miles as a suggestion, not a rule), and every
+     other key falls through to the two-way binding. */
   addKey(ctx, sprintId) {
     if (ctx.event.key !== 'Escape') return;
     ctx.event.preventDefault();

@@ -717,22 +717,53 @@ describe("typing opens THAT sprint's panel — matches, no matches, one sprint a
     expect(links(b, 'gaddone')).toHaveLength(1);
   });
 
-  it("makes an in-flight sprint's links inert and leaves every other sprint live (B10)", () => {
+  it("makes EVERY sprint's links inert while one add is in the air — one act per screen (B10, amended at review)", () => {
+    /* the handler guards on `addBusy` being set at all, so the template must
+       disable on the same truth: a link rendered live in a sprint that is not
+       adding would answer a click with nothing (review 2026-09-05, B2-R2) */
     const html = renderSprintSchedule({ addQ: { s1: 'illustrate', s2: 'loft' }, addPanels: PANELS, addBusy: 's1' });
     const [a, b] = bySprint(html);
-    for (const cls of ['gaddone', 'gaddall']) {
-      expect(links(a, cls).length, `no ${cls} to read — the assertions below would be vacuous`).toBeGreaterThan(0);
-      expect(links(b, cls).length, `no ${cls} to read — the assertions below would be vacuous`).toBeGreaterThan(0);
-      expect(links(a, cls).every((t) => t.includes('disabled')), `a ${cls} stayed live during its own sprint's flight`).toBe(true);
-      expect(links(b, cls).some((t) => t.includes('disabled')), `a ${cls} froze in a sprint that is not adding`).toBe(false);
+    for (const half of [a, b]) {
+      for (const cls of ['gaddone', 'gaddall']) {
+        expect(links(half, cls).length, `no ${cls} to read — the assertions below would be vacuous`).toBeGreaterThan(0);
+        expect(links(half, cls).every((tag) => tag.includes('disabled')), `a ${cls} stayed live during a flight`).toBe(true);
+      }
     }
+    // every result row wears the busy grammar — the CSS greys the link and holds the label on it
+    expect([...html.matchAll(/<div class="growr gresult[^"]*"/g)].every((m) => m[0].includes('busy'))).toBe(true);
+    const idle = renderSprintSchedule({ addQ: { s1: 'illustrate', s2: 'loft' }, addPanels: PANELS, addBusy: null });
+    expect(links(idle, 'gaddone').some((tag) => tag.includes('disabled')), 'a per-row Add froze with nothing in flight').toBe(false);
+    expect(idle).not.toMatch(/class="growr gresult[^"]*busy/);
   });
 
   it('draws no placement + on a result row — the card lands UNPLOTTED (B5)', () => {
-    const row = divFragment('<div class="growr gresult"', renderSprintSchedule({ addQ: { s1: 'x' }, addPanels: { s1: PANEL_A } }));
+    const row = divFragment('<div class="growr gresult ', renderSprintSchedule({ addQ: { s1: 'x' }, addPanels: { s1: PANEL_A } }));
     expect(row).toContain('gweek');
     expect(row, 'the result row offers placement — adding and placing are TWO acts (#72 §6)').not.toContain('gplus');
     expect(row).not.toContain('ghovcell');
+  });
+});
+
+describe('the search row after review (2026-09-05) — the field debounces, names itself, and the panel speaks', () => {
+  const open = renderSprintSchedule({ addQ: { s1: 'illustrate' }, addPanels: { s1: PANEL_A } });
+  const none = renderSprintSchedule({ addQ: { s1: 'zzz' }, addPanels: { s1: { items: [] } } });
+
+  it('debounces the field like every other search field in the app (surface-4)', () => {
+    // three fields carry lazy="250" already — a fourth that re-ran the whole pool per keystroke would be the odd one
+    expect(TEMPLATE.match(/<input class="gaddq[^>]*lazy="250"/), 'the add field has no lazy debounce').not.toBeNull();
+  });
+
+  it('gives the field an id keyed on the sprint — what the focus return finds (B2-R7)', () => {
+    expect(open).toMatch(/<input class="gaddq[^>]*id="gaddq-s1"/);
+    expect(fnBody('addRefocus'), 'addRefocus does not look the field up by that id').toContain('gaddq-');
+  });
+
+  it('announces the answer — the no-match line is a status, and a match count is spoken off-screen (surface-3)', () => {
+    expect(none).toMatch(/<span class="gmuted" role="status">No cards found for this query<\/span>/);
+    expect(open).toMatch(/<span class="gvh" role="status">2 work cards match<\/span>/);
+    expect(none, 'a zero count spoke beside the no-match line').not.toContain('work cards match');
+    const one = renderSprintSchedule({ addQ: { s1: 'x' }, addPanels: { s1: { items: [PANEL_A.items[0]!] } } });
+    expect(one).toContain('1 work card matches');
   });
 });
 
@@ -913,6 +944,8 @@ describe('addPanels — a key exists only where a query has tokens (frozen contr
 interface AddRun {
   api: Array<{ method: string; path: string; body: Record<string, unknown> }>;
   banners: string[];
+  /** the sprints the handler asked the focus return for, in order */
+  refocus: string[];
   reloads: number;
   reply: unknown;
   state: Record<string, unknown>;
@@ -923,7 +956,7 @@ interface AddRun {
 const TOP_LEVEL = new Set([...APP_JS_CODE.matchAll(/\n(?:const|function)\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]!));
 
 /** The stub scope every handler run is given. */
-const STUBBED = ['app', 'api', 'flashBanner', 'errText', 'loadAll', 'sprintItemSaving'];
+const STUBBED = ['app', 'api', 'flashBanner', 'errText', 'loadAll', 'addRefocus', 'sprintItemSaving'];
 
 /**
  * The shipped declarations a body NAMES beyond the stub scope, and theirs in
@@ -971,6 +1004,7 @@ const runAdd = async (
   const run: AddRun = {
     api: [],
     banners: [],
+    refocus: [],
     reloads: 0,
     reply: reply instanceof Error ? null : reply,
     state: { activeProjectId: 'p1', addQ: {}, addBusy: null, addPanels: {}, ...structuredClone(seed) },
@@ -994,10 +1028,15 @@ const runAdd = async (
         else write(a, b);
       },
     };
-    const api = { send: async (m, p, b) => { run.api.push({ method: m, path: p, body: b }); if (fail) throw fail; return run.reply; } };
-    const flashBanner = (m) => { run.banners.push(String(m)); };
-    const errText = (e) => (e && e.message) || 'Request failed';
-    const loadAll = async () => { run.reloads += 1; };
+    const api = { send: async (m, p, b) => { run.api.push({ method: m, path: p, body: b }); if (fail) throw fail; return typeof run.reply === 'function' ? run.reply(run) : run.reply; } };
+    /* the banner is STATE, as shipped: flashBanner writes the slot and the
+       reload writes it too — 80-loaders.js's one app.set carries
+       \`banner: … : ''\`. A stub reload that left the slot alone let a summary
+       the reload wipes pass as delivered (review 2026-09-05, B2-R1). */
+    const flashBanner = (m) => { run.banners.push(String(m)); app.set('banner', String(m)); };
+    const errText = (e) => (e && e.detail && e.detail.message) || (e && e.message) || 'Request failed';
+    const loadAll = async () => { run.reloads += 1; app.set('banner', ''); };
+    const addRefocus = (s) => { run.refocus.push(String(s)); };
     let sprintItemSaving = false;
     ${shippedDeps(handlerBody(name))}
     return ${head} ${handlerBody(name)};
@@ -1036,11 +1075,29 @@ describe('addOne — the single route, and the query stays (B4)', () => {
     expect(run.api).toHaveLength(0);
   });
 
-  it('surfaces a refusal through the banner, reloads nothing, and releases the lock', async () => {
-    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed, new Error('ALREADY_SCHEDULED'));
-    expect(run.banners).toEqual(['ALREADY_SCHEDULED']);
-    expect(run.reloads).toBe(0);
+  it('surfaces a plain failure through the banner, reloads nothing, and releases the lock', async () => {
+    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed, new Error('Failed to fetch'));
+    expect(run.banners).toEqual(['Failed to fetch']);
+    expect(run.reloads, 'a network failure says nothing about the list — reloading it is noise').toBe(0);
     expect(run.state.addBusy, 'the lock outlived a failed flight — that sprint can never add again').toBeFalsy();
+  });
+
+  it('reloads BEFORE bannering a refusal that means the list is stale — the refused row leaves (B2-R6)', async () => {
+    const stale = Object.assign(new Error('ALREADY_SCHEDULED'), {
+      detail: { code: 'ALREADY_SCHEDULED', message: 'That task card is already on the schedule.' },
+    });
+    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed, stale);
+    expect(run.reloads, 'the refused row stays listed and the next click refuses again').toBe(1);
+    // the banner is written AFTER the reload, so the reload cannot wipe it
+    expect(run.state.banner).toBe('That task card is already on the schedule.');
+    expect(queries(run).s1, 'a refusal consumed the query').toBe('illustrate');
+  });
+
+  it("returns focus to that sprint's field after the reload — the clicked Add is gone with its row (B2-R7)", async () => {
+    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed);
+    expect(run.refocus).toEqual(['s1']);
+    const failed = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed, new Error('Failed to fetch'));
+    expect(failed.refocus, 'a failed add moved focus — nothing left the page').toEqual([]);
   });
 });
 
@@ -1083,15 +1140,33 @@ describe('Add All — ONE request carrying the listed set, in list order (B3/B4)
     });
     expect(partial.banners.length, 'a partial add said nothing — a card goes missing silently').toBe(1);
     expect(partial.reloads).toBe(1);
+    expect(partial.state.banner, 'the reload wiped the summary — the user never reads it (B2-R1)').toBe(partial.banners[0]);
     const clean = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
     expect(clean.banners, 'a clean add interrupted with a banner — no confirmation, no count-check (Miles)').toEqual([]);
   });
 
-  it('writes nothing for an empty panel, and nothing while that sprint is busy', async () => {
+  it('clears only the query it SENT — text typed during the flight survives (B2-R4)', async () => {
+    const typedMeanwhile = (run: AddRun) => {
+      (run.state.addQ as Record<string, string>).s1 = 'illustrate corey';
+      return { ok: true, added: 2, skipped: [] };
+    };
+    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, typedMeanwhile);
+    expect(run.api).toHaveLength(1);
+    expect(queries(run).s1, 'the clear wiped what the user typed while the batch was in the air').toBe('illustrate corey');
+  });
+
+  it("returns focus to the field after the reload — Add All left with the emptied panel (B2-R7)", async () => {
+    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
+    expect(run.refocus).toEqual(['s1']);
+  });
+
+  it('writes nothing for an empty panel, and nothing while any sprint is busy', async () => {
     const empty = await runAdd('addAll', ALL_HEAD, [null, 's1'], { addQ: { s1: 'zzz' }, addPanels: { s1: { items: [] } } });
     expect(empty.api).toHaveLength(0);
     const busy = await runAdd('addAll', ALL_HEAD, [null, 's1'], { ...seed, addBusy: 's1' });
     expect(busy.api).toHaveLength(0);
+    const elsewhere = await runAdd('addAll', ALL_HEAD, [null, 's1'], { ...seed, addBusy: 's2' });
+    expect(elsewhere.api, 'two adds in the air at once — one act per screen (B10)').toHaveLength(0);
   });
 
   it('releases the lock, banners, and keeps the query when the batch itself fails', async () => {
@@ -1177,6 +1252,27 @@ describe('the search row and its results in CSS (833:68629 / 840:31597 / 841:336
     const dis = rulesFor('gaddall').filter((r) => r.selector.includes('[disabled]'));
     expect(dis.length, 'no disabled Add All rule').toBeGreaterThan(0);
     expect(dis.some((r) => /color:\s*var\(--slate-400\)/.test(r.body))).toBe(true);
+  });
+
+  it('turns the live grammar OFF on a busy row — grey link, no rise, and it wins by ORDER (surface-1 / B2-R3)', () => {
+    const busyLink = CSS_RULES.filter((r) => /\.gresult\.busy .*\.galink/.test(r.selector));
+    const busyLabel = CSS_RULES.filter((r) => /\.gresult\.busy .*\.glabel/.test(r.selector));
+    expect(busyLink.some((r) => /color:\s*var\(--slate-400\)/.test(r.body) && /cursor:\s*default/.test(r.body)), 'a busy Add still reads live').toBe(true);
+    expect(busyLabel.some((r) => /font-weight:\s*400/.test(r.body)), 'a busy row still thickens its label on hover').toBe(true);
+    // same specificity as the rise, so the sheet ORDER is what decides — the busy rules must come later
+    const at = (re: RegExp) => CSS.search(re);
+    expect(at(/\.gresult\.busy \.galink/)).toBeGreaterThan(at(/\.gresult:hover \.gaddone/));
+    expect(at(/\.gresult\.busy \.glabel/)).toBeGreaterThan(at(/\.gresult:hover \.glabel/));
+  });
+
+  it("draws the seam above the footer ONCE — the row above owns it (surface-2)", () => {
+    const seam = CSS_RULES.filter((r) => /\.gblock \+ \.gfoot/.test(r.selector));
+    expect(seam.some((r) => /border-top:\s*none/.test(r.body)), 'the footer doubles the rule of the row above it').toBe(true);
+  });
+
+  it("yields the sixteenth pixel below the field to the row's own rule — 16 + 45 + 15 + 1 = 77 (surface-5)", () => {
+    const pane = rulesFor('gsearchpane');
+    expect(pane.some((r) => /padding:\s*var\(--space-16\) var\(--space-24\) 15px var\(--space-16\)/.test(r.body)), 'the search pane pads 16 below and the field overflows the border-box').toBe(true);
   });
 
   it('keeps the placement circle — the + outlived the add zone it shared a recipe with', () => {
