@@ -10,7 +10,7 @@ import globals from 'globals';
 // concatenates them into one <script>). Drives both the eslint globals map
 // and the unused-vars ignore pattern below — one list, two derivations.
 const FRONTEND_SHARED = [
-  'alphaSort', 'addLabel', 'addTokens', 'addMatches', 'addRefocus', // block 2 (owl #77 §0): the search-based add helpers in 10-constants.js
+  'alphaSort', 'addLabel', 'addTokens', 'addMatches', 'addRefocus', // block 2 (owl #77 §0): the search-based add helpers in 12-constants-pipeline.js
   'api', 'fmtDate', 'mondayShift', 'ICONS', 'ICON_SPRITE',
   'BASE', 'parseRoute', 'buildPath', 'ROUTE_TABS', 'ROUTE_DEFAULT_TAB', 'ROUTE_RETIRED_TABS',
   // The former 01-app.js, split into ten files (context restructure stage 5,
@@ -26,8 +26,8 @@ const FRONTEND_SHARED = [
   'PIPE_COLS', 'pipeColLabel', 'PIPE_FILTERS', 'PIPE_FILTERS_EMPTY', 'PIPE_SORTS', 'PIPE_SORT_DEFAULT', 'pipeCompare', 'pipeSortRows',
   'PIPE_MENU_W', 'pipeBackToTop',
   'pipeMatches', 'pipePick', 'pipeFacetList', 'pipeChipList', 'pipeValueLabel', 'pipeSortLabel',
-  'pipeWorkMatch', // 10-constants.js → the pipeKids computed (block 4, owl #78 §4)
-  'DL_MONTHS', 'DL_DAY_NAMES', 'dlMonthWeeks', 'dlRangeLabel', 'dlWeekRange', 'dlBuild', // block 3 (owls #74/#75): the Deadlines helpers in 10-constants.js
+  'pipeWorkMatch', // 12-constants-pipeline.js → the pipeKids computed (block 4, owl #78 §4)
+  'DL_MONTHS', 'DL_DAY_NAMES', 'dlMonthWeeks', 'dlRangeLabel', 'dlWeekRange', 'dlBuild', // block 3 (owls #74/#75): the Deadlines helpers in 11-constants-deadlines.js
   'NO_OVERLAYS', 'OVERLAY_KEYS', 'patchWorkCard', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
   'REQ_MENU_H', 'REQ_MENU_W', 'REQ_PAGE_SIZE', 'reqComparator', 'reqFilterKeys', 'reqFiltersCleared',
   'REQUEST_SEGMENTS', 'requestBlob', 'resetForProjectSwitch', 'rowWarning', 'scrollerOf',

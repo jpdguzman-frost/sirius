@@ -65,6 +65,6 @@ _last-verified: 2026-08-18_
    project; handle them per the root `CLAUDE.md` invariants.
 
 8. **Source-reading guards go through `test/helpers/source.ts`** — never a
-   hardcoded frontend filename: the app scripts are ten numbered files
+   hardcoded frontend filename: the app scripts are numbered files
    concatenated by `frontend/build.js`, so a guard naming one breaks at the
    next split. [test/helpers/source.ts]

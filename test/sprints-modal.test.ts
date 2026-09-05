@@ -4,8 +4,8 @@
  * Two halves, both against the SHIPPED files and neither retyped:
  *
  * 1. The validators are EXECUTED out of the shipped app scripts (the
- *    executed-computed precedent, now homed in
- *    test/sprint-schedule-render.test.ts), because what a banner says and
+ *    executed-computed precedent, now homed across
+ *    the sprint-schedule-*.test.ts suites), because what a banner says and
  *    whether Save locks are arithmetic, not markup — and R-f-8's working-day
  *    gap rule is a NEW date-math site that `lib/**` cannot own (invariant 5),
  *    so it is the one thing in this batch with no golden test behind it.

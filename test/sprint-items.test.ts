@@ -13,7 +13,7 @@
  *
  * `toHTML()`-style render checks are not here; this file proves the server
  * contract. The search row's geometry and its three states belong to
- * test/sprint-schedule-render.test.ts and the live pass.
+ * test/sprint-schedule-add-search.test.ts and the live pass.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

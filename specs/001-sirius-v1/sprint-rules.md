@@ -183,7 +183,7 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
   board is read-only whatever the switch says: nothing to write to (review
   R4-1). Pipeline only REFLECTS the date.
   [#78 §2;
-  PLAN block 3 B12/B13; `test/sprint-schedule-render.test.ts`]
+  PLAN block 3 B12/B13; `test/sprint-schedule-deadline.test.ts`]
 - **R9-b** A row's deadline is the card's OWN Trello due date or none. The MC
   group's deliverable dates are never inherited (#78 §2 retired jp→miles
   #58's judgement — main cards have no deadline; the Pipeline work row and

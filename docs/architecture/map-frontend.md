@@ -9,7 +9,9 @@ _last-verified: 2026-08-18_
 - `frontend/scripts/00-api.js` — fetch helper; BASE from window.SIRIUS_BASE; 401 → redirect to sign-in (returnTo preserved).
 - `frontend/scripts/00-icons.js` — inlined SVG icon set (ICONS).
 - `frontend/scripts/00-router.js` — PURE routing half (path ⇄ {project, tab}); ROUTE_TABS mirrored from src/routing/paths.ts.
-- `frontend/scripts/10-constants.js` — module constants + one-per-app recipes: capacity bands, planner geometry (WEEK_COUNT/WEEK_PX), STATUS_FILED/clarified/REQUEST_SEGMENTS/noteText, WARN_*/rowWarning, isoOf/todayIso, month tables + pure-string date formatters (fmtLongIso…monthShort).
+- `frontend/scripts/10-constants-core.js` — capacity fallbacks, planner geometry (WEEK_COUNT/WEEK_PX), Requests constants, STATUS_FILED/clarified/REQUEST_SEGMENTS/noteText, WARN_*/rowWarning, isoOf/todayIso, fmtLongIso.
+- `frontend/scripts/11-constants-deadlines.js` — Deadlines month/week tables and helpers: DL_MONTHS/DL_DAY_NAMES through dlBuild, monthShort/monthOrder.
+- `frontend/scripts/12-constants-pipeline.js` — Pipeline sort/filter: DIFF_RANK/PIPE_* machinery (mcRank is consumed from 20-requests-table.js) and the add-work search helpers addLabel/addTokens/addMatches.
 - `frontend/scripts/20-requests-table.js` — Requests sort/filter machinery: shared comparators, REQ_FILTERS, mcRank, REQ_COLS/REQ_SORT_COLS, reqComparator.
 - `frontend/scripts/30-dates.js` — Manila clock (MANILA_DAY/TIME, manilaToday, fmtInstant), ISO calendar arithmetic (isoAddDays…mondayIso), sprint week helpers (sprintPayload, fridayIso, workingDaysBetween, mondaysBetween).
 - `frontend/scripts/40-app-state.js` — initialRoute capture + THE `app = new Ractive({...})` — every data key and computed (tabLabel…sprintDirty); one statement, indivisible.

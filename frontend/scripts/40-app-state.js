@@ -286,13 +286,13 @@ const app = new Ractive({
       return PIPE_SORTS.find((s) => s.key === this.get('pipeSort')) || PIPE_SORT_DEFAULT;
     },
     /* The facet counts live in `pipeFacetList` beside the axes and the matcher
-       they depend on (10-constants), so the panel and the table cannot disagree
+       they depend on (12-constants-pipeline.js), so the panel and the table cannot disagree
        about what a value means. Rule and reasoning are documented there. */
     pipeFacets() {
       return pipeFacetList(this.get('pipeSearched'), this.get('pipeFilters'));
     },
     /* The filter indicator's chips — one per filtered axis. Derived where the
-       axes live (10-constants) so the chip and the panel cannot disagree about
+       axes live (12-constants-pipeline.js) so the chip and the panel cannot disagree about
        what an axis is called or which values are on. */
     pipeChips() {
       /* The chips themselves cost a walk of the SELECTION and nothing else.
@@ -417,7 +417,7 @@ const app = new Ractive({
     /* ---- Deadlines (owls #74/#75/#78 §2; PLAN.md block 3 B1–B5) ----------
        Three derivations, each ONE step from the last, so the template reads
        plain keys and the recipe suite executes the pure helpers beneath them
-       (10-constants.js). The rows are the schedule's own — `sprintItems.rows`
+       (11-constants-deadlines.js). The rows are the schedule's own — `sprintItems.rows`
        off the one `/deliverables` payload (B1) — so one source feeds both
        tabs, which is what keeps a bar on Sprint Schedules and a card here
        from ever disagreeing about the same work card (drift row forty-five).

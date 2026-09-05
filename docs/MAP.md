@@ -18,7 +18,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 ## Areas
 
 <!-- GEN:AREAS -->
-- `frontend` — 33 files → docs/architecture/map-frontend.md — no-bundler Ractive app: numbered app scripts (one shared scope, filename order) + a template layout with numbered partials and views + numbered styles
+- `frontend` — 35 files → docs/architecture/map-frontend.md — no-bundler Ractive app: numbered app scripts (one shared scope, filename order) + a template layout with numbered partials and views + numbered styles
 - `backend` — 66 files → docs/architecture/map-backend.md — Express 5 + worker; lib/ holds the verbatim-port trio; scripts/ are ops
 <!-- /GEN:AREAS -->
 
@@ -37,11 +37,11 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 - test/helpers/gantt-render.ts — renders the shipped schedules template with real Ractive — the template-proof harness.
 - test/helpers/ — db.ts in-memory mongod + migrations; fixtures.ts project/member/agent preamble; requests.ts shared payload shape.
 - test/drag-hittest.test.ts — the inline-style law + week-cell hit-testability (placement clicks); drag sweeps retired 2026-08-28.
-- test/sprint-schedule-render.test.ts — the rebuilt Sprint Schedules tab (owls #72/#73): groups, add flow, itemBar geometry, withdrawal guards.
+- test/sprint-schedule-groups.test.ts, -deadline, -add-search, -add-handlers, -bars-footer — the rebuilt Sprint Schedules tab (owls #72/#73): groups, add flow, itemBar geometry, withdrawal guards.
 - test/gantt-legend.test.ts — one phase→colour map only; deadline tick reuses .gdl (1px red).
 - test/planner-weeks.test.ts — week/month labels + bar geometry from shipped planner text.
 - test/sprints-modal.test.ts — modal validators executed out of the shipped app scripts + rendered states.
-- test/pipeline-warning.test.ts — warning icon + hover card, keyed on server-emitted tokens.
+- test/pipeline-warning-recipe.test.ts, -wiring, -dismissal-css, -live — warning icon + hover card, keyed on server-emitted tokens.
 
 <!-- HAND:BEGIN -->
 - lib/calendar.ts + lib/forecast.ts + lib/planner.ts = the VERBATIM-port trio (invariant 5); golden tests pin parity (test/golden/).

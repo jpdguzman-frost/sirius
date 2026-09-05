@@ -34,7 +34,7 @@ const reqFiltersCleared = () => Object.fromEntries(reqFilterKeys.map((k) => [k, 
    Computed once per load (blobRequests), never inside the comparator.
 
    Takes the MC STRING, not the row. It used to take a request row and read
-   `mc_number` off it, and the Pipeline's own MC sort (10-constants.js) then
+   `mc_number` off it, and the Pipeline's own MC sort (12-constants-pipeline.js) then
    called it with the string — so every row ranked null and that sort silently
    ordered nothing. One argument both tabs can spell is the fix; a row shape is
    not something a shared helper should have to know. */

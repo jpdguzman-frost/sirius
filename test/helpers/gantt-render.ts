@@ -85,7 +85,7 @@ export const APP_JS = appScripts();
  * APP_JS with block and line comments stripped — the corpus for guards that
  * must not be tripped by prose. `(^|[^:])` so a `https://…` inside a template
  * literal is not mistaken for a line comment. ONE copy, shared by every suite
- * that slices the shipped client (pipeline-warning, pipeline-expanded, …).
+ * that slices the shipped client (pipeline-warning-*.test.ts, pipeline-expanded-*.test.ts, …).
  */
 export const APP_JS_CODE = APP_JS.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/gm, '$1');
 
@@ -271,7 +271,7 @@ export interface SprintScheduleState {
    * exists ONLY for a sprint whose query has tokens, and an EMPTY `items`
    * array is the no-matches state (owl #77 §0; 841:33689). The computed and
    * `addMatches` are EXECUTED from shipped source in
-   * test/sprint-schedule-render.test.ts — a render proves which nodes the
+   * the sprint-schedule-add-*.test.ts suites — a render proves which nodes the
    * template emits, never what the list contains.
    */
   addPanels?: Record<string, { items: Array<{ cardId: string; mc: string; name: string; label: string }> }>;
@@ -305,7 +305,7 @@ export interface SprintScheduleState {
 /**
  * Renders the rebuilt tab body (`<div class="gantt …">`) for one view state.
  * The per-row helpers (`itemBar`, `plusLeft`, `deadlineTick`, the two foot
- * helpers) are stubbed here BECAUSE test/sprint-schedule-render.test.ts
+ * helpers) are stubbed here BECAUSE test/sprint-schedule-bars-footer.test.ts
  * executes each recipe out of the shipped scripts — what a render proves is
  * which nodes the template emits, not what is inside a bar. Every array the
  * template iterates is stubbed (rule 6), or a section renders empty and its
@@ -644,7 +644,7 @@ export interface PipelineTableState {
   /**
    * expanded MC groups (owl #45): mcNumber → true is the reader's HAND-opened
    * state. The template never reads it — it is the harness's fallback for
-   * `pipeOpen` below (a guard in test/pipeline-expanded.test.ts proves the
+   * `pipeOpen` below (a guard in test/pipeline-expanded-groups.test.ts proves the
    * subtree gates on the derived map alone).
    */
   expanded?: Record<string, boolean>;
@@ -660,7 +660,7 @@ export interface PipelineTableState {
    * supply it, the harness derives it the way the shipped computed does with
    * no trigger live (`!!expanded[mc]`), so every render written before the
    * rework still says what it said. The computed's own arithmetic is executed
-   * out of the shipped scripts in test/pipeline-expanded.test.ts.
+   * out of the shipped scripts in test/pipeline-expanded-groups.test.ts.
    */
   pipeOpen?: Record<string, boolean>;
   /**
@@ -780,7 +780,7 @@ export function renderPipelineTable(state: PipelineTableState): string {
  * The Ractive data the Pipeline TABLE subtree reads, for a given view state —
  * every array it iterates stubbed (rule 6), the rows stamped as `loadAll`
  * stamps them. Split out of `renderPipelineTable` so a renderer of a LARGER
- * subtree (the `.pipestack` swap in test/pipeline-sortfilter.test.ts) can
+ * subtree (the `.pipestack` swap in test/pipeline-sortfilter-noresults.test.ts) can
  * spread it under its own toolbar keys rather than keep a second copy.
  */
 export function pipeTableData(state: PipelineTableState): Record<string, unknown> {
@@ -911,8 +911,8 @@ export function renderRequestsTable(state: RequestsTableState): string {
  * One top-level declaration — `function NAME(…) { … }` or `const NAME = …;` —
  * sliced out of the shipped frontend source so a test can EXECUTE the recipe
  * the browser runs rather than a retyped copy of it. Which form a helper
- * takes is the author's choice rather than a contract (10-constants.js
- * carries both), so a slicer that knew only one would fail a correct file.
+ * takes is the author's choice rather than a contract (10-constants-core.js /
+ * 11-constants-deadlines.js / 12-constants-pipeline.js carry both), so a slicer that knew only one would fail a correct file.
  *
  * The `function` arm balances the PARAMETER LIST first — `capacityBand(value,
  * { least, … })` destructures, so the first `{` after the name is not the
@@ -923,7 +923,7 @@ export function renderRequestsTable(state: RequestsTableState): string {
  * as `fnBody` does.
  *
  * Three suites had kept byte-identical private copies of this (deadlines-tab,
- * sprint-schedule-render, and `decl` below as the const-only half); the
+ * the sprint-schedule-*.test.ts suites, and `decl` below as the const-only half); the
  * parameter-list subtlety is now stated once (simplification pass
  * 2026-09-05, R2/T-1).
  */

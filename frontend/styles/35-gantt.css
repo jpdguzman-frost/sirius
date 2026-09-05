@@ -14,7 +14,7 @@
 
    Widths are INTRINSIC: a week column is --gw wide, every row lays 12 of them
    end to end, so the sheet sizes itself and no rule repeats the week count.
-   --gw is the CSS half of WEEK_PX (10-constants.js); the month cells multiply
+   --gw is the CSS half of WEEK_PX (10-constants-core.js); the month cells multiply
    it with calc() rather than shipping a second pixel number.
 
    WITHDRAWN 2026-08-28 (owls #72/#73, the sprint rebuild): every recipe that
@@ -28,7 +28,7 @@
    treatment to the next person pricing a change. */
 
 .gantt {
-  --gw: 92px; /* one week column — mirrors WEEK_PX in 10-constants.js */
+  --gw: 92px; /* one week column — mirrors WEEK_PX in 10-constants-core.js */
   --gleft: 952px; /* 122 + 262 + 163 + 142 + 263 — mirrors LEFT_PANE_PX. No gutter: the checkbox replaced the grip */
   --gbar-h: 31px; /* the bar band (frame 731:98682) */
   font-family: var(--font-sans);

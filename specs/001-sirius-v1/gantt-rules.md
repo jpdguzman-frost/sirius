@@ -36,7 +36,7 @@ _last-verified: 2026-09-05_
    segment. [JP 2026-08-18, batch 8]
 5. **Minimum grab width is 24px, done as arithmetic in `phaseRun`, never as
    CSS.** A CSS minimum widens the rendered box after the arithmetic and
-   stretches every short bar; `sprint-schedule-render` (was `gantt-run-geometry`, retired 2026-08-28) bans the width properties
+   stretches every short bar; `sprint-schedule-bars-footer` (was `gantt-run-geometry`, retired 2026-08-28) bans the width properties
    by name. [batch 8 §minimum-grab]
 6. **The box anchors left and grows its invisible part right; in the final
    column it extends LEFT** — `L = max(0, min(R0, TOTAL_UNITS − W))`, one
@@ -117,7 +117,7 @@ _last-verified: 2026-09-05_
     built server-side in `toRow`, half-open, zero widths dropped. [R3]
 25. **Which tests guard what**: `test/drag-hittest.test.ts` — hit-testability
     of every enumerated source, ancestor/week-cell/`.gdragging` sweeps, source
-    count; `test/sprint-schedule-render.test.ts` (which absorbed the retired gantt-run-geometry suite, 2026-08-28) — both axes against a frozen
+    count; `test/sprint-schedule-bars-footer.test.ts` (which absorbed the retired gantt-run-geometry suite, 2026-08-28) — both axes against a frozen
     oracle (horizontal within the 0.02 pp bound, vertical by exact equality)
     plus the `.grun` CSS bans; `test/gantt-legend.test.ts` — each phase
     colour declared once. Guards assert the RULE, never a snapshot.
@@ -126,7 +126,7 @@ _last-verified: 2026-09-05_
 ## 4. Standing decisions — deliberately not done
 
 40. **The four shared `.grun`/`.gghost` CSS declarations stay duplicated**:
-    `sprint-schedule-render` and `drag-hittest` look those selectors up by name (the former absorbed gantt-run-geometry, 2026-08-28).
+    `sprint-schedule-bars-footer` and `drag-hittest` look those selectors up by name (the former absorbed gantt-run-geometry, 2026-08-28).
     [review sweep 2026-08-18, T162]
 41. **The 26px vertical grab band is deliberate** — affordance and target
     agree on both axes; nothing widens it back. [JP 2026-08-18, batch 9]
