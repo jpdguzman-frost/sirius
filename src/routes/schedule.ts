@@ -612,8 +612,11 @@ export function scheduleRouter(): Router {
          lands in list order after whatever the sprint already holds; a skip
          consumes no position, so the created rows stay contiguous. */
       let position = ((last?.position as number) ?? -1) + 1;
-      let added = 0;
       const skipped: Array<{ card_id: string; code: BatchSkipCode }> = [];
+      /* The rows this request created, in the order it created them: the
+         rollback below walks them, and their COUNT is what the answer reports
+         as `added` — one list rather than a list and a counter kept in step
+         by hand. */
       const createdIds: Types.ObjectId[] = [];
       /* A create failing for any reason but the unique index, or an audit row
          failing to land, STOPS the batch (review 2026-09-05, S2): the rows
@@ -675,8 +678,8 @@ export function scheduleRouter(): Router {
         }
         createdIds.push(created._id as Types.ObjectId);
         position += 1;
-        added += 1;
       }
+      const added = createdIds.length;
 
       /* The sprint was asserted BEFORE the loop, and the sprints editor can
          remove it — cascading its rows — while the loop runs; every row

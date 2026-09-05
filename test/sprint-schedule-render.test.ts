@@ -804,13 +804,7 @@ const A = (): AddHarness =>
     ${['mcRank', 'unranked', 'cmpNullsLast', 'addLabel', 'addTokens', 'addMatches'].map((n) => fnDecl(n)).join('\n')}
     const computed = { ${method('addPanels')} };
     const DATA = { sprints: [], addQ: {}, sprintItems: { addable: {} } };
-    /* COMPUTED_CTX_JS's resolver, plus KEYPATHS: Ractive's own \`get\` reads
-       'sprintItems.addable' as a path, and a plain DATA[k] would answer
-       undefined — the computed would then fall back to {} and every list
-       assertion below would pass on an empty pool. */
-    const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k)
-      ? computed[k].call(ctx)
-      : k.split('.').reduce((o, p) => (o == null ? o : o[p]), DATA)) };
+    ${COMPUTED_CTX_JS}
     return {
       addLabel, addTokens, addMatches,
       panels: (s) => {
@@ -986,17 +980,28 @@ const shippedDeps = (body: string): string => {
 };
 
 /**
- * Runs one shipped add handler in a stub scope. The signature is PLAN.md's
- * frozen one; everything the body reaches for outside itself — `app`, `api`,
- * `flashBanner`, `errText`, `loadAll`, the module-level `sprintItemSaving`
- * lock, and any shipped helper it calls — is supplied and recorded. `api.send`
- * answers with the route's documented body, or throws when `reply` is an
- * Error. The seed is DEEP-COPIED: one shared fixture object mutated by an
- * earlier run made a later run's assertion read the earlier run's writes.
+ * The handler's own signature as a function expression, DERIVED rather than
+ * retyped (rule 2): PLAN.md froze the parameter lists, and a retyped copy
+ * would keep binding the arguments below to names the shipped handler had
+ * stopped using. Reads the comment-stripped source, as `handlerBody` does.
+ */
+const handlerHead = (name: string): string => {
+  const m = new RegExp(`\\n  (async )?(${name}\\([^)]*\\))`).exec(APP_JS_CODE);
+  expect(m, `no \`${name}\` handler in the shipped client`).not.toBeNull();
+  return `${m![1] ?? ''}function ${m![2]}`;
+};
+
+/**
+ * Runs one shipped add handler in a stub scope. Everything the body reaches
+ * for outside itself — `app`, `api`, `flashBanner`, `errText`, `loadAll`, the
+ * module-level `sprintItemSaving` lock, and any shipped helper it calls — is
+ * supplied and recorded. `api.send` answers with the route's documented body,
+ * or throws when `reply` is an Error. The seed is DEEP-COPIED: one shared
+ * fixture object mutated by an earlier run made a later run's assertion read
+ * the earlier run's writes.
  */
 const runAdd = async (
   name: 'addOne' | 'addAll' | 'addKey',
-  head: string,
   args: unknown[],
   seed: Record<string, unknown> = {},
   reply: unknown = { ok: true, added: 1, skipped: [] },
@@ -1039,16 +1044,13 @@ const runAdd = async (
     const addRefocus = (s) => { run.refocus.push(String(s)); };
     let sprintItemSaving = false;
     ${shippedDeps(handlerBody(name))}
-    return ${head} ${handlerBody(name)};
+    return ${handlerHead(name)} ${handlerBody(name)};
   `,
   ) as (r: AddRun, fail: Error | null) => (...a: unknown[]) => unknown;
   await factory(run, reply instanceof Error ? reply : null)(...args);
   return run;
 };
 
-const ONE_HEAD = 'async function addOne(_ctx, sprintId, cardId)';
-const ALL_HEAD = 'async function addAll(_ctx, sprintId)';
-const KEY_HEAD = 'function addKey(ctx, sprintId)';
 /** That run's query map, after the handler had its way with it. */
 const queries = (run: AddRun) => run.state.addQ as Record<string, string>;
 
@@ -1056,7 +1058,7 @@ describe('addOne — the single route, and the query stays (B4)', () => {
   const seed = { addQ: { s1: 'illustrate' }, addPanels: PANELS };
 
   it('POSTs the sprint and the card to the EXISTING single route, never the batch one', async () => {
-    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed);
+    const run = await runAdd('addOne', [null, 's1', 'c1'], seed);
     expect(run.api).toHaveLength(1);
     expect(run.api[0]!.method).toBe('POST');
     expect(run.api[0]!.path).toBe('/api/projects/p1/sprint-items');
@@ -1067,16 +1069,16 @@ describe('addOne — the single route, and the query stays (B4)', () => {
   });
 
   it('leaves the query alone — the added card drops out when loadAll replaces the pool (B4)', async () => {
-    expect(queries(await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed)).s1).toBe('illustrate');
+    expect(queries(await runAdd('addOne', [null, 's1', 'c1'], seed)).s1).toBe('illustrate');
   });
 
   it('refuses to start while another add is in flight, and writes nothing', async () => {
-    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], { ...seed, addBusy: 's2' });
+    const run = await runAdd('addOne', [null, 's1', 'c1'], { ...seed, addBusy: 's2' });
     expect(run.api).toHaveLength(0);
   });
 
   it('surfaces a plain failure through the banner, reloads nothing, and releases the lock', async () => {
-    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed, new Error('Failed to fetch'));
+    const run = await runAdd('addOne', [null, 's1', 'c1'], seed, new Error('Failed to fetch'));
     expect(run.banners).toEqual(['Failed to fetch']);
     expect(run.reloads, 'a network failure says nothing about the list — reloading it is noise').toBe(0);
     expect(run.state.addBusy, 'the lock outlived a failed flight — that sprint can never add again').toBeFalsy();
@@ -1086,7 +1088,7 @@ describe('addOne — the single route, and the query stays (B4)', () => {
     const stale = Object.assign(new Error('ALREADY_SCHEDULED'), {
       detail: { code: 'ALREADY_SCHEDULED', message: 'That task card is already on the schedule.' },
     });
-    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed, stale);
+    const run = await runAdd('addOne', [null, 's1', 'c1'], seed, stale);
     expect(run.reloads, 'the refused row stays listed and the next click refuses again').toBe(1);
     // the banner is written AFTER the reload, so the reload cannot wipe it
     expect(run.state.banner).toBe('That task card is already on the schedule.');
@@ -1094,9 +1096,9 @@ describe('addOne — the single route, and the query stays (B4)', () => {
   });
 
   it("returns focus to that sprint's field after the reload — the clicked Add is gone with its row (B2-R7)", async () => {
-    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed);
+    const run = await runAdd('addOne', [null, 's1', 'c1'], seed);
     expect(run.refocus).toEqual(['s1']);
-    const failed = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed, new Error('Failed to fetch'));
+    const failed = await runAdd('addOne', [null, 's1', 'c1'], seed, new Error('Failed to fetch'));
     expect(failed.refocus, 'a failed add moved focus — nothing left the page').toEqual([]);
   });
 });
@@ -1105,7 +1107,7 @@ describe('Add All — ONE request carrying the listed set, in list order (B3/B4)
   const seed = { addQ: { s1: 'illustrate', s2: 'loft' }, addPanels: PANELS };
 
   it("POSTs the PANEL'S OWN ids to the batch route, in the order on screen", async () => {
-    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
+    const run = await runAdd('addAll', [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
     expect(run.api, 'Add All fanned out into one request per card').toHaveLength(1);
     expect(run.api[0]!.method).toBe('POST');
     expect(run.api[0]!.path).toBe('/api/projects/p1/sprint-items/batch');
@@ -1115,18 +1117,18 @@ describe('Add All — ONE request carrying the listed set, in list order (B3/B4)
   });
 
   it("sends the OPEN sprint's ids only — never another sprint's panel", async () => {
-    const run = await runAdd('addAll', ALL_HEAD, [null, 's2'], seed, { ok: true, added: 1, skipped: [] });
+    const run = await runAdd('addAll', [null, 's2'], seed, { ok: true, added: 1, skipped: [] });
     expect(run.api[0]!.body).toEqual({ sprint_id: 's2', card_ids: ['c9'] });
   });
 
   it("clears that sprint's query when something landed — the set was consumed (B4)", async () => {
-    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
+    const run = await runAdd('addAll', [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
     expect(queries(run).s1).toBe('');
     expect(queries(run).s2, "another sprint's query was cleared too").toBe('loft');
   });
 
   it('KEEPS the query when nothing landed — an untouched set must stay on screen (B4)', async () => {
-    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, {
+    const run = await runAdd('addAll', [null, 's1'], seed, {
       ok: true,
       added: 0,
       skipped: [{ card_id: 'c1', code: 'ALREADY_SCHEDULED' }, { card_id: 'c3', code: 'CARD_COMPLETE' }],
@@ -1135,13 +1137,13 @@ describe('Add All — ONE request carrying the listed set, in list order (B3/B4)
   });
 
   it('banners a PARTIAL result and stays silent when everything landed (B3)', async () => {
-    const partial = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, {
+    const partial = await runAdd('addAll', [null, 's1'], seed, {
       ok: true, added: 1, skipped: [{ card_id: 'c3', code: 'ALREADY_SCHEDULED' }],
     });
     expect(partial.banners.length, 'a partial add said nothing — a card goes missing silently').toBe(1);
     expect(partial.reloads).toBe(1);
     expect(partial.state.banner, 'the reload wiped the summary — the user never reads it (B2-R1)').toBe(partial.banners[0]);
-    const clean = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
+    const clean = await runAdd('addAll', [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
     expect(clean.banners, 'a clean add interrupted with a banner — no confirmation, no count-check (Miles)').toEqual([]);
   });
 
@@ -1150,27 +1152,27 @@ describe('Add All — ONE request carrying the listed set, in list order (B3/B4)
       (run.state.addQ as Record<string, string>).s1 = 'illustrate corey';
       return { ok: true, added: 2, skipped: [] };
     };
-    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, typedMeanwhile);
+    const run = await runAdd('addAll', [null, 's1'], seed, typedMeanwhile);
     expect(run.api).toHaveLength(1);
     expect(queries(run).s1, 'the clear wiped what the user typed while the batch was in the air').toBe('illustrate corey');
   });
 
   it("returns focus to the field after the reload — Add All left with the emptied panel (B2-R7)", async () => {
-    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
+    const run = await runAdd('addAll', [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
     expect(run.refocus).toEqual(['s1']);
   });
 
   it('writes nothing for an empty panel, and nothing while any sprint is busy', async () => {
-    const empty = await runAdd('addAll', ALL_HEAD, [null, 's1'], { addQ: { s1: 'zzz' }, addPanels: { s1: { items: [] } } });
+    const empty = await runAdd('addAll', [null, 's1'], { addQ: { s1: 'zzz' }, addPanels: { s1: { items: [] } } });
     expect(empty.api).toHaveLength(0);
-    const busy = await runAdd('addAll', ALL_HEAD, [null, 's1'], { ...seed, addBusy: 's1' });
+    const busy = await runAdd('addAll', [null, 's1'], { ...seed, addBusy: 's1' });
     expect(busy.api).toHaveLength(0);
-    const elsewhere = await runAdd('addAll', ALL_HEAD, [null, 's1'], { ...seed, addBusy: 's2' });
+    const elsewhere = await runAdd('addAll', [null, 's1'], { ...seed, addBusy: 's2' });
     expect(elsewhere.api, 'two adds in the air at once — one act per screen (B10)').toHaveLength(0);
   });
 
   it('releases the lock, banners, and keeps the query when the batch itself fails', async () => {
-    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, new Error('SPRINT_NOT_FOUND'));
+    const run = await runAdd('addAll', [null, 's1'], seed, new Error('SPRINT_NOT_FOUND'));
     expect(run.banners).toEqual(['SPRINT_NOT_FOUND']);
     expect(run.state.addBusy).toBeFalsy();
     expect(queries(run).s1, 'a failed batch consumed the query anyway').toBe('illustrate');
@@ -1181,7 +1183,7 @@ describe("addKey — Escape clears that sprint's query, every other key falls th
   const press = async (key: string, seed: Record<string, unknown>) => {
     let prevented = 0;
     const ctx = { event: { key, preventDefault: () => { prevented += 1; }, stopPropagation: () => {} } };
-    return { run: await runAdd('addKey', KEY_HEAD, [ctx, 's1'], seed), prevented: () => prevented };
+    return { run: await runAdd('addKey', [ctx, 's1'], seed), prevented: () => prevented };
   };
 
   it('clears the query on Escape, and takes the key so nothing else answers it', async () => {

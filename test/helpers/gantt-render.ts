@@ -767,9 +767,16 @@ export const pipeRecipeDecls = (extra: string[] = []): string =>
  * CALLING it (so a computed that reads another goes through the same door)
  * and anything else from a `DATA` object. Expects `computed` and `DATA` in
  * scope — every harness declares both, then this line.
+ *
+ * KEYPATHS resolve, as Ractive's own `get` resolves them: a computed that
+ * reads `'sprintItems.addable'` must see the pool, and a plain `DATA[k]`
+ * answers undefined — the computed then falls back to its own empty default
+ * and every list assertion passes on an empty fixture. A dotless key walks a
+ * one-segment path, which is `DATA[k]`, so the harnesses that never used a
+ * keypath read exactly what they read before.
  */
 export const COMPUTED_CTX_JS =
-  'const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k) ? computed[k].call(ctx) : DATA[k]) };';
+  "const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k) ? computed[k].call(ctx) : k.split('.').reduce((o, p) => (o == null ? o : o[p]), DATA)) };";
 
 /**
  * Every `app.observe('keys', …)` call in the shipped client: the keypaths it

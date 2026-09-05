@@ -79,6 +79,26 @@ const mkCard = (projectId: Types.ObjectId, id: string, over: Record<string, unkn
     current_list: 'Working on Design', ...over,
   });
 
+/** A SECOND project — every cross-project guard here needs one (invariant 1). */
+const otherProject = () =>
+  Project.create({ code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22 });
+
+/**
+ * Runs `intrude` immediately before the route's FIRST `SprintItem` insert and
+ * then lets that insert proceed — the seam both race guards below need, and
+ * the only place a competing actor can be simulated without reaching inside
+ * the route. Returns the spy, so the caller restores it in its own `finally`.
+ */
+const interruptFirstInsert = (
+  intrude: (create: (doc: Record<string, unknown>) => Promise<unknown>, doc: Record<string, unknown>) => Promise<unknown>,
+) => {
+  const original = SprintItem.create.bind(SprintItem) as (doc: Record<string, unknown>) => Promise<unknown>;
+  return vi.spyOn(SprintItem, 'create').mockImplementationOnce((async (doc: Record<string, unknown>) => {
+    await intrude(original, doc);
+    return original(doc);
+  }) as never);
+};
+
 /* Through `loadPipeline`, not `loadSprintItems` directly — sprint items are
    opt-in on that call, so going the real route also proves the one caller that
    asks for them actually gets them. */
@@ -540,9 +560,7 @@ describe('the routes are Sirius-owned planning writes', () => {
 
   it('refuses a move into another project’s sprint', async () => {
     const { project, sprint, agent } = await setup();
-    const other = await Project.create({
-      code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22,
-    });
+    const other = await otherProject();
     const foreignSprint = await Sprint.create({
       project_id: other._id, name: 'S', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 0,
     });
@@ -590,9 +608,7 @@ describe('the routes are Sirius-owned planning writes', () => {
 
   it('never reaches across projects (invariant 1)', async () => {
     const { project, sprint, agent } = await setup();
-    const other = await Project.create({
-      code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22,
-    });
+    const other = await otherProject();
     const otherSprint = await Sprint.create({
       project_id: other._id, name: 'S', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 0,
     });
@@ -611,9 +627,7 @@ describe('the routes are Sirius-owned planning writes', () => {
 
   it('404s an item id from another project instead of touching it', async () => {
     const { project, sprint, agent } = await setup();
-    const other = await Project.create({
-      code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22,
-    });
+    const other = await otherProject();
     const foreign = await SprintItem.create({
       project_id: other._id, sprint_id: sprint._id, mc_number: 'MC-07',
       trello_card_id: 'x', added_by: 'someone@frostdesigngroup.com',
@@ -656,9 +670,7 @@ describe('Add All is one request that answers per card', () => {
 
   it('skips a complete, an already-scheduled and an unknown card with a code, and still adds the rest', async () => {
     const { project, sprint, agent } = await setup();
-    const other = await Project.create({
-      code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22,
-    });
+    const other = await otherProject();
     await WorkCard.create({
       project_id: other._id, mc_number: 'MC-07', trello_card_id: 'foreign',
       name: 'Foreign', difficulty: 'Medium', current_list: 'Working on Design',
@@ -737,9 +749,7 @@ describe('Add All is one request that answers per card', () => {
 
   it('404s a sprint from another project and writes nothing', async () => {
     const { project, agent } = await setup();
-    const other = await Project.create({
-      code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22,
-    });
+    const other = await otherProject();
     const otherSprint = await Sprint.create({
       project_id: other._id, name: 'S', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 0,
     });
@@ -810,11 +820,8 @@ describe('Add All is one request that answers per card', () => {
        The rule: that 11000 is the same fact the pre-read reports, so it is
        the same code, and the rest of the batch still lands. An `insertMany`
        or a dropped catch would fail here with a 500. */
-    const original = SprintItem.create.bind(SprintItem) as (doc: Record<string, unknown>) => Promise<unknown>;
-    const spy = vi.spyOn(SprintItem, 'create').mockImplementationOnce((async (doc: Record<string, unknown>) => {
-      await original({ ...doc, position: 99, added_by: 'other@frostdesigngroup.com' });
-      return original(doc);
-    }) as never);
+    const spy = interruptFirstInsert((create, doc) =>
+      create({ ...doc, position: 99, added_by: 'other@frostdesigngroup.com' }));
     try {
       const res = await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['w1', 'w2'] }).expect(200);
       expect(res.body).toEqual({ ok: true, added: 1, skipped: [{ card_id: 'w1', code: 'ALREADY_SCHEDULED' }] });
@@ -837,12 +844,10 @@ describe('Add All is one request that answers per card', () => {
        Simulated at the seam: the route's FIRST insert is preceded by exactly
        that act, so every row the batch creates hangs off a sprint that is
        gone — drawn nowhere, holding its card out of the pool. */
-    const original = SprintItem.create.bind(SprintItem) as (doc: Record<string, unknown>) => Promise<unknown>;
-    const spy = vi.spyOn(SprintItem, 'create').mockImplementationOnce((async (doc: Record<string, unknown>) => {
+    const spy = interruptFirstInsert(async () => {
       await SprintItem.deleteMany({ project_id: project._id, sprint_id: sprint._id });
       await Sprint.deleteOne({ _id: sprint._id, project_id: project._id });
-      return original(doc);
-    }) as never);
+    });
     try {
       const res = await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['w1', 'w2'] }).expect(409);
       expect(res.body.ok).toBe(false);
@@ -853,7 +858,7 @@ describe('Add All is one request that answers per card', () => {
     }
     // no orphan: both cards are back in the pool, and the log holds the add AND the removal of each
     expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(0);
-    expect(Object.keys((await load(project._id)).addable['MC-07'] ? { x: 1 } : {})).toHaveLength(1);
+    expect((await load(project._id)).addable['MC-07']!.map((c) => c.cardId).sort()).toEqual(['w1', 'w2']);
     const log = (await AuditLog.find({ project_id: project._id }).sort({ _id: 1 }).lean()).map((a) => a.action);
     expect(log).toEqual(['sprintItem.add', 'sprintItem.add', 'sprintItem.remove', 'sprintItem.remove']);
   });
@@ -883,7 +888,7 @@ describe('Add All is one request that answers per card', () => {
   });
 
   it('answers a vanished sprint with plain words, on both add routes (review 2026-09-05, B2-R5)', async () => {
-    const { project, sprint, agent } = await setup();
+    const { project, agent } = await setup();
     await mkCard(project._id, 'w1');
     const gone = await Sprint.create({
       project_id: project._id, name: 'Gone', starts_on: '2026-09-07', ends_on: '2026-09-18', position: 1,
@@ -897,6 +902,5 @@ describe('Add All is one request that answers per card', () => {
       // the client prints the server's own message; a bare code reached the banner before
       expect(res.body.error.message).toMatch(/no longer exists/);
     }
-    void sprint;
   });
 });

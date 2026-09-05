@@ -117,18 +117,24 @@ function toggleMc(mc) {
    template reads to make ONE sprint's links inert (PLAN.md B10). */
 let sprintItemSaving = false;
 
+/* HOW AN ADD FAILS — one owner for both adds, because the policy is one
+   policy: a refusal that means the LIST ON SCREEN is stale (the card is
+   already on the schedule, complete, gone from the board, or its sprint is
+   gone) is answered with a reload BEFORE the banner, so the pool the server
+   just refused is replaced, the refused row leaves the list, and the same
+   click cannot refuse twice (review 2026-09-05, B2-R6). Any other failure
+   (network, a server fault) leaves the list standing for another try. */
+const ADD_STALE = new Set(['NOT_FOUND', 'CARD_COMPLETE', 'ALREADY_SCHEDULED', 'SPRINT_GONE']);
+const addFailed = async (err) => {
+  if (err && err.detail && ADD_STALE.has(err.detail.code)) await loadAll();
+  // errText prefers the server's own message — the refusals all carry one
+  flashBanner(errText(err));
+};
+
 /* THE PARTIAL-RESULT BANNER for Add All (PLAN.md B3): one sentence, shown
    only when the server skipped something — 'Added N of M — K already on the
    schedule, J complete.' The codes are the server's own; one this map does
    not know reads as itself, lowercased, rather than dropping out of the count. */
-/* A refusal that means the LIST ON SCREEN is stale — the card is already on
-   the schedule, complete, gone from the board, or its sprint is gone — is
-   answered with a reload before the banner: the pool the server just refused
-   is replaced, so the row that was refused leaves the list and the same click
-   cannot refuse twice (review 2026-09-05, B2-R6). Any other failure (network,
-   a 500) leaves the list standing for another try. */
-const ADD_STALE = new Set(['NOT_FOUND', 'CARD_COMPLETE', 'ALREADY_SCHEDULED', 'SPRINT_GONE']);
-const addStale = (err) => Boolean(err && err.detail && ADD_STALE.has(err.detail.code));
 const ADD_SKIP_WHY = { ALREADY_SCHEDULED: 'already on the schedule', CARD_COMPLETE: 'complete', NOT_FOUND: 'no longer on the board' };
 function addSkipSummary(added, asked, skipped) {
   const counts = new Map();
@@ -705,9 +711,7 @@ app.on({
       await loadAll();
       addRefocus(sprintId);
     } catch (err) {
-      if (addStale(err)) await loadAll();
-      // errText prefers the server's own message — the 409s and 404s carry one
-      flashBanner(errText(err));
+      await addFailed(err);
     } finally {
       app.set('addBusy', null);
     }
@@ -721,10 +725,10 @@ app.on({
      slot itself, and a summary flashed before it lived only as long as the
      fetch. */
   async addAll(_ctx, sprintId) {
+    if (app.get('addBusy')) return;
     const panel = app.get('addPanels')[sprintId];
     const ids = panel ? panel.items.map((m) => m.cardId) : [];
     if (!ids.length) return;
-    if (app.get('addBusy')) return;
     app.set('addBusy', sprintId);
     /* the query as SENT: the field stays typeable during the flight, and the
        clear below must never wipe text the user typed while the batch was in
@@ -745,8 +749,7 @@ app.on({
       if (skipped.length) flashBanner(addSkipSummary(added, ids.length, skipped));
       addRefocus(sprintId);
     } catch (err) {
-      if (addStale(err)) await loadAll();
-      flashBanner(errText(err));
+      await addFailed(err);
     } finally {
       app.set('addBusy', null);
     }
