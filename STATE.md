@@ -15,16 +15,12 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 |---|---|---|---|
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12**; T073/T091 ⏸, T075 pending | write-enable on rt-837 = next JP gate |
-| 10–13k | Two-way sync · admin · Pipeline redesign · Gantt planner · batches 1–13 · context restructure · expanded MC row | **DEPLOYED + LIVE through 2026-08-19** (T077–T178) | detail: `docs/history/phase-log.md` |
-| 14pf–16 | Pipeline filter + sort · "None" as a value · **Deadlines tab rebuilt** (R-dl-a..n) · the Filter Indicator | **LIVE 2026-08-21** (`a3e4c88`) — clicked through on rt-test twice; the pass found DL-scope |
-| 17 | **One clock, Manila's** (invariant 11) · **Schedules + Deadlines off the unfinished-screen background** (both frames white) | **DEPLOYED 2026-08-22** (`3cfcd96`) |
 | 19 | **The ARES-sourced, tag-classified cycle-time model** (T179–T183, ~3–4d) — replaces the inter-event dwell derivation that produced `Medium/design = 0.13d`. Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
 | 18 | **The redesign** (owls #67–#74): Forecast tab withdrawn · OPEN WORK blue/500 · the client-review wait out of the past-deadline warning · **the scheduled unit becomes the WORK CARD** — `sprint_items`, migration 009, no backfill | **DEPLOYED 2026-08-27** (`2382bfb`) — server half only; the frontend for both rebuilt tabs is the next block of work |
-| 18b | **Frame drift closed** (JP, 2026-08-27): the expanded MC row's two captions withdrawn · **frame 731:101090's fifteen unlanded Requests specs** · the note field HUGS its text | **DEPLOYED 2026-08-27** (`a7d01f3`) |
-| 18c | **Sprint Schedules SCREEN rebuilt** (owls #72/#73, frame 731:98513) — first build under the workflow law; spot-fix + test-board group join (`c7f9d3c`); **no-results state** (#76) | **DEPLOYED 2026-08-28** (`9128017`) · spot-fix `e7ad007` · #76 **DEPLOYED 2026-08-30** — day logs 08-28 / 08-30 |
-| 18d | **Urgency + difficulty move to the WORK card** (owls #78/#79): W1/W3 re-pointed, parent routes deleted (cross-kind 404), own-card urgency on sprint rows, ten columns, node colours; urgency/difficulty axes + Priority sorts **PARKED until block 4** | **DEPLOYED 2026-09-05** (`d882e89`, JP's ship; build `b40df03` · fixes `a64d6d6` · simplify `303e11f`): 24 proofs, review 9/14 applied, E2E real round trips on rt-test. Queue: block 4 (#78 §4/§5) → #77 §0 add flow → #74/#75 + #78 §2 → #77 §1–4 → W4 |
+| 18d | **Urgency + difficulty move to the WORK card** (owls #78/#79): W1/W3 re-pointed, parent routes deleted (cross-kind 404), own-card urgency on sprint rows, ten columns, node colours | **DEPLOYED 2026-09-05** (`d882e89`; build `b40df03` · fixes `a64d6d6` · simplify `303e11f`): 24 proofs, review 9/14, real round trips on rt-test |
+| 18e | **Pipeline filter + sort rework** (owl #78 §4/§5, frames 841:53782 · 841:58731): DIFFICULTY + URGENCY axes over WORK cards, ten sorts, groups auto-open (hand-collapse via `pipeShut`), B12 facet arithmetic, back-to-top fixed to the PAGE scroller (pre-existing since #62) | **BUILT 2026-09-05, NOT DEPLOYED** (`50def71` build · `a4c4376` review · `5432079` pin · `fa43f10` simplify): 20 proofs, review 11/20 stood, simplify 20/26, E2E real round trip on rt-test. Queue: #77 §0 add flow → #74/#75 + #78 §2 → #77 §1–4 → W4 |
 
-**Build health (2026-09-05):** 1135/1135 tests + 27 `it.todo`, 63 files — green
+**Build health (2026-09-05):** 1179/1179 tests + 24 `it.todo`, 63 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations applied through **008** (0025's guard
 needs none — an absent stamp already means "never written by Sirius"). The
@@ -62,7 +58,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
   before building on one. **Thread**: miles→jp acked through **#71** + #76, #78, #79;
   **#72–#74 UNACKED** (screens pending), **#75/#77/#80 open** until their blocks;
-  jp→miles sent through **#61** (2026-09-05, block 1 report + #80 §1 answer). Product is fixing frame defects; **until they
+  jp→miles sent through **#61**; **#62 drafted** (block 4: six calls for Miles, three held) awaiting JP's yes. Product is fixing frame defects; **until they
   confirm, this build is authoritative over those frames** — including the
   past-deadline legend reworded 2026-08-27. **Awaiting Miles**: the Deadlines
   acknowledged-state design (R-dl-n), and a ruling on the reworded legend.
@@ -100,7 +96,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Product (Miles)**: the row-controls design pass + Smoke pass (see Comms) ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
-- **Agent backlog**: badge writes drop keyboard focus after the reload · W1 has no
+- **Agent backlog**: arrow keys through the Pipeline popovers (owl #62, never built) · Trello list order for STATUS needs an ARES list position (own slice, R-pf-e) · parent DEADLINE cell vs the child-keyed sort until block 3 (B5) · `pipeWorkLive` → PIPE_WORK_FILTERS once eslint lists it · badge writes drop keyboard focus after the reload · W1 has no
   server no-op guard (contract rule 4, pre-existing) · T075 AC sweep · non-member 403 check · `Last Synced`
   browser-TZ + col-done width · schedules-tab tokenization beyond the planner ·
   per-tab URL sub-state (raised to Miles in #40) · `worker/CLAUDE.md` unwritten
@@ -114,5 +110,5 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
+- 2026-09-05 (later) — **Pipeline filter + sort rework** (owl #78 §4/§5): 49-row drift, gate on JP's yes; the STATE agent stopped on the facet arithmetic (two work axes ticked → under-count, B12) and the plan was amended; review found the back-to-top rule had never scrolled the page since #62; simplify put R-pf-h in one observer. Real round trip on rt-test. NOT deployed. → docs/history/state-log/2026-09-05.md
 - 2026-09-05 — **Urgency + difficulty to the WORK card** (owls #78/#79): four new owls → six blocks; W1/W3 re-pointed, parent routes deleted; review caught the urgency write never reloading, the Priority sorts ranking parents by hidden values, and the smoke script labelling a MAIN card. Real Trello round trips on rt-test. DEPLOYED 2026-09-05. → docs/history/state-log/2026-09-05.md
-- 2026-08-28 — **Sprint Schedules rebuilt on the work-card unit** (owls #72/#73) — first run of the new constitution workflow (JP set it as law the same day). 4-agent build off an ephemeral PLAN.md; **the adversarial review found PUT /sprints regenerating every sprint id** — latent for months, made a data-loss bug by stored membership; fixed as an id-preserving upsert with an audited cascade. Simplify caught a review fix seated in the WRONG FUNCTION (non-unique anchor). Full browser E2E incl. a live rename-survival pass. NOT deployed. → docs/history/state-log/2026-08-28.md
