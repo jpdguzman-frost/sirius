@@ -28,13 +28,13 @@ async function resetForProjectSwitch() {
   // Submit would write it there.
   //
   // Planner view state is per-project too (R-d, owl #25; re-based on the
-  // work-card unit, #72): a half-built `addRow` names THIS project's card
-  // and sprint ids — carried over, the next click would write them into
-  // another project — and `sprintSel` (the checkbox highlight) plus the
-  // hover pair `plotRow`/`plotWeek` point at rows the next project does not
-  // have. `collapsedBlocks` is keyed on sprint ids,
-  // which are per-project. `leftCollapsed` deliberately does NOT reset — it
-  // is a reader preference about the pane, not project data.
+  // work-card unit, #72): the search queries `addQ` are keyed on THIS
+  // project's sprint ids — carried over, they would name sprints the next
+  // project does not have — and `sprintSel` (the checkbox highlight) plus
+  // the hover pair `plotRow`/`plotWeek` point at rows it does not have
+  // either. `collapsedBlocks` is keyed on sprint ids, which are
+  // per-project. `leftCollapsed` deliberately does NOT reset — it is a
+  // reader preference about the pane, not project data.
   app.set({
     ...reqFiltersCleared(),
     requestFilter: 'all',
@@ -57,12 +57,14 @@ async function resetForProjectSwitch() {
     noteEditing: null,
     noteDraft: { remark: '', clarify: false },
     noteError: '',
-    /* Sprint Schedules placement + Add row (#72) — `addMenu` needs no entry
-       of its own: it is an overlay key, so NO_OVERLAYS above already nulls it. */
+    /* Sprint Schedules placement + the search-based add (#72, #77 §0;
+       PLAN.md B10): the per-sprint queries and the in-flight sprint go with
+       the sprint ids they are keyed on. */
     sprintSel: null,
     plotRow: null,
     plotWeek: null,
-    addRow: null,
+    addQ: {},
+    addBusy: null,
     collapsedBlocks: {},
     // owl #45 recon finding: `expanded` is keyed on mc_number, which repeats
     // ACROSS projects (invariant 3) — carried over, project A's expanded
@@ -106,12 +108,26 @@ function toggleMc(mc) {
   app.toggle(app.get('pipeAutoOpen') ? `pipeShut.${mc}` : `expanded.${mc}`);
 }
 
-/* ONE placement write in flight (the savingUrgency discipline, invariant 8's
-   shape): a double-click on the track — or on the calendar icon — would send
-   the same PATCH twice, and the second would bank an audit row for a
-   non-change. A single flag, not per-item chrome: both writes end in loadAll,
-   which replaces the rows before a second gesture can mean anything. */
+/* ONE sprint-items write in flight (the savingUrgency discipline, invariant
+   8's shape): a double-click on the track — or on the calendar icon, or on
+   Add — would send the same request twice, and the second would bank an audit
+   row for a non-change. A single flag, not per-item chrome: every write ends
+   in loadAll, which replaces the rows before a second gesture can mean
+   anything. The adds also raise `addBusy` (state), which is what the
+   template reads to make ONE sprint's links inert (PLAN.md B10). */
 let sprintItemSaving = false;
+
+/* THE PARTIAL-RESULT BANNER for Add All (PLAN.md B3): one sentence, shown
+   only when the server skipped something — 'Added N of M — K already on the
+   schedule, J complete.' The codes are the server's own; one this map does
+   not know reads as itself, lowercased, rather than dropping out of the count. */
+const ADD_SKIP_WHY = { ALREADY_SCHEDULED: 'already on the schedule', CARD_COMPLETE: 'complete', NOT_FOUND: 'no longer on the board' };
+function addSkipSummary(added, asked, skipped) {
+  const counts = new Map();
+  for (const s of skipped) counts.set(s.code, (counts.get(s.code) || 0) + 1);
+  const parts = [...counts].map(([code, n]) => `${n} ${ADD_SKIP_WHY[code] || String(code || 'skipped').toLowerCase().replace(/_/g, ' ')}`);
+  return `Added ${added} of ${asked} — ${parts.join(', ')}.`;
+}
 
 app.on({
   noop(ctx) { ctx.event && ctx.event.stopPropagation(); },
@@ -593,8 +609,9 @@ app.on({
        this ghost. */
     if (sprintItemSaving) return;
     /* the same pure mapper the drop path used (weekAtX): pointer X against
-       the TRACK's measured rect. `rowId` is whose track the pointer is on —
-       a committed row's id, or 'add' for the draft row — so the + and the
+       the TRACK's measured rect. `rowId` is the committed row whose track
+       the pointer is on — only committed rows bind this; the search row and
+       its results have inert tracks (#77 §0, PLAN.md B5) — so the + and the
        cell tint render on that row alone. Per-mousemove is fine — Ractive
        no-ops the set until something actually changes. */
     app.set({
@@ -657,129 +674,77 @@ app.on({
     }
   },
 
-  /* ---- the Add row (#72 §3, #73) ----
-     ONE pending row per screen — `addRow` is a single object, not a map, so
-     opening a zone in another sprint replaces a half-built row rather than
-     accumulating drafts. Nothing is written until Add Item posts. */
-  openAddRow(_ctx, sprintId) {
-    // plot state clears with the draft's lifecycle — a stale 'add' hover
-    // must never survive into (or past) a draft it was not pointed at
-    app.set({ addRow: { sprintId, mc: null, cardId: null, saving: false }, plotRow: null, plotWeek: null });
-  },
-  /* THE one owner of "discard the draft" — Escape (60-overlays fires this)
-     and the pane collapse both route here, so the discard cannot fork
-     (review 2026-08-28b, finding 3: a direct addRow-null elsewhere left
-     this cleanup unreachable). The hover clear is identity-guarded: a live
-     hover on a COMMITTED row while the draft dies is the user's, not ours. */
-  cancelAddRow() {
-    app.set('addRow', null);
-    if (app.get('plotRow') === 'add') app.set({ plotRow: null, plotWeek: null });
-  },
-  openAddMenu(ctx, which) {
-    /* 'card' is INERT until an MC is picked (#73): its options are keyed by
-       MC, so opening it early would show a list that belongs to nobody.
-       Through openOverlay for the shared lifecycle — outside click, Escape,
-       mutual exclusion — and openOverlay's toggle is what closes an open
-       menu on a second click of its control. */
-    if (which === 'card' && !app.get('addRow.mc')) return;
-    /* UPWARD IS THE DEFAULT, FLIP ON COLLISION (#73's own allowance). The
-       menu is CSS-anchored 5px above the control at up to 218px tall, and
-       .gwrap clips it: above an EMPTY first sprint there is ~161px of sheet,
-       so the top options — the alphabetically FIRST MCs — rendered outside
-       reach (review 2026-08-28, finding 11). Measured at open against the
-       scroller's visible top, because the clip is the scroller's, not the
-       viewport's. */
-    const wrap = ctx.node.closest('.gwrap');
-    const headroom = wrap ? ctx.node.getBoundingClientRect().top - wrap.getBoundingClientRect().top : Infinity;
-    app.set('addMenuFlip', headroom < 218 + 5);
-    openOverlay(ctx, which, { key: 'addMenu' });
-  },
-  pickAddMc(_ctx, mc) {
-    closeMenus({ restoreFocus: true });
-    /* ALWAYS clears the card — even re-picking the same MC (#73: never
-       re-match a work card by name; the stored id is the only identity). */
-    app.set({ 'addRow.mc': mc, 'addRow.cardId': null });
-  },
-  pickAddCard(_ctx, cardId) {
-    closeMenus({ restoreFocus: true });
-    app.set('addRow.cardId', cardId);
-  },
-  /* review finding 15: the add zone is a div with role=button, and that role
-     is a PROMISE of Enter/Space activation the element cannot keep by itself.
-     preventDefault stops Space scrolling the pane it just activated in. */
-  addZoneKey(ctx, sprintId) {
-    if (ctx.event.key !== 'Enter' && ctx.event.key !== ' ') return;
-    ctx.event.preventDefault();
-    // through the ONE open owner, the same routing the discard side uses
-    // (cancelAddRow, finding 3): the spot-fix had to grow the open's state
-    // change here and in openAddRow in lockstep — duplication is exactly
-    // how a "key" drifts from a "click"
-    app.fire('openAddRow', sprintId);
-  },
-  async submitAddItem() {
-    const add = app.get('addRow');
-    // the button is already disabled in these states; this is the second lock
-    if (!add || !add.cardId || add.saving) return;
-    app.set('addRow.saving', true);
-    try {
-      await api.send('POST', `/api/projects/${app.get('activeProjectId')}/sprint-items`, {
-        sprint_id: add.sprintId, card_id: add.cardId,
-      });
-    } catch (err) {
-      /* the 409s (CARD_COMPLETE / ALREADY_SCHEDULED) land here — errText
-         prefers the server's own message, so it is shown verbatim. The row
-         stays open with its picks intact for another try.
-         `addRow` IS RE-READ (review 2026-08-28, finding 3): Escape or another
-         zone's + can have replaced or nulled the draft during the await, and
-         a keypath write into a nulled addRow makes Ractive conjure a phantom
-         `{saving:false}` that matches no sprint. Only THIS draft is touched. */
-      if (app.get('addRow') === add) app.set('addRow.saving', false);
-      flashBanner(errText(err));
-      return;
-    }
-    // same identity rule on success: never clobber a draft the user has
-    // since opened in another sprint — the POSTed row arrives via loadAll.
-    // The draft's own hover (if the pointer sat on its track) dies with it.
-    if (app.get('addRow') === add) app.set('addRow', null);
-    if (app.get('plotRow') === 'add') app.set({ plotRow: null, plotWeek: null });
-    await loadAll();
-  },
-  /* one click = commit AND place (#72 §6 + node 731:100277): the draft's +
-     and the Add Item button both mean "add", and this click also sets the
-     start — the Add Item button remains the add-without-placement path.
-     Both sibling disciplines apply: submitAddItem's identity guard (only
-     THIS draft is touched after the await) and plotPlace's lock spanning
-     the reload. */
-  async draftPlace() {
-    const add = app.get('addRow');
-    const week = app.get('plotWeek');
-    /* `plotRow === 'add'` for the same reason plotPlace checks its own id
-       (finding 7): the week must be THIS track's hover, not a stale global
-       from some committed row's. */
-    if (!add || !add.cardId || add.saving || !week || app.get('plotRow') !== 'add' || sprintItemSaving) return;
-    app.set('addRow.saving', true);
+  /* ---- the search-based add (owl #77 §0; nodes 840:31597 / 841:33668 /
+     833:68629) ----
+     An always-visible field at the end of every sprint. Typing lists the
+     addable cards the query matches (addPanels, 40-app-state.js); each result
+     row has Add, the field row has Add All. Both land the card UNPLOTTED —
+     two acts (#72 §6, PLAN.md B5): placement stays the + on the committed
+     row, which arrives with the reload. Two locks for the flight: `addBusy`
+     names the sprint whose links go inert, and `sprintItemSaving` is shared
+     with placement so an add and a placement never race one loadAll against
+     another (B10). Both span the reload, on plotPlace's discipline: released
+     early, the links would re-arm while the pool on screen is still the old
+     one, and a second click would POST a card the server now refuses. */
+  async addOne(_ctx, sprintId, cardId) {
+    if (app.get('addBusy') || sprintItemSaving) return;
+    app.set('addBusy', sprintId);
     sprintItemSaving = true;
     try {
       await api.send('POST', `/api/projects/${app.get('activeProjectId')}/sprint-items`, {
-        sprint_id: add.sprintId, card_id: add.cardId, starts_on: week,
+        sprint_id: sprintId, card_id: cardId,
       });
-      if (app.get('addRow') === add) app.set('addRow', null);
-      /* the finding-4 discipline on the hover pair too (review 2026-08-28b,
-         finding 2): a hover the user established on another row during the
-         await is THEIRS — only this draft's own hover is this cleanup's. */
-      if (app.get('plotRow') === 'add') app.set({ plotRow: null, plotWeek: null });
+      /* the query STAYS (B4): the added card leaves the list when the reload
+         replaces the pool, and the rest of the set is still what was asked for */
       await loadAll();
     } catch (err) {
-      if (app.get('addRow') === add) app.set('addRow.saving', false);
-      /* the saving gate detached the draft track's mouseleave for the whole
-         flight (finding 12) — so a pointer that left during the await has no
-         event left to clear the chrome. Same identity guard: only the
-         draft's own hover dies. */
-      if (app.get('plotRow') === 'add') app.set({ plotRow: null, plotWeek: null });
+      // the 409s (CARD_COMPLETE / ALREADY_SCHEDULED) land here — errText
+      // prefers the server's own message, and the list stays for another try
       flashBanner(errText(err));
     } finally {
       sprintItemSaving = false;
+      app.set('addBusy', null);
     }
+  },
+  /* ONE batch request carrying exactly the visible ids, in list order (B3):
+     the list on screen IS the set. No confirmation, no count-check, no review
+     pass (Miles). The server SKIPS what it cannot add — already scheduled,
+     complete, gone — with a code per card and never fails the batch for it,
+     so a partial result is reported in a banner, not thrown. */
+  async addAll(_ctx, sprintId) {
+    const panel = app.get('addPanels')[sprintId];
+    const ids = panel ? panel.items.map((m) => m.cardId) : [];
+    if (!ids.length) return;
+    if (app.get('addBusy') || sprintItemSaving) return;
+    app.set('addBusy', sprintId);
+    sprintItemSaving = true;
+    try {
+      const res = await api.send('POST', `/api/projects/${app.get('activeProjectId')}/sprint-items/batch`, {
+        sprint_id: sprintId, card_ids: ids,
+      });
+      const added = Number(res.added) || 0;
+      const skipped = Array.isArray(res.skipped) ? res.skipped : [];
+      /* the set was consumed, so the field returns to rest (B4) — but only
+         when something landed: a query that added nothing is still the
+         user's, and clearing it would hide the list that explains why */
+      if (added >= 1) app.set(`addQ.${sprintId}`, '');
+      if (skipped.length) flashBanner(addSkipSummary(added, ids.length, skipped));
+      await loadAll();
+    } catch (err) {
+      flashBanner(errText(err));
+    } finally {
+      sprintItemSaving = false;
+      app.set('addBusy', null);
+    }
+  },
+  /* B6: Escape clears THAT sprint's query and nothing else — focus stays in
+     the field, which the template keeps mounted in every state. Enter is
+     inert (Enter-as-Add-All went to Miles as a suggestion, not a rule), and
+     every other key falls through to the two-way binding. */
+  addKey(ctx, sprintId) {
+    if (ctx.event.key !== 'Escape') return;
+    ctx.event.preventDefault();
+    app.set(`addQ.${sprintId}`, '');
   },
   /* owl #24 — collapse is PRESENTATION only: sprintGroups, the block header's
      meta/count and the capacity footer all keep reading every row, so a hidden
@@ -794,11 +759,8 @@ app.on({
      moves with it; without the refresh the timeline thumb keeps the old ratio
      and lies about how much timeline is off-screen. */
   toggleLeftPane() {
-    /* the collapsed pane cannot show the add row (its controls live in
-       hidden columns — review finding 10), so an open draft is discarded
-       rather than left standing invisibly with Add Item unreachable —
-       through the ONE discard owner, so its hover cleanup rides along */
-    if (app.get('addRow')) app.fire('cancelAddRow');
+    /* the search field survives the collapse (PLAN.md B9): it is pane-wide,
+       so it flexes to the narrow pane rather than hiding — nothing to discard */
     app.set('leftCollapsed', !app.get('leftCollapsed'));
     // the collapsed pane hides the three detail columns (#72 layout), so the
     // sheet's width and the thumb's ratio both change — re-measure next frame

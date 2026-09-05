@@ -26,8 +26,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   APP_JS,
+  APP_JS_CODE,
   TEMPLATE,
   UI_CSS,
+  handlerBody,
   leakedMustacheText,
   renderSprintModal,
   type SprintBanner,
@@ -1073,13 +1075,21 @@ describe('end to end — the shipped validators drive the shipped markup', () =>
 describe('batch semantics — one PUT, nothing per row', () => {
   it('sends the whole draft in a single PUT and never stamps a sprint onto a row', () => {
     expect([...APP_JS.matchAll(/api\.send\('PUT', `\/api\/projects\/\$\{app\.get\('activeProjectId'\)\}\/sprints`/g)]).toHaveLength(1);
-    /* Amended 2026-08-28 (#72, then the spot-fix): TWO legitimate
-       `sprint_id` sites — submitAddItem's POST and draftPlace's one-act
-       commit-and-place POST (frozen contract, PLAN.md). Both pair a work
-       card with the sprint list the PM opened. Sprint DEFINITIONS still
-       travel only in the batch PUT, and no client code assigns a sprintId
-       onto a row — the rows arrive from the server already carrying theirs. */
-    expect([...APP_JS.matchAll(/sprint_id/g)]).toHaveLength(2);
+    /* Amended 2026-09-05 (owl #77 §0): the two legitimate `sprint_id` sites
+       are the search flow's two adds — `addOne`'s single POST and `addAll`'s
+       batch POST (the 08-28 dropdown flow's submitAddItem and draftPlace
+       retired with it). Both pair work cards with the sprint list the PM
+       opened. Sprint DEFINITIONS still travel only in the batch PUT, and no
+       client code assigns a sprintId onto a row — the rows arrive from the
+       server already carrying theirs.
+       The count is DERIVED from those two handlers (test/CLAUDE.md rule 2),
+       so the rule under guard is WHICH code names a sprint_id, not how many
+       times: a third site anywhere in the bundle breaks the equality. */
+    const owned = ['addOne', 'addAll']
+      .map((h) => [...handlerBody(h).matchAll(/sprint_id/g)].length)
+      .reduce((a, b) => a + b, 0);
+    expect(owned, 'neither add handler names a sprint_id — the count below would be vacuous').toBeGreaterThan(0);
+    expect([...APP_JS_CODE.matchAll(/sprint_id/g)]).toHaveLength(owned);
     expect(APP_JS).not.toMatch(/\.sprintId\s*=[^=]/); // no property assignment, anywhere
   });
 

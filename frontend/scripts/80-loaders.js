@@ -265,7 +265,7 @@ async function writeCapacity(next) {
 }
 
 /* Monotonic guard on the ONE payload-apply (review 2026-08-28, finding 5):
-   plotPlace / unplotItem / submitAddItem each end in their own loadAll and
+   plotPlace / unplotItem / addOne / addAll each end in their own loadAll and
    nothing serialized them, so two quick gestures could land their responses
    out of order and the OLDER snapshot — read before the second write
    committed — would win the final app.set and re-draw a bar the server no
@@ -364,22 +364,6 @@ async function loadAll() {
       requestCounts: requests.counts || app.get('requestCounts'),
       deadlinePayload: deadlines,
     });
-    /* A refresh can invalidate the add row's picked CARD (review 2026-08-28,
-       finding 9; RE-SEATED same day — the first fix anchored on a
-       non-unique line and landed in writeCapacity's deadline refetch, a
-       path that never replaces `addable`; the simplification pass spotted
-       it): someone else schedules it, or it completes — either way it
-       leaves `addable`, the closed control would render neither name nor
-       placeholder, and Add Item would stay live for a POST the server now
-       refuses. Same rule as an MC re-pick (#73): the pick clears, the row
-       and the MC stay, the repopulated list tells the user why. THIS is the
-       one place the pool is replaced, so this is the one place the pick can
-       go stale. */
-    const addDraft = app.get('addRow');
-    if (addDraft && addDraft.cardId) {
-      const pool = (app.get('sprintItems').addable || {})[addDraft.mc] || [];
-      if (!pool.some((c) => c.cardId === addDraft.cardId)) app.set('addRow.cardId', null);
-    }
     computeDeadlines();
     // one frame, both post-render measurements. loadAll is also the project
     // switch (resetForProjectSwitch and popstate both end here), so the clip

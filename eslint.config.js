@@ -10,7 +10,7 @@ import globals from 'globals';
 // concatenates them into one <script>). Drives both the eslint globals map
 // and the unused-vars ignore pattern below — one list, two derivations.
 const FRONTEND_SHARED = [
-  'alphaSort',
+  'alphaSort', 'addLabel', 'addTokens', 'addMatches', // block 2 (owl #77 §0): the search-based add helpers in 10-constants.js
   'api', 'fmtDate', 'mondayShift', 'ICONS', 'ICON_SPRITE',
   'BASE', 'parseRoute', 'buildPath', 'ROUTE_TABS', 'ROUTE_DEFAULT_TAB', 'ROUTE_RETIRED_TABS',
   // The former 01-app.js, split into ten files (context restructure stage 5,

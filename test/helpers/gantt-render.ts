@@ -199,8 +199,9 @@ export const OFF_BOARD: SprintScheduleRow = {
 
 /**
  * The default groups: one sprint with rows and one EMPTY sprint — empty
- * renders too (the add affordance needs a home), and NO 'outside', NO
- * 'unscheduled' group exists any more (#72 §2: absence is the design).
+ * renders too (the always-visible search row needs a home, owl #77 §0), and
+ * NO 'outside', NO 'unscheduled' group exists any more (#72 §2: absence is
+ * the design).
  * `count` uses the shipped `itemCount` format ('· N items').
  */
 export const SPRINT_GROUPS: SprintGroup[] = [
@@ -216,13 +217,22 @@ export interface SprintScheduleState {
   sprintSel?: string | null;
   /** the week the pointer is over on the SELECTED unplotted row's track */
   plotWeek?: string | null;
-  addRow?: { sprintId: string; mc: string | null; cardId: string | null; saving: boolean } | null;
-  addMenu?: null | 'mc' | 'card';
-  /** what the two dropdowns list — the deriving computeds are executed from
-      shipped source in test/sprint-schedule-render.test.ts, never re-proven
-      through a render */
-  addMcOptions?: string[];
-  addCardOptions?: Array<{ cardId: string; name: string; taskPrefix: string | null }>;
+  /** each sprint's search text (PLAN.md block 2, B10) — sprintId → query.
+      Only the two-way binding and the `.typed` class read it; whether a panel
+      is OPEN is `addPanels`, never this. */
+  addQ?: Record<string, string>;
+  /** the sprint whose add is in flight (B10) — that sprint's links go inert
+      for the flight, every other sprint's stay live */
+  addBusy?: string | null;
+  /**
+   * The open panels as the shipped `addPanels()` computed emits them: a key
+   * exists ONLY for a sprint whose query has tokens, and an EMPTY `items`
+   * array is the no-matches state (owl #77 §0; 841:33689). The computed and
+   * `addMatches` are EXECUTED from shipped source in
+   * test/sprint-schedule-render.test.ts — a render proves which nodes the
+   * template emits, never what the list contains.
+   */
+  addPanels?: Record<string, { items: Array<{ cardId: string; mc: string; name: string; label: string }> }>;
   /**
    * `() => []` renders a row with NO bar — unplotted, unforecastable, or
    * clipped fully outside the window. The default draws one bar so the
@@ -252,10 +262,12 @@ export function renderSprintSchedule(state: SprintScheduleState = {}): string {
       collapsedBlocks: state.collapsedBlocks ?? {},
       sprintSel: state.sprintSel ?? null,
       plotWeek: state.plotWeek ?? null,
-      addRow: state.addRow ?? null,
-      addMenu: state.addMenu ?? null,
-      addMcOptions: state.addMcOptions ?? ['MC-655', 'MC-824'],
-      addCardOptions: state.addCardOptions ?? [],
+      // the RESTING search row is the default: no query anywhere, no panel,
+      // nothing in flight (833:68629) — every suite that does not care about
+      // the add flow renders it at rest
+      addQ: state.addQ ?? {},
+      addBusy: state.addBusy ?? null,
+      addPanels: state.addPanels ?? {},
       plannerWeeks: [
         { key: '2026-08-03', wk: 'wk1', sub: 'Aug 3–7' },
         { key: '2026-08-10', wk: 'wk2', sub: 'Aug 10–14' },

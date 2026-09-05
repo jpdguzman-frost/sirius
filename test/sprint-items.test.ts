@@ -9,12 +9,14 @@
  *   C. no cascade — placing a sketch does nothing to its render (BR-1a)
  *   D. the filter governs what can be ADDED, never what is REMOVED
  *   E. one row per card, and the bar's finish is computed from the click
+ *   F. Add All is ONE act with a per-card answer (owl #77 §0, PLAN.md B3)
  *
  * `toHTML()`-style render checks are not here; this file proves the server
- * contract. Geometry and the two dropdowns are the live pass's to prove.
+ * contract. The search row's geometry and its three states belong to
+ * test/sprint-schedule-render.test.ts and the live pass.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { Types } from 'mongoose';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
@@ -86,6 +88,9 @@ const load = async (projectId: Types.ObjectId) =>
 const itemUrl = (pid: unknown, id: string) => `/api/projects/${pid}/sprint-items/${id}`;
 const add = (agent: ReturnType<typeof request.agent>, pid: unknown, body: Record<string, unknown>) =>
   agent.post(`/api/projects/${pid}/sprint-items`).send(body);
+/** Add All — the search row's one request carrying the listed ids (owl #77 §0). */
+const batch = (agent: ReturnType<typeof request.agent>, pid: unknown, body: Record<string, unknown>) =>
+  agent.post(`/api/projects/${pid}/sprint-items/batch`).send(body);
 /** add + plot, the pair almost every case here needs. Returns the item id. */
 const addAndPlot = async (
   agent: ReturnType<typeof request.agent>,
@@ -128,7 +133,7 @@ describe('the schedule is opt-in — it is NOT a mirror of the board', () => {
     expect(addable['MC-07']!.map((c) => c.cardId).sort()).toEqual(['w1', 'w2']);
   });
 
-  it('sorts the dropdown alphabetically by the FULL label — Render before Sketch', async () => {
+  it('sorts the pool alphabetically by the FULL label — Render before Sketch', async () => {
     const { project } = await setup();
     await mkCard(project._id, 'r1', { name: 'Render Asset: GRaf Playing Flute', task_prefix: 'Render Asset' });
     await mkCard(project._id, 's1', { name: 'Sketch Asset: GRaf Playing Flute' });
@@ -146,7 +151,7 @@ describe('the schedule is opt-in — it is NOT a mirror of the board', () => {
     ]);
   });
 
-  it('stores the FULL card name — the menu ellipsis is a display clamp, not the value', async () => {
+  it('stores the FULL card name — the result row’s ellipsis is a display clamp, not the value', async () => {
     const { project, sprint, agent } = await setup();
     const full = 'Sketch Asset: Corey G Singing "Chicosci Vampire Social Club" by Chicosci';
     await mkCard(project._id, 'long', { name: full });
@@ -356,7 +361,7 @@ describe('two rules that look alike and are not (#72 §5)', () => {
 
     const { addable } = await load(project._id);
     expect(addable['MC-07']!.map((c) => c.cardId)).toEqual(['open1']);
-    // and the server refuses it, so the dropdown is not the only guard
+    // and the server refuses it, so the pool is not the only guard
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'done1' }).expect(409);
   });
 
@@ -399,7 +404,7 @@ describe('one row = one task card = one bar', () => {
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     const dup = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(409);
     expect(dup.body.error.code).toBe('ALREADY_SCHEDULED');
-    // and it is off the dropdown, so the refusal is a backstop not the UX
+    // and it is out of the pool, so the refusal is a backstop not the UX
     const { addable } = await load(project._id);
     expect(addable['MC-07'] ?? []).toEqual([]);
   });
@@ -567,9 +572,11 @@ describe('the routes are Sirius-owned planning writes', () => {
       .patch(itemUrl(project._id, res.body.id))
       .send({ starts_on: '2026-08-03', difficulty: 'Hard' })
       .expect(400);
-    /* `starts_on` left this guard 2026-08-28: the add route OWNS it now —
-       one-act commit-and-place (PLAN.md, node 731:100277). The unknown-key
-       refusal is proven with a field no sprint-item route will ever own. */
+    /* `starts_on` is NOT the probe here: the single add keeps it as an
+       optional, tested contract (PLAN.md B13, block 2 — nothing in the search
+       flow sends it, and the batch route refuses it; see F below). The
+       unknown-key refusal is proven with a field no sprint-item route will
+       ever own. */
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1', difficulty: 'Hard' })
       .expect(400);
   });
@@ -615,5 +622,211 @@ describe('the routes are Sirius-owned planning writes', () => {
     await agent.patch(url).send({ starts_on: '2026-08-03' }).expect(404);
     await agent.delete(url).expect(404);
     expect(await SprintItem.countDocuments({ _id: foreign._id })).toBe(1);
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* F — Add All: one act, a per-card answer (owl #77 §0; PLAN.md B3)        */
+/* ---------------------------------------------------------------------- */
+
+describe('Add All is one request that answers per card', () => {
+  /** position by card id, straight off the collection — the rule under test is
+      the ORDER the rows took, so it is read where it is stored. */
+  const positions = async (projectId: Types.ObjectId) =>
+    Object.fromEntries(
+      (await SprintItem.find({ project_id: projectId }).lean()).map((it) => [it.trello_card_id, it.position]),
+    );
+
+  it('adds every listed card in LIST order, after the sprint’s tail', async () => {
+    const { project, sprint, agent } = await setup();
+    for (const id of ['a0', 'w1', 'w2', 'w3']) await mkCard(project._id, id);
+    // the sprint already holds a row: the batch lands AFTER it, never around it
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'a0' }).expect(201);
+
+    /* Deliberately NOT alphabetical: the list on screen IS the set (Miles),
+       and its order is the client's (MC rank, then the server's pool order),
+       so the server takes the ids as sent and never re-sorts them. */
+    const res = await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['w3', 'w1', 'w2'] }).expect(200);
+    expect(res.body).toEqual({ ok: true, added: 3, skipped: [] });
+
+    expect(await positions(project._id)).toEqual({ a0: 0, w3: 1, w1: 2, w2: 3 });
+    // and the load — which sorts on position — reads the list in that order
+    expect((await load(project._id)).rows.map((r) => r.cardId)).toEqual(['a0', 'w3', 'w1', 'w2']);
+  });
+
+  it('skips a complete, an already-scheduled and an unknown card with a code, and still adds the rest', async () => {
+    const { project, sprint, agent } = await setup();
+    const other = await Project.create({
+      code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22,
+    });
+    await WorkCard.create({
+      project_id: other._id, mc_number: 'MC-07', trello_card_id: 'foreign',
+      name: 'Foreign', difficulty: 'Medium', current_list: 'Working on Design',
+    });
+    await mkCard(project._id, 'open1');
+    await mkCard(project._id, 'open2');
+    await mkCard(project._id, 'done1', { current_list: 'Done' });
+    await mkCard(project._id, 'sched1');
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'sched1' }).expect(201);
+
+    /* Never fatal (#77 §0, Miles: no confirmation, no count-check, no review
+       pass). Every skip carries the single add's own refusal code, so the
+       client reads one vocabulary; a card from ANOTHER project is simply not
+       found under this one (invariant 1) — a skip, never a cross-project
+       write. The skip order is the request order. */
+    const res = await batch(agent, project._id, {
+      sprint_id: String(sprint._id),
+      card_ids: ['open1', 'done1', 'sched1', 'ghost', 'foreign', 'open2'],
+    }).expect(200);
+    expect(res.body).toEqual({
+      ok: true,
+      added: 2,
+      skipped: [
+        { card_id: 'done1', code: 'CARD_COMPLETE' },
+        { card_id: 'sched1', code: 'ALREADY_SCHEDULED' },
+        { card_id: 'ghost', code: 'NOT_FOUND' },
+        { card_id: 'foreign', code: 'NOT_FOUND' },
+      ],
+    });
+
+    // the two that could land did, in order, and a skip consumed no position
+    expect(await positions(project._id)).toEqual({ sched1: 0, open1: 1, open2: 2 });
+    expect(await SprintItem.countDocuments({ project_id: other._id })).toBe(0);
+    expect(await SprintItem.countDocuments({ trello_card_id: 'foreign' })).toBe(0);
+  });
+
+  it('dedupes a repeated id — first occurrence keeps the order, and a repeat is not a skip', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkCard(project._id, 'w1');
+    await mkCard(project._id, 'w2');
+
+    /* A duplicate in the body is a client echo, not a fact to report: without
+       the dedupe the second `w1` would hit the unique index and come back as
+       ALREADY_SCHEDULED, which would put a phantom skip in the banner. */
+    const res = await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['w1', 'w1', 'w2', 'w1'] }).expect(200);
+    expect(res.body).toEqual({ ok: true, added: 2, skipped: [] });
+    expect(await positions(project._id)).toEqual({ w1: 0, w2: 1 });
+  });
+
+  it('audits one sprintItem.add per CREATED row, in the single add’s own shape (invariant 10)', async () => {
+    const { project, sprint, agent } = await setup();
+    for (const id of ['s1', 'b1', 'b2', 'done1']) await mkCard(project._id, id, id === 'done1' ? { current_list: 'Done' } : {});
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 's1' }).expect(201);
+    await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['b1', 'b2', 'done1'] }).expect(200);
+
+    const adds = await AuditLog.find({ project_id: project._id, action: 'sprintItem.add' }).sort({ _id: 1 }).lean();
+    // one for the single add, one per row the batch created — none for the skip
+    expect(adds).toHaveLength(3);
+
+    /* DERIVED, not copied (test/CLAUDE.md rule 2): the batch row's `after` is
+       compared key-for-key with what the single add wrote in this same run,
+       so a field added to one route and not the other fails here rather than
+       drifting the log into two dialects. */
+    const single = adds[0]!.after as Record<string, unknown>;
+    for (const row of adds.slice(1)) {
+      const after = row.after as Record<string, unknown>;
+      expect(Object.keys(after).sort()).toEqual(Object.keys(single).sort());
+      expect(after.sprint_id).toBe(String(sprint._id));
+      expect(after.mc_number).toBe('MC-07');
+      expect(after.starts_on).toBeNull();
+      // entity_id is the row it created, so the log can be followed to the row
+      expect(await SprintItem.countDocuments({ _id: row.entity_id, trello_card_id: after.card_id as string })).toBe(1);
+    }
+    expect(adds.slice(1).map((a) => (a.after as { card_id: string }).card_id)).toEqual(['b1', 'b2']);
+  });
+
+  it('404s a sprint from another project and writes nothing', async () => {
+    const { project, agent } = await setup();
+    const other = await Project.create({
+      code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22,
+    });
+    const otherSprint = await Sprint.create({
+      project_id: other._id, name: 'S', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 0,
+    });
+    await mkCard(project._id, 'w1');
+    await mkCard(project._id, 'w2');
+
+    // the sprint is the one thing that fails the WHOLE request (invariant 1):
+    // there is no list to land in, so no card can be "the rest"
+    await batch(agent, project._id, { sprint_id: String(otherSprint._id), card_ids: ['w1', 'w2'] }).expect(404);
+    expect(await SprintItem.countDocuments({})).toBe(0);
+    expect(await AuditLog.countDocuments({})).toBe(0);
+  });
+
+  it('refuses a malformed body rather than adding some of it', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkCard(project._id, 'w1');
+    const sprintId = String(sprint._id);
+
+    const bad: Record<string, unknown>[] = [
+      { card_ids: ['w1'] }, // no sprint
+      { sprint_id: 'not-an-id', card_ids: ['w1'] }, // a bad id in the BODY is a 400, as the single add answers
+      { sprint_id: sprintId }, // no ids
+      { sprint_id: sprintId, card_ids: [] }, // an empty set is not a request
+      { sprint_id: sprintId, card_ids: 'w1' }, // not an array
+      { sprint_id: sprintId, card_ids: ['w1', ''] }, // an empty id is not an id — the WHOLE body is refused
+      { sprint_id: sprintId, card_ids: ['w1', 7] },
+    ];
+    for (const body of bad) {
+      const res = await batch(agent, project._id, body).expect(400);
+      expect(res.body.error.code).toBe('INVALID_BODY');
+    }
+    expect(await SprintItem.countDocuments({})).toBe(0);
+  });
+
+  it('lands every row UNPLOTTED — the batch carries no starts_on and refuses one', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkCard(project._id, 'w1');
+    await mkCard(project._id, 'w2');
+
+    /* Two acts (#72 §6), for a batch as for a single add: the result rows draw
+       no + (node 840:31630), so there is no click to carry. The single add's
+       optional `starts_on` (PLAN.md B13) is that route's contract, not this
+       one's — `.strict()` refuses the key here (src/CLAUDE.md §2). */
+    await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['w1'], starts_on: '2026-08-03' }).expect(400);
+    expect(await SprintItem.countDocuments({})).toBe(0);
+
+    await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['w1', 'w2'] }).expect(200);
+    const { rows } = await load(project._id);
+    expect(rows).toHaveLength(2);
+    for (const r of rows) {
+      expect(r.startsOn).toBeNull();
+      expect(r.finish).toBeNull();
+    }
+    // and stored as ABSENT, the same unplotted state the single add produces
+    expect(await SprintItem.countDocuments({ project_id: project._id, starts_on: { $exists: true } })).toBe(0);
+  });
+
+  it('turns a row that lands between the pre-read and the insert into a skip, not a 500', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkCard(project._id, 'w1');
+    await mkCard(project._id, 'w2');
+
+    /* The batch reads "already scheduled" ONCE, then inserts one by one. The
+       race is a second actor scheduling `w1` after that read and before the
+       insert — a second tab, a single Add. Simulated at the seam itself: the
+       first `create` the route makes (for `w1`, first in order) is preceded
+       by the competing row, so the route's own insert hits the unique index.
+       The rule: that 11000 is the same fact the pre-read reports, so it is
+       the same code, and the rest of the batch still lands. An `insertMany`
+       or a dropped catch would fail here with a 500. */
+    const original = SprintItem.create.bind(SprintItem) as (doc: Record<string, unknown>) => Promise<unknown>;
+    const spy = vi.spyOn(SprintItem, 'create').mockImplementationOnce((async (doc: Record<string, unknown>) => {
+      await original({ ...doc, position: 99, added_by: 'other@frostdesigngroup.com' });
+      return original(doc);
+    }) as never);
+    try {
+      const res = await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['w1', 'w2'] }).expect(200);
+      expect(res.body).toEqual({ ok: true, added: 1, skipped: [{ card_id: 'w1', code: 'ALREADY_SCHEDULED' }] });
+    } finally {
+      spy.mockRestore();
+    }
+
+    // exactly one row for w1 (the competing one), w2 still added, and the
+    // batch audited only what IT created
+    expect(await SprintItem.countDocuments({ project_id: project._id, trello_card_id: 'w1' })).toBe(1);
+    expect(await SprintItem.countDocuments({ project_id: project._id, trello_card_id: 'w2' })).toBe(1);
+    const adds = await AuditLog.find({ project_id: project._id, action: 'sprintItem.add' }).lean();
+    expect(adds.map((a) => (a.after as { card_id: string }).card_id)).toEqual(['w2']);
   });
 });

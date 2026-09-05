@@ -39,7 +39,7 @@ app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ'), noteText
    mutual exclusion all derive from this list — adding `warnPop` used to mean
    three hand-edits that had to agree, and a fourth list (the focus-held
    selectors below) that nothing tied to them. A sixth overlay is one entry. */
-const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop', 'pipeSortMenu', 'pipeFilterMenu', 'chipPop', 'addMenu'];
+const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop', 'pipeSortMenu', 'pipeFilterMenu', 'chipPop'];
 const NO_OVERLAYS = Object.fromEntries(OVERLAY_KEYS.map((k) => [k, null]));
 /* WHAT MUST NOT DISMISS EACH OVERLAY — its own trigger and its own box, keyed
    by the state key so the two lists cannot drift apart. They already had:
@@ -61,28 +61,20 @@ const OVERLAY_SHIELDS = {
      `.fchip` alone would cover it — naming both keeps the entry honest about
      what the reader can point at. */
   chipPop: '.fchip, .pipemenu',
-  /* the Add row's dropdown (owls #72/#73): control and menu both live inside
-     the one `.gdd` box, and the box is exactly control-plus-menu — no dead
-     space for the wrapper rule above to worry about. */
-  addMenu: '.gdd',
 };
 /** One selector string, derived — the click dismisser's ignore list. */
 const OVERLAY_SHIELD = [...new Set(OVERLAY_KEYS.flatMap((k) => OVERLAY_SHIELDS[k].split(',').map((x) => x.trim())))].join(', ');
 /* The SCROLL dismisser shields only the boxes that can scroll INSIDE
    themselves — a scroll an overlay answers itself must not dismiss it. The
    filter panel is here because its STATUS group is a deliberate internal
-   scroller (R-pf-e), so a wheel over it would otherwise shut the panel. The
-   Add dropdown's list is here because it scrolls itself as the NORMAL case
-   (#73 — a fixed max height shorter than most MC lists). */
-const OVERLAY_SELF_SCROLL = '.duepop, .selectmenu, .warnpop, .pipemenu, .gddmenu';
+   scroller (R-pf-e), so a wheel over it would otherwise shut the panel. */
+const OVERLAY_SELF_SCROLL = '.duepop, .selectmenu, .warnpop, .pipemenu';
 /* ANCHORED overlays move WITH the page — they hang off an element in the flow
    rather than being pinned to the viewport, so a scroll cannot detach them from
    their trigger and there is nothing for the scroll dismisser to protect
    against. Dismissing them anyway made their lower half unreachable on a short
-   viewport: the only way to reach it is to scroll, and scrolling closed it.
-   The Add dropdown's menu is CSS-anchored above its own control (#73 — it
-   opens upward), so it rides the same rule. */
-const OVERLAY_ANCHORED = ['pipeSortMenu', 'pipeFilterMenu', 'chipPop', 'addMenu'];
+   viewport: the only way to reach it is to scroll, and scrolling closed it. */
+const OVERLAY_ANCHORED = ['pipeSortMenu', 'pipeFilterMenu', 'chipPop'];
 function anyMenuOpen() {
   return OVERLAY_KEYS.some((k) => app.get(k));
 }
@@ -114,7 +106,7 @@ function closeMenus({ restoreFocus = false } = {}) {
   warnPopCancelClose(); // one door out: no pending close survives a close
   const t = overlayTrigger;
   const ae = document.activeElement;
-  const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .warnpop, .gddmenu'));
+  const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .warnpop'));
   /* RETURNING focus, never STEALING it. Every overlay before this batch opened
      on a CLICK of its own <button>, so the captured trigger was also what the
      browser had just focused and the restore was a no-op or a step back inside
@@ -158,17 +150,7 @@ document.addEventListener('click', (e) => {
   closeMenus();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && anyMenuOpen()) {
-    closeMenus({ restoreFocus: true });
-    return;
-  }
-  /* the Add row (#72 §3): Escape cancels it — AFTER the overlays, so the
-     first press closes an open dropdown and the second discards the row.
-     Nothing in the row is a write in progress (only Add Item posts), so
-     discarding is always safe. Routed through cancelAddRow — the ONE
-     discard owner (review 2026-08-28b, finding 3: a direct null here left
-     the draft's hover-state cleanup unreachable). */
-  if (e.key === 'Escape' && app.get('addRow')) app.fire('cancelAddRow');
+  if (e.key === 'Escape' && anyMenuOpen()) closeMenus({ restoreFocus: true });
 });
 document.addEventListener('scroll', (e) => {
   // the popover scrolls INSIDE itself on a viewport shorter than it is —

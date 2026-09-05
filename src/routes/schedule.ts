@@ -47,6 +47,14 @@ const DATE_ONLY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => {
    and a bad id in a PATH stays a 404 because an unroutable id names nothing. */
 const OBJECT_ID = z.string().refine((v) => Types.ObjectId.isValid(v), { message: 'not an id' });
 
+/**
+ * Why a batch add left one card out (owl #77 §0; PLAN.md B3). The three are
+ * the single add's own refusals — 404 NOT_FOUND, 409 CARD_COMPLETE, 409
+ * ALREADY_SCHEDULED — carried per id instead of per request, so the client
+ * reads one vocabulary whichever route answered.
+ */
+type BatchSkipCode = 'NOT_FOUND' | 'CARD_COMPLETE' | 'ALREADY_SCHEDULED';
+
 
 /**
  * CONFIDENCE AND THE TWO REVIEW-SLA OVERRIDES ARE NOT HERE — closed 2026-08-27
@@ -349,7 +357,7 @@ export function scheduleRouter(): Router {
          week; the moment #72 stored membership as `sprint_items.sprint_id`, a
          routine rename would have orphaned every scheduled row — gone from
          every group, still counted in the footer, its card locked out of the
-         dropdown by the unique index, with no UI path back. So: a row whose id
+         search list by the unique index, with no UI path back. So: a row whose id
          matches a live sprint is UPDATED in place; a row without one is
          inserted; a live sprint absent from the payload is removed, and its
          scheduled items are removed WITH it — the modal's confirm banner warns
@@ -448,17 +456,18 @@ export function scheduleRouter(): Router {
   /* other state change (invariant 10).                                    */
   /* ------------------------------------------------------------------ */
 
-  /* ADD a work card to a sprint's list. Without `starts_on` the row lands
-     UNPLOTTED — added and plotted are two separate acts (#72 §6), and the
-     violet + is what turns one into the other. The DRAFT row's + collapses
-     the two into ONE act (node 731:100277): it sends `starts_on`, the row is
-     created already plotted, and the add's single audit row carries the
-     placement — never an add plus a synthetic plot (invariant 10 logs the
-     act, and there was one act).
+  /* ADD a work card to a sprint's list — the search row's per-row `Add`
+     (owl #77 §0). Without `starts_on` the row lands UNPLOTTED: added and
+     plotted are two separate acts (#72 §6), and the violet + on the committed
+     row is what turns one into the other. `starts_on` stays OPTIONAL on this
+     body as a tested contract (PLAN.md B13, block 2, 2026-09-05) — nothing in
+     the search flow sends it; a caller that does gets the row created already
+     plotted, with the placement in the add's one audit row rather than an add
+     plus a synthetic plot (invariant 10 logs the act, and there was one act).
 
      The sprint comes from the body because the insertion point carries
-     meaning: the + belongs to a specific sprint's list, so the row lands in
-     THAT sprint and never in a default one (#72 §4). */
+     meaning: the search row belongs to a specific sprint's list, so the row
+     lands in THAT sprint and never in a default one (#72 §4). */
   router.post(
     '/api/projects/:projectId/sprint-items',
     ensureAuthenticated,
@@ -495,9 +504,9 @@ export function scheduleRouter(): Router {
         return;
       }
       /* #72 §5: a card already complete is never OFFERED, and the server says
-         the same thing the dropdown does. This is the ADD-time filter — it
-         governs what can be added and NEVER what is removed, so a row whose
-         card completes later is untouched by it. */
+         the same thing the search list's pool does. This is the ADD-time
+         filter — it governs what can be added and NEVER what is removed, so a
+         row whose card completes later is untouched by it. */
       if (classifyList(card.current_list as string | undefined) === 'done') {
         res.status(409).json({
           ok: false,
@@ -512,7 +521,7 @@ export function scheduleRouter(): Router {
           sprint_id: sprint._id,
           mc_number: card.mc_number,
           trello_card_id: card.trello_card_id,
-          // the draft +'s one-act placement; absent → unplotted (#72 §6)
+          // optional on the single add (PLAN.md B13); absent → unplotted (#72 §6)
           starts_on: body.data.starts_on,
           position: ((last?.position as number) ?? -1) + 1,
           added_by: actor,
@@ -534,6 +543,122 @@ export function scheduleRouter(): Router {
         }
         throw err;
       }
+    },
+  );
+
+  /* ADD ALL — the search row's one act (owl #77 §0; PLAN.md B3, block 2,
+     2026-09-05). The client sends exactly the ids its list shows, in list
+     order, and the server answers PER CARD rather than for the batch: a card
+     that is complete, already on the schedule, or not this project's is
+     SKIPPED with a code and the rest still land. Never fatal, never
+     confirmed, never re-checked against a count (Miles: "the list on screen
+     IS the set"). One request rather than N single adds because MC-825 alone
+     is 99 cards — 99 round trips with no order guarantee and a half-done
+     schedule on a mid-way error.
+
+     Rows land UNPLOTTED. The two-act rule (#72 §6) holds for a batch as for
+     a single add, so this body has no `starts_on` and `.strict()` refuses
+     one. Every created row is its own audit row (invariant 10 logs the act,
+     and here the act is N rows) in the SAME `after` shape as the single add,
+     so the log reads alike whichever route wrote it. */
+  router.post(
+    '/api/projects/:projectId/sprint-items/batch',
+    ensureAuthenticated,
+    ensureProjectMember,
+    async (req, res) => {
+      const body = z
+        .object({ sprint_id: OBJECT_ID, card_ids: z.array(z.string().min(1)).min(1).max(2000) })
+        .strict()
+        .safeParse(req.body);
+      if (!body.success) {
+        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY', issues: body.error.issues } });
+        return;
+      }
+      const projectId = res.locals.project._id as Types.ObjectId;
+      const actor = (req.user as SessionUser).email;
+      /* First occurrence wins the order. A repeated id is one card — not a
+         second row, and not a skip either: the list never shows a card twice,
+         so a duplicate in the body is a client echo, not a fact to report. */
+      const ids = [...new Set(body.data.card_ids)];
+
+      /* Everything UNDER THE PROJECT (invariant 1), one read per collection
+         rather than one per id: the sprint's existence, the cards, the ids
+         already on the schedule, and the tail — one round trip, as the single
+         add does. A sprint from another project is a 404 and nothing is
+         written; a card from another project simply is not found here, so it
+         is a skip and never a cross-project write. */
+      const [sprint, cards, scheduled, last] = await Promise.all([
+        Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId }).select({ _id: 1 }).lean(),
+        WorkCard.find({ project_id: projectId, trello_card_id: { $in: ids }, active: true })
+          .select({ trello_card_id: 1, mc_number: 1, current_list: 1 })
+          .lean(),
+        SprintItem.find({ project_id: projectId, trello_card_id: { $in: ids } })
+          .select({ trello_card_id: 1 })
+          .lean(),
+        SprintItem.findOne({ project_id: projectId, sprint_id: body.data.sprint_id })
+          .sort({ position: -1 })
+          .select({ position: 1 })
+          .lean(),
+      ]);
+      if (!sprint) {
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+        return;
+      }
+      const cardById = new Map(cards.map((c) => [c.trello_card_id as string, c]));
+      const taken = new Set(scheduled.map((s) => s.trello_card_id as string));
+      /* The tail is read ONCE and counted up per CREATED row, so the batch
+         lands in list order after whatever the sprint already holds; a skip
+         consumes no position, so the created rows stay contiguous. */
+      let position = ((last?.position as number) ?? -1) + 1;
+      let added = 0;
+      const skipped: Array<{ card_id: string; code: BatchSkipCode }> = [];
+
+      for (const id of ids) {
+        const card = cardById.get(id);
+        if (!card) {
+          skipped.push({ card_id: id, code: 'NOT_FOUND' });
+          continue;
+        }
+        // #72 §5: the add-time filter — the same answer the pool gives
+        if (classifyList(card.current_list as string | undefined) === 'done') {
+          skipped.push({ card_id: id, code: 'CARD_COMPLETE' });
+          continue;
+        }
+        if (taken.has(id)) {
+          skipped.push({ card_id: id, code: 'ALREADY_SCHEDULED' });
+          continue;
+        }
+        try {
+          const created = await SprintItem.create({
+            project_id: projectId,
+            sprint_id: sprint._id,
+            mc_number: card.mc_number,
+            trello_card_id: card.trello_card_id,
+            // no `starts_on` — unplotted by construction (#72 §6)
+            position,
+            added_by: actor,
+          });
+          position += 1;
+          added += 1;
+          await audit({
+            project_id: projectId, actor, action: 'sprintItem.add', entity: 'sprint_item',
+            entity_id: String(created._id),
+            after: { sprint_id: String(sprint._id), card_id: card.trello_card_id, mc_number: card.mc_number, starts_on: created.starts_on ?? null },
+          });
+        } catch (err) {
+          /* ONE BY ONE, never insertMany: the `scheduled` read above is a
+             snapshot, and a row that lands between it and this insert (a
+             second tab, a single Add) hits the unique index. That is the same
+             "already on the schedule" fact the snapshot reports, so it gets
+             the same code — not a 500, and not a half-written batch. */
+          if ((err as { code?: number }).code === 11000) {
+            skipped.push({ card_id: id, code: 'ALREADY_SCHEDULED' });
+            continue;
+          }
+          throw err;
+        }
+      }
+      res.json({ ok: true, added, skipped });
     },
   );
 

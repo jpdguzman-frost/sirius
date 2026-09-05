@@ -214,12 +214,12 @@
                       ANY unplotted row's track lights the violet + at the
                       pointer's week and tints that week cell slate-50 beneath
                       it (.ghovcell, node 731:100271), and the CLICK lands on
-                      the TRACK — the + itself is pointer-events: none and
-                      deliberately the same 24px circle as the add zone below.
-                      On the DRAFT row, once MC + work card are chosen, the
-                      same gesture commits and places in one act (draftPlace).
-                      The row plots on the hovered week's MONDAY; day-granular
-                      placement is #75's rollover territory. }}
+                      the TRACK — the + itself is pointer-events: none. The
+                      row plots on the hovered week's MONDAY; day-granular
+                      placement is #75's rollover territory. Placement stays a
+                      SECOND act: nothing below this loop offers a week, and
+                      the search rows draw no + of their own (owl #77 §0, node
+                      840:31630). }}
                   <div class="gtrack"
                        {{#if !row.startsOn}}on-mousemove="['plotHover', row.id]" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{/if}}>
                     <div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div>
@@ -232,106 +232,57 @@
                   </div>
                 </div>
               {{/each}}
-              {{! Adding (#72 §5, frame 731:98513): the zone is invisible at
-                  rest — a dashed rule and the indigo circle, revealed on
-                  hover/focus — and swaps for the pending row while open. MC
-                  first, then the card: re-picking the MC always CLEARS the
-                  card (#73 — never re-match by name), and the card list is
-                  the server's alphabetical order (#73's provisional rule;
-                  Render before Sketch — the mock's Sketch-first is wrong,
-                  ruled decision 1, do not re-sort client-side). Menus open
-                  UPWARD (#73; review finding 11's measured collision flip
-                  is the one exception) and the
-                  picked option is SemiBold ONLY — no tick, no fill (#73).
-                  The STORED value is always the full string; the 2-line clamp
-                  is CSS. Escape cancels the row (cancelAddRow, wired in
-                  90-events) and `addMenu` dismisses through the overlay
-                  system with the .gdd shield — trigger and menu both live
-                  inside it. }}
-              {{#if addRow && addRow.sprintId === g.id}}
-                <div class="growr gaddrow">
-                  <div class="gpin gdetails">
-                    <div class="gcell c-mc">
-                      <div class="gdd gddmc {{#if addMenu === 'mc'}}open{{/if}}">
-                        <button class="gddctl" type="button" on-click="['openAddMenu', 'mc']"
-                                aria-haspopup="listbox"
-                                aria-expanded="{{ addMenu === 'mc' ? 'true' : 'false' }}"
-                                aria-label="MC number">
-                          {{#if addRow.mc}}<span class="gddval">{{addRow.mc}}</span>{{else}}<span class="gddval ph">MC No.</span>{{/if}}
-                          <svg class="i16 gddchev" aria-hidden="true"><use href="#i-badgeChevron" /></svg>
-                        </button>
-                        {{#if addMenu === 'mc'}}
-                          <div class="gddmenu {{#if addMenuFlip}}down{{/if}}" role="listbox" aria-label="MC numbers with addable work cards">
-                            {{#each addMcOptions as mc}}
-                              <button class="gdditem {{#if addRow.mc === mc}}on{{/if}}" type="button" role="option"
-                                      aria-selected="{{ addRow.mc === mc ? 'true' : 'false' }}"
-                                      on-click="['pickAddMc', mc]">{{mc}}</button>
-                            {{/each}}
-                          </div>
-                        {{/if}}
-                      </div>
-                    </div>
-                    <div class="gcell c-scope">
-                      <div class="gdd gddcard {{#if addMenu === 'card'}}open{{/if}}">
-                        <button class="gddctl" type="button" on-click="['openAddMenu', 'card']"
-                                disabled="{{ addRow.mc ? false : true }}"
-                                aria-haspopup="listbox"
-                                aria-expanded="{{ addMenu === 'card' ? 'true' : 'false' }}"
-                                aria-label="Work card">
-                          {{#if addRow.cardId}}<span class="gddval">{{#each addCardOptions as c}}{{#if c.cardId === addRow.cardId}}{{c.name}}{{/if}}{{/each}}</span>{{else}}<span class="gddval ph">Work Card</span>{{/if}}
-                          <svg class="i16 gddchev" aria-hidden="true"><use href="#i-badgeChevron" /></svg>
-                        </button>
-                        {{#if addMenu === 'card'}}
-                          <div class="gddmenu {{#if addMenuFlip}}down{{/if}}" role="listbox" aria-label="Work cards on {{addRow.mc}}">
-                            {{#each addCardOptions as c}}
-                              <button class="gdditem {{#if addRow.cardId === c.cardId}}on{{/if}}" type="button" role="option"
-                                      aria-selected="{{ addRow.cardId === c.cardId ? 'true' : 'false' }}"
-                                      on-click="['pickAddCard', c.cardId]">{{c.name}}</button>
-                            {{/each}}
-                          </div>
-                        {{/if}}
-                      </div>
-                    </div>
-                    <div class="gcell c-dl">
-                      <button class="gaddbtn {{#if addRow.saving}}saving{{/if}}" type="button" on-click="['submitAddItem']"
-                              disabled="{{ addRow.cardId && !addRow.saving ? false : true }}">Add Item</button>
-                    </div>
-                    <div class="gcell c-fc"><span class="gdim">—</span></div>
-                    <div class="gcell c-gstatus">
-                      <span class="gdim">—</span>
-                      {{! the inert grey trio — decoration keeping the pending
-                          row on the real rows' grid, so it is hidden from AT }}
-                      <span class="gactions" aria-hidden="true">
-                        <button class="gact" type="button" disabled tabindex="-1"><svg class="i13" aria-hidden="true"><use href="#i-rowCopy" /></svg></button>
-                        <button class="gact" type="button" disabled tabindex="-1"><svg class="i13" aria-hidden="true"><use href="#i-rowPin" /></svg></button>
-                        <button class="gact" type="button" disabled tabindex="-1"><svg class="i13" aria-hidden="true"><use href="#i-rowCalRemove" /></svg></button>
-                      </span>
-                    </div>
-                  </div>
-                  {{! The draft row's own track (Miles, node 731:100277): once
-                      MC + work card are chosen and no save is in flight, the
-                      same hover gesture as a committed row offers placement
-                      — the click COMMITS AND PLACES in one act (draftPlace).
-                      The Add Item button still commits unplotted. }}
-                  <div class="gtrack"
-                       {{#if addRow.cardId && !addRow.saving}}on-mousemove="['plotHover', 'add']" on-mouseleave="['plotLeave']" on-click="['draftPlace']"{{/if}}>
-                    <div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div>
-                    {{#if plotRow === 'add' && plotWeek}}
-                      <div class="ghovcell" style="left:{{plusLeft(plotWeek)}}%;" aria-hidden="true"></div>
-                      <button class="gplus" type="button" tabindex="-1" style="left:{{plusLeft(plotWeek)}}%;" aria-label="Place the work card in the week of {{plotWeek}}"><svg class="i16" aria-hidden="true"><use href="#i-plus" /></svg></button>
-                    {{/if}}
-                  </div>
+              {{! Adding, rebuilt on SEARCH (owl #77 §0; nodes 833:68629
+                  resting, 840:31597 results, 841:33668 and 841:33689 no
+                  matches). The field is ALWAYS visible at the end of every
+                  sprint — no hover zone, no pending row, no menus: everything
+                  built to the earlier picker flow is superseded whole. Typing
+                  lists every addable work card whose label carries every
+                  token of the query (B1), in MC order and then the server's
+                  own order, never re-sorted here and never capped — the list
+                  on screen IS the set (B2) — so Add All sends exactly those
+                  ids in one request, with no confirmation and no count-check
+                  (B3), and clears the query only when something landed (B4).
+                  Result rows land UNPLOTTED: neither the search row nor a
+                  result row offers a week, so their timeline halves are inert
+                  grid (B5, node 840:31630). Escape clears the query and Enter
+                  is inert (B6). Row heights are fixed in every state, so the
+                  first keystroke moves only the field's right edge as Add All
+                  appears (B7); the two link blues are two TOKENS, never one
+                  colour at opacity (B8); and the row survives the collapsed
+                  pane because the field is pane-wide, unlike the columns the
+                  old picker cells sat in (B9). }}
+              <div class="growr gsearch">
+                <div class="gpin gdetails gsearchpane">
+                  <input class="gaddq {{#if addPanels[g.id]}}typed{{/if}}" type="text"
+                         value="{{addQ[g.id]}}" placeholder="Search by MC# or Work Card to add to sprint"
+                         aria-label="Search work cards to add to {{g.name}}"
+                         on-keydown="['addKey', g.id]" />
+                  {{#if addPanels[g.id]}}
+                    <button class="galink gaddall" type="button" on-click="['addAll', g.id]"
+                            disabled="{{ addPanels[g.id].items.length && addBusy !== g.id ? false : true }}"
+                            aria-label="Add every listed work card to {{g.name}}">Add All</button>
+                  {{/if}}
                 </div>
-              {{else}}
-                {{! role=button PROMISES Enter/Space (review finding 15) — a div fires
-                    no click for either, so the keydown supplies what the role
-                    advertises. }}
-                <div class="gaddzone" role="button" tabindex="0" on-click="['openAddRow', g.id]"
-                     on-keydown="['addZoneKey', g.id]"
-                     aria-label="Add a work card to {{g.name}}">
-                  <span class="gaddrule" aria-hidden="true"></span>
-                  <span class="gaddplus" aria-hidden="true"><svg class="i16"><use href="#i-plus" /></svg></span>
-                </div>
+                <div class="gtrack"><div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div></div>
+              </div>
+              {{#if addPanels[g.id]}}
+                {{#each addPanels[g.id].items as m}}
+                  <div class="growr gresult">
+                    <div class="gpin gdetails gresultpane">
+                      <span class="glabel">{{m.label}}</span>
+                      <button class="galink gaddone" type="button" on-click="['addOne', g.id, m.cardId]"
+                              disabled="{{ addBusy === g.id ? true : false }}"
+                              aria-label="Add {{m.label}} to {{g.name}}">Add</button>
+                    </div>
+                    <div class="gtrack"><div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div></div>
+                  </div>
+                {{else}}
+                  <div class="growr gresult gnomatch">
+                    <div class="gpin gdetails gresultpane"><span class="gmuted">No cards found for this query</span></div>
+                    <div class="gtrack"><div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div></div>
+                  </div>
+                {{/each}}
               {{/if}}
               {{/if}}
               </div>

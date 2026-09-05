@@ -85,29 +85,33 @@ const app = new Ractive({
     pipeThumb: { needed: false, left: 0, width: 100 },
     iconSprite: ICON_SPRITE,
     weekStart: mondayIso(manilaToday()),
-    /* ---- Sprint Schedules (owls #72/#73, frame 731:98513) ----
+    /* ---- Sprint Schedules (owls #72/#73/#77, frame 731:98513) ----
        The tab body's unit is the WORK CARD: `sprintItems` is the server's
        {rows, addable} payload stored verbatim in loadAll (rows are
        position-sorted per sprint; addable = MC → its incomplete work cards).
-       Everything below it is VIEW state for placement and the Add row,
-       never persisted. */
+       Everything below it is VIEW state for placement and the search-based
+       add, never persisted. */
     sprintItems: { rows: [], addable: {} },
     /* the checkbox — a row HIGHLIGHT whose semantics are still with product
        (owl jp→miles #60); it gates nothing in placement */
     sprintSel: null,
-    /* the hover pair (node 731:100277): `plotRow` is whose track the pointer
-       is on — a committed row's id, or the literal 'add' for the draft row —
-       and `plotWeek` the week column under it, where the cell tints and the
-       violet + renders. Both null whenever the pointer is elsewhere. */
+    /* the hover pair (node 731:100277): `plotRow` is the committed row whose
+       track the pointer is on, and `plotWeek` the week column under it, where
+       the cell tints and the violet + renders. Both null whenever the pointer
+       is elsewhere. Only committed rows have a live track: the search row and
+       its results draw no + (owl #77 §0, node 840:31630; PLAN.md B5). */
     plotRow: null,
     plotWeek: null,
-    /* the one pending Add row: { sprintId, mc, cardId, saving } while open.
-       Nothing in it is written until Add Item posts (#72 §3). */
-    addRow: null,
-    /* which Add dropdown is open ('mc' | 'card') — an overlay key like the
-       rest, registered in OVERLAY_KEYS with the `.gdd` shield. */
-    addMenu: null,
-    addMenuFlip: false, // finding 11: upward hits the sheet top → open downward
+    /* owl #77 §0 (PLAN.md B10): sprintId → the text in that sprint's search
+       field, two-way bound. A MAP, not one string: every sprint has its own
+       always-visible field and several may hold text at once. Survives a
+       reload — the pool is replaced under it and the list re-derives — and
+       resets on a project switch, where the sprint ids stop meaning anything. */
+    addQ: {},
+    /* the sprint whose add (single or Add All) is in flight, else null: THAT
+       sprint's Add links go inert for the flight while the others stay live.
+       `sprintItemSaving` (90-events.js) still guards placement alongside it. */
+    addBusy: null,
     /* owl #24: block id → true = collapsed. VIEW state only, no persistence —
        keyed on sprintGroups' `id` (a sprint's own id, never the sprint NAME:
        names are free text), and cleared on a project switch because sprint
@@ -631,19 +635,23 @@ const app = new Ractive({
         };
       });
     },
-    /* the Add row's MC dropdown — the addable map's keys, alphabetical. The
-       map itself is server-shaped (#73): MC → its incomplete work cards. */
-    addMcOptions() {
-      return Object.keys(this.get('sprintItems').addable).sort();
-    },
-    /* the Work Card dropdown for the picked MC — server-sorted alphabetically
-       (#73's provisional rule; DO NOT re-sort client-side). Empty until an MC
-       is picked, which is the same state that keeps the control inert
-       (openAddMenu refuses 'card' without one). */
-    addCardOptions() {
-      const add = this.get('addRow');
-      if (!add || !add.mc) return [];
-      return this.get('sprintItems').addable[add.mc] || [];
+    /* THE SEARCH PANELS (owl #77 §0; PLAN.md "Computed"): sprintId → { items }
+       for every sprint whose field holds a query, derived through addMatches
+       and nowhere else. A key exists ONLY while addTokens(addQ[id]) is
+       non-empty, so `{{#if addPanels[g.id]}}` is the resting/active switch —
+       and an EMPTY items array is still active: that is the no-matches state
+       (841:33668), not rest. Reads `sprints`, `addQ` and the pool; the pool
+       is the server's own addable map, unchanged (B11), so a card that was
+       scheduled elsewhere or completed leaves every list on the next load. */
+    addPanels() {
+      const q = this.get('addQ') || {};
+      const addable = this.get('sprintItems.addable') || {};
+      const out = {};
+      for (const s of this.get('sprints')) {
+        if (!addTokens(q[s.id]).length) continue;
+        out[s.id] = { items: addMatches(q[s.id], addable) };
+      }
+      return out;
     },
     /* the footer caption beside WORK CARDS / WEEK — the committed capacity
        plus its band against the reference weeks, through the same

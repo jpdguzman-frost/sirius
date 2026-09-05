@@ -20,19 +20,28 @@
  * of source sliced out of the shipped scripts (test/CLAUDE.md rules 2 and 6).
  * A real click landing on a real track is E2E's, after deploy.
  *
+ * RETIRED WITH THE ADD FLOW, 2026-09-05 (owl #77 §0 — "anything built to the
+ * earlier two-dropdown flow is superseded"): the hover-revealed zone, the
+ * pending row, the MC and Work Card dropdowns, Add Item, and the draft row's
+ * one-act commit-and-place. Their describes go; the SEARCH FIELD's take their
+ * place, and the withdrawal sweep below is what keeps them gone.
+ *
  * NON-VACUOUS REVERT PROOFS OWED AT VALIDATE (test/CLAUDE.md; PLAN.md) — each
  * of these guards must be shown to FAIL under the revert it names:
- *   1. an EMPTY sprint still renders header + add zone (revert: filter empty
- *      groups out of `sprintGroups`)
- *   2. no auto-population — addable cards never become rows (revert: seed
- *      `rows` from `addable` in the computed)
+ *   1. an EMPTY sprint still renders header + search row (revert: filter
+ *      empty groups out of `sprintGroups`)
+ *   2. no auto-population — addable cards never become rows, and only a
+ *      QUERY opens a panel (revert: seed `rows` from `addable` in the
+ *      computed, or emit a panel for a blank query)
  *   3. the violet + gates on `!row.startsOn && plotRow === row.id &&
  *      plotWeek`, and the track's handlers on `!row.startsOn` — the checkbox
  *      gates NOTHING (revert: drop any one clause, or re-gate on `sprintSel`;
  *      the !row.startsOn render clause is review 2026-08-28b finding 1 — a
  *      hover re-armed during the placement reload must not strand chrome on
  *      the freshly plotted row)
- *   4. `pickAddMc` always clears `cardId` (revert: keep the old card)
+ *   4. `addMatches` needs EVERY token — the annotation's "MC-06 Illustrate"
+ *      example lists MC-06's Illustrate cards and nothing else (revert: a raw
+ *      substring test, or OR across the tokens)
  *   5. MIN_GRAB widening anchors LEFT, slides left only in the final column
  *      (revert: `left = l` unclamped, or a CSS min-width)
  *   6. the bar covers the finish DAY (revert: `dayIndex(finish)` without +1)
@@ -40,26 +49,31 @@
  *   8. footer overlap counts include a Friday start and a Monday finish
  *      (revert: strict inequalities)
  *   9. the withdrawal sweeps (revert: reintroduce `draggable`, a drop
- *      handler, or Suggest markup in the schedules view)
+ *      handler, Suggest markup, or any of the retired add flow)
  *  10. the hover cell renders in BOTH tracks only under `plotRow`+`plotWeek`
  *      and wears slate-50 (revert: drop the `.ghovcell` element, its gate
  *      clause, or the `var(--slate-50)` fill)
  *  11. a PAST deadline pins to the window's LEFT edge; the right clip stays
  *      (revert: restore the `u >= 0` left clip in `deadlineTick`)
- *  12. the draft track's click COMMITS AND PLACES via `draftPlace`, gated on
- *      `addRow.cardId && !addRow.saving` (revert: drop a clause, or route
- *      the click to the add-without-placement path)
- *  13. plotHover refuses to re-arm mid-flight, and plotPlace/draftPlace
- *      demand the hover is their OWN before writing (revert: drop the
- *      `sprintItemSaving` return or either identity clause)
- *  14. the draft discard has ONE owner — Escape and the pane collapse FIRE
- *      `cancelAddRow` (revert: null `addRow` directly in 60-overlays)
+ *  12. Add All sends the PANEL'S OWN ids to the batch route in one act, and
+ *      clears that sprint's query only when something was added (revert: N
+ *      single POSTs, re-derive the ids, or clear unconditionally)
+ *  13. plotHover refuses to re-arm mid-flight, and plotPlace demands the
+ *      hover is its OWN before writing (revert: drop the `sprintItemSaving`
+ *      return or the identity clause)
+ *  14. Escape ALONE clears a sprint's query; Enter is inert (revert: clear on
+ *      any key, or give Enter an Add All branch)
+ *  15. row heights are pinned as HEIGHTS — the first keystroke moves only the
+ *      field's right edge (revert: a min-height on `.gsearch`/`.gresult`)
+ *  16. the two blues are two TOKENS (revert: one colour at an opacity on
+ *      `.galink`/`.gaddone`/`.gaddall`)
  */
 
 import { describe, expect, it } from 'vitest';
 import {
   APP_JS,
   APP_JS_CODE,
+  COMPUTED_CTX_JS,
   GANTT_CSS,
   PLANNER_CSS,
   TEMPLATE,
@@ -159,8 +173,6 @@ const groupsOf = (...rows: SprintScheduleRow[]): SprintGroup[] => [
 interface GroupsHarness {
   set(key: string, value: unknown): void;
   groups(): SprintGroup[];
-  mcs(): string[];
-  cards(): Array<{ cardId: string; name: string }>;
   caption(): string;
   fmtDate(iso: string): string;
   itemCount(n: number): string;
@@ -176,19 +188,16 @@ const H = (): GroupsHarness =>
     ${fnDecl('CAP_TYPICAL_TOLERANCE')}
     ${fnDecl('CAP_EDGE_SHARE')}
     ${fnDecl('capacityBand')}
-    const computed = { ${['sprintGroups', 'addMcOptions', 'addCardOptions', 'footCaption'].map((n) => method(n)).join(', ')} };
+    const computed = { ${['sprintGroups', 'footCaption'].map((n) => method(n)).join(', ')} };
     const DATA = {
       sprintItems: { rows: [], addable: {} },
       sprints: [],
-      addRow: null,
       capacity: { weekly: 8, least: 6, typical: 8, most: 10 },
     };
-    const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k) ? computed[k].call(ctx) : DATA[k]) };
+    ${COMPUTED_CTX_JS}
     return {
       set: (k, v) => { DATA[k] = v; },
       groups: () => computed.sprintGroups.call(ctx),
-      mcs: () => computed.addMcOptions.call(ctx),
-      cards: () => computed.addCardOptions.call(ctx),
       caption: () => computed.footCaption.call(ctx),
       fmtDate,
       itemCount,
@@ -201,7 +210,7 @@ describe('sprintGroups — one group per sprint, empty sprints included, no synt
     { id: 's2', name: 'Beta', start: '2026-08-31', end: '2026-09-04' },
   ];
 
-  it('emits every sprint — an EMPTY sprint keeps its group, because the add affordance needs a home', () => {
+  it('emits every sprint — an EMPTY sprint keeps its group, because the SEARCH ROW needs a home', () => {
     const h = H();
     h.set('sprints', SPRINTS);
     h.set('sprintItems', { rows: [{ ...PLOTTED, sprintId: 's1' }], addable: {} });
@@ -261,13 +270,13 @@ describe('sprintGroups — one group per sprint, empty sprints included, no synt
     expect(body).not.toContain('Unscheduled');
   });
 
-  it('renders an empty group as header + add zone with zero rows', () => {
+  it('renders an empty group as header + search row with zero rows', () => {
     const html = renderSprintSchedule({
       sprintGroups: [{ id: 's2', name: 'Sprint B', meta: 'Aug 31 - Sep 4', count: '· 0 items', rows: [] }],
     });
     expect(html).toContain('Sprint B');
     expect(html).not.toContain('sitem');
-    expect(html).toContain('gaddzone');
+    expect(html).toContain('growr gsearch'); // always visible, even here (owl #77 §0)
   });
 
   it('keeps the no-groups empty state, pointed at the Sprints modal', () => {
@@ -521,13 +530,16 @@ describe('the violet + rides the hovered week of any unplotted row — the check
     expect(handlerBody('plotHover')).toContain('weekAtX');
   });
 
-  it('a project switch clears the whole placement state (source)', () => {
-    // `addMenu` is deliberately absent here: it closes through the derived
-    // NO_OVERLAYS spread, which the overlay suite in this file pins instead.
+  it('a project switch clears the whole placement and add state (source)', () => {
     const body = fnBody('resetForProjectSwitch');
-    for (const key of ['sprintSel', 'plotRow', 'plotWeek', 'addRow']) {
+    for (const key of ['sprintSel', 'plotRow', 'plotWeek', 'addBusy']) {
       expect(body, `${key} survives a project switch`).toMatch(new RegExp(`${key}: null`));
     }
+    /* the queries reset to an EMPTY MAP, not null (PLAN.md B10): `addQ` is
+       one field per sprint and several may hold text, and the sprint ids it
+       is keyed on are per-project — carried over, a query would name another
+       project's sprint. */
+    expect(body, 'the search queries survive a project switch').toMatch(/addQ: \{\s*\}/);
   });
 });
 
@@ -543,205 +555,680 @@ describe('the hover pair cannot strand, and a click places only its OWN hover (r
     ).toContain('if (sprintItemSaving) return;');
   });
 
-  it('plotPlace and draftPlace demand the hover is THEIRS before writing (finding 7)', () => {
+  /* The draft row's half of finding 7 retired with the pending row (owl #77
+     §0); the committed row's half is the whole rule now — result rows land
+     UNPLOTTED (PLAN.md B5), so nothing but a committed track ever places. */
+  it('plotPlace demands the hover is ITS OWN before writing (finding 7)', () => {
     expect(handlerBody('plotPlace'), 'plotPlace would place this row at a week hovered on another track')
       .toContain("app.get('plotRow') !== itemId");
-    expect(handlerBody('draftPlace'), 'draftPlace would commit at a week hovered on a committed row')
-      .toContain("app.get('plotRow') !== 'add'");
-  });
-
-  it("draftPlace clears only the draft's own hover — on success AND on failure (findings 2, 12)", () => {
-    const clear = "if (app.get('plotRow') === 'add') app.set({ plotRow: null, plotWeek: null });";
-    expect(
-      handlerBody('draftPlace').split(clear).length - 1,
-      'an identity-guarded clear left draftPlace — a mid-flight hover on another row dies, or a failed POST strands the draft chrome',
-    ).toBe(2);
-  });
-
-  it('the draft discard has ONE owner and every path fires it (finding 3)', () => {
-    // Escape (60-overlays) and the pane collapse both route through
-    // cancelAddRow — a direct addRow-null would strand the draft's hover
-    expect(APP_JS.split("app.fire('cancelAddRow')").length - 1, 'a discard path stopped firing the owner').toBe(2);
-    expect(APP_JS, "60-overlays nulls addRow itself again — cancelAddRow's cleanup is unreachable on that path")
-      .not.toContain("app.get('addRow')) app.set('addRow', null)");
-    expect(handlerBody('cancelAddRow'), "the owner lost its identity-guarded hover clear")
-      .toContain("if (app.get('plotRow') === 'add')");
   });
 });
 
 /* ====================================================================== *
- * SUITE 4 — the add affordance: zone → row → two dropdowns → Add Item
+ * SUITE 4 — adding a work card: ONE always-visible search field per sprint,
+ * the matching cards listed beneath it, `Add` on every result row and
+ * `Add All` on the field row (owl #77 §0; nodes 833:68629 resting,
+ * 840:31597 results, 841:33668 + 841:33689 no matches).
+ *
+ * The three states are RENDERED (rule 6) and every recipe behind them is
+ * EXECUTED out of the shipped scripts (rule 2) — the handlers included, so
+ * what a guard proves is the ROUTE one calls and the ids it carries, not
+ * that a string appears somewhere in a body. A real keystroke, a real
+ * pointer on `Add` and the measured hover rise are E2E's (gantt-rules §5).
  * ====================================================================== */
 
-describe('the add zone — hidden at rest, one per group, opens the add row in ITS group only', () => {
-  it('renders per group and opens via openAddRow with the group id (source)', () => {
-    const html = renderSprintSchedule(); // two groups
-    expect([...html.matchAll(/gaddzone/g)].length).toBeGreaterThanOrEqual(2);
-    expect(html).toMatch(/gaddrule/);
-    expect(html).toMatch(/gaddplus/);
-    expect(schedulesView()).toContain("['openAddRow', g.id]");
+/**
+ * One panel item, shaped as the shipped `addMatches` emits them. The label is
+ * spelled out here deliberately: a render proves which NODES the template
+ * emits, and the label's composition is proven by executing `addLabel`
+ * against `addMatches` in the source suite below.
+ */
+const item = (mc: string, name: string, cardId: string) => ({ cardId, mc, name, label: `${mc}: ${name}` });
+
+/** Sprint A's panel — two results. */
+const PANEL_A = {
+  items: [item('MC-06', 'Illustrate Asset: Hero Banner', 'c1'), item('MC-06', 'Illustrate Asset: Chickenjoy Mascot', 'c3')],
+};
+/** Sprint B's panel — a DIFFERENT card, so a leak between sprints shows. */
+const PANEL_B = { items: [item('MC-07', 'Sketch Asset: Loft Plan', 'c9')] };
+const PANELS = { s1: PANEL_A, s2: PANEL_B };
+
+/** Every `<button>` open tag in `html` whose class list carries `cls`. */
+const links = (html: string, cls: string): string[] =>
+  [...html.matchAll(/<button[^>]*>/g)].map((m) => m[0]).filter((t) => t.includes(cls));
+
+/** The one `cls` link in `html` — asserts the count so a read cannot go silent. */
+const oneLink = (html: string, cls: string): string => {
+  const found = links(html, cls);
+  expect(found, `expected exactly one \`${cls}\` link`).toHaveLength(1);
+  return found[0]!;
+};
+
+/** A two-group render split at Sprint B's header — [Sprint A's half, B's]. */
+const bySprint = (html: string): [string, string] => {
+  const at = html.indexOf('Sprint B');
+  expect(at, 'the two-group fixture stopped rendering its second sprint').toBeGreaterThan(-1);
+  return [html.slice(0, at), html.slice(at)];
+};
+
+/** 35-gantt.css with comments stripped — rule 3's kinder corpus for sweeps
+    whose subject the sheet may legitimately NAME while explaining it. */
+const CSS = GANTT_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+/** Every rule as `{ selector, body }`. The sheet carries no at-rules, so
+    splitting on `}` lands exactly on rule boundaries. */
+const CSS_RULES: Array<{ selector: string; body: string }> = CSS.split('}')
+  .map((chunk) => {
+    const at = chunk.indexOf('{');
+    return at < 0 ? null : { selector: chunk.slice(0, at).trim(), body: chunk.slice(at + 1) };
+  })
+  .filter((r): r is { selector: string; body: string } => r !== null);
+
+/** Every rule whose selector names `.cls` as a WHOLE class token. */
+const rulesFor = (cls: string) => CSS_RULES.filter((r) => new RegExp(`\\.${cls}(?![\\w-])`).test(r.selector));
+
+describe('the search row — always visible, one per sprint, resting until typed into (833:68629)', () => {
+  it('rests with the placeholder alone: no Add All, no results, no message', () => {
+    const html = renderSprintSchedule(); // two groups, one of them empty
+    expect([...html.matchAll(/growr gsearch/g)]).toHaveLength(2);
+    expect(html).toContain('Search by MC# or Work Card to add to sprint');
+    expect(html, 'Add All is drawn at rest — 833:68629 shows the field alone').not.toContain('gaddall');
+    expect(html, 'a result row exists with no query behind it').not.toContain('gresult');
+    expect(html).not.toContain('No cards found for this query');
   });
 
-  it('is revealed by hover/focus, not always-on chrome (CSS)', () => {
-    expect(GANTT_CSS).toMatch(/\.gaddzone[^{]*\{[^}]*opacity: 0/);
-    expect(GANTT_CSS).toMatch(/\.gaddzone[^{]*(hover|focus)[^{]*\{[^}]*opacity: 1/);
+  it('draws the week grid in its timeline half and NO placement + (B5; 840:31630)', () => {
+    const row = divFragment('<div class="growr gsearch"', renderSprintSchedule());
+    expect(row).toContain('gweek'); // the grid runs on across the row
+    expect(row, 'the frame draws no + on the search row — a result lands UNPLOTTED (#72 §6)').not.toContain('gplus');
+    expect(row).not.toContain('ghovcell');
   });
 
-  it('swaps to the add ROW in the opened group, keeping the zone in the other', () => {
-    const html = renderSprintSchedule({
-      addRow: { sprintId: 's1', mc: null, cardId: null, saving: false },
-    });
-    expect(html).toContain('gaddrow');
-    // Sprint B (s2) still offers its zone
-    const afterB = html.slice(html.indexOf('Sprint B'));
-    expect(afterB).toContain('gaddzone');
-    expect(afterB).not.toContain('gaddrow');
+  it('survives the collapsed pane — the field is pane-wide, so nothing hides it (B9)', () => {
+    const html = renderSprintSchedule({ leftCollapsed: true, addQ: { s1: 'illustrate' }, addPanels: { s1: PANEL_A } });
+    expect(html).toContain('growr gsearch');
+    expect(html).toContain('growr gresult');
+    /* the retired hide existed only because the pending row's dropdown cells
+       lived in columns `lpc` hides; a field that FILLs the pane has none */
+    const lpc = CSS_RULES.filter((r) => r.selector.includes('lpc'));
+    expect(lpc.length, 'no lpc rules at all — this sweep would be vacuous').toBeGreaterThan(0);
+    for (const r of lpc) {
+      expect(r.selector, 'the collapsed pane hides the search row — B9 keeps it').not.toMatch(/gsearch|gresult/);
+    }
+  });
+
+  it('wires field and links to the frozen handlers, per sprint (source — directives never reach toHTML)', () => {
+    const view = schedulesView();
+    expect(view).toContain('value="{{addQ[g.id]}}"'); // one field per sprint, two-way bound
+    expect(view).toContain(`on-keydown="['addKey', g.id]"`);
+    expect(view).toContain(`on-click="['addAll', g.id]"`);
+    expect(view).toContain(`on-click="['addOne', g.id, m.cardId]"`);
   });
 });
 
-describe('the two dropdowns — MC first, card second, full strings always', () => {
-  const OPEN_MC = {
-    addRow: { sprintId: 's1', mc: null, cardId: null, saving: false },
-    addMenu: 'mc' as const,
-    addMcOptions: ['MC-07', 'MC-824'],
+describe("typing opens THAT sprint's panel — matches, no matches, one sprint at a time", () => {
+  it('lists one result row per item, each with its label and its own Add, and offers Add All', () => {
+    const html = renderSprintSchedule({ addQ: { s1: 'mc-06 illustrate' }, addPanels: { s1: PANEL_A } });
+    const [a, b] = bySprint(html);
+    expect([...a.matchAll(/growr gresult/g)]).toHaveLength(2);
+    expect(a).toContain('MC-06: Illustrate Asset: Hero Banner');
+    expect(a).toContain('MC-06: Illustrate Asset: Chickenjoy Mascot');
+    expect(links(a, 'gaddone')).toHaveLength(2);
+    expect(oneLink(a, 'gaddall'), 'Add All is dead with a set to add').not.toContain('disabled');
+    expect(a).not.toContain('gnomatch');
+    // the other sprint is untouched — the field is per sprint (B10)
+    expect(b).not.toContain('gaddall');
+    expect(b).not.toContain('gresult');
+  });
+
+  it('greys Add All for a query with no matches and draws ONE muted line where the first result would be', () => {
+    const html = renderSprintSchedule({ addQ: { s1: 'zzz' }, addPanels: { s1: { items: [] } } });
+    const [a] = bySprint(html);
+    expect([...a.matchAll(/growr gresult/g)], 'the muted line IS the first result row (841:33689)').toHaveLength(1);
+    expect(a).toContain('gnomatch');
+    expect(a).toContain('No cards found for this query');
+    expect(a).toContain('gmuted');
+    expect(oneLink(a, 'gaddall'), 'Add All stays live with nothing to add').toContain('disabled');
+    expect(links(a, 'gaddone'), 'a row with no card offered an Add').toHaveLength(0);
+  });
+
+  it('treats an EMPTY items array as an OPEN panel — absence of the KEY is what rests', () => {
+    // the switch is `{{#if addPanels[g.id]}}`, never the item count: a
+    // no-match query must show its message, not fall back to the resting row
+    expect(renderSprintSchedule()).not.toContain('gaddall');
+    expect(renderSprintSchedule({ addQ: { s1: 'zzz' }, addPanels: { s1: { items: [] } } })).toContain('gaddall');
+  });
+
+  it('wears .typed on the field exactly while its OWN panel is open (B12 — CSS cannot read a value)', () => {
+    expect(renderSprintSchedule()).not.toMatch(/class="gaddq[^"]*typed/);
+    const [a, b] = bySprint(renderSprintSchedule({ addQ: { s1: 'zzz' }, addPanels: { s1: { items: [] } } }));
+    expect(a).toMatch(/class="gaddq[^"]*typed/);
+    expect(b).not.toMatch(/class="gaddq[^"]*typed/);
+  });
+
+  it('holds two independent panels — several sprints may carry text at once (B10)', () => {
+    const html = renderSprintSchedule({ addQ: { s1: 'illustrate', s2: 'loft' }, addPanels: PANELS });
+    const [a, b] = bySprint(html);
+    expect(a).toContain('MC-06: Illustrate Asset: Hero Banner');
+    expect(a, "Sprint B's result leaked into Sprint A's panel").not.toContain('MC-07: Sketch Asset: Loft Plan');
+    expect(b).toContain('MC-07: Sketch Asset: Loft Plan');
+    expect(b, "Sprint A's results leaked into Sprint B's panel").not.toContain('MC-06: Illustrate');
+    expect(links(a, 'gaddone')).toHaveLength(2);
+    expect(links(b, 'gaddone')).toHaveLength(1);
+  });
+
+  it("makes an in-flight sprint's links inert and leaves every other sprint live (B10)", () => {
+    const html = renderSprintSchedule({ addQ: { s1: 'illustrate', s2: 'loft' }, addPanels: PANELS, addBusy: 's1' });
+    const [a, b] = bySprint(html);
+    for (const cls of ['gaddone', 'gaddall']) {
+      expect(links(a, cls).length, `no ${cls} to read — the assertions below would be vacuous`).toBeGreaterThan(0);
+      expect(links(b, cls).length, `no ${cls} to read — the assertions below would be vacuous`).toBeGreaterThan(0);
+      expect(links(a, cls).every((t) => t.includes('disabled')), `a ${cls} stayed live during its own sprint's flight`).toBe(true);
+      expect(links(b, cls).some((t) => t.includes('disabled')), `a ${cls} froze in a sprint that is not adding`).toBe(false);
+    }
+  });
+
+  it('draws no placement + on a result row — the card lands UNPLOTTED (B5)', () => {
+    const row = divFragment('<div class="growr gresult"', renderSprintSchedule({ addQ: { s1: 'x' }, addPanels: { s1: PANEL_A } }));
+    expect(row).toContain('gweek');
+    expect(row, 'the result row offers placement — adding and placing are TWO acts (#72 §6)').not.toContain('gplus');
+    expect(row).not.toContain('ghovcell');
+  });
+});
+
+/* ---------------------------------------------------------------------- *
+ * The matching recipe and the panel computed, executed from shipped source.
+ * ---------------------------------------------------------------------- */
+
+interface Match {
+  cardId: string;
+  mc: string;
+  name: string;
+  label: string;
+}
+type Addable = Record<string, Array<{ cardId: string; name: string; taskPrefix: string | null }>>;
+interface AddHarness {
+  addLabel(mc: string, name: string): string;
+  addTokens(q: string): string[];
+  addMatches(q: string, addable: Addable): Match[];
+  panels(s: { sprints: Array<{ id: string }>; addQ: Record<string, string>; addable: Addable }): Record<string, { items: Match[] } | undefined>;
+}
+
+/**
+ * `addLabel` / `addTokens` / `addMatches` (10-constants.js) and the
+ * `addPanels` computed (40-app-state.js), sliced out of the shipped bundle
+ * and executed. `mcRank`, `cmpNullsLast` and its `unranked` ride along because
+ * the cross-MC order is defined in terms of them (PLAN.md B2) — the same rank
+ * and the same nulls-last comparator the Requests and Pipeline tables already
+ * sort by, so "unrankable last" cannot come to mean two things on two screens.
+ * `mcRank` ships from a LATER file in build.js's order; a runtime call sees it
+ * either way, so the prelude declares it first.
+ *
+ * Sliced LAZILY, as `G()` is: `fnDecl` throws when a declaration is absent,
+ * and a throw at module scope would take the render suites down with it.
+ */
+let addHarness: AddHarness | undefined;
+const A = (): AddHarness =>
+  (addHarness ??= new Function(`
+    ${['mcRank', 'unranked', 'cmpNullsLast', 'addLabel', 'addTokens', 'addMatches'].map((n) => fnDecl(n)).join('\n')}
+    const computed = { ${method('addPanels')} };
+    const DATA = { sprints: [], addQ: {}, sprintItems: { addable: {} } };
+    /* COMPUTED_CTX_JS's resolver, plus KEYPATHS: Ractive's own \`get\` reads
+       'sprintItems.addable' as a path, and a plain DATA[k] would answer
+       undefined — the computed would then fall back to {} and every list
+       assertion below would pass on an empty pool. */
+    const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k)
+      ? computed[k].call(ctx)
+      : k.split('.').reduce((o, p) => (o == null ? o : o[p]), DATA)) };
+    return {
+      addLabel, addTokens, addMatches,
+      panels: (s) => {
+        DATA.sprints = s.sprints;
+        DATA.addQ = s.addQ;
+        DATA.sprintItems = { addable: s.addable };
+        return computed.addPanels.call(ctx);
+      },
+    };
+  `)() as AddHarness);
+
+/**
+ * The annotation's own example (840:31597): "MC-06 Illustrate" lists MC-06's
+ * Illustrate cards. The Jollibee card shares the MC and the MC-07 card shares
+ * the word — each is a way for a looser rule to over-list.
+ */
+const ADDABLE: Addable = {
+  'MC-06': [
+    { cardId: 'c1', name: 'Illustrate Asset: Hero Banner', taskPrefix: 'Illustrate Asset' },
+    { cardId: 'c2', name: 'Jollibee Chickenjoy Poster', taskPrefix: null },
+    { cardId: 'c3', name: 'Illustrate Asset: Chickenjoy Mascot', taskPrefix: 'Illustrate Asset' },
+  ],
+  'MC-07': [{ cardId: 'c4', name: 'Illustrate Asset: Other Client', taskPrefix: 'Illustrate Asset' }],
+};
+
+describe('addMatches — every token, over the whole label, in MC order (PLAN.md B1/B2)', () => {
+  it("lists MC-06's Illustrate cards for the annotation's own query, and nothing else", () => {
+    expect(A().addMatches('MC-06 Illustrate', ADDABLE).map((m) => m.cardId)).toEqual(['c1', 'c3']);
+  });
+
+  it('needs EVERY token — a raw substring test would match none of them (the colon)', () => {
+    const hits = A().addMatches('MC-06 Illustrate', ADDABLE);
+    expect(hits.length).toBeGreaterThan(0);
+    // the proof that a passing recipe cannot be `label.includes(query)`: no
+    // label carries the query as typed, because a label reads `MC: name`
+    for (const m of hits) expect(m.label).not.toContain('MC-06 Illustrate');
+  });
+
+  it('matches through the LABEL, so a token can name a card the NAME never mentions', () => {
+    const hits = A().addMatches('mc-07', ADDABLE);
+    expect(hits.map((m) => m.cardId)).toEqual(['c4']);
+    expect(hits[0]!.name, 'the fixture stopped testing what it claims to').not.toContain('MC-07');
+  });
+
+  it('is case-blind in both directions', () => {
+    const lower = A().addMatches('mc-06 illustrate', ADDABLE).map((m) => m.cardId);
+    expect(lower).toEqual(['c1', 'c3']);
+    expect(A().addMatches('MC-06 ILLUSTRATE', ADDABLE).map((m) => m.cardId)).toEqual(lower);
+  });
+
+  it('answers a blank or whitespace-only query with NOTHING — blank is the resting state (B1)', () => {
+    expect(A().addTokens('')).toEqual([]);
+    expect(A().addTokens('   ')).toEqual([]);
+    expect(A().addMatches('', ADDABLE)).toEqual([]);
+    expect(A().addMatches('   \t ', ADDABLE)).toEqual([]);
+  });
+
+  it('composes every label through the shipped addLabel — one spelling, never two', () => {
+    const hits = A().addMatches('illustrate', ADDABLE);
+    expect(hits.length).toBeGreaterThan(0);
+    for (const m of hits) expect(m.label).toBe(A().addLabel(m.mc, m.name));
+  });
+
+  it("orders MC ascending, then the SERVER's order inside an MC — never re-sorted here (B2)", () => {
+    /* the per-MC list is deliberately UNSORTED: the server sorts it (#73's
+       provisional alphabetical rule) and the client must not sort it again —
+       a client alphabetical pass would answer ['m', 'a', 'z'] */
+    const unsorted: Addable = {
+      'MC-825': [
+        { cardId: 'z', name: 'Zebra pass', taskPrefix: null },
+        { cardId: 'a', name: 'Apple pass', taskPrefix: null },
+      ],
+      'MC-06': [{ cardId: 'm', name: 'Middle pass', taskPrefix: null }],
+    };
+    expect(A().addMatches('pass', unsorted).map((m) => m.cardId)).toEqual(['m', 'z', 'a']);
+  });
+
+  it('puts an unrankable MC last, ordered among its own by string (B2)', () => {
+    const mixed: Addable = {
+      'MC-ZZ': [{ cardId: 'z', name: 'Zed pass', taskPrefix: null }],
+      'MC-AA': [{ cardId: 'a', name: 'Ana pass', taskPrefix: null }],
+      'MC-825': [{ cardId: 'n', name: 'Numbered pass', taskPrefix: null }],
+    };
+    expect(A().addMatches('pass', mixed).map((m) => m.cardId)).toEqual(['n', 'a', 'z']);
+  });
+
+  it('caps nothing — a one-letter query lists the WHOLE addable set (B2, raised with Miles)', () => {
+    // "the list on screen IS the set": a cap would let Add All add rows the
+    // reader cannot see, which is the one thing this design must not do
+    expect(A().addMatches('m', ADDABLE)).toHaveLength(Object.values(ADDABLE).flat().length);
+  });
+});
+
+describe('addPanels — a key exists only where a query has tokens (frozen contract)', () => {
+  const SPRINTS = [{ id: 's1' }, { id: 's2' }];
+  const panels = (addQ: Record<string, string>) => A().panels({ sprints: SPRINTS, addQ, addable: ADDABLE });
+
+  it('emits NO key for a blank or whitespace query — a resting sprint is absent', () => {
+    expect(Object.keys(panels({}))).toEqual([]);
+    expect(Object.keys(panels({ s1: '', s2: '   ' }))).toEqual([]);
+  });
+
+  it('emits a key with an EMPTY items array for a query that matches nothing', () => {
+    const p = panels({ s1: 'zzzz' });
+    expect(Object.keys(p)).toEqual(['s1']);
+    expect(p.s1!.items).toEqual([]);
+  });
+
+  it('emits the matches for a query that finds some, and only for the sprint that typed', () => {
+    const p = panels({ s2: 'MC-06 Illustrate' });
+    expect(Object.keys(p)).toEqual(['s2']);
+    expect(p.s2!.items.map((m) => m.cardId)).toEqual(['c1', 'c3']);
+  });
+
+  it('answers every sprint from the SAME pool — the addable map is not partitioned (B11)', () => {
+    const p = panels({ s1: 'illustrate', s2: 'illustrate' });
+    expect(p.s1!.items.map((m) => m.cardId)).toEqual(p.s2!.items.map((m) => m.cardId));
+  });
+
+  it('opens no panel for a sprint that no longer exists — a stale query is not a phantom row', () => {
+    expect(Object.keys(panels({ gone: 'illustrate' }))).toEqual([]);
+  });
+});
+
+/* ---------------------------------------------------------------------- *
+ * The three handlers, executed. What matters about them is the ROUTE, the
+ * ids that ride along and when the query clears — none of which a source
+ * grep can tell apart from a string that merely appears in a body.
+ * ---------------------------------------------------------------------- */
+
+interface AddRun {
+  api: Array<{ method: string; path: string; body: Record<string, unknown> }>;
+  banners: string[];
+  reloads: number;
+  reply: unknown;
+  state: Record<string, unknown>;
+}
+
+/** Every top-level `const`/`function` the shipped bundle declares — what
+    `fnDecl` can slice. The two shared top-level `let`s are stubbed by name. */
+const TOP_LEVEL = new Set([...APP_JS_CODE.matchAll(/\n(?:const|function)\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]!));
+
+/** The stub scope every handler run is given. */
+const STUBBED = ['app', 'api', 'flashBanner', 'errText', 'loadAll', 'sprintItemSaving'];
+
+/**
+ * The shipped declarations a body NAMES beyond the stub scope, and theirs in
+ * turn, as one prelude. A handler may lean on any top-level helper in the
+ * bundle — the skip banner's sentence and its code→wording map, for two — and
+ * PLAN.md froze the HANDLERS, not the helpers they reach for. Naming those
+ * here would couple this suite to a spelling nobody froze, so they are
+ * RESOLVED out of the shipped source instead (test/CLAUDE.md rule 2). Bare
+ * references count, not just calls: the map behind the banner is read, never
+ * called, and missing it turned a partial add into a caught ReferenceError.
+ */
+const shippedDeps = (body: string): string => {
+  const out: string[] = [];
+  const seen = new Set(STUBBED);
+  const queue = [body];
+  while (queue.length) {
+    for (const m of queue.shift()!.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) {
+      const name = m[1]!;
+      if (seen.has(name) || !TOP_LEVEL.has(name)) continue;
+      seen.add(name);
+      const decl = fnDecl(name);
+      out.push(decl);
+      queue.push(decl);
+    }
+  }
+  return out.join('\n');
+};
+
+/**
+ * Runs one shipped add handler in a stub scope. The signature is PLAN.md's
+ * frozen one; everything the body reaches for outside itself — `app`, `api`,
+ * `flashBanner`, `errText`, `loadAll`, the module-level `sprintItemSaving`
+ * lock, and any shipped helper it calls — is supplied and recorded. `api.send`
+ * answers with the route's documented body, or throws when `reply` is an
+ * Error. The seed is DEEP-COPIED: one shared fixture object mutated by an
+ * earlier run made a later run's assertion read the earlier run's writes.
+ */
+const runAdd = async (
+  name: 'addOne' | 'addAll' | 'addKey',
+  head: string,
+  args: unknown[],
+  seed: Record<string, unknown> = {},
+  reply: unknown = { ok: true, added: 1, skipped: [] },
+): Promise<AddRun> => {
+  const run: AddRun = {
+    api: [],
+    banners: [],
+    reloads: 0,
+    reply: reply instanceof Error ? null : reply,
+    state: { activeProjectId: 'p1', addQ: {}, addBusy: null, addPanels: {}, ...structuredClone(seed) },
+  };
+  const factory = new Function(
+    'run',
+    'fail',
+    `
+    const state = run.state;
+    const app = {
+      get: (k) => k.split('.').reduce((o, p) => (o == null ? o : o[p]), state),
+      set: (a, b) => {
+        const write = (k, v) => {
+          const parts = k.split('.');
+          const last = parts.pop();
+          let o = state;
+          for (const p of parts) o = (o[p] = o[p] || {});
+          o[last] = v;
+        };
+        if (a && typeof a === 'object') Object.keys(a).forEach((k) => write(k, a[k]));
+        else write(a, b);
+      },
+    };
+    const api = { send: async (m, p, b) => { run.api.push({ method: m, path: p, body: b }); if (fail) throw fail; return run.reply; } };
+    const flashBanner = (m) => { run.banners.push(String(m)); };
+    const errText = (e) => (e && e.message) || 'Request failed';
+    const loadAll = async () => { run.reloads += 1; };
+    let sprintItemSaving = false;
+    ${shippedDeps(handlerBody(name))}
+    return ${head} ${handlerBody(name)};
+  `,
+  ) as (r: AddRun, fail: Error | null) => (...a: unknown[]) => unknown;
+  await factory(run, reply instanceof Error ? reply : null)(...args);
+  return run;
+};
+
+const ONE_HEAD = 'async function addOne(_ctx, sprintId, cardId)';
+const ALL_HEAD = 'async function addAll(_ctx, sprintId)';
+const KEY_HEAD = 'function addKey(ctx, sprintId)';
+/** That run's query map, after the handler had its way with it. */
+const queries = (run: AddRun) => run.state.addQ as Record<string, string>;
+
+describe('addOne — the single route, and the query stays (B4)', () => {
+  const seed = { addQ: { s1: 'illustrate' }, addPanels: PANELS };
+
+  it('POSTs the sprint and the card to the EXISTING single route, never the batch one', async () => {
+    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed);
+    expect(run.api).toHaveLength(1);
+    expect(run.api[0]!.method).toBe('POST');
+    expect(run.api[0]!.path).toBe('/api/projects/p1/sprint-items');
+    expect(run.api[0]!.body).toEqual({ sprint_id: 's1', card_id: 'c1' });
+    expect(run.api[0]!.body, 'a single add carries a start — the two acts collapsed back into one (B5)')
+      .not.toHaveProperty('starts_on');
+    expect(run.reloads, 'the added row never arrives — loadAll is what fetches it').toBe(1);
+  });
+
+  it('leaves the query alone — the added card drops out when loadAll replaces the pool (B4)', async () => {
+    expect(queries(await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed)).s1).toBe('illustrate');
+  });
+
+  it('refuses to start while another add is in flight, and writes nothing', async () => {
+    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], { ...seed, addBusy: 's2' });
+    expect(run.api).toHaveLength(0);
+  });
+
+  it('surfaces a refusal through the banner, reloads nothing, and releases the lock', async () => {
+    const run = await runAdd('addOne', ONE_HEAD, [null, 's1', 'c1'], seed, new Error('ALREADY_SCHEDULED'));
+    expect(run.banners).toEqual(['ALREADY_SCHEDULED']);
+    expect(run.reloads).toBe(0);
+    expect(run.state.addBusy, 'the lock outlived a failed flight — that sprint can never add again').toBeFalsy();
+  });
+});
+
+describe('Add All — ONE request carrying the listed set, in list order (B3/B4)', () => {
+  const seed = { addQ: { s1: 'illustrate', s2: 'loft' }, addPanels: PANELS };
+
+  it("POSTs the PANEL'S OWN ids to the batch route, in the order on screen", async () => {
+    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
+    expect(run.api, 'Add All fanned out into one request per card').toHaveLength(1);
+    expect(run.api[0]!.method).toBe('POST');
+    expect(run.api[0]!.path).toBe('/api/projects/p1/sprint-items/batch');
+    expect(run.api[0]!.body).toEqual({ sprint_id: 's1', card_ids: ['c1', 'c3'] });
+    expect(run.api[0]!.body, 'the batch carries a start — its rows land UNPLOTTED (B5)').not.toHaveProperty('starts_on');
+    expect(run.reloads).toBe(1);
+  });
+
+  it("sends the OPEN sprint's ids only — never another sprint's panel", async () => {
+    const run = await runAdd('addAll', ALL_HEAD, [null, 's2'], seed, { ok: true, added: 1, skipped: [] });
+    expect(run.api[0]!.body).toEqual({ sprint_id: 's2', card_ids: ['c9'] });
+  });
+
+  it("clears that sprint's query when something landed — the set was consumed (B4)", async () => {
+    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
+    expect(queries(run).s1).toBe('');
+    expect(queries(run).s2, "another sprint's query was cleared too").toBe('loft');
+  });
+
+  it('KEEPS the query when nothing landed — an untouched set must stay on screen (B4)', async () => {
+    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, {
+      ok: true,
+      added: 0,
+      skipped: [{ card_id: 'c1', code: 'ALREADY_SCHEDULED' }, { card_id: 'c3', code: 'CARD_COMPLETE' }],
+    });
+    expect(queries(run).s1).toBe('illustrate');
+  });
+
+  it('banners a PARTIAL result and stays silent when everything landed (B3)', async () => {
+    const partial = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, {
+      ok: true, added: 1, skipped: [{ card_id: 'c3', code: 'ALREADY_SCHEDULED' }],
+    });
+    expect(partial.banners.length, 'a partial add said nothing — a card goes missing silently').toBe(1);
+    expect(partial.reloads).toBe(1);
+    const clean = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, { ok: true, added: 2, skipped: [] });
+    expect(clean.banners, 'a clean add interrupted with a banner — no confirmation, no count-check (Miles)').toEqual([]);
+  });
+
+  it('writes nothing for an empty panel, and nothing while that sprint is busy', async () => {
+    const empty = await runAdd('addAll', ALL_HEAD, [null, 's1'], { addQ: { s1: 'zzz' }, addPanels: { s1: { items: [] } } });
+    expect(empty.api).toHaveLength(0);
+    const busy = await runAdd('addAll', ALL_HEAD, [null, 's1'], { ...seed, addBusy: 's1' });
+    expect(busy.api).toHaveLength(0);
+  });
+
+  it('releases the lock, banners, and keeps the query when the batch itself fails', async () => {
+    const run = await runAdd('addAll', ALL_HEAD, [null, 's1'], seed, new Error('SPRINT_NOT_FOUND'));
+    expect(run.banners).toEqual(['SPRINT_NOT_FOUND']);
+    expect(run.state.addBusy).toBeFalsy();
+    expect(queries(run).s1, 'a failed batch consumed the query anyway').toBe('illustrate');
+  });
+});
+
+describe("addKey — Escape clears that sprint's query, every other key falls through (B6)", () => {
+  const press = async (key: string, seed: Record<string, unknown>) => {
+    let prevented = 0;
+    const ctx = { event: { key, preventDefault: () => { prevented += 1; }, stopPropagation: () => {} } };
+    return { run: await runAdd('addKey', KEY_HEAD, [ctx, 's1'], seed), prevented: () => prevented };
   };
 
-  it('the work-card control is inert until an MC is picked — render AND handler agree', () => {
-    const html = renderSprintSchedule({ addRow: { sprintId: 's1', mc: null, cardId: null, saving: false } });
-    const scope = html.slice(html.indexOf('gaddrow'));
-    expect(scope).toMatch(/disabled/);
-    // the handler refuses to open 'card' without an MC — the belt to the
-    // template's braces (one gate in each half cannot drift apart silently)
-    expect(handlerBody('openAddMenu')).toContain('.mc');
+  it('clears the query on Escape, and takes the key so nothing else answers it', async () => {
+    const { run, prevented } = await press('Escape', { addQ: { s1: 'illustrate', s2: 'loft' } });
+    expect(queries(run).s1).toBe('');
+    expect(queries(run).s2, "Escape cleared another sprint's field").toBe('loft');
+    expect(prevented()).toBe(1);
   });
 
-  it('lists the MC options in a listbox that opens UPWARD and scrolls as the NORMAL case', () => {
-    const html = renderSprintSchedule(OPEN_MC);
-    expect(html).toContain('gddmenu');
-    expect(html).toContain('role="listbox"');
-    expect(html).toContain('MC-07');
-    expect(html).toContain('MC-824');
-    // #73: upward, fixed height, own scrollbar — most MC lists are longer
-    expect(GANTT_CSS).toMatch(/\.gddmenu[^{]*\{[^}]*bottom: calc\(100% \+ 5px\)/);
-    expect(GANTT_CSS).toMatch(/\.gddmenu[^{]*\{[^}]*max-height: 218px/);
-    expect(GANTT_CSS).toMatch(/\.gddmenu[^{]*\{[^}]*overflow-y: auto/);
+  it('leaves Enter INERT — Enter-as-Add-All is a suggestion to Miles, not built (B6)', async () => {
+    const { run, prevented } = await press('Enter', { addQ: { s1: 'illustrate' }, addPanels: PANELS });
+    expect(queries(run).s1).toBe('illustrate');
+    expect(run.api, 'Enter added the listed set — no such ruling exists').toHaveLength(0);
+    expect(prevented(), 'Enter was swallowed — whatever default the field owns dies with it').toBe(0);
   });
 
-  it("marks the picked option by WEIGHT ALONE — `.on` is font-weight 600 and nothing else (#73)", () => {
-    const at = GANTT_CSS.search(/\.gdditem\.on\s*\{/);
-    expect(at, 'no .gdditem.on rule').toBeGreaterThan(-1);
-    const body = GANTT_CSS.slice(GANTT_CSS.indexOf('{', at) + 1, GANTT_CSS.indexOf('}', at));
-    const decls = body.split(';').map((d) => d.trim()).filter(Boolean);
-    expect(decls).toEqual(['font-weight: 600']);
-    // no tick joins it in the markup either — the menu subtree alone is read,
-    // so an icon elsewhere in the sheet cannot mask (or fake) a violation
-    const html = renderSprintSchedule({ ...OPEN_MC, addRow: { ...OPEN_MC.addRow, mc: 'MC-07' } });
-    const menu = divFragment('<div class="gddmenu ', html);
-    expect(menu).not.toContain('<svg'); // the chevron lives on the control, not in the list
+  it('leaves an ordinary keystroke alone — the field is two-way bound, not handler-driven', async () => {
+    const { run, prevented } = await press('a', { addQ: { s1: 'illustrate' } });
+    expect(queries(run).s1).toBe('illustrate');
+    expect(prevented()).toBe(0);
+  });
+});
+
+/* ---------------------------------------------------------------------- *
+ * The dress: heights that cannot reflow, two blue TOKENS, one hover rise.
+ * ---------------------------------------------------------------------- */
+
+describe('the search row and its results in CSS (833:68629 / 840:31597 / 841:33668)', () => {
+  it("pins both row heights as HEIGHTS — only the field's right edge may move (B7)", () => {
+    for (const [cls, px] of [['gsearch', '77px'], ['gresult', '54px']] as const) {
+      const rules = rulesFor(cls);
+      expect(rules.length, `no CSS rule names \`.${cls}\``).toBeGreaterThan(0);
+      expect(
+        rules.some((r) => new RegExp(`(^|;)\\s*height:\\s*${px}`).test(r.body)),
+        `.${cls} lost its fixed ${px} height`,
+      ).toBe(true);
+      expect(
+        rules.every((r) => !r.body.includes('min-height')),
+        `.${cls} uses a min-height — the row can grow, and the first keystroke reflows the sprint`,
+      ).toBe(true);
+    }
   });
 
-  it('hands the handler the FULL stored string — never a display-clamped copy (source)', () => {
-    const view = schedulesView();
-    expect(view).toMatch(/\['pickAddMc', \w+\]/);
-    expect(view).toMatch(/\['pickAddCard', \w+\.cardId\]/);
+  it('never fakes the second blue with opacity — two TOKENS, never one colour dimmed (B8, Miles)', () => {
+    const linkRules = CSS_RULES.filter((r) => /\.galink|\.gaddone|\.gaddall/.test(r.selector));
+    expect(linkRules.length, 'no add-link rules at all — this sweep would be vacuous').toBeGreaterThan(0);
+    expect(linkRules.filter((r) => /(^|[^-\w])opacity\s*:/.test(r.body)).map((r) => r.selector)).toEqual([]);
   });
 
-  it('addMcOptions / addCardOptions read the server map and NEVER re-sort the cards (#73)', () => {
-    const h = H();
-    const cards = [
-      { cardId: 'r1', name: 'Render Asset: GRaf Playing Flute', taskPrefix: 'Render Asset' },
-      { cardId: 's1', name: 'Sketch Asset: GRaf Playing Flute', taskPrefix: 'Sketch Asset' },
-    ];
-    h.set('sprintItems', { rows: [], addable: { 'MC-824': cards, 'MC-07': [] } });
-    h.set('addRow', { sprintId: 's1', mc: 'MC-824', cardId: null, saving: false });
-    expect(h.mcs()).toEqual(['MC-07', 'MC-824']); // keys, sorted
-    expect(h.cards()).toEqual(cards); // the server's order, untouched
-    h.set('addRow', { sprintId: 's1', mc: null, cardId: null, saving: false });
-    expect(h.cards()).toEqual([]); // no MC picked → nothing to offer
+  it('rests the per-row Add on the blue-300 TOKEN (840:31661)', () => {
+    const rest = rulesFor('gaddone').filter((r) => !r.selector.includes(':'));
+    expect(rest.some((r) => /color:\s*var\(--blue-300\)/.test(r.body)), 'the resting Add is not the blue-300 token').toBe(true);
   });
 
-  it('re-picking the MC ALWAYS clears the card — never re-matched by name (#73; source)', () => {
-    // matches the keypath spelling too: `'addRow.cardId': null`
-    expect(handlerBody('pickAddMc')).toMatch(/cardId'?\s*:\s*null/);
+  it("raises the link AND the label together, on the ROW's hover and focus (840:31670/31671)", () => {
+    const risen = CSS_RULES.filter((r) => /\.gresult:(hover|focus-within)/.test(r.selector));
+    expect(risen.length, 'no row-hover rules at all — the rise is not built').toBeGreaterThan(0);
+    const link = risen.filter((r) => /\.gaddone/.test(r.selector));
+    const label = risen.filter((r) => /\.glabel/.test(r.selector));
+    expect(link.some((r) => /var\(--blue-600\)/.test(r.body)), 'the Add does not rise to blue-600 on row hover').toBe(true);
+    expect(label.some((r) => /font-weight:\s*600/.test(r.body)), 'the label does not thicken with it — the two move together').toBe(true);
+    // the keyboard gets the same rise: a focus-within clause on each half
+    expect(link.some((r) => r.selector.includes(':focus-within')), 'the Add rises for a pointer only').toBe(true);
+    expect(label.some((r) => r.selector.includes(':focus-within')), 'the label thickens for a pointer only').toBe(true);
   });
 
-  it('the add dropdown joins the overlay law: addMenu closes by the derived list, shielded by .gdd', () => {
+  it('greys a dead Add All to slate-400 — never a pale blue (841:33668)', () => {
+    const dis = rulesFor('gaddall').filter((r) => r.selector.includes('[disabled]'));
+    expect(dis.length, 'no disabled Add All rule').toBeGreaterThan(0);
+    expect(dis.some((r) => /color:\s*var\(--slate-400\)/.test(r.body))).toBe(true);
+  });
+
+  it('keeps the placement circle — the + outlived the add zone it shared a recipe with', () => {
+    expect(
+      rulesFor('gplus').some((r) => /var\(--indigo-500\)/.test(r.body)),
+      'the placement + lost its circle with the add zone',
+    ).toBe(true);
+  });
+});
+
+/* ---------------------------------------------------------------------- *
+ * WITHDRAWAL — the 08-28 add flow, whole (owl #77 §0).
+ * ---------------------------------------------------------------------- */
+
+describe('the 08-28 add flow is withdrawn whole — zone, pending row, dropdowns, one-act commit', () => {
+  it('is out of the shipped scripts', () => {
+    for (const gone of [
+      'addRow', 'addMenu', 'addMenuFlip', 'addMcOptions', 'addCardOptions',
+      'openAddRow', 'cancelAddRow', 'openAddMenu', 'pickAddMc', 'pickAddCard',
+      'addZoneKey', 'submitAddItem', 'draftPlace', "plotRow === 'add'",
+    ]) {
+      expect(APP_JS_CODE, `\`${gone}\` survives in the shipped scripts`).not.toContain(gone);
+    }
+  });
+
+  it('is out of the schedules view', () => {
+    // Ractive comments stripped first (rule 3's kinder corpus): the template
+    // may legitimately explain what replaced the retired block
+    const view = schedulesView().replace(/\{\{!\s[\s\S]*?\}\}/g, ' ');
+    for (const gone of [
+      'gaddzone', 'gaddrule', 'gaddplus', 'gaddrow', 'gaddbtn', 'gdd',
+      'openAddRow', 'addZoneKey', 'submitAddItem', 'draftPlace',
+      'addMcOptions', 'addCardOptions', 'Add Item',
+    ]) {
+      expect(view, `\`${gone}\` survives in the schedules view`).not.toContain(gone);
+    }
+  });
+
+  it('is out of the stylesheet', () => {
+    for (const gone of ['.gaddzone', '.gaddrule', '.gaddplus', '.gaddrow', '.gaddbtn', '.gdd']) {
+      expect(CSS, `\`${gone}\` outlived the flow it dressed`).not.toContain(gone);
+    }
+  });
+
+  it('left the overlay law with it — no addMenu key, no .gdd shield, no anchored entry', () => {
     const keys = new Function(`${fnDecl('OVERLAY_KEYS')} return OVERLAY_KEYS;`)() as string[];
-    expect(keys).toContain('addMenu');
-    expect(fnDecl('OVERLAY_SHIELDS')).toMatch(/addMenu: '\.gdd'/);
-  });
-});
-
-describe('Add Item — dead until a card is picked, saving while the POST runs', () => {
-  const addRow = (patch: Partial<{ mc: string | null; cardId: string | null; saving: boolean }>) => ({
-    addRow: { sprintId: 's1', mc: null, cardId: null, saving: false, ...patch },
-  });
-
-  const addBtn = (html: string): string => {
-    const at = html.indexOf('Add Item');
-    expect(at, 'no Add Item button rendered').toBeGreaterThan(-1);
-    return html.slice(html.lastIndexOf('<button', at), at); // the open tag ahead of the label
-  };
-
-  it('is disabled with no card, live with one, disabled again while saving', () => {
-    expect(addBtn(renderSprintSchedule(addRow({ mc: 'MC-07' })))).toContain('disabled');
-    expect(addBtn(renderSprintSchedule(addRow({ mc: 'MC-07', cardId: 'w1' })))).not.toContain('disabled');
-    expect(addBtn(renderSprintSchedule(addRow({ mc: 'MC-07', cardId: 'w1', saving: true })))).toContain('disabled');
-  });
-
-  it('POSTs the pair, surfaces the 409s through the banner, reloads on success (source)', () => {
-    const body = handlerBody('submitAddItem');
-    expect(body).toContain('sprint_id');
-    expect(body).toContain('card_id');
-    expect(body).toContain('/sprint-items');
-    expect(body).toContain('flashBanner');
-    expect(body).toContain('loadAll');
-  });
-
-  it('fills the far cells with em-dashes — the add row forecasts nothing', () => {
-    const html = renderSprintSchedule(addRow({}));
-    const tail = html.slice(html.indexOf('gaddrow'));
-    expect([...tail.matchAll(/—/g)].length).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe("the draft row's own track — one click commits AND places (node 731:100277)", () => {
-  it('carries the FROZEN draft gate: hover and click only once MC + card are chosen, no save in flight', () => {
-    expect(schedulesView()).toContain(
-      `{{#if addRow.cardId && !addRow.saving}}on-mousemove="['plotHover', 'add']" on-mouseleave="['plotLeave']" on-click="['draftPlace']"{{/if}}`,
-    );
-  });
-
-  it("gates its + and hover cell on plotRow === 'add' — the same form as a committed row's", () => {
-    const view = schedulesView();
-    const draft = view.slice(view.indexOf(`on-click="['draftPlace']"`));
-    expect(draft).toContain("{{#if plotRow === 'add' && plotWeek}}");
-    expect(draft).toContain('class="ghovcell"');
-    expect(draft).toContain('aria-label="Place the work card in the week of {{plotWeek}}"');
-    // BOTH tracks carry the hover cell — the committed row's and the draft's
-    expect([...view.matchAll(/class="ghovcell"/g)].length).toBe(2);
-  });
-
-  it('renders the draft week grid, and nothing hover-gated without plotRow', () => {
-    const html = renderSprintSchedule({
-      addRow: { sprintId: 's1', mc: 'MC-07', cardId: 'w1', saving: false },
-      plotWeek: '2026-08-10',
-    });
-    const tail = html.slice(html.indexOf('gaddrow'));
-    expect(tail).toContain('gweek');
-    expect(tail).not.toContain('gplus');
-    expect(tail).not.toContain('ghovcell');
-  });
-
-  it('draftPlace POSTs the pair WITH starts_on from the hovered week, then reloads (source)', () => {
-    const body = handlerBody('draftPlace');
-    expect(body).toContain("'POST'");
-    expect(body).toContain('/sprint-items');
-    expect(body).toContain('sprint_id');
-    expect(body).toContain('card_id');
-    expect(body).toContain('starts_on');
-    expect(body).toContain('plotWeek'); // the hovered week IS the start — its Monday (#72 §6)
-    expect(body).toContain('loadAll');
+    expect(keys.length, 'no overlay keys at all — the assertion below would be vacuous').toBeGreaterThan(0);
+    expect(keys, 'addMenu is still an overlay — the dropdown it shielded is gone').not.toContain('addMenu');
+    const anchored = new Function(`${fnDecl('OVERLAY_ANCHORED')} return OVERLAY_ANCHORED;`)() as string[];
+    expect(anchored).not.toContain('addMenu');
+    expect(fnDecl('OVERLAY_SHIELDS'), 'the .gdd shield outlived its dropdown').not.toContain('.gdd');
+    expect(fnDecl('OVERLAY_SELF_SCROLL'), 'the .gddmenu self-scroll entry outlived its menu').not.toContain('.gddmenu');
   });
 });
 

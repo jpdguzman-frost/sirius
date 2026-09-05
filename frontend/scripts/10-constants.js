@@ -776,3 +776,44 @@ const pipeSortLabel = (key) => {
   return s ? `${s.group}: ${s.label}` : '';
 };
 
+/* ---- Sprint Schedules: the search-based add (owl #77 §0; nodes 840:31597,
+   841:33668, 833:68629) -------------------------------------------------
+   The field at the end of every sprint lists the addable work cards its
+   query matches, and Add All adds exactly that list — "the list on screen IS
+   the set" (Miles). So ONE recipe derives the list: the addPanels computed
+   (40-app-state.js) reads these three and nothing else derives one. Pure on
+   purpose — no app access — so the recipe suite can execute them from shipped
+   source against a fixture pool. The pool itself is the server's `addable`,
+   unchanged (PLAN.md B11): MC → its incomplete, unscheduled work cards, in
+   the server's own order. */
+
+/** The line a card is matched on and shown as: `MC-655: Illustrate hero`. */
+const addLabel = (mc, name) => `${mc}: ${name}`;
+/** Query → tokens: trim, lowercase, split on whitespace; blank → `[]`. */
+const addTokens = (q) => String(q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+/* THE MATCH (PLAN.md B1/B2). A card matches when EVERY token is a substring
+   of its lowercased label — token-AND, not one raw substring: the annotation's
+   own example, "MC-06 Illustrate" listing the five Illustrate cards of MC-06,
+   has no colon after the number, so a raw substring of `MC-06: Illustrate …`
+   would find nothing. Order is MC number ascending by mcRank (the rank the
+   Requests and Pipeline tables already sort by; unrankable last, ties by plain
+   string compare), then the server's own card order INSIDE an MC — #73's
+   provisional alphabetical, kept server-side and never re-sorted here. No
+   cap and no minimum length: "M" listing every addable card is the honest
+   output of the rule, raised with Miles. */
+function addMatches(q, addable) {
+  const tokens = addTokens(q);
+  if (!tokens.length) return [];
+  const pool = addable || {};
+  const byMc = (a, b) => cmpNullsLast(mcRank(a), mcRank(b), 1) || (a < b ? -1 : a > b ? 1 : 0);
+  const out = [];
+  for (const mc of Object.keys(pool).sort(byMc)) {
+    for (const c of pool[mc] || []) {
+      const label = addLabel(mc, c.name);
+      const hay = label.toLowerCase();
+      if (tokens.every((t) => hay.includes(t))) out.push({ cardId: c.cardId, mc, name: c.name, label });
+    }
+  }
+  return out;
+}
+

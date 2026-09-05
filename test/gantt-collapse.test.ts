@@ -84,15 +84,21 @@ describe('collapsing a block hides its rows and nothing else', () => {
     expect(html).toContain('MC-712'); // Sprint B is still open
   });
 
-  it('keeps the add affordance reachable only where rows are visible — a shut block offers no add zone', () => {
-    // the zone lives with the rows (after them, inside the block body); a
-    // collapsed block that still offered Add would open an add row nobody
-    // can see. Asserted per-block: shut s1 loses its zone, open s2 keeps one.
-    const html = render({ collapsedBlocks: { s1: true } });
+  it('shows a shut block its HEADER ONLY — the search row and its results go with the rows', () => {
+    /* PLAN.md B14: the always-visible search row (owl #77 §0) sits inside the
+       same `collapsedBlocks` gate the retired add zone sat in — after the
+       rows, inside the block body. A shut block that still offered the field
+       would list results nobody can see, and Add All would act on them.
+       Asserted per-block: shut s1 loses field AND results, open s2 keeps
+       both. */
+    const panel = { items: [{ cardId: 'c1', mc: 'MC-06', name: 'Illustrate Asset: Hero', label: 'MC-06: Illustrate Asset: Hero' }] };
+    const html = render({ collapsedBlocks: { s1: true }, addQ: { s1: 'hero', s2: 'hero' }, addPanels: { s1: panel, s2: panel } });
     const beforeB = html.slice(0, html.indexOf('Sprint B'));
     const afterB = html.slice(html.indexOf('Sprint B'));
-    expect(beforeB).not.toContain('gaddzone');
-    expect(afterB).toContain('gaddzone');
+    expect(beforeB).not.toContain('gsearch');
+    expect(beforeB).not.toContain('gresult');
+    expect(afterB).toContain('growr gsearch');
+    expect(afterB).toContain('growr gresult');
   });
 });
 

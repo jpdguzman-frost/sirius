@@ -83,10 +83,13 @@ export interface SprintItemRow {
 export interface SprintItemsResult {
   rows: SprintItemRow[];
   /**
-   * What the Work Card dropdown may offer, by MC number (#72 §5). A card
-   * already complete is never offered, and neither is one already scheduled —
-   * one row per card. This is an ADD-time filter and says nothing about the
-   * rows above: a row whose card completed later stays in `rows`.
+   * What the sprint's search row may OFFER, by MC number (#72 §5). The pool
+   * feeds a search box since owl #77 §0 — the client flattens it and filters
+   * by query; the SET is decided here (annotation: "FILTERING is unchanged",
+   * PLAN.md B11). A card already complete is never offered, and neither is
+   * one already scheduled — one row per card. This is an ADD-time filter and
+   * says nothing about the rows above: a row whose card completed later
+   * stays in `rows`.
    */
   addable: Record<string, Array<{ cardId: string; name: string; taskPrefix: string | null }>>;
 }

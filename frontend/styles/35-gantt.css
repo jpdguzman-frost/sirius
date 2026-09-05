@@ -339,13 +339,22 @@
    edge; the margin centres the circle inside the --gw column so the CSS half
    never repeats the geometry maths. `pointer-events: none` is load-bearing:
    the TRACK owns the click (#72 §6), and a solid button under the pointer
-   would swallow the very click it advertises. */
+   would swallow the very click it advertises.
+   ONE rule since owl #77 §0: the indigo circle used to be shared with the add
+   affordance of the retired flow (section seven), and with that wearer gone a
+   second block under the same selector would only be a place for the two
+   halves to drift apart. */
 .gantt .gplus {
   position: absolute; top: 50%;
   margin-left: calc((var(--gw) - 24px) / 2);
   transform: translateY(-50%);
   pointer-events: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex: none; padding: 0; border: none;
+  border-radius: var(--radius-full);
+  background: var(--indigo-500); color: var(--white);
 }
+.gantt .gplus svg { display: block; }
 
 /* the hovered week cell — the slate-50 tint under the + (node 731:100271).
    Placement is hover-gated on any unplotted row — Miles's note on 731:100277;
@@ -363,139 +372,105 @@
   pointer-events: none;
 }
 
-/* ---- 7. adding a work card (frame 731:98918 / 731:100230) ---- */
+/* ---- 7. adding a work card — the search row and its results (owl #77 §0;
+   nodes 833:68629 at rest, 840:31597 with matches, 841:33668 + 841:33689 with
+   none) ----
+   One field at the end of every sprint block, present at rest and in every
+   other state. Typing lists the addable cards beneath it, each carrying its
+   own link; the field's own link takes the whole listed set in one act.
 
-/* the 24px indigo circle — ONE recipe for both wearers, deliberately the
-   same (#72 §6): the + that reveals the add row and the + that places a bar
-   are the same promise, "a row lands here". */
-.gantt .gaddplus, .gantt .gplus {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; flex: none; padding: 0; border: none;
-  border-radius: var(--radius-full);
-  background: var(--indigo-500); color: var(--white);
-}
-.gantt .gaddplus svg, .gantt .gplus svg { display: block; }
+   WITHDRAWN here (owl #77 §0 — Miles: "anything built to the earlier
+   two-dropdown flow is superseded"): the hover-revealed zone and its dashed
+   rule, the pending row and its surface tint, both option lists with their
+   upward opening and measured flip, the black commit button, and the pending
+   row's own commit-and-place track. Removed rather than left orphaned,
+   because a dead selector reads as a live treatment to the next person
+   pricing a change. The pane-collapse hide goes with them: it existed only
+   because the pending row's controls sat in the columns a collapsed pane
+   drops, and a pane-wide field has no such cells (plan decision B9). The
+   circle the retired affordance shared with the placement + folds into that
+   one's own rule in section six. */
 
-/* the add zone after a group's rows — invisible at rest (opacity, not
-   display: it must keep its box to be hoverable and hold its place in the
-   tab order), revealed on hover or keyboard focus; the reveal IS the focus
-   indication. The frame draws the whole affordance inside the details pane
-   (node 731:98918: the rule spans the pane and stops at the gantt boundary),
-   so the zone is pane-wide and rides `position: sticky` like every other
-   pinned surface — it must not drift off with the timeline scroll while the
-   columns it belongs to stay put. */
-/* The collapsed pane hides the ADD AFFORDANCE WHOLE (review 2026-08-28,
-   finding 10): the pending row's dropdown/button cells live in columns lpc
-   hides, and their display:flex tied with the hide rule at equal specificity
-   — source order let them RESURFACE and spill 568px over the timeline.
-   Collapse is a reading mode; adding needs the full pane. toggleLeftPane
-   discards an open draft for the same reason (90-events.js). */
-.gantt.lpc .gaddzone, .gantt.lpc .gaddrow { display: none; }
-.gantt .gaddzone {
-  position: sticky; left: 0;
+/* the search row rides the row recipe for its pinned pane and the table's
+   bottom rule, and overrides the height alone: the node stacks the field
+   between equal insets. The height is FIXED in every state, so the first
+   keystroke moves nothing but the field's right edge (node 833:68629's own
+   rule; plan decision B7). That rule is also why the field keeps its stroke
+   at rest — the same annotation's "no visible stroke" would make a border
+   appear on the first keystroke, which is the reflow it forbids. */
+.gantt .gsearch { height: 77px; }
+.gantt .gsearchpane {
   display: flex; align-items: center;
-  width: var(--gleft); height: 24px;
-  cursor: pointer; opacity: 0; transition: opacity 0.12s ease;
+  padding: var(--space-16) var(--space-24) var(--space-16) var(--space-16);
+  gap: var(--space-24);
 }
-.gantt .gaddzone:hover,
-.gantt .gaddzone:focus-visible,
-.gantt .gaddzone:focus-within { opacity: 1; }
-.gantt .gaddrule { flex: 1; border-top: 1px dashed var(--indigo-500); }
-.gantt .gaddzone .gaddplus { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
-
-/* the pending row — the details pane fills slate-50 (frame 731:100230:
-   pending is a SURFACE state, the timeline half stays on the row white), and
-   its cells centre their 32px controls instead of hanging them on the rows'
-   16px top line. The clip release is deliberate and scoped: the shared
-   `.gcell` clip guards the pane width against unbounded VALUES, but these
-   two controls are fixed boxes that cannot spill wide — and the option list
-   opens UPWARD out of the cell (#73), which a clipping cell would swallow
-   whole. Same release, same reasoning, as the old requestor column's. */
-.gantt .gaddrow .gpin { background: var(--slate-50); }
-.gantt .gaddrow .gcell { display: flex; align-items: center; padding-top: 0; padding-bottom: 0; overflow: visible; }
-/* the inert trio is decoration here (aria-hidden in the template) — it shows
-   at rest to keep the pending row on the real rows' grid, so it must not
-   wait for a hover it will never answer */
-.gantt .gaddrow .gactions { opacity: 1; }
-
-/* Add Item — frozen as .gaddbtn (main-thread ruling 2026-08-28): the app's
-   black action button at the frame's 102×32 (node 731:100230). The toolbar's
-   button family is `.ptoolbar`-scoped and cannot reach in here — that
-   scoping is WHY this is its own recipe and not a variant borrow. */
-.gantt .gaddbtn {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 102px; height: 32px; padding: 0 var(--space-12); flex: none;
-  border: none; border-radius: var(--radius-sm);
-  background: var(--neutral-950); color: var(--white);
-  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 600; line-height: 1;
-  white-space: nowrap; cursor: pointer;
-}
-.gantt .gaddbtn:hover { background: var(--slate-700); }
-.gantt .gaddbtn:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
-.gantt .gaddbtn[disabled] { background: var(--slate-100); color: var(--slate-400); cursor: not-allowed; }
-/* the in-flight POST: half-lit and unpressable, the same saving grammar as
-   the Pipeline select pill */
-.gantt .gaddbtn.saving { opacity: 0.5; pointer-events: none; }
-
-/* the two dropdowns (frame 737:109809/109839). Widths ride the mc/card
-   modifier classes, not the cells, so the recipe names no column. */
-.gantt .gdd { position: relative; }
-.gantt .gddmc { width: 90px; }
-.gantt .gddcard { width: 230px; }
-.gantt .gddctl {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-8);
-  width: 100%; height: 32px; padding: 0 6px 0 8px; /* frame insets — no token at 6/8 asymmetry */
-  background: var(--surface-background);
+/* the field FILLS the pane and gives way to the link beside it, so it flexes
+   rather than carrying the node's measured width — which is also what lets it
+   survive the collapsed pane at its narrower measure (plan decision B9) */
+.gantt .gaddq {
+  flex: 1; min-width: 0; height: 45px; padding: var(--space-12);
+  background: var(--slate-50);
   border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
-  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; line-height: 1;
-  color: var(--surface-foreground); text-align: left; cursor: pointer;
-}
-.gantt .gddctl:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
-/* 'card' is inert until an MC is picked — its list literally does not exist
-   yet (addCardOptions keys off addRow.mc) */
-.gantt .gddctl[disabled] { background: var(--slate-50); color: var(--slate-400); cursor: not-allowed; }
-.gantt .gddval { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gantt .gddval.ph { color: var(--slate-400); }
-.gantt .gddchev { flex: none; transition: transform 0.12s ease; }
-/* open state (frame: the stroke doubles and darkens): the inner ring fakes
-   the second pixel so the control's box never changes and the text does not
-   jump a pixel left on every open */
-.gantt .gdd.open .gddctl {
-  border-color: var(--slate-700);
-  box-shadow: inset 0 0 0 1px var(--slate-700);
-}
-.gantt .gdd.open .gddchev { transform: rotate(180deg); }
-/* the option list opens UPWARD (#73 — the add row lives at a list's end;
-   the measured collision flip below is the ONE exception, review finding
-   11) with the frame's 5px seam. The
-   height is a FIXED 218 with its own scroll because scrolling is the normal
-   case, not the overflow case: MC-825 alone carries 99 deliverables. Width
-   tracks the control via the shared 100%. */
-.gantt .gddmenu {
-  position: absolute; bottom: calc(100% + 5px); left: 0; z-index: 5;
-  width: 100%; max-height: 218px; overflow-y: auto;
-  display: flex; flex-direction: column; gap: var(--space-4);
-  padding: var(--space-4) 0;
-  background: var(--surface-background);
-  border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-xs);
-}
-/* the collision flip (finding 11): same 5px seam, mirrored. Upward stays the
-   default #73 rules; this fires only when the measured headroom to the
-   scroller's top cannot hold the 218px menu — the empty-first-sprint case. */
-.gantt .gddmenu.down { bottom: auto; top: calc(100% + 5px); }
-/* an option clamps to 2 lines as a DISPLAY courtesy; the stored value is
-   always the full string (#73). Selection is weight ONLY — no tick, no fill
-   (#73) — so the hover tint stays light enough to never read as selection. */
-.gantt .gdditem {
-  border: none; background: none; cursor: pointer; text-align: left;
-  width: 100%; padding: 6px 10px; /* frame item insets — no token */
-  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400; line-height: 1.3;
+  font-family: var(--font-sans); font-size: var(--text-body); font-weight: 400;
   color: var(--surface-foreground);
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
 }
-.gantt .gdditem:hover { background: var(--slate-50); }
-.gantt .gdditem.on { font-weight: 600; }
+.gantt .gaddq::placeholder { color: var(--slate-400); }
+/* the query reads heavier than its placeholder once a panel is open for this
+   sprint (node 840:31599). CSS cannot read a field's value, so the state
+   marks the field: the class rides the same condition that draws the panel
+   (plan decision B12). */
+.gantt .gaddq.typed { font-weight: 600; }
+.gantt .gaddq:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+
+/* both links are TEXT on the pane's right axis (nodes 833:68629, 840:31597) —
+   a button element for a real action, wearing none of a button's chrome. */
+.gantt .galink {
+  border: none; background: none; padding: 0; flex: none;
+  font-family: var(--font-sans); font-size: var(--text-body); font-weight: 600; line-height: 20px;
+  color: var(--blue-600); cursor: pointer;
+}
+.gantt .galink:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+/* nothing to take: grey, never a paler blue (node 841:33668) */
+.gantt .gaddall[disabled] { color: var(--slate-400); cursor: default; }
+
+/* a result row is a row of this same table — the node draws it no container
+   of its own (node 840:31619), so it keeps the grid's bottom rule and needs
+   only its height. */
+.gantt .gresult { height: 54px; }
+.gantt .gresultpane {
+  display: flex; align-items: center;
+  padding: var(--space-16) var(--space-24) var(--space-16) 29px; /* the node's label inset — no token at this value */
+  gap: var(--space-24);
+}
+/* a display clamp only: the stored name is never cut (#73), so a long label
+   ellipses instead of pushing the link off the pane */
+.gantt .glabel {
+  flex: 1; min-width: 0;
+  font-size: var(--text-body); font-weight: 400; line-height: 21px;
+  color: var(--surface-foreground);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* the row's link rests receded and RISES with the label's weight when the row
+   is hovered or holds focus — the two blues are two tokens, never one colour
+   dimmed (Miles; nodes 840:31661 / 31670 / 31671, plan decision B8). Keyboard
+   focus is the pointer's equal here: tabbing to the link must show the same
+   pair, or the keyboard reader sees a state the mouse reader never does. */
+.gantt .gaddone { color: var(--blue-300); }
+.gantt .gresult:hover .gaddone, .gantt .gresult:focus-within .gaddone { color: var(--blue-600); }
+.gantt .gresult:hover .glabel, .gantt .gresult:focus-within .glabel { font-weight: 600; }
+/* the empty answer is one muted line where the first result would be (node
+   841:33689) — a row of this table, not the full-page empty state the
+   Pipeline draws */
+.gantt .gnomatch .gmuted {
+  font-size: var(--text-body); font-weight: 400; line-height: 21px;
+  color: var(--slate-500);
+}
+
+/* the timeline half of both new rows is inert: a card lands here unplotted
+   and is placed as a second act (#72 §6), and the node draws no affordance in
+   the track (node 840:31630). It carries the node's tint; the week cells stay
+   transparent, so the grid reads straight through it. */
+.gantt .gsearch .gtrack, .gantt .gresult .gtrack { background: var(--slate-50); }
 
 /* ---- 8. capacity footer (63px) ----
    The footer is CHROME, not a row: the frame paints its caption area and every

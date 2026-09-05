@@ -33,12 +33,12 @@
   --blue-50: #eff6ff; /* Requests filter-bar active select (build-spec v1.2 §3) */
   --blue-100: #dbeafe;
   --blue-200: #bfdbfe;
-  --blue-300: #93c5fd; /* Suggest-plan expanded bar border (node 262:34499) */
+  --blue-300: #93c5fd; /* the RECEDED blue: Deadlines status-badge borders, and the per-row add link at rest in Sprint Schedules (owl #77 §0, node 840:31661) */
   --blue-500: #3b82f6;
-  --blue-600: #2563eb; /* planner cards-per-week slider fill + thumb (node 94:4828) */
+  --blue-600: #2563eb; /* the STRONG blue: planner cards-per-week slider fill + thumb (node 94:4828), and both Sprint Schedules add links at full strength — the pair above is two colours, never one dimmed (Miles, owl #77 §0, node 841:33668) */
   --blue-700: #1d4ed8;
   --violet-500: #8b5cf6; /* planner suggestion ghost bar outline (R8, node 95:5795) */
-  --indigo-500: #6366f1; /* Sprint Schedules add-item affordance — rule, add circle, placement + (owl #72, frame 731:98513; agent-C addition per the rebuild plan) */
+  --indigo-500: #6366f1; /* Sprint Schedules placement + (owl #72, frame 731:98513); the retired add affordance that shared it left with owl #77 §0 */
   --neutral-950: #0a0a0a; /* Requests note-editor Submit fill */
   --green-50: #f0fdf4;
   --green-100: #dcfce7;
