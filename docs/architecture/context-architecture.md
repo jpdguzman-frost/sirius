@@ -32,7 +32,7 @@ it in. Layer 1 is one file now.)
 atomic and bounded.**
 Domain rulebooks — one file per AREA of the app, rules numbered inside, cap
 ~20KB, split by sub-area at the cap, never by individual rule
-(`specs/001-sirius-v1/gantt-rules.md` today; pipeline and requests to follow
+(`specs/001-sirius-v1/gantt-rules.md` + `sprint-rules.md` today, split 2026-09-05; pipeline and requests to follow
 the pattern) · `decisions/NNNN-short-name.md` — ONE architectural decision per
 file, 20–40 lines (Title / Status / Context / Decision / Consequences /
 Alternatives rejected); accepted decisions are never edited — changes are a

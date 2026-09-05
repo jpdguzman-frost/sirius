@@ -1,7 +1,7 @@
 # Sprint Schedules — deliverables table + Gantt planner, frame notes (2026-08-15)
 
 > **BATCH-HISTORY ARCHIVE** — mechanisms, defects and verification
-> narratives, in build order. Current planner law lives in `gantt-rules.md`;
+> narratives, in build order. Current planner law lives in `gantt-rules.md` and `sprint-rules.md` (split 2026-09-05);
 > where this file and `gantt-rules.md` disagree, `gantt-rules.md` wins — fix
 > the narrative here, never the law there.
 

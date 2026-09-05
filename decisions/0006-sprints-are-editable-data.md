@@ -26,7 +26,7 @@ forced into a neighbour (FR-5.15; constitution invariant 12).
 - *Outside any sprint* is an honest, expected UI state — prod rt-test showing
   all rows outside any sprint is correct data, not a bug (2026-08-15 live
   verification leaned on exactly this).
-- Operational modal/save rules live in `specs/001-sirius-v1/gantt-rules.md`
+- Operational modal/save rules live in `specs/001-sirius-v1/sprint-rules.md` (§3; split from `gantt-rules.md` 2026-09-05)
   §3, not here.
 
 ## Alternatives rejected

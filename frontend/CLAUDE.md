@@ -62,7 +62,7 @@ comment, never the guard.
 ## Planner and tab law — pointers
 
 - Before touching the Gantt/planner, read `specs/001-sirius-v1/gantt-rules.md`
-  — especially §1, the drag contract (a drag source must stay hit-testable in
+  + `sprint-rules.md` — especially §1, the drag contract (a drag source must stay hit-testable in
   every state; standing guard `test/drag-hittest.test.ts`)
   [gantt-rules.md §1; docs/history/state-log/2026-08-18.md, batches 7–9].
 - Pipeline mechanism notes: `specs/001-sirius-v1/pipeline-frame-notes.md`.

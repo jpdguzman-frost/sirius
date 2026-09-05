@@ -25,7 +25,7 @@ rows' drops.
 
 - One meaning of "pinned" across every surface; UI affordances follow it
   (no drag handle on the coloured run, refusal cursor and title —
-  operational detail in `specs/001-sirius-v1/gantt-rules.md`).
+  operational detail in `specs/001-sirius-v1/sprint-rules.md`).
 - Standing instruction not to re-litigate: recorded in HANDOFF's
   never-re-litigate list; agents must not resurrect the Suggest-only
   reading from the stale owls.
@@ -42,5 +42,5 @@ rows' drops.
 `docs/state-log/2026-08-17.md` (invariant-13 session entry: FR-5.9 ruling B;
 batch-4 entry: pins supersession enforced); `docs/HANDOFF.md` §JP rulings to
 never re-litigate; `specs/001-sirius-v1/gantt-frame-notes.md` (batch-4
-precedence override — the two stale annotations); `specs/001-sirius-v1/gantt-rules.md`
+precedence override — the two stale annotations); `specs/001-sirius-v1/sprint-rules.md`
 (operational pin rules).

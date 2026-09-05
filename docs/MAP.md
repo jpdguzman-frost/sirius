@@ -5,7 +5,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 ## Standing rules
 
 - Code decides FACTS: where a doc describes behaviour and the code disagrees, code wins — flag the contradiction in your task output, never silently work around it. Obligations bind the other way: the constitution (root CLAUDE.md), the write registry (specs/001-sirius-v1/contracts/trello-write.md), and the area rulebooks bind code — code contradicting them is a defect to flag.
-- Before changing a module, read its entries in decisions/ and its area rulebook (planner: specs/001-sirius-v1/gantt-rules.md). Do not re-decide settled choices.
+- Before changing a module, read its entries in decisions/ and its area rulebook (planner: specs/001-sirius-v1/gantt-rules.md + sprint-rules.md). Do not re-decide settled choices.
 
 ## Status
 
@@ -28,7 +28,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 <!-- GEN:DOCMAP -->
 - Layer 0 · entry — CLAUDE.md (constitution) · docs/MAP.md (this skim) · directory CLAUDE.md files (frontend/, test/, lib/, src/)
 - Layer 1 · current state — STATE.md (the only Layer-1 file; docs/HANDOFF.md retired 2026-08-18)
-- Layer 2 · task set — area maps (docs/architecture/map-frontend.md, docs/architecture/map-backend.md — the per-file lines) · area rulebooks (planner: specs/001-sirius-v1/gantt-rules.md; pipeline/requests law still lives in their frame-notes until extracted — docs/README.md §Where law lives) · decisions/ · specs/001-sirius-v1/ (contracts + spec-kit)
+- Layer 2 · task set — area maps (docs/architecture/map-frontend.md, docs/architecture/map-backend.md — the per-file lines) · area rulebooks (planner: specs/001-sirius-v1/gantt-rules.md + sprint-rules.md; pipeline/requests law still lives in their frame-notes until extracted — docs/README.md §Where law lives) · decisions/ · specs/001-sirius-v1/ (contracts + spec-kit)
 - Layer 3 · archive — docs/history/state-log/ · archived frame-notes (gantt today; banner marks each) · git history · owl threads
 <!-- /GEN:DOCMAP -->
 

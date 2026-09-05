@@ -1,7 +1,7 @@
 # test/ — durable law for writing or editing tests
 
 Scope: everything under `test/`. Planner law lives in
-`specs/001-sirius-v1/gantt-rules.md` and constitution law in the root
+`specs/001-sirius-v1/gantt-rules.md` + `sprint-rules.md` and constitution law in the root
 `CLAUDE.md` — point at those, never copy them into assertions.
 
 _last-verified: 2026-08-18_

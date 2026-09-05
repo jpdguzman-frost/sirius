@@ -97,7 +97,8 @@ report on demand — still gitignored; it carries the real board id.
 
 | Law | Authoritative file |
 |---|---|
-| Planner (Gantt) rules | `specs/001-sirius-v1/gantt-rules.md` (its narratives: `gantt-frame-notes.md`, history only) |
+| Planner (Gantt) rules — drag, geometry, verification | `specs/001-sirius-v1/gantt-rules.md` (its narratives: `gantt-frame-notes.md`, history only) |
+| Sprint Schedules rules — planner behaviours, sprints modal, chips, the add row | `specs/001-sirius-v1/sprint-rules.md` (split from `gantt-rules.md` 2026-09-05 at the 20KB cap; rule numbers are global across the two) |
 | Pipeline rules incl. R-warn-* rulings | `specs/001-sirius-v1/pipeline-frame-notes.md` |
 | Requests-tab rules | `specs/001-sirius-v1/requests-frame-notes.md` |
 | Trello write registry | `specs/001-sirius-v1/contracts/trello-write.md` |
