@@ -129,20 +129,14 @@ describe('the grey wash reaches only tabs that have not been rebuilt', () => {
      Asserted as the RULE — a tab with a rulebook is a rebuilt tab and must not
      be washed — rather than as today's list, so the guard keeps working when
      Admin is eventually designed. */
-  /* Each tab's rulebook, by the name(s) that count as one. A LIST rather than a
-     single name because a rebuild can rename its own law: Deadlines was rebuilt
-     whole on 2026-09-05 (owls #74/#75, PLAN.md block 3), and its rulebook
-     becomes `deadlines-rules.md` (R-d2-*) while `deadlines-frame-notes.md` is
-     archived behind the gantt-frame-notes banner. The main thread writes the
-     new file at CLOSE, so until then EITHER name proves the same thing this
-     guard has always cared about: the tab has a law on disk.
-     2026-09-05 — the main thread narrows this entry to the single new name at
-     CLOSE, once the file exists. */
+  /* One rulebook per rebuilt tab. Deadlines points at the work-card tab's law
+     (block 3, 2026-09-05); the milestone tab's deadlines-frame-notes.md stays
+     on disk as the archived narrative and is deliberately NOT listed here. */
   const REBUILT_TABS: Record<string, string[]> = {
     requests: ['requests-frame-notes.md'],
     pipeline: ['pipeline-frame-notes.md'],
     schedules: ['gantt-frame-notes.md'], // the planner's law predates the tab's name
-    deadlines: ['deadlines-rules.md', 'deadlines-frame-notes.md'],
+    deadlines: ['deadlines-rules.md'], // block 3 (2026-09-05): the work-card tab's law; deadlines-frame-notes.md is the archived milestone tab
   };
 
   const specDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'specs', '001-sirius-v1');
