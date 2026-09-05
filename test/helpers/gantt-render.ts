@@ -21,6 +21,13 @@
  * `divFragment` + `toHTML` path. The Suggest bar's renderer retired with the
  * feature (owl #72, 2026-08-28), and `renderGantt` gave way to
  * `renderSprintSchedule` when the tab body was rebuilt on the work-card unit.
+ *
+ * BLOCK 3 (2026-09-05, owls #74/#75/#78 §2, PLAN.md block 3): `renderDeadlines`
+ * joins them for the rebuilt Deadlines tab. That tab is NOT one balanced
+ * `<div>` — the month navigator and the week scroller are siblings — so it
+ * renders through `tabView` (the whole `{{#if activeTab === '…'}}` branch)
+ * rather than through `divFragment`, and the tab guard itself is part of what
+ * the render proves.
  */
 
 import fs from 'node:fs';
@@ -66,7 +73,7 @@ export const PIPELINE_CSS = readFrontend('styles', '20-pipeline.css');
 export const REQUESTS_CSS = readFrontend('styles', '25-requests.css');
 /** The design tokens — where a CSS value has a JS twin, this is its side. */
 export const TOKENS_CSS = readFrontend('styles', '05-tokens.css');
-/** The Deadlines tab — week columns, the deadline card, the banners, the legend. */
+/** The Deadlines tab — the month navigator, the week lanes, the day columns, the card. */
 export const DEADLINES_CSS = readFrontend('styles', '40-deadlines.css');
 /**
  * The WHOLE shipped script set, in build.js's own order and join — see
@@ -128,6 +135,28 @@ export function divFragment(openTag: string, src: string = TEMPLATE): string {
 
 /** The `<div class="gantt …">` subtree. */
 export const ganttFragment = (src: string = TEMPLATE): string => divFragment('<div class="gantt ', src);
+
+/**
+ * One TAB's whole `{{#if activeTab === '…'}}` branch, sliced to the NEXT tab
+ * guard whichever tab that is.
+ *
+ * Three suites had grown byte-identical private copies of this (deadlines,
+ * schedules, and now Pipeline), and the recipe encodes a lesson worth keeping
+ * in one place: the slice must NOT name its neighbour. It used to end at a
+ * literal `forecast`, and when that tab was withdrawn (owl #67) the slice ran
+ * on through the shell and swallowed Admin — a suite then failed on another
+ * tab's markup. Ending at "whatever guard comes next" survives any tab being
+ * added, renamed or withdrawn.
+ *
+ * The returned text carries the branch's own `{{/if}}`, so it parses and
+ * renders on its own with `activeTab` set.
+ */
+export function tabView(tab: string, src: string = TEMPLATE): string {
+  const at = src.indexOf(`{{#if activeTab === '${tab}'}}`);
+  if (at < 0) throw new Error(`gantt-render: no \`${tab}\` view in the shipped template`);
+  const end = src.indexOf("{{#if activeTab === '", at + 1);
+  return src.slice(at, end > at ? end : undefined);
+}
 
 /* ------------------------------------------------------------------ *
  * Sprint Schedules — the work-card rebuild (owls #72/#73, frame 731:98513)
@@ -242,6 +271,22 @@ export interface SprintScheduleState {
   deadlineTick?: (row: SprintScheduleRow) => string | null;
   sprintFootText?: (weekKey: string) => string;
   sprintFootCls?: (weekKey: string) => string;
+  /* ---- the DEADLINE cell's W2 setter (block 3, owl #78 §2; PLAN.md B13) ----
+     The date popover moved off Pipeline and onto this cell, so every piece of
+     state the popover recipe reads has to be settable here or the two branches
+     of the cell cannot both be rendered. `writesEnabled` DEFAULTS FALSE — the
+     read-only branch is the one every suite that does not care about the setter
+     wants, and it needs no calendar. */
+  /** false takes the read-only span; true arms the trigger and the popover */
+  writesEnabled?: boolean;
+  /** the row's cardId whose popover is open — one global key, as on Pipeline */
+  duePopover?: string | null;
+  duePopPos?: { left: number; top: number };
+  dueStaged?: string | null;
+  dueBaseline?: string | null;
+  dueMonth?: string;
+  /** cardId → the write is in flight; the trigger reads `saving…` meanwhile */
+  savingDeadline?: Record<string, boolean>;
 }
 
 /**
@@ -256,6 +301,12 @@ export interface SprintScheduleState {
 export function renderSprintSchedule(state: SprintScheduleState = {}): string {
   const instance = new Ractive({
     template: ganttFragment(),
+    /* The calendar is the shipped `dueCalendar` partial, registered from the
+       template's own body — Ractive swallows an unresolved `{{>name}}` in
+       silence, so without this every popover assertion on this tab would pass
+       against markup that never rendered (the rule-6 hazard, the same one the
+       Pipeline renderer was caught by on 2026-08-18). */
+    partials: { dueCalendar: DUE_CALENDAR_PARTIAL },
     data: {
       sprintGroups: state.sprintGroups ?? SPRINT_GROUPS,
       leftCollapsed: state.leftCollapsed ?? false,
@@ -288,6 +339,139 @@ export function renderSprintSchedule(state: SprintScheduleState = {}): string {
       fmtLongIso: (iso: unknown) => (iso ? `long:${String(iso)}` : '—'),
       sprintFootText: state.sprintFootText ?? (() => '—'),
       sprintFootCls: state.sprintFootCls ?? (() => 'empty'),
+      // the DEADLINE cell's setter (block 3). The calendar's own internals are
+      // another suite's business — an empty grid renders the popover SHELL
+      // (head, shortcuts, Clear, Apply), which is what the structural
+      // assertions on this cell read.
+      writesEnabled: state.writesEnabled ?? false,
+      duePopover: state.duePopover ?? null,
+      duePopPos: state.duePopPos ?? { left: 0, top: 0 },
+      dueStaged: state.dueStaged ?? null,
+      dueBaseline: state.dueBaseline ?? null,
+      dueMonth: state.dueMonth ?? '',
+      savingDeadline: state.savingDeadline ?? {},
+      dueGrid: () => [],
+      dueMonthLabel: () => '',
+      dowNames: [],
+      fmtLong: (iso: unknown) => (iso ? `long:${String(iso)}` : '—'),
+    },
+  });
+  return instance.toHTML();
+}
+
+/* ------------------------------------------------------------------ *
+ * Deadlines — the work-card rebuild (owls #74/#75, PLAN.md block 3;
+ * nodes 731:100853 / 731:100872 / 810:121954)
+ *
+ * The tab is a view over the schedule's own rows: a card appears only when it
+ * is in a sprint AND plotted AND forecastable. `dlBuild` turns those rows into
+ * the week lanes below and is EXECUTED out of the shipped scripts by
+ * test/deadlines-tab.test.ts — so it is never stubbed there; what the renderer
+ * proves is the other half, which nodes each lane state emits.
+ * ------------------------------------------------------------------ */
+
+/** One card as the shipped `dlBuild` emits it (PLAN.md block 3, frozen). */
+export interface DlCard {
+  id: string;
+  cardId: string;
+  mc: string;
+  label: string;
+  urgent: boolean;
+  difficulty: string | null;
+  assetType: string | null;
+  lane: string | null;
+  status: string | null;
+  done: boolean;
+  trelloUrl: string | null;
+  figmaUrl: string | null;
+  /** the forecast FINISH — which day column the card sits in (PLAN.md B2) */
+  day: string;
+}
+
+/** One day column of an expanded lane. */
+export interface DlDay {
+  day: string;
+  name: string;
+  holiday: boolean;
+  cards: DlCard[];
+  pending: number;
+  done: number;
+}
+
+/** One week lane, collapsed or expanded. */
+export interface DlWeek {
+  key: string;
+  label: string;
+  range: string;
+  cards: DlCard[];
+  pending: number;
+  urgent: number;
+  done: number;
+  /** a PLAIN count of the week's work cards, every status (PLAN.md B5) */
+  load: number;
+  /** `min(100, load / capacity · 100)` to one decimal, as a string */
+  capPct: string;
+  days: DlDay[];
+}
+
+export interface DeadlinesState {
+  dlWeeks?: DlWeek[];
+  dlRange?: string;
+  /** ONE week open at a time; null is every lane collapsed */
+  expandedWeek?: string | null;
+  capacity?: { weekly: number };
+  icon?: Record<string, string>;
+}
+
+/**
+ * The `dlCard` partial's BODY, sliced from the shipped template.
+ *
+ * LAZY, unlike `DUE_CALENDAR_PARTIAL` above, and deliberately so: a throw at
+ * module scope takes down every suite that imports this helper, not just the
+ * one that wanted the partial (the reasoning drag-hittest states about
+ * `weekAtX`). A missing partial should fail the deadlines render, and nothing
+ * else.
+ */
+let dlCardPartialSrc: string | undefined;
+export function dlCardPartial(src: string = TEMPLATE): string {
+  if (dlCardPartialSrc !== undefined) return dlCardPartialSrc;
+  const marker = '{{#partial dlCard}}';
+  const open = src.indexOf(marker);
+  const close = src.indexOf('{{/partial}}', open);
+  if (open < 0 || close < 0) throw new Error('gantt-render: no dlCard partial in the shipped template');
+  return (dlCardPartialSrc = src.slice(open + marker.length, close));
+}
+
+/**
+ * Renders the Deadlines tab for one view state.
+ *
+ * The whole `{{#if activeTab === 'deadlines'}}` branch, not a `<div>` subtree:
+ * the navigator and the week scroller are siblings, so no single balanced div
+ * holds both, and a renderer that took only one of them could not prove the
+ * month control and the lanes agree about the month.
+ *
+ * `dlWeeks` is passed as DATA rather than computed here — the computed's own
+ * arithmetic (`dlBuild`) is executed out of the shipped scripts in
+ * test/deadlines-tab.test.ts, which is what keeps this render honest about
+ * being a proof of MARKUP. Every array the template iterates (`dlWeeks`,
+ * `w.cards`, `w.days`, `d.cards`) is reachable from that one stub, so a lane
+ * that renders nothing renders nothing visibly rather than passing vacuously.
+ */
+export function renderDeadlines(state: DeadlinesState = {}): string {
+  const instance = new Ractive({
+    template: tabView('deadlines'),
+    partials: { dlCard: dlCardPartial() },
+    data: {
+      activeTab: 'deadlines',
+      dlWeeks: state.dlWeeks ?? [],
+      dlRange: state.dlRange ?? 'Aug 31 – Sept 30, 2026',
+      expandedWeek: state.expandedWeek ?? null,
+      capacity: state.capacity ?? { weekly: 120 },
+      /* MARKERS, not the shipped art: the sprite's own strings are asserted to
+         carry the keys the template names (test/deadlines-tab.test.ts reads
+         them out of the icon file), and a marker is what lets a render say
+         WHICH element got the chevron. */
+      icon: state.icon ?? { rowChevron: '<svg data-icon="rowChevron"></svg>', trello: '<svg data-icon="trello"></svg>', figma: '<svg data-icon="figma"></svg>' },
     },
   });
   return instance.toHTML();

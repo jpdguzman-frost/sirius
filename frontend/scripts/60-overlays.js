@@ -1,7 +1,3 @@
-/* BR-6c: a row carries its MC group's work-card share, so the footer speaks
-   the same unit as capacity (cards). Hard mix stays BR-6b's own test. */
-const rowLoad = (rows) => rows.reduce((a, r) => a + (r.weight || 1), 0);
-
 /* Search-match highlight (annotation 17:2057): escape first, then wrap the
    matches in <mark> — rendered via triple-mustache, so escaping is mandatory.
    The app.get(queryKey) read registers the Ractive dependency; the regex

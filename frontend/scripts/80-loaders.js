@@ -96,11 +96,12 @@ app.set('dueMonthLabel', (month) => {
   return `${MONTHS_LONG[m - 1]} ${y}`;
 });
 
-/* An expanded MC's task card, found by its Trello card id (owl #45;
-   contracts/trello-write.md §W2 scope). Returns the Ractive keypath alongside
-   the card so callers can write optimistically to the one entry. Which HALF
-   of W2 a write takes is not this function's question — the template passes
-   the kind explicitly; this only locates the entry. */
+/* A work card, found by its Trello card id in the Pipeline's map (owl #45;
+   contracts/trello-write.md §W2 scope — the work card, and since owl #78 §2
+   nothing else). Returns the Ractive keypath alongside the card so callers
+   can write optimistically to the one entry. The Sprint Schedules DEADLINE
+   cell and the Deadlines popover both key on the same WORK card id the map
+   holds, so this one locator serves every W2 caller; it only locates. */
 function findWorkCard(cardId) {
   for (const [mc, cards] of Object.entries(app.get('workCardsByMc') || {})) {
     const i = cards.findIndex((w) => w.cardId === cardId);
@@ -131,36 +132,31 @@ function patchWorkCard(cardId, fields) {
   app.set(patch);
 }
 
-/* W2 deadline write (FR-9.1): optimistic with revert, same pattern as urgency
-   and difficulty; Trello is written first server-side, so a failure reverts
-   here. The no-op guard compares against trelloDue because W2 owns only the
-   TRELLO due date — a sheet-sourced deadline is not Sirius's to clear, which
-   is why the popover disables Clear on those rows. The cell shows 'saving…'
-   meanwhile, so no unconfirmed date is ever on screen (invariant 8).
-   `kind` is the template's word for which half of W2 this is — 'task' for an
-   expanded MC's task card (owl #45): same optimistic shape against the task's
-   own endpoint. A task due has no sheet fallback and no precedence, so its
-   display field IS its Trello field. */
-async function writeDeadline(cardId, value, kind) {
-  if (kind === 'task') return writeTaskDue(cardId, value);
-  const row = app.get('rows').find((r) => r.cardId === cardId);
-  if (!row) return;
-  if ((value || null) === (row.trelloDue || null)) return; // no-op guard — no call, no audit
-  const prev = { deadline: row.deadline, deadlineSource: row.deadlineSource, trelloDue: row.trelloDue };
-  patchRow(cardId, { deadline: value, deadlineSource: value ? 'trello' : null, trelloDue: value });
-  app.set(`savingDeadline.${cardId}`, true);
-  try {
-    await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/deliverables/${cardId}/deadline`, { date: value });
-    await loadAll(); // precedence may fall back to the sheet deadline (BR-9)
-  } catch (err) {
-    patchRow(cardId, prev);
-    flashBanner(`Deadline write failed — reverted. ${errText(err)}`);
-  } finally {
-    app.set(`savingDeadline.${cardId}`, false);
-  }
-}
+/* W2 — THE DEADLINE WRITE, on the WORK CARD and nowhere else (owl #78 §2;
+   PLAN.md block 3 B12/B13; contracts/trello-write.md §W2). Deadlines live
+   only on work cards now — a main card has none, and Pipeline draws the
+   em-dash — so the deliverable half this function used to dispatch to (a
+   `kind` argument, a second endpoint, the sheet-deadline precedence and its
+   own no-op rule) left with its route. One door, one endpoint, one shape.
+   The Sprint Schedules DEADLINE cell is the only trigger (B13); Pipeline
+   reflects the date read-only.
 
-async function writeTaskDue(cardId, value) {
+   Optimistic with rollback, the urgency/difficulty shape (FR-9.1, invariant
+   8): the card is patched through `patchWorkCard` on the way out AND on the
+   way back — the card is RE-FOUND at each step, never a keypath held across
+   the await. Trello is written first server-side, so a failure reverts here
+   and says so. The no-op guard compares against the card's own `due`: a
+   work card has no sheet fallback and no precedence, its display field IS
+   its Trello field, and a no-op sends nothing and audits nothing. The cell
+   shows 'saving…' meanwhile, so no unconfirmed date is ever on screen.
+
+   The reload after the commit is CORRECTNESS, not precedence (review pass
+   2026-08-18, reversing the /simplify removal): with no client poll, a
+   concurrent loadAll that read Mongo pre-commit and landed after the
+   optimistic set would leave the OLD value on screen forever. It is also
+   what re-derives the schedule row's `deadline`, its `late` flag and the
+   tick (B13) — server-computed, and nothing the work-card map alone knows. */
+async function writeDeadline(cardId, value) {
   const found = findWorkCard(cardId);
   if (!found) return;
   if ((value || null) === (found.card.due || null)) return; // no-op guard — no call, no audit
@@ -169,11 +165,6 @@ async function writeTaskDue(cardId, value) {
   app.set(`savingDeadline.${cardId}`, true);
   try {
     await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/workcards/${cardId}/deadline`, { date: value });
-    /* The reload is CORRECTNESS, not precedence (review pass 2026-08-18,
-       reversing the /simplify removal): with no client poll, a concurrent
-       loadAll that read Mongo pre-commit and landed after the optimistic set
-       would leave the OLD value on screen forever. Reloading after the
-       commit is the same self-heal the deliverable half has always had. */
     await loadAll();
   } catch (err) {
     patchWorkCard(cardId, { due: prev });
@@ -224,7 +215,6 @@ async function writeCapacity(next) {
   if (capFlushing) return; // the running flush picks the new value up
   capFlushing = true;
   app.set('savingCapacity', true);
-  let landed = false;
   try {
     while (capQueued !== null) {
       const want = capQueued;
@@ -234,7 +224,6 @@ async function writeCapacity(next) {
         const res = await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/capacity`, { weekly: want });
         if (res.capacity) {
           capServer = res.capacity.weekly;
-          landed = true;
           // a newer value is already queued: re-seating here would flash the
           // superseded number, so let the next pass land the server's shape
           if (capQueued === null) app.set({ capacity: res.capacity, capDraft: res.capacity.weekly });
@@ -250,18 +239,12 @@ async function writeCapacity(next) {
     capFlushing = false;
     app.set('savingCapacity', false);
   }
-  /* Invariant 13 v4.3.0: a capacity change invalidates matching acks, so the
-     deadlines banners can RE-SURFACE right now — refetch once after the queue
-     settles or the payload is stale until the next reload. */
-  if (landed) {
-    try {
-      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
-      app.set('deadlinePayload', res);
-      computeDeadlines();
-    } catch {
-      /* stale-until-reload is the pre-amendment behavior — never worse */
-    }
-  }
+  /* No refetch after the queue settles any more: the post-queue read of the
+     milestone payload existed so a silenced conflict could re-surface
+     (invariant 13) on a screen that no longer draws them (PLAN.md block 3
+     B9 — the machinery is parked server-side). The Deadlines progress line
+     reads `capacity.weekly` straight off this state, so it moved with the
+     thumb already. */
 }
 
 /* Monotonic guard on the ONE payload-apply (review 2026-08-28, finding 5):
@@ -285,10 +268,14 @@ async function loadAll() {
        needed it except to print the provenance banner. The endpoint itself
        stays — the model refresh is still a release gate (invariant 7), and the
        gate script reads the model through `loadProjectModel` directly. */
-    const [pipeline, requests, deadlines] = await Promise.all([
+    /* The `/deadlines` fetch left with the milestone tab (owls #74/#75;
+       PLAN.md block 3 B1): the rebuilt Deadlines tab is a view over
+       `sprintItems.rows`, which this same payload already carries, so the
+       one `/deliverables` read feeds all three tabs and they cannot disagree
+       about a card. The route parks server-side with no caller. */
+    const [pipeline, requests] = await Promise.all([
       api.get(`/api/projects/${pid}/deliverables`),
       api.get(`/api/projects/${pid}/requests`), // §3: one unfiltered fetch — every filter is client-side
-      api.get(`/api/projects/${pid}/deadlines`),
     ]);
     // searchable text per row, computed once per load (annotation 17:2057).
     // The MC# cell shows the bare mcLabel (JP ruling 2026-08-13), but typing
@@ -362,9 +349,7 @@ async function loadAll() {
       requests: blobRequests(requests.requests),
       rejects: requests.rejects,
       requestCounts: requests.counts || app.get('requestCounts'),
-      deadlinePayload: deadlines,
     });
-    computeDeadlines();
     // one frame, both post-render measurements. loadAll is also the project
     // switch (resetForProjectSwitch and popstate both end here), so the clip
     // sweep needs no separate hook for it.
@@ -472,130 +457,3 @@ app.observe('requests', () => {
    the sweep runs after the swap renders; the entry flip sweeps zero nodes
    and costs nothing. */
 app.observe('pipeNoResults', () => { remeasure(); }, { init: false });
-
-function computeDeadlines() {
-  const payload = app.get('deadlinePayload');
-  const offset = app.get('monthOffset');
-  /* Invariant 11: the month this tab is scoped to is a MANILA month. `new
-     Date()` would read the viewer's own clock, which lands on the wrong month
-     for anyone whose calendar date differs from Manila's at the moment they
-     look — the same host-local `today` that used to seed the planner's week. */
-  const [my, mm] = manilaToday().split('-').map(Number);
-  const base = new Date(my, mm - 1, 1);
-  base.setMonth(base.getMonth() + offset, 1);
-  const y = base.getFullYear();
-  const m = base.getMonth();
-  app.set('monthLabel', base.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }));
-
-  const inMonth = payload.milestones.filter((ms) => {
-    const d = new Date(ms.date + 'T00:00:00');
-    return d.getFullYear() === y && d.getMonth() === m;
-  });
-  const byWeek = {};
-  for (const ms of inMonth) (byWeek[ms.week] = byWeek[ms.week] || []).push(ms);
-  const cap = app.get('capacity').weekly || 1;
-  const keys = Object.keys(byWeek).sort();
-  const active = payload.conflicts.filter((c) => keys.includes(c.week));
-  const acked = (payload.acknowledged || []).filter((c) => keys.includes(c.week));
-  /* Which cards the PM is being asked to replot, by MC number — the same list
-     the alert-group's detail rows enumerate and the same number the Breakdown
-     reports, so one word cannot mean three things across one screen (owl #64
-     asked for this to be stated rather than inferred). */
-  const replotMcs = new Set((payload.replot || []).map((r) => r.displayId));
-
-  app.set({
-    deadlineWeeks: keys.map((key, i) => {
-      const items = byWeek[key];
-      const urgent = items.filter((x) => x.urgent).length;
-      const load = rowLoad(items); // BR-6c card-equivalents
-      /* THE WEEK BADGE names the rule AND the cards (owl #64): the header
-         carries the evidence, not just a count. One badge per rule broken,
-         cards de-duplicated and in the order the engine found them. */
-      const badges = [];
-      for (const rule of DL_RULES) {
-        const hits = active.filter((c) => c.week === key && c.rule === rule.rule);
-        if (!hits.length) continue;
-        const cards = [];
-        for (const c of hits) for (const it of c.items) if (!cards.includes(it.displayId)) cards.push(it.displayId);
-        badges.push({ rule: rule.rule, word: rule.word, count: hits.length, cards });
-      }
-      const replotHere = [];
-      for (const m of items) if (replotMcs.has(m.displayId) && !replotHere.includes(m.displayId)) replotHere.push(m.displayId);
-      if (replotHere.length) {
-        badges.push({ rule: 'replot', word: 'replotting', count: replotHere.length, cards: replotHere });
-      }
-      return {
-        key,
-        label: `Week ${i + 1}`,
-        /* the frame's own day-first range, beside the heading */
-        range: fmtWeekRange(key),
-        items,
-        urgent,
-        due: items.length,
-        load,
-        badges,
-        // §6.1: the week tints ONLY when over capacity — warnings have banners
-        flagged: load > cap,
-        capPct: Math.min(100, (load / cap) * 100).toFixed(1),
-      };
-    }),
-    deadlineConflicts: active,
-    /* THE DETAIL ROWS, one per active conflict, composed where the payload
-       lives so the template stays a layout. The frame's order is ACTION, then
-       SUBJECT, then REASON — 'Raise with the PM for replotting', the cards it
-       concerns, then why. Urgency rides on the conflict item itself, set by the
-       engine off the milestone it already held; re-joining it here was a second
-       answer to "which milestone is this" and a scan per item. */
-    deadlineAlerts: active.map((c) => ({
-      key: c.key,
-      rule: c.rule,
-      word: dlRuleWord(c.rule),
-      explanation: c.explanation,
-      items: c.items.map((it) => ({ displayId: it.displayId, phase: it.phase, urgent: !!it.urgent })),
-    })),
-    acknowledged: acked,
-    replot: payload.replot,
-    dueThisMonth: inMonth.length,
-    urgentThisMonth: inMonth.filter((x) => x.urgent).length,
-    /* THE SUMMARY BANNER counts CONFLICTS, not weeks in conflict — the frame's
-       own arithmetic settles it: '2 conflicts' over two weeks holding one each,
-       broken out as one badge per rule (owl #64 asked which; the frame answers
-       it). Acknowledged ones are not counted: they are not on the board. */
-    deadlineRuleTotals: DL_RULES
-      .map((r) => ({ rule: r.rule, word: r.word, count: active.filter((c) => c.rule === r.rule).length }))
-      .filter((r) => r.count > 0),
-  });
-}
-
-/* FR-12: day columns for an expanded week — capacities from the server
-   (largest remainder, exact sum), entries placed on plannedDay ?? forecast. */
-app.set('dayCols', (weekKey) => {
-  const payload = app.get('deadlinePayload');
-  const cols = (payload.days && payload.days[weekKey]) || [];
-  const weekItems = (payload.milestones || []).filter((m) => m.week === weekKey);
-  return cols.map((c) => {
-    const items = weekItems.filter((m) => (m.plannedDay || m.date) === c.day);
-    return { ...c, items, load: rowLoad(items) };
-  });
-});
-
-/* FR-12.5: optimistic with rollback, same shape as the W2 deadline write. */
-async function writeDayPlan(cardId, phase, day) {
-  const payload = app.get('deadlinePayload');
-  const idx = (payload.milestones || []).findIndex((m) => m.cardId === cardId && m.phase === phase);
-  if (idx < 0) return;
-  const prev = payload.milestones[idx].plannedDay || null;
-  if ((day || null) === prev) return; // no-op — no call, no audit
-  app.set(`deadlinePayload.milestones.${idx}.plannedDay`, day);
-  computeDeadlines();
-  try {
-    await api.send('PUT', `/api/projects/${app.get('activeProjectId')}/deadlines/day`, { cardId, phase, day });
-  } catch (err) {
-    app.set(`deadlinePayload.milestones.${idx}.plannedDay`, prev);
-    computeDeadlines();
-    const code = err.detail && err.detail.error && err.detail.error.code;
-    const why = code === 'HOLIDAY' ? 'that day is a holiday — it takes no work' : code === 'DAY_OUTSIDE_WEEK' ? 'that day is outside the milestone’s week' : err.message;
-    flashBanner(`Day move failed — reverted. ${why}`);
-  }
-}
-

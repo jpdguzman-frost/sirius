@@ -59,7 +59,10 @@ async function setup() {
   const sprint = await Sprint.create({
     project_id: project._id, name: 'Sprint 12', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 0,
   });
-  // the MC group: one main card carrying the client date and the urgency
+  // the MC group: one main card with a client date — which a row does NOT
+  // inherit since owl #78 §2, any more than it inherits the group's urgency
+  // (#78 §1). The asset badge is the one thing a row reads off the group,
+  // and only when the group agrees (section E).
   await Deliverable.create({
     project_id: project._id, mc_number: 'MC-07', display_id: 'MC-07', trello_card_id: 'main07',
     name: 'GCat Twirling', difficulty: 'Medium', lane: 'design', current_list: 'Design',
@@ -414,7 +417,8 @@ describe('two rules that look alike and are not (#72 §5)', () => {
 });
 
 /* ---------------------------------------------------------------------- */
-/* E — one row per card, the deadline it is measured against, its urgency  */
+/* E — one row per card, the deadline it is measured against, its urgency, */
+/*     and the two fields the Deadlines card reads (figma, asset)          */
 /* ---------------------------------------------------------------------- */
 
 describe('one row = one task card = one bar', () => {
@@ -429,15 +433,39 @@ describe('one row = one task card = one bar', () => {
     expect(addable['MC-07'] ?? []).toEqual([]);
   });
 
-  it('inherits the MC group’s client date, not a task’s own', async () => {
+  it('does NOT inherit the MC group’s client date — an undated card has no deadline (owl #78 §2)', async () => {
+    /* The exact input the retired rule read as LATE: the group's main card
+       dated the day after the bar starts, the task card undated. Until
+       2026-09-05 the row took the group's earliest deadline (jp→miles #58
+       judgement 1) and this bar ran past it. #78 §2 put deadlines on work
+       cards and nowhere else, so the row has no date to be measured against
+       and cannot be late — the schedule's tick and the Pipeline work row must
+       show the SAME date for the same card, and the card has none. */
     const { project, sprint, agent } = await setup();
+    await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { sheet_deadline: '2026-08-04' } });
+    await mkCard(project._id, 'w1');
+    await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+
+    const { rows } = await load(project._id);
+    expect(rows[0]!.finish! > '2026-08-04').toBe(true); // the work DOES run past the group's date
+    expect(rows[0]!.deadline).toBeNull();
+    expect(rows[0]!.late).toBe(false);
+  });
+
+  it('ignores the group whether it agrees with itself or not — there is no "earliest" any more', async () => {
+    const { project, sprint, agent } = await setup();
+    // invariant 3: mc_number is not a key — a second deliverable under MC-07,
+    // dated from Trello this time so both of `deliverables_v`'s sources are
+    // on the table (the main card's sheet date is in the fixture)
+    await Deliverable.create({
+      project_id: project._id, mc_number: 'MC-07', display_id: 'MC-07.2', trello_card_id: 'main07b',
+      name: 'Second', difficulty: 'Medium', lane: 'design', current_list: 'Design',
+      trello_due: '2026-09-01',
+    });
     await mkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
 
-    const { rows } = await load(project._id);
-    // the client date is the group's (the deadline half of the old #58
-    // judgement — untouched by #78, revisited in block 3)
-    expect(rows[0]!.deadline).toBe('2026-12-31');
+    expect((await load(project._id)).rows[0]!.deadline).toBeNull();
   });
 
   it('is urgent iff ITS OWN card carries the label — never inherited (owl #78)', async () => {
@@ -473,35 +501,26 @@ describe('one row = one task card = one bar', () => {
     expect((await load(project._id)).rows[0]!.urgent).toBe(false);
   });
 
-  it('takes the EARLIEST date when the MC group disagrees with itself', async () => {
-    const { project, sprint, agent } = await setup();
-    // invariant 3: mc_number is not a key — MC-825 carries 99 deliverables
-    await Deliverable.create({
-      project_id: project._id, mc_number: 'MC-07', display_id: 'MC-07.2', trello_card_id: 'main07b',
-      name: 'Second', difficulty: 'Medium', lane: 'design', current_list: 'Design',
-      sheet_deadline: '2026-09-01',
-    });
-    await mkCard(project._id, 'w1');
-    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
-
-    const { rows } = await load(project._id);
-    expect(rows[0]!.deadline).toBe('2026-09-01'); // the binding one, not the later
-  });
-
-  it('lets the task card’s OWN due date win over the group’s', async () => {
+  it('the deadline is the card’s OWN Trello due date, and nothing else', async () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'w1', { trello_due: '2026-08-20' });
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
-
-    // invariant 14's shape, one level down — task cards are W2-writable
+    // the field W2 writes on the work card (contracts/trello-write.md §W2)
     expect((await load(project._id)).rows[0]!.deadline).toBe('2026-08-20');
+
+    // cleared in Trello → no date, NOT the group's; the row follows the card
+    await WorkCard.updateOne({ trello_card_id: 'w1' }, { $unset: { trello_due: 1 } });
+    expect((await load(project._id)).rows[0]!.deadline).toBeNull();
+
+    // and a card that has left the board carries nothing to measure against
+    await WorkCard.deleteOne({ trello_card_id: 'w1' });
+    expect((await load(project._id)).rows[0]!.deadline).toBeNull();
   });
 
-  it('flags late when the WORK runs past the date, and never without a date', async () => {
+  it('flags late when the WORK runs past ITS date, and never without one', async () => {
     const { project, sprint, agent } = await setup();
     await mkCard(project._id, 'w1', { trello_due: '2026-08-04' });
-    await mkCard(project._id, 'w2');
-    await Deliverable.updateOne({ trello_card_id: 'main07' }, { $unset: { sheet_deadline: 1 } });
+    await mkCard(project._id, 'w2'); // undated — and the group's main card IS dated (fixture)
     await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
     await addAndPlot(agent, project._id, 'w2', String(sprint._id), '2026-08-03');
 
@@ -511,6 +530,89 @@ describe('one row = one task card = one bar', () => {
     expect(byId.get('w1')!.late).toBe(true);
     expect(byId.get('w2')!.deadline).toBeNull();
     expect(byId.get('w2')!.late).toBe(false); // BR-9: no deadline is no conflict
+  });
+
+  it('carries the card’s Figma link for the Deadlines card, and null when there is none (#74 §3)', async () => {
+    const { project, sprint, agent } = await setup();
+    const figma = 'https://www.figma.com/design/abc/Fx?node-id=1-2';
+    await mkCard(project._id, 'w1', { figma_url: figma });
+    await mkCard(project._id, 'w2');
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w2' }).expect(201);
+
+    const byId = new Map((await load(project._id)).rows.map((r) => [r.cardId, r]));
+    expect(byId.get('w1')!.figmaUrl).toBe(figma);
+    expect(byId.get('w2')!.figmaUrl).toBeNull();
+
+    // gone from the board → nothing to link; the row stays (#72 §5)
+    await WorkCard.deleteOne({ trello_card_id: 'w1' });
+    expect((await load(project._id)).rows.find((r) => r.cardId === 'w1')!.figmaUrl).toBeNull();
+  });
+});
+
+describe('the asset badge reads the MC group, and only when the group agrees (PLAN.md B6/B17)', () => {
+  /* Work cards carry no asset type — it is the sheet's FR-4.1 field on the
+     deliverable — and a task attaches to the GROUP (invariant 4), so the row
+     borrows the group's value exactly when there is one value to borrow. */
+  const secondDeliverable = (projectId: Types.ObjectId, over: Record<string, unknown> = {}) =>
+    Deliverable.create({
+      project_id: projectId, mc_number: 'MC-07', display_id: 'MC-07.2', trello_card_id: 'main07b',
+      name: 'Second', difficulty: 'Medium', lane: 'design', current_list: 'Design', ...over,
+    });
+  const rowFor = async (projectId: Types.ObjectId) => (await load(projectId)).rows[0]!;
+
+  it('agreed: every deliverable under the MC carries the same type → that type', async () => {
+    const { project, sprint, agent } = await setup();
+    await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { asset_type: 'Illustration' } });
+    await mkCard(project._id, 'w1');
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
+    expect((await rowFor(project._id)).assetType).toBe('Illustration'); // one deliverable agrees with itself
+
+    await secondDeliverable(project._id, { asset_type: 'Illustration' });
+    expect((await rowFor(project._id)).assetType).toBe('Illustration'); // two, still one value
+  });
+
+  it('disagreeing: two deliverables, two types → null, and the card draws no badge', async () => {
+    const { project, sprint, agent } = await setup();
+    await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { asset_type: 'Illustration' } });
+    await secondDeliverable(project._id, { asset_type: 'Icon' });
+    await mkCard(project._id, 'w1');
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
+    expect((await rowFor(project._id)).assetType).toBeNull();
+  });
+
+  it('absent: no deliverable under the MC carries a type → null', async () => {
+    const { project, sprint, agent } = await setup(); // the fixture's main card has none
+    await secondDeliverable(project._id);
+    await mkCard(project._id, 'w1');
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
+    expect((await rowFor(project._id)).assetType).toBeNull();
+  });
+
+  it('one typed and one untyped is not agreement → null (a judgement, reversible in one line)', async () => {
+    /* The strict reading of "shared by every deliverable row": a deliverable
+       with no sheet type does not share anything. Claiming the group is
+       "Illustration" while one of its deliverables says nothing would put an
+       inference on the card that the data does not carry. */
+    const { project, sprint, agent } = await setup();
+    await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { asset_type: 'Illustration' } });
+    await secondDeliverable(project._id);
+    await mkCard(project._id, 'w1');
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
+    expect((await rowFor(project._id)).assetType).toBeNull();
+  });
+
+  it('never reads across projects — another project’s MC-07 has no say (invariant 1)', async () => {
+    const { project, sprint, agent } = await setup();
+    const other = await otherProject();
+    await Deliverable.create({
+      project_id: other._id, mc_number: 'MC-07', display_id: 'MC-07', trello_card_id: 'x07',
+      name: 'Stranger', asset_type: 'Icon',
+    });
+    await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { asset_type: 'Illustration' } });
+    await mkCard(project._id, 'w1');
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
+    expect((await rowFor(project._id)).assetType).toBe('Illustration');
   });
 });
 

@@ -1,8 +1,16 @@
 /**
- * T079 — W2 due-date write (FR-9.1, FR-9.3; contracts/trello-write.md):
- * set/change/clear with Trello-first rollback semantics, 17:00 Manila
- * default with existing time-of-day preserved, the no-op guard, the
+ * T079 — W2 due-date write (FR-9.1, FR-9.3; contracts/trello-write.md) on the
+ * WORK CARD: set/change/clear with Trello-first rollback semantics, 17:00
+ * Manila default with existing time-of-day preserved, the no-op guard, the
  * invariant-17 board guard, and audit + sync_runs on every attempt.
+ *
+ * W2 had two halves from 2026-08-18 (JP's "either kind" scope note, owl #45):
+ * the deliverable row and the task cards its expanded MC group reveals. Owl
+ * #78 §2 (2026-09-05, block 3) put deadlines on work cards and nowhere else —
+ * Pipeline reflects the date read-only, the setter is the Sprint Schedules
+ * DEADLINE cell — so the deliverable route was DELETED on the W1/W3 block-1
+ * precedent. What was that half's suite is now one fact: the old path is a
+ * 404, whatever the id and whatever the body.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -23,15 +31,15 @@ beforeEach(async () => {
 });
 
 /**
- * The shared registry fixture (test/helpers/write-fixture.ts) with the main
- * card `card1` alone — W2's deliverable half. The task-card half below asks
- * the same fixture for `task1` as well.
+ * The shared registry fixture (test/helpers/write-fixture.ts): the task card
+ * `task1` under the main card `card1`. Both exist side by side so every case
+ * can say which one the write reached — and that the other did not move.
  */
-const setup = (envOver: Record<string, string> = {}, deliverable: Record<string, unknown> = {}) =>
-  setupWriteFixture({ env: envOver, deliverable });
+const setup = (envOver: Record<string, string> = {}, task: Record<string, unknown> = {}) =>
+  setupWriteFixture({ env: envOver, task });
 
 const patchDeadline = (agent: request.Agent, projectId: unknown, date: string | null) =>
-  agent.patch(`/api/projects/${projectId}/deliverables/card1/deadline`).send({ date });
+  agent.patch(`/api/projects/${projectId}/workcards/task1/deadline`).send({ date });
 
 describe('composeDueIso — W2 semantics (contracts/trello-write.md)', () => {
   it('defaults to 17:00 Asia/Manila', () => {
@@ -52,17 +60,26 @@ describe('composeDueIso — W2 semantics (contracts/trello-write.md)', () => {
   });
 });
 
-describe('W2 — the due-date write (FR-9.1)', () => {
-  it('sets a date at 17:00 Manila, persists both fields, audits, and logs the sync run', async () => {
+/**
+ * Asserted through the SAME writeGuards / commitRegistryWrite door W1 and W3
+ * use — the guards below are the shared ones, proven here at W2's field.
+ */
+describe('W2 — the due-date write on the WORK CARD (FR-9.1; owl #78 §2)', () => {
+  it('sets a date at 17:00 Manila, persists both fields on the WORK CARD, audits as work_card, logs the sync run', async () => {
     const { project, agent, trello } = await setup();
     const res = await patchDeadline(agent, project._id, '2026-08-21').expect(200);
     expect(res.body).toEqual({ ok: true, trello_due: '2026-08-21' });
-    expect(trello.dueCalls).toEqual([{ cardId: 'card1', dueIso: '2026-08-21T09:00:00.000Z' }]);
-    const doc = await Deliverable.findOne({ trello_card_id: 'card1' });
+    expect(trello.dueCalls).toEqual([{ cardId: 'task1', dueIso: '2026-08-21T09:00:00.000Z' }]);
+    const doc = await WorkCard.findOne({ trello_card_id: 'task1' });
     expect(doc?.trello_due).toBe('2026-08-21');
     expect(doc?.trello_due_at?.toISOString()).toBe('2026-08-21T09:00:00.000Z');
+    const row = await AuditLog.findOne({ action: 'due.set' });
+    expect(row?.entity).toBe('work_card');
+    expect(row?.entity_id).toBe('task1');
     expect(await AuditLog.countDocuments({ action: 'due.set' })).toBe(1);
     expect(await SyncRun.countDocuments({ source: 'trello_write', ok: true })).toBe(1);
+    // the main card beside it is untouched — the write went to the work card
+    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.trello_due ?? null).toBeNull();
   });
 
   it('changing the date preserves the existing time-of-day', async () => {
@@ -71,23 +88,21 @@ describe('W2 — the due-date write (FR-9.1)', () => {
       trello_due_at: new Date('2026-08-10T03:30:00.000Z'), // 11:30 Manila
     });
     await patchDeadline(agent, project._id, '2026-08-25').expect(200);
-    expect(trello.dueCalls).toEqual([{ cardId: 'card1', dueIso: '2026-08-25T03:30:00.000Z' }]);
+    expect(trello.dueCalls).toEqual([{ cardId: 'task1', dueIso: '2026-08-25T03:30:00.000Z' }]);
   });
 
-  it('clearing sends null and precedence falls back to the sheet deadline (BR-9)', async () => {
+  it('clears with null — a work card has no sheet fallback, so cleared means cleared', async () => {
     const { project, agent, trello } = await setup({}, {
-      trello_due: '2026-08-10',
-      trello_due_at: new Date('2026-08-10T09:00:00.000Z'),
-      sheet_deadline: '2026-08-15',
+      trello_due: '2026-08-10', trello_due_at: new Date('2026-08-10T09:00:00.000Z'),
     });
     await patchDeadline(agent, project._id, null).expect(200);
-    expect(trello.dueCalls).toEqual([{ cardId: 'card1', dueIso: null }]);
-    const doc = await Deliverable.findOne({ trello_card_id: 'card1' });
+    expect(trello.dueCalls).toEqual([{ cardId: 'task1', dueIso: null }]);
+    const doc = await WorkCard.findOne({ trello_card_id: 'task1' });
     expect(doc?.trello_due).toBeNull();
     expect(doc?.trello_due_at).toBeNull();
-    const viewed = await Deliverable.db.collection('deliverables_v').findOne({ trello_card_id: 'card1' });
-    expect(viewed?.deadline).toBe('2026-08-15');
-    expect(viewed?.deadline_source).toBe('sheet');
+    // a CLEAR is a registry write like any other, so it earns the same shield
+    // against a reconcile still holding the old date (owl #50)
+    expect(doc?.registry_written_at).toBeInstanceOf(Date);
   });
 
   it('no-op guard: same value → 400 NO_OP, no Trello call, no audit row', async () => {
@@ -105,8 +120,9 @@ describe('W2 — the due-date write (FR-9.1)', () => {
     const res = await patchDeadline(agent, project._id, '2026-08-25');
     expect(res.status).toBe(502);
     expect(res.body.error.code).toBe('TRELLO_WRITE_FAILED');
-    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.trello_due).toBe('2026-08-10');
-    expect(await AuditLog.countDocuments({ action: 'due.set_failed' })).toBe(1);
+    expect((await WorkCard.findOne({ trello_card_id: 'task1' }))?.trello_due).toBe('2026-08-10');
+    const failRow = await AuditLog.findOne({ action: 'due.set_failed' });
+    expect(failRow?.entity).toBe('work_card');
     expect(await SyncRun.countDocuments({ source: 'trello_write', ok: false })).toBe(1);
   });
 
@@ -143,93 +159,48 @@ describe('W2 — the due-date write (FR-9.1)', () => {
     const res = await patchDeadline(agent, project._id, '2026-08-21');
     expect(res.status).toBe(404);
   });
+
+  it('a main card’s id on this route is a 404 — the door looks up work cards only', async () => {
+    // card1 is a DELIVERABLE: the work-card route must not find it, and must
+    // not reach Trello or touch either document
+    const { project, agent, trello } = await setup();
+    const cross = await agent.patch(`/api/projects/${project._id}/workcards/card1/deadline`).send({ date: '2026-08-21' });
+    expect(cross.status).toBe(404);
+    expect(trello.dueCalls).toHaveLength(0);
+    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.trello_due ?? null).toBeNull();
+  });
 });
 
 /**
- * W2's task-card half (owl #45; JP's 2026-08-18 scope clarification —
- * contracts/trello-write.md §W2). Same field, same setDue(), same guards
- * through the SAME writeGuards door; only the collection and the audit
- * entity differ. Asserted against the shared handler, not a copy of it.
+ * The deliverable half's whole suite, since block 3. The 404 body is the
+ * app's unknown-API answer and `writeGuards`'s NOT_FOUND share a shape, so
+ * one id cannot tell "route gone" from "route looks in the wrong
+ * collection" — the pair below can: were the route still registered, a
+ * main card's id would have written (200) and a work card's id would have
+ * 404'd on the lookup; were it registered over the work-card collection, the
+ * reverse. Both 404 only when nothing answers the path at all.
  */
-describe('W2 — the task-card due write (owl #45 scope)', () => {
-  const patchTaskDue = (agent: request.Agent, projectId: unknown, date: string | null) =>
-    agent.patch(`/api/projects/${projectId}/workcards/task1/deadline`).send({ date });
+describe('W2’s deliverable route is GONE (owl #78 §2, block 3)', () => {
+  const oldPath = (agent: request.Agent, projectId: unknown, cardId: string, date: string | null) =>
+    agent.patch(`/api/projects/${projectId}/deliverables/${cardId}/deadline`).send({ date });
 
-  const setupTask = (envOver: Record<string, string> = {}, taskOver: Record<string, unknown> = {}) =>
-    setupWriteFixture({ env: envOver, task: taskOver });
-
-  it('sets a date, persists both fields on the WORK CARD, audits as work_card', async () => {
-    const { project, agent, trello } = await setupTask();
-    const res = await patchTaskDue(agent, project._id, '2026-08-21').expect(200);
-    expect(res.body).toEqual({ ok: true, trello_due: '2026-08-21' });
-    expect(trello.dueCalls).toEqual([{ cardId: 'task1', dueIso: '2026-08-21T09:00:00.000Z' }]);
-    const doc = await WorkCard.findOne({ trello_card_id: 'task1' });
-    expect(doc?.trello_due).toBe('2026-08-21');
-    expect(doc?.trello_due_at?.toISOString()).toBe('2026-08-21T09:00:00.000Z');
-    const row = await AuditLog.findOne({ action: 'due.set' });
-    expect(row?.entity).toBe('work_card');
-    expect(row?.entity_id).toBe('task1');
-    expect(await SyncRun.countDocuments({ source: 'trello_write', ok: true })).toBe(1);
-    // the deliverable beside it is untouched — the write went to the task
-    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.trello_due ?? null).toBeNull();
-  });
-
-  it('preserves the task’s existing time-of-day, exactly as the deliverable half does', async () => {
-    const { project, agent, trello } = await setupTask({}, {
-      trello_due: '2026-08-10',
-      trello_due_at: new Date('2026-08-10T03:30:00.000Z'), // 11:30 Manila
-    });
-    await patchTaskDue(agent, project._id, '2026-08-25').expect(200);
-    expect(trello.dueCalls).toEqual([{ cardId: 'task1', dueIso: '2026-08-25T03:30:00.000Z' }]);
-  });
-
-  it('clears with null — a task has no sheet fallback, so cleared means cleared', async () => {
-    const { project, agent, trello } = await setupTask({}, {
-      trello_due: '2026-08-10', trello_due_at: new Date('2026-08-10T09:00:00.000Z'),
-    });
-    await patchTaskDue(agent, project._id, null).expect(200);
-    expect(trello.dueCalls).toEqual([{ cardId: 'task1', dueIso: null }]);
-    const doc = await WorkCard.findOne({ trello_card_id: 'task1' });
-    expect(doc?.trello_due).toBeNull();
-    expect(doc?.trello_due_at).toBeNull();
-    // a CLEAR is a registry write like any other, so it earns the same shield
-    // against a reconcile still holding the old date (owl #50)
-    expect(doc?.registry_written_at).toBeInstanceOf(Date);
-  });
-
-  it('no-op guard holds: same value → 400 NO_OP, no Trello call, no audit row', async () => {
-    const { project, agent, trello } = await setupTask({}, { trello_due: '2026-08-21' });
-    const res = await patchTaskDue(agent, project._id, '2026-08-21');
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('NO_OP');
+  it('a main card’s id on the old path is a 404 — with Trello configured, writes enabled and a valid body', async () => {
+    const { project, agent, trello } = await setupWriteFixture({ deliverable: { trello_due: '2026-08-10' } });
+    const res = await oldPath(agent, project._id, 'card1', '2026-08-21');
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
     expect(trello.dueCalls).toHaveLength(0);
     expect(await AuditLog.countDocuments({})).toBe(0);
+    expect(await SyncRun.countDocuments({})).toBe(0);
+    // the main card keeps its Trello-owned date — read-only in Sirius now
+    expect((await Deliverable.findOne({ trello_card_id: 'card1' }))?.trello_due).toBe('2026-08-10');
   });
 
-  it('rollback holds: a failed Trello write leaves the task untouched and records the failure', async () => {
-    const { project, agent, trello } = await setupTask({}, { trello_due: '2026-08-10' });
-    trello.fail = true;
-    const res = await patchTaskDue(agent, project._id, '2026-08-25');
-    expect(res.status).toBe(502);
-    expect((await WorkCard.findOne({ trello_card_id: 'task1' }))?.trello_due).toBe('2026-08-10');
-    const failRow = await AuditLog.findOne({ action: 'due.set_failed' });
-    expect(failRow?.entity).toBe('work_card');
-  });
-
-  it('the shared board guard holds through the same door (invariant 17)', async () => {
-    const { project, agent } = await setupTask({ PROD_TRELLO_BOARD_IDS: 'testBoardX' });
-    const res = await patchTaskDue(agent, project._id, '2026-08-21');
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('PRODUCTION_BOARD_GUARD');
-  });
-
-  it('a cardId of the WRONG kind is a 404 — each half looks up its own collection', async () => {
-    // card1 is a DELIVERABLE: the workcards route must not find it, and the
-    // deliverables route must not find the task
-    const { project, agent } = await setupTask();
-    const cross = await agent.patch(`/api/projects/${project._id}/workcards/card1/deadline`).send({ date: '2026-08-21' });
-    expect(cross.status).toBe(404);
-    const reverse = await agent.patch(`/api/projects/${project._id}/deliverables/task1/deadline`).send({ date: '2026-08-21' });
-    expect(reverse.status).toBe(404);
+  it('so is a clear, and so is a work card’s id — the route is gone, not just its lookup', async () => {
+    const { project, agent, trello } = await setup();
+    expect((await oldPath(agent, project._id, 'card1', null)).status).toBe(404);
+    expect((await oldPath(agent, project._id, 'task1', '2026-08-21')).status).toBe(404);
+    expect(trello.dueCalls).toHaveLength(0);
+    expect((await WorkCard.findOne({ trello_card_id: 'task1' }))?.trello_due ?? null).toBeNull();
   });
 });

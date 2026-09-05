@@ -15,8 +15,14 @@
  *    object (PLAN decision D2). A main card's own labels still exist in
  *    Trello and still reconcile IN through ARES (decision D1) — they are
  *    read-only in Sirius, changed in Trello only.
- *  - W2 writes either kind — the deliverable row and its expanded MC group's
- *    task cards alike (JP 2026-08-18, §W2 scope clarification).
+ *  - W2 writes the WORK CARD too, since the same owl's §2 (block 3,
+ *    2026-09-05): "deadlines live on work cards" — Pipeline shows the date
+ *    read-only and the setter is the Sprint Schedules DEADLINE cell. The
+ *    deliverable route (JP's 2026-08-18 "either kind" scope note, owl #45)
+ *    was DELETED on the block-1 precedent above, not left dormant. A main
+ *    card's own due still reconciles IN through ARES and still leads
+ *    invariant 14's precedence in `deliverables_v` — read-only in Sirius,
+ *    changed in Trello only. The contract's §W2 scope narrows with it.
  *
  * What every entry SHARES — the Trello-first order, the stamp, the audit and
  * sync_runs rows, the 502 — lives in `commitRegistryWrite` below, stated once
@@ -55,14 +61,17 @@ type KindDoc = {
  * other kind is a 404, which is the cross-kind guard every route relies on.
  * Every refusal guard is identical for both kinds, which is the point of the
  * ONE door (src/CLAUDE.md rule 3). Generic over the kind, so `ctx.doc` is
- * COMPILER-typed at every call site: a literal kind narrows to its doc, a
- * variable kind yields the union (fine for handlers that touch only the
- * fields both kinds share, which is exactly W2's shared-handler case).
+ * COMPILER-typed at every call site: a literal kind narrows to its doc. Every
+ * route passes 'work_card' since block 3 deleted W2's deliverable route (owl
+ * #78 §2); the deliverable branch is a LOOKUP a future main-card entry would
+ * come through with the same guards, never a write path on its own — a
+ * registry entry is what reaches it, and growing the registry is a
+ * constitution amendment.
  *
  * `kind` is REQUIRED. It used to default to 'deliverable' when that was the
- * only kind; since owl #78 no route is deliverable-only, and a default that
- * silently picks a collection is the shape of the wrong-target write this
- * build removed.
+ * only kind; since owl #78 no route targets a deliverable at all, and a
+ * default that silently picks a collection is the shape of the wrong-target
+ * write the #78 build removed.
  */
 async function writeGuards<K extends keyof KindDoc>(
   env: Env,
@@ -222,78 +231,74 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
     },
   );
 
-  // W2 — due date (FR-9.1): date set or cleared; 17:00 Manila default,
-  // existing time-of-day preserved (contracts/trello-write.md W2 semantics).
-  // ONE handler for both card kinds — the deliverable row and, since JP's
-  // 2026-08-18 scope clarification, the task cards its expanded MC group
-  // reveals (owl #45). Same field, same setDue(), same guards; only the
-  // looked-up collection and the audit entity differ. Task-card dues play no
-  // part in deadline precedence or forecasting.
-  const dueHandler = (kind: 'deliverable' | 'work_card') =>
-    async (req: Request, res: Response) => {
-      const body = z
-        .object({
-          date: z
-            .string()
-            .regex(/^\d{4}-\d{2}-\d{2}$/)
-            // the regex admits calendar-impossible days (2026-02-30) that
-            // would make composeDueIso throw OUTSIDE the try — a 500 with no
-            // audit trail (review pass 2026-08-18). A real-date check keeps
-            // bad input in the 400 lane, where non-attempts belong.
-            .refine((d) => {
-              const t = new Date(`${d}T00:00:00Z`).getTime();
-              return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === d;
-            }, 'not a real calendar date')
-            .nullable(),
-        })
-        .strict()
-        .safeParse(req.body);
-      if (!body.success) {
-        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
-        return;
-      }
-      // a variable kind yields the union-typed doc — exactly right for a
-      // handler that touches only the field pair both kinds share
-      const ctx = await writeGuards(env, trello, req, res, kind);
-      if (!ctx) return;
+  // W2 — due date (FR-9.1) on the WORK CARD (owl #78 §2, block 3): date set
+  // or cleared; 17:00 Manila default, existing time-of-day preserved
+  // (contracts/trello-write.md W2 semantics). The setter is the Sprint
+  // Schedules DEADLINE cell; Pipeline only reflects the date. From 2026-08-18
+  // (JP's "either kind" scope note, owl #45) this handler was a factory over
+  // the card kind and served a deliverable route beside this one; that route
+  // is deleted and the kind is fixed, so a main card's id here is a 404 like
+  // any other stranger. A work card's due plays no part in deliverable
+  // precedence (invariant 14, `deliverables_v`) or forecasting; it IS the
+  // date the card's schedule row is measured against (`deadlineFor`,
+  // services/sprint-items.ts), so the Pipeline work row and the schedule's
+  // tick read the one field this writes.
+  const dueHandler = async (req: Request, res: Response) => {
+    const body = z
+      .object({
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          // the regex admits calendar-impossible days (2026-02-30) that
+          // would make composeDueIso throw OUTSIDE the try — a 500 with no
+          // audit trail (review pass 2026-08-18). A real-date check keeps
+          // bad input in the 400 lane, where non-attempts belong.
+          .refine((d) => {
+            const t = new Date(`${d}T00:00:00Z`).getTime();
+            return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === d;
+          }, 'not a real calendar date')
+          .nullable(),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
+      return;
+    }
+    const ctx = await writeGuards(env, trello, req, res, 'work_card');
+    if (!ctx) return;
 
-      const doc = ctx.doc;
-      const before = doc.trello_due ?? null;
-      const after = body.data.date;
-      if (before === after) {
-        // no-op guard: no Trello call, no audit row
-        res.status(400).json({ ok: false, error: { code: 'NO_OP', message: 'The due date already has this value.' } });
-        return;
-      }
+    const doc = ctx.doc; // typed work card by the guard's generic — W2's only surface since #78 §2
+    const before = doc.trello_due ?? null;
+    const after = body.data.date;
+    if (before === after) {
+      // no-op guard: no Trello call, no audit row
+      res.status(400).json({ ok: false, error: { code: 'NO_OP', message: 'The due date already has this value.' } });
+      return;
+    }
 
-      const dueIso = after === null ? null : composeDueIso(after, doc.trello_due_at ?? null);
-      await commitRegistryWrite(ctx, res, {
-        kind,
-        action: 'due',
-        field: 'trello_due',
-        before,
-        after,
-        stats: { due: after },
-        apply: async () => {
-          await ctx.trello.setDue(ctx.cardId, dueIso);
-          doc.trello_due = after;
-          doc.trello_due_at = dueIso ? new Date(dueIso) : null;
-        },
-        respond: { ok: true, trello_due: after },
-      });
-    };
+    const dueIso = after === null ? null : composeDueIso(after, doc.trello_due_at ?? null);
+    await commitRegistryWrite(ctx, res, {
+      kind: 'work_card',
+      action: 'due',
+      field: 'trello_due',
+      before,
+      after,
+      stats: { due: after },
+      apply: async () => {
+        await ctx.trello.setDue(ctx.cardId, dueIso);
+        doc.trello_due = after;
+        doc.trello_due_at = dueIso ? new Date(dueIso) : null;
+      },
+      respond: { ok: true, trello_due: after },
+    });
+  };
 
-  router.patch(
-    '/api/projects/:projectId/deliverables/:cardId/deadline',
-    ensureAuthenticated,
-    ensureProjectMember,
-    dueHandler('deliverable'),
-  );
   router.patch(
     '/api/projects/:projectId/workcards/:cardId/deadline',
     ensureAuthenticated,
     ensureProjectMember,
-    dueHandler('work_card'),
+    dueHandler,
   );
 
   // W3 — difficulty label swap (BRD-§9-A1, approved 2026-08-12) on the WORK

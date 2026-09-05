@@ -1,201 +1,126 @@
 {{#if activeTab === 'deadlines'}}
-  {{! Deadlines tab v2 — owl miles→jp #64, node 630:51389 (five annotations,
-      verified against the frame before building). Structure top→bottom:
-      Breakdown · alert-group (summary banner + detail rows) · the week-grouped
-      list · alert-container (the Model Constants legend).
+  {{! DEADLINES, rebuilt whole on the WORK-CARD unit. Sources: owls miles→jp
+      #74 (the tab's anatomy — doubly opt-in, week lanes, the card, the empty
+      states), #75 (the counts, the finished card, rollover) and #78 §2 (a
+      deadline belongs to a work card, and the control that SETS one lives on
+      Sprint Schedules and nowhere else); JP's ruling in jp→miles #58 that
+      both tabs stand on the work card. Nodes read through Rex: container
+      731:100853, range navigator 731:100859, collapsed lane 731:100872,
+      expanded lane 810:121954.
 
-      ⚠️ THERE IS NO COLUMN TABLE HERE. The Figma component is still called
-      'Request Tab Table', but it is a Search Field over week groups holding
-      cards. The name is a leftover — the Requests/Pipeline table treatment is
-      deliberately NOT inherited. }}
+      The milestone tab that stood here (owl #64, node 630:51389) is retired
+      WHOLE — the breakdown tiles, the notice banners and their detail rows,
+      the roster of ones a human had already waved through, the legend, the
+      search field, the per-week rule chips, the capacity strip and the
+      day-drag planner. Several of those were never in that frame either;
+      they went with it all the same. Do not restore any of them into this
+      file from #64.
 
-  {{! The month control the frame does not draw. The Breakdown says DUE THIS
-      MONTH, so a month scope exists and needs steering; deleting the only way
-      to move it to match a frame that never showed it would strand the tab on
-      whatever month it loaded in. }}
-  <div class="toolbar dltoolbar">
-    <button class="navbtn" on-click="['monthShift', -1]" aria-label="Previous month">‹</button>
-    <span class="rangetitle">{{monthLabel}}</span>
-    <button class="navbtn" on-click="['monthShift', 1]" aria-label="Next month">›</button>
-    <span class="note soft" style="margin:0 0 0 auto;">🔒 Reference only. Dates follow Sprint Schedules — replotting happens there.</span>
+      WHAT IS DRAWN: the schedule's own rows, and only the ones a human opted
+      into TWICE — added to a sprint AND plotted — that also have a forecast
+      finish. Nothing here reconciles against the board (#74 §1), and nothing
+      here writes: every card is read-only and derived, and the only thing
+      that moves one between days is the server's rollover job, which leaves
+      no marker (#74 §3, #75 §2).
+
+      WHICH DAY a card sits on is its forecast FINISH — the day the delivery
+      is expected to land, and the day rollover moves. It is not the client's
+      deadline: that lives on Sprint Schedules, beside the tick and the bar
+      that give it something to be compared against.
+
+      There is NO COLUMN TABLE here, no filter-and-sort pair and no search
+      field: navigation is the month navigator plus scrolling (#74 §2). }}
+
+  {{! The month scope. Two chevron buttons around a static label — a range
+      NAVIGATOR, not a picker: no calendar, no input, nothing to type into
+      (731:100859). The sprite carries one chevron and the stylesheet turns
+      the left-hand one round. The label runs from the first Monday on screen
+      to the end of the month those weeks belong to, so it describes what is
+      actually shown rather than naming a calendar month the lanes only
+      mostly cover. }}
+  <div class="dlnav" role="group" aria-label="Month">
+    <button class="dlnavbtn prev" on-click="['monthShift', -1]" aria-label="Previous month">{{{icon.rowChevron}}}</button>
+    <span class="dlrange">{{dlRange}}</span>
+    <button class="dlnavbtn next" on-click="['monthShift', 1]" aria-label="Next month">{{{icon.rowChevron}}}</button>
   </div>
 
-  {{! ---- Breakdown: four Request Status Cards, the .metrics recipe shared with
-       Requests and Pipeline. NEEDS REPLOTTING is the only new colour. }}
-  <div class="metrics dlstats" role="group" aria-label="Deadline breakdown">
-    <div class="metric"><span class="mlabel">DUE THIS MONTH</span><span class="mvalue">{{dueThisMonth}}</span></div>
-    <div class="metric red"><span class="mlabel">URGENT</span><span class="mvalue">{{urgentThisMonth}}</span></div>
-    <div class="metric amber"><span class="mlabel">CONFLICTS</span><span class="mvalue">{{deadlineConflicts.length}}</span></div>
-    <div class="metric purple"><span class="mlabel">NEEDS REPLOTTING</span><span class="mvalue">{{replot.length}}</span></div>
-  </div>
-
-  {{! ---- alert-group. Banners stay AS DRAWN: the conversion to the row-level
-       warning pattern Pipeline already ships is deferred, not forgotten. }}
-  {{#if deadlineConflicts.length}}
-    <div class="dlalert" role="status">
-      {{{icon.alertCircle}}}
-      <span class="dlatitle">{{deadlineConflicts.length}} conflict{{deadlineConflicts.length === 1 ? '' : 's'}}</span>
-      {{#each deadlineRuleTotals as t}}
-        <span class="pbadge dlrule r-{{t.rule}}">{{t.count}} {{t.word}}</span>
-      {{/each}}
-    </div>
-
-    {{! DETAIL ROWS — action, then subject, then reason. That order is the
-        frame's and is the point: the row opens with what to do about it.
-
-        ⚠️ The acknowledge control is NOT from this frame. The frame has no
-        acknowledgement design yet (deliberately deferred, owl #64) — but
-        acknowledging a conflict is shipped, audited behaviour and this tab is
-        its ONLY route in the whole UI. Deleting it to match a partial frame
-        would remove a capability, not a decoration. It stays as it is until
-        the design lands, and is not an invented interpretation of one. }}
-    <div class="dldetails">
-      {{#each deadlineAlerts as a}}
-        <div class="dldetail">
-          <span class="dlaction">Raise with the PM for replotting</span>
-          <span class="dldash" aria-hidden="true">—</span>
-          {{#each a.items as i}}
-            <span class="pbadge dlchip">{{i.displayId}} • {{i.phase}}</span>
-            <span class="pbadge dlurg {{i.urgent ? 'urgent' : 'nonurgent'}}">{{i.urgent ? 'Urgent' : 'Non-Urgent'}}</span>
-          {{/each}}
-          <span class="dlwhy">{{a.explanation}}</span>
-          <button class="dlack" on-click="['ackConflict', a.key]"
-                  aria-label="Acknowledge this {{a.word}} conflict"
-                  title="Acknowledge — silences THIS situation only; any change to the cards involved, or to the project's weekly capacity, brings it back">{{{icon.close}}}</button>
-        </div>
-      {{/each}}
-    </div>
-  {{/if}}
-
-  {{#if acknowledged.length}}
-    <div class="dlacked">
-      <span class="dlackedhead">Acknowledged ({{acknowledged.length}})</span>
-      {{#each acknowledged as a}}
-        <span class="pbadge">{{ruleLabel(a.rule)}} {{fmt(a.week)}}{{#if a.ack && a.ack.reason}} · “{{a.ack.reason}}”{{/if}}</span>
-        <button class="dlrestore" on-click="['restoreConflict', a.key]">restore</button>
-      {{/each}}
-    </div>
-  {{/if}}
-
-  {{! ---- Search. The frame gives this tab a Search Field and NOT the filter +
-       sort pair Pipeline gained — search-only is the design, not an omission. }}
-  <div class="searchbar dlsearch">{{{icon.search}}}<input name="deadlines-search" placeholder="Search cards or MC#" value="{{dlQ}}" lazy="250" aria-label="Search deadline cards by MC number or name" /></div>
-
-  {{! ---- The week-grouped list. Weeks read left to right and the CARD ROW
-       scrolls horizontally — the page body never does. }}
+  {{! Weeks read left to right and the WEEK ROW is what scrolls sideways —
+      the page body never does (the one rule worth keeping from the tab that
+      stood here, R-dl-a). Vertical scrolling belongs to each lane, and
+      inside an expanded lane to each day column, one at a time. }}
   <div class="dlscroll">
     <div class="dlweeks">
       {{#each dlWeeks as w}}
-        <section class="dlweek {{#if w.flagged}}flagged{{/if}} {{#if expandedWeek === w.key}}expanded{{/if}}" aria-label="{{w.label}}, {{w.range}}">
+        <section class="dlweek {{#if expandedWeek === w.key}}expanded{{/if}}" aria-label="{{w.label}}, {{w.range}}">
           <header class="dlwhead">
             <span class="dlwtitle">{{w.label}}</span>
             <span class="dlwrange">{{w.range}}</span>
-            {{! The frame draws one round action per week and does not say what
-                it does. The tab has exactly one per-week action — opening its
-                day columns — so that is what it opens (owl #64 confirm 2). }}
+            {{! THREE counts on a week header, TWO on a day header — the
+                asymmetry is drawn that way on purpose (#75 §4). All three
+                are independent measures: pending and done are mapped lane
+                states, an ongoing card is counted in neither, and urgent
+                cuts across every status. One is never derived from another
+                and they are not expected to add up (#75 §1). They show on
+                the expanded lane, which is where the frame puts them. }}
+            {{#if expandedWeek === w.key}}
+              <span class="dlcount">
+                <span class="dlc pending">{{w.pending}} Pending</span>
+                <span class="dldot" aria-hidden="true">•</span>
+                <span class="dlc urgent">{{w.urgent}} Urgent</span>
+                <span class="dldot" aria-hidden="true">•</span>
+                <span class="dlc done">{{w.done}} Done</span>
+              </span>
+            {{/if}}
+            {{! One round action per lane, and the lane has exactly one thing
+                to do: open its day columns. The accessible name says which
+                week, and which way the press goes. }}
             <button class="dlwexpand" on-click="['toggleWeek', w.key]"
                     aria-expanded="{{expandedWeek === w.key ? 'true' : 'false'}}"
-                    aria-label="{{expandedWeek === w.key ? 'Close' : 'Open'}} the day columns for {{w.label}}">{{{icon.rowChevron}}}</button>
+                    aria-label="{{expandedWeek === w.key ? 'Close' : 'Open'}} the day columns for {{w.label}}, {{w.range}}">{{{icon.rowChevron}}}</button>
           </header>
 
-          {{#each w.badges as b}}
-            <span class="pbadge dlwbadge r-{{b.rule}}">{{b.count}} {{b.word}} • {{b.cards.join(', ')}}</span>
-          {{/each}}
-
-          <p class="dlwsum">{{w.due}} due <span class="dlwdot" aria-hidden="true">·</span> {{w.urgent}} urgent</p>
-          <div class="capbar"><div class="fill" style="width:{{w.capPct}}%;"></div></div>
-          <p class="dlwload">{{fmtLoad(w.load)}} / {{capacity.weekly}} cards</p>
+          {{! The lane's load line: a PLAIN COUNT of the week's work cards
+              over the project's weekly capacity. Not card-equivalents, not
+              weighted by difficulty — the unit on this tab is the card, so
+              the number is cards. The bar is that ratio capped at full
+              width, so an over-committed week overruns the number and never
+              the track. }}
+          <div class="dlprogress">
+            <div class="dlbar"><div class="dlfill" style="width:{{w.capPct}}%;"></div></div>
+            <p class="dlload">{{w.load}} / {{capacity.weekly}} Work Cards</p>
+          </div>
 
           {{#if expandedWeek === w.key}}
-            {{! The day planner, kept. FR-12 — drag an entry between days, or
-                focus it and use ←/→. Also not in this frame; also shipped. }}
-            <div class="daygrid">
-              {{#each dayCols(w.key) as d}}
-                <div class="daycol {{#if d.holiday}}holiday{{/if}} {{#if d.load > d.capacity}}over{{/if}}"
-                     on-dragover="['dayDragOver', d.holiday]" on-drop="['dropOnDay', d.day, d.holiday]">
-                  <div class="dhead">{{dayName(d.day)}} <span class="dcap">{{#if d.holiday}}holiday{{else}}{{fmtLoad(d.load)}}/{{d.capacity}}{{/if}}</span></div>
-                  {{#each d.items as m}}
-                    <div class="entry {{#if m.late}}late{{elseif m.urgent}}urgent{{/if}}" draggable="true" tabindex="0"
-                         on-dragstart="['dragMilestone', m.cardId, m.phase]"
-                         on-keydown="['milestoneKey', m.cardId, m.phase, d.day, w.key]"
-                         aria-label="{{m.displayId}} {{m.phase}} on {{dayName(d.day)}} — arrows move the day">
-                      <span class="who">{{m.displayId}}</span>
-                      <span class="badge {{m.phase}}">{{m.phase}}</span>
-                      {{#if m.plannedDay}}<button class="chev" on-click="['clearDayPlan', m.cardId, m.phase]" title="Back to the forecast day">✕</button>{{/if}}
-                    </div>
-                  {{/each}}
+            {{! Expanded: five day columns, Monday to Friday, one lane open
+                at a time. This is passive GROUPING and nothing more — no
+                drop target, no arrow-key move, no put-it-back control. The
+                planner that used to own this shape retired with the tab: a
+                card's day is its forecast finish, and the server is the only
+                thing that changes it. A weekday column still renders on a
+                holiday; work simply never lands on one, so it draws the
+                empty card like any other quiet day. }}
+            <div class="dldays">
+              {{#each w.days as d}}
+                <div class="dlday">
+                  <div class="dldhead">
+                    <span class="dldname">{{d.name}}</span>
+                    <span class="dlcount"><span class="dlc pending">{{d.pending}} Pending</span><span class="dldot" aria-hidden="true">•</span><span class="dlc done">{{d.done}} Done</span></span>
+                  </div>
+                  {{! The empty card is CONTENT, not an announcement: it is
+                      the resting state of a quiet day and it is on screen
+                      before anything happens, so it carries no live-region
+                      role. Reading it out on every re-render would be noise
+                      about nothing. }}
+                  <div class="dlcards">{{#each d.cards as c}}{{>dlCard}}{{else}}<div class="dlempty"><div class="dlemptybox">None slated today</div></div>{{/each}}</div>
                 </div>
               {{/each}}
             </div>
           {{else}}
-            {{#if w.items.length}}
-              {{#each w.items as m}}
-                {{! DEADLINE CARD. Two dates, two meanings: the CAPTION date is
-                    the forecast milestone — it is what puts the card in this
-                    week — and the SUBTITLE date is the client's deadline. They
-                    are separately placed and separately labelled and must never
-                    be collapsed into one date (owl #64).
-
-                    ⚠️ COMPARING THEM IS NOT THE PAST-DEADLINE RULE, since
-                    2026-08-27. The caption still includes the wait for client
-                    review; `m.late` measures the design work alone (JP's
-                    ruling — see `workFinishOf`). So a caption LATER than the
-                    subtitle with no late styling is correct, not a missing
-                    flag, and the legend says why. }}
-                <article class="dlcard {{#if m.urgent}}urgent{{/if}} {{#if m.late}}late{{/if}}">
-                  <p class="dlcapt">
-                    <span class="dlmc">{{m.displayId}}</span>
-                    <span class="dldot" aria-hidden="true">·</span>
-                    <span class="dlmilestone" title="Forecast milestone — what places this card in {{w.label}}">{{dlDate(m.plannedDay || m.date)}}</span>
-                    <span class="pbadge dlphase">{{m.phase}}</span>
-                  </p>
-                  <p class="dlname">{{m.name}}</p>
-                  <p class="dlbadges">
-                    <span class="pbadge dlurg {{m.urgent ? 'urgent' : 'nonurgent'}}">{{m.urgent ? '⚡ Urgent' : 'Non-Urgent'}}</span>
-                    {{#if m.difficulty}}<span class="pbadge d-{{m.difficulty}}">{{m.difficulty}}</span>{{/if}}
-                    {{#if m.currentList}}<span class="pbadge dlstatus">{{m.currentList}}</span>{{/if}}
-                    {{#if m.requestor}}<span class="pbadge dlwho">{{m.requestor}}</span>{{/if}}
-                  </p>
-                  <p class="dlsub">
-                    <span class="dlcards">{{m.cards || 0}} card{{(m.cards || 0) === 1 ? '' : 's'}}</span>
-                    {{#if m.deadline}}
-                      <span class="dldot" aria-hidden="true">·</span>
-                      <span class="dldl" title="The client's stated deadline — not the forecast date above">deadline {{dlDeadline(m.deadline, m.date)}}</span>
-                    {{/if}}
-                    <span class="dllinks">
-                      {{#if m.trelloUrl}}<a href="{{m.trelloUrl}}" target="_blank" rel="noopener" aria-label="Open {{m.displayId}} in Trello">{{{icon.trello}}}</a>{{/if}}
-                      {{#if m.figmaUrl}}<a href="{{m.figmaUrl}}" target="_blank" rel="noopener" aria-label="Open {{m.displayId}} in Figma">{{{icon.figma}}}</a>{{/if}}
-                    </span>
-                  </p>
-                </article>
-              {{/each}}
-            {{else}}
-              {{! A week with nothing due keeps its place and says so. That is a
-                  different state from a week the SEARCH emptied, which is
-                  dropped entirely (see the dlWeeks computed). }}
-              <p class="dlempty">Nothing due this week</p>
-            {{/if}}
+            {{! Collapsed: the week's cards stacked, in day order and then in
+                the schedule's own row order. Nothing re-sorts them here. }}
+            <div class="dlcards">{{#each w.cards as c}}{{>dlCard}}{{else}}<div class="dlempty"><div class="dlemptybox">None slated this week</div></div>{{/each}}</div>
           {{/if}}
         </section>
-      {{/each}}
-    </div>
-  </div>
-
-  {{#if dlQ && !dlWeeks.length}}
-    <p class="dlnohits">No card matches “{{dlQ}}”.</p>
-  {{/if}}
-
-  {{! ---- alert-container: the Model Constants legend. The wording is quoted
-       from the frame and is the SAME three rules the engine detects — the copy
-       here and the rules there must not drift (owl #64). }}
-  <div class="dllegend">
-    <p class="dllegendhead">Model Constants</p>
-    <div class="dlformulas">
-      {{#each DL_RULES as r}}
-        <div class="dlformula">
-          <p class="dlflabel">{{r.label}}</p>
-          <p class="dlftext">{{r.text}}</p>
-        </div>
       {{/each}}
     </div>
   </div>

@@ -14,23 +14,21 @@
   padding: 0.8rem 1.1rem; margin: 0.6rem 0; font-size: 0.88rem;
 }
 .note .dim { font-size: 0.8rem; }
-.note.soft { background: #f8fafc; border-style: dashed; color: var(--muted); }
 
-/* ---- conflict banners (Deadlines) ---- */
-.conflict {
-  border-radius: 14px; padding: 0.9rem 1.2rem; margin: 0.5rem 0; font-size: 0.9rem;
-  background: #fee2e2; border: 1px solid #fecaca; color: var(--red-ink);
-}
-.conflict.past-deadline { background: #ede9fe; border-color: #ddd6fe; color: #6d28d9; }
-.conflict.over-capacity { background: #fff7ed; border-color: #fed7aa; color: #b45309; }
-.conflict .ctag { font-weight: 700; }
+/* WITHDRAWN 2026-09-05 (Deadlines rebuilt on the work-card unit, owls #74/#75):
+   the soft note variant and the whole conflict-banner family — the base box,
+   its past-deadline and over-capacity tints, its tag and the acknowledge
+   control pinned into its corner further down this file. The retired tab was
+   their ONLY consumer: the note carried the reference-only caption, and the
+   banners were the pre-owl-64 conflict surface that the alert-group in the v1
+   deadlines sheet had already replaced. The conflict routes, model and audit
+   rows stay server-side; nothing in the client dresses them any more.
 
-/* The v1 Deadlines recipes — .replotcard, .weekgrid, .weekcard and their
-   entries — were DELETED when owl #64 rebuilt that tab around .dlweek and
-   the deadline card (frontend/styles/40-deadlines.css). Nothing referenced
-   them any more, and a second .capbar recipe is the kind of thing a future
-   edit lands on by mistake. The .daycol entry rules below are still live:
-   the day planner survived the rebuild. */
+   The v1 Deadlines recipes — .replotcard, .weekgrid, .weekcard and their
+   entries — went the same way when owl #64 rebuilt that tab. Nothing
+   referenced them any more, and a second capacity-bar recipe is the kind of
+   thing a future edit lands on by mistake. The day-planner block went the same
+   way on 2026-09-05 (block 3) — see the note where it stood. */
 
 /* ---- toolbar & chips ---- */
 .toolbar { display: flex; align-items: center; gap: 0.6rem; margin: 0.6rem 0 1rem; flex-wrap: wrap; }
@@ -39,8 +37,12 @@
   padding: 0.5rem 1rem; cursor: pointer; font: inherit; font-size: 0.85rem; font-weight: 600;
 }
 .chip.on, .chip.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.navbtn { border: 1px solid var(--border); background: #fff; border-radius: 50%; width: 2.2rem; height: 2.2rem; cursor: pointer; font: inherit; }
-.rangetitle { font-weight: 700; font-size: 1.05rem; }
+/* WITHDRAWN 2026-09-05 with the same rebuild: the round month button and the
+   range caption that sat between the pair. The Deadlines navigator draws them
+   from the node now (owl #74, node 731:100859) under its own prefixed names in
+   frontend/styles/40-deadlines.css, and this generic pair had no second
+   consumer — a chrome recipe that outlives its only screen is a recipe the
+   next tab inherits by accident instead of by design. */
 
 /* The phase legend moved to 35-gantt.css with the planner body it explains —
    its swatches now reuse the ONE phase→colour map the bars are painted from,
@@ -73,15 +75,9 @@
 /* ---- daily plotting (FR-12): expanded week, Mon–Fri columns ---- */
 .weekcard .wexpand { border: none; background: none; cursor: pointer; font: inherit; font-weight: 700; padding: 0; }
 .weekcard.expanded { grid-column: 1 / -1; }
-.daygrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; margin-top: 0.5rem; }
-.daycol { border: 1px dashed var(--border); border-radius: 10px; padding: 0.4rem; min-height: 5rem; background: #fff; }
-.daycol.drophover { background: #dbeafe; }
-.daycol.over { background: #fef2f2; border-color: #fca5a5; }
-.daycol.holiday { background: #f8fafc; opacity: 0.6; }
-.daycol .dhead { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between; gap: 0.4rem; margin-bottom: 0.3rem; }
-.daycol .dcap { font-weight: 600; }
-.daycol .entry { cursor: grab; }
-.daycol .entry:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+/* The FR-12 day-planner recipes (day grid, day columns, the draggable entry)
+   left with the milestone Deadlines tab on 2026-09-05 (owl #74: card fields
+   are read-only; rollover is the only mover). Nothing renders them. */
 
 /* The legacy week-board (.gtrack/.gweek/.gbar/.gdl/.gunsched/.ganttcell and
    the .footcell totals) was replaced by the deliverables table + Gantt in
@@ -239,8 +235,8 @@
 
 .badge.togglable { cursor: pointer; font: inherit; font-size: 0.75rem; font-weight: 600; }
 
-.conflict { position: relative; }
-.conflict .ack { position: absolute; top: 0.6rem; right: 0.8rem; border: none; background: none; color: inherit; cursor: pointer; font: inherit; font-weight: 700; }
+/* the corner acknowledge control that rode the withdrawn banner family left
+   here on 2026-09-05 — see the note at the head of this file */
 
 /* Admin tab (FR-10) */
 .admin-title { margin: 0.4rem 0 0.8rem; font-size: 1.05rem; }

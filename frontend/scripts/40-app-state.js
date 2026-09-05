@@ -174,31 +174,20 @@ const app = new Ractive({
     reqSortDir: '',
     reqPage: 1,
     reqThumb: { needed: false, left: 0, width: 100 },
+    /* ---- Deadlines (owls #74/#75; PLAN.md block 3 B3, B7, B15) ----
+       ONE view key here and nothing else: `monthOffset` is the navigator's
+       distance from the Manila month (B3); its partner `expandedWeek`, the
+       one open lane (B7), sits above beside the other per-tab view keys.
+       Both reset on a project switch (B15). Everything the tab draws is
+       derived from the schedule's own rows by the three computeds below —
+       the milestone payload, the conflict and acknowledgement lists, the
+       replot list, the month-scoped tallies, the rule table, the search
+       query and the per-card formatters all left with the milestone tab
+       (B9): a key that nothing renders is a key a reload can leave stale. */
     monthOffset: 0,
-    monthLabel: '',
-    deadlinePayload: { milestones: [], conflicts: [], replot: [] },
-    deadlineWeeks: [],
-    deadlineConflicts: [],
-    acknowledged: [],
-    replot: [],
-    dueThisMonth: 0,
-    urgentThisMonth: 0,
-    /* owl #64 — one badge per rule broken, for the summary banner. */
-    deadlineRuleTotals: [],
-    deadlineAlerts: [],
-    /* the legend renders FROM the rule table, so the copy on screen and the
-       words the engine detects cannot drift apart (owl #64) */
-    DL_RULES,
-    /* the tab's own search box; the frame gives Deadlines a Search Field and
-       NOT the filter/sort pair Pipeline gained (R-dl-h) */
-    dlQ: '',
     fmt: (iso) => fmtDate(iso),
     fmtLong: fmtLongIso,
     fmtLongIso, // the schedules cells call it by its own name (PLAN 2026-08-28)
-    /* the Deadlines card's two dates, which mean different things and are
-       formatted differently on purpose (owl #64) */
-    dlDate: fmtDayMonth,
-    dlDeadline: fmtDeadlineShort,
     fmtInstant,
     monthShort,
     /* the derived-status names the template compares against — the constants
@@ -213,18 +202,6 @@ const app = new Ractive({
       return t.length > 180 ? `${t.slice(0, 180)}…` : t;
     },
     pct: (x) => `${Math.round((x || 0) * 1000) / 10}%`,
-    // BR-6c/§5.4 display rule: fractions to one decimal, whole numbers plain
-    fmtLoad: (n) => {
-      const r = Math.round((n || 0) * 1000) / 1000;
-      return Number.isInteger(r) ? String(r) : r.toFixed(1);
-    },
-    dayName: (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }),
-    /* The acknowledged strip's label, read out of the SAME rule table the
-       legend and the badges render from. It used to be a ternary chain whose
-       else-branch labelled any unknown rule 'Over capacity' — so a fourth rule
-       would have shipped mislabelled, on the one screen where the wording is
-       supposed to match the engine exactly. */
-    ruleLabel: (r) => dlRule(r).chip,
   },
   computed: {
     tabLabel() {
@@ -431,28 +408,38 @@ const app = new Ractive({
       if (this.get('pipelineRows').length) return false;
       return (this.get('searchQ') || '').trim() !== '' || this.get('pipeChips').length > 0;
     },
-    /* ---- Deadlines (owl #64, node 630:51389) ----------------------------
-       Search filters the CARDS by MC number or deliverable name, and a week the
-       search empties is DROPPED rather than left standing empty — the frame's
-       own instruction. A week that is empty because nothing is due is a
-       different state entirely and keeps its place: the frame draws it a card
-       that says so.
-
-       The week's own summary — due, urgent, load against capacity — is NOT
-       recomputed against the search. It describes the week, and a capacity line
-       that moved when you typed would be reporting the search, not the load. */
+    /* ---- Deadlines (owls #74/#75/#78 §2; PLAN.md block 3 B1–B5) ----------
+       Three derivations, each ONE step from the last, so the template reads
+       plain keys and the recipe suite executes the pure helpers beneath them
+       (10-constants.js). The rows are the schedule's own — `sprintItems.rows`
+       off the one `/deliverables` payload (B1) — so one source feeds both
+       tabs, which is what keeps a bar on Sprint Schedules and a card here
+       from ever disagreeing about the same work card (drift row forty-five).
+       No search, no filter: navigation is the month arrows and scrolling
+       (#74 §2). */
+    /* THE MONDAYS of the shown month: the MANILA month (invariant 11 — a
+       viewer whose calendar date differs from Manila's at the moment they
+       look must not open on a different month; the retired tab had the same
+       rule) shifted by the navigator, through the same week rule the engine
+       keys on. The Date constructor normalises the shifted month, so
+       December plus one is the next January without a second branch. */
+    dlMondays() {
+      const [y, m] = manilaToday().split('-').map(Number);
+      const base = new Date(y, m - 1 + this.get('monthOffset'), 1);
+      return dlMonthWeeks(base.getFullYear(), base.getMonth());
+    },
+    /** The navigator's label (731:100859) — first shown Monday → the month's end. */
+    dlRange() {
+      return dlRangeLabel(this.get('dlMondays'));
+    },
+    /* THE LANES: the pure builder over the rows, the Mondays, the ARES
+       holiday calendar (R-f-8's same feed) and the COMMITTED capacity —
+       `capacity.weekly`, never capDraft: the progress line states the number
+       the server holds, as the footer does; the live thumb has capBand. A
+       card's day, its counts and its badges are all decided in dlBuild, so
+       the template stays a layout. */
     dlWeeks() {
-      const q = (this.get('dlQ') || '').trim().toLowerCase();
-      const weeks = this.get('deadlineWeeks');
-      if (!q) return weeks;
-      const out = [];
-      for (const w of weeks) {
-        const items = w.items.filter(
-          (m) => (m.displayId || '').toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q),
-        );
-        if (items.length) out.push({ ...w, items });
-      }
-      return out;
+      return dlBuild(this.get('sprintItems.rows'), this.get('dlMondays'), this.get('holidays'), this.get('capacity.weekly'));
     },
     /* ---- Requests §3: segment + search + four selects, AND-combined, all
        client-side over the single unfiltered payload. The counts stay on

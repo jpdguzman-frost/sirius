@@ -168,7 +168,62 @@
                       </div>
                       <span class="gname">{{row.name}}</span>
                     </div>
-                    <div class="gcell c-dl">{{#if row.deadline}}{{fmtLongIso(row.deadline)}}{{else}}<span class="gdim">—</span>{{/if}}</div>
+                    {{! The DEADLINE cell — and the ONLY place in the whole
+                        product where a due date can be SET (owl #78 §2; write
+                        registry W2, work-card scope). It belongs here because
+                        here the date has something to be measured against:
+                        the tick stands at the deadline, the bar ends at the
+                        forecast, and a bar running past its tick is late
+                        (#72 §7). The Pipeline cells that used to offer a
+                        picker are now read-only reflections of what is set
+                        here, so the same date can never be edited in two
+                        places and drift.
+
+                        The recipe is the Pipeline work row's, carried over
+                        rather than re-invented: same wrapper, same trigger,
+                        the same shared calendar partial and the same three
+                        handlers. The popover is fixed-positioned, so the
+                        sticky left pane cannot clip it. The write goes to the
+                        card's own Trello due date and the reload re-derives
+                        the cell, the tick and the late flag together — none
+                        of them is recomputed here.
+
+                        A work card has NO sheet fallback, so its own due date
+                        is both what shows and the only thing Clear can
+                        remove; that is why the clear control reads the row's
+                        deadline directly instead of a separate source field.
+                        There is no overdue tint on this cell either: the tick
+                        and the bar already say late, and saying it a third
+                        time in the same row is noise.
+
+                        The gate is UX only, and the first one on this tab.
+                        The server refuses the write on a read-only project
+                        whatever the template drew, so the read-only branch is
+                        a courtesy, never the control. }}
+                    <div class="gcell c-dl">
+                      {{#if writesEnabled}}
+                        <div class="duewrap">
+                          <button class="datefield {{row.deadline ? '' : 'missing'}} {{#if savingDeadline[row.cardId]}}saving{{/if}}"
+                                  on-click="['openDuePopover', row.cardId]" disabled="{{savingDeadline[row.cardId] ? true : false}}"
+                                  aria-haspopup="dialog"
+                                  aria-expanded="{{duePopover === row.cardId ? 'true' : 'false'}}"
+                                  title="Apply writes the Trello due date (write registry W2)">
+                            <span class="dpdate">{{#if savingDeadline[row.cardId]}}saving…{{elseif row.deadline}}{{fmtLongIso(row.deadline)}}{{else}}Select Date{{/if}}</span><svg class="i16"><use href="#i-calendar" /></svg>
+                          </button>
+                          {{#if duePopover === row.cardId}}
+                            <div class="duepop" role="dialog" aria-label="Due date" style="left:{{duePopPos.left}}px;top:{{duePopPos.top}}px;">
+                              {{>dueCalendar}}
+                              <div class="dueact">
+                                <button class="dueclear" disabled="{{!row.deadline}}" on-click="['dueClear', row.cardId]" title="{{row.deadline ? 'Clear the Trello due date' : 'No due date to clear'}}">Clear Due Date</button>
+                                <button class="dueapply" on-click="['dueApply', row.cardId]">Apply</button>
+                              </div>
+                            </div>
+                          {{/if}}
+                        </div>
+                      {{else}}
+                        <span class="datefield readonly {{row.deadline ? '' : 'missing'}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{row.deadline ? fmtLongIso(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
+                      {{/if}}
+                    </div>
                     <div class="gcell c-fc">{{#if row.finish}}{{fmtLongIso(row.finish)}}{{else}}<span class="gdim">—</span>{{/if}}</div>
                     {{! The RAW lane chip: the text is the Trello list itself,
                         the colourway is the classified status. `status: null`

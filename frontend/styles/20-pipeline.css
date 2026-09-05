@@ -449,7 +449,17 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .selectmenu .dot.amber { background: var(--amber-500); }
 
 /* due date field — the popover's trigger (node 415:54979, write registry W2;
-   annotations 251:7925, 251:23859) */
+   annotations 251:7925, 251:23859).
+
+   ⚠️ SHARED, AND DELIBERATELY UNPREFIXED. Since owl #78 §2 the setter itself
+   lives on the Sprint Schedules DEADLINE cell and nowhere else: this file
+   still declares the wrapper, the trigger and the popover below, but Pipeline
+   now renders only the read-only variant of the trigger, and the tab that
+   WRITES borrows all three from here. That is the point of the missing
+   prefix — one recipe, one shared calendar partial and one set of handlers,
+   so the same control cannot come to look like two. A prefix, a copy in the
+   schedules sheet, or a Pipeline-only tweak to any rule in this block would
+   silently fork the two tabs; change it here or not at all. */
 .duewrap { position: relative; display: inline-block; }
 .datefield {
   display: inline-flex; align-items: center; gap: var(--space-8); justify-content: space-between;
@@ -475,7 +485,12 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 /* outranks the sticky header. max-height keeps Apply / Clear reachable on a
    viewport shorter than the 420px box — it shrinks and scrolls itself rather
    than pushing its own action row off-screen; overscroll-behavior keeps that
-   scroll from chaining to the page (which would trip the dismisser). */
+   scroll from chaining to the page (which would trip the dismisser).
+
+   The fixed position earns its keep twice over now: on the Sprint Schedules
+   DEADLINE cell (owl #78 §2) the same box opens inside the pinned left pane,
+   whose overflow would otherwise clip it. Nothing here is Pipeline's alone —
+   see the shared-recipe note above the trigger. */
 .duepop {
   width: 354px; z-index: 40; box-sizing: border-box; border-radius: var(--radius-md);
   padding: var(--space-16); font-family: var(--font-sans); gap: 12px;

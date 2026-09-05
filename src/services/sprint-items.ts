@@ -50,6 +50,19 @@ export interface SprintItemRow {
   /** `null` when the work card has left the board — absent is not 'ongoing'. */
   status: string | null;
   trelloUrl: string | null;
+  /** The card's own Figma attachment — the Deadlines card's links row (#74 §3). */
+  figmaUrl: string | null;
+  /**
+   * The MC group's asset type, when its deliverables AGREE on one; else null.
+   * A work card carries no asset type of its own — it is a sheet field on the
+   * deliverable (FR-4.1) — and a task attaches to the GROUP, never to one
+   * deliverable (invariant 4), so the only honest value is the one every
+   * deliverable under the MC shares. Two deliverables that differ, or one
+   * without a type, yield null and the Deadlines card draws no asset badge
+   * (PLAN.md B6/B17). That a MISSING type breaks agreement is a judgement,
+   * reversible in one line at the map below.
+   */
+  assetType: string | null;
   /**
    * THIS card carries the `Urgent` label (owl #78, 2026-09-05). Not the MC
    * group's — see the note at the `rows` map. False when the card has left
@@ -69,7 +82,10 @@ export interface SprintItemRow {
    * cell cannot be keyed. The bar and the FORECASTED column both read this.
    */
   finish: string | null;
-  /** The client date this row is measured against — see `deadlineFor`. */
+  /**
+   * The card's OWN Trello due date, or null — see `deadlineFor`. Nothing is
+   * inherited from the MC group (owl #78 §2, 2026-09-05).
+   */
   deadline: string | null;
   /**
    * The work runs past the client date (JP ruling 2026-08-27). The review wait
@@ -148,8 +164,9 @@ const laneInputs = (w: { current_list?: string | null }) => ({
  * CONFIDENCE: the caller passes none, so every bar is drawn at the engine's
  * default percentile. Deliberate but NOT ruled — confidence is a per-deliverable
  * field and the unit here is a task card, which has none; taking the MC group's
- * would need a rule for a group that disagrees with itself, exactly as the
- * deadline below does. Raised to product rather than guessed at.
+ * would need a rule for a group that disagrees with itself — the deadline had
+ * one (earliest) until owl #78 §2 retired inheritance, and `assetType` still
+ * does (agree, or nothing). Raised to product rather than guessed at.
  */
 export function finishOf(
   card: { difficulty?: string | null; current_list?: string | null; task_prefix?: string | null },
@@ -166,26 +183,25 @@ export function finishOf(
 }
 
 /**
- * The client date a task card is measured against.
+ * The client date a task card is measured against: the card's OWN Trello due
+ * date, or none.
  *
- * Precedence mirrors invariant 14's shape, one level down: the card's OWN
- * Trello due date wins where present (task cards are W2-writable — JP
- * 2026-08-18), else the MC group's.
+ * Until 2026-09-05 this fell back to the MC group's EARLIEST deliverable
+ * deadline — jp→miles #58 judgement 1, "reversible in one line". Owl #78 §2
+ * superseded it: deadlines live on work cards and nowhere else. W2 writes the
+ * work card, Pipeline reflects that date read-only, and the schedule's tick
+ * must be the SAME date the Pipeline row shows for the same card. An inherited
+ * date broke that: a row could read late against a sibling deliverable's
+ * client date its own card never carried. Live rows whose ticks came from the
+ * main card lose them — that is the model, not a regression (PLAN.md B14).
  *
- * **The MC's date is the EARLIEST among its deliverables, and that is a
- * judgement.** `mc_number` is not a key (invariant 3) — MC-825 carries 99
- * deliverables — and a task attaches to the GROUP, never to one of them
- * (invariant 4), so there is no single correct date to inherit. Earliest is
- * the binding one: miss it and something under that MC is late. Reversible in
- * one line if product wants latest, or wants the row to show no date at all
- * when the group disagrees.
+ * There was never a single correct date to inherit anyway: `mc_number` is not
+ * a key (invariant 3) — MC-825 carries 99 deliverables — and a task attaches
+ * to the GROUP, never to one of them (invariant 4). "Earliest" was the
+ * judgement that papered over that, and it went with the rule.
  */
-function deadlineFor(
-  card: { trello_due?: string | null } | undefined,
-  mcNumber: string,
-  mcDeadline: Map<string, string>,
-): string | null {
-  return card?.trello_due ?? mcDeadline.get(mcNumber) ?? null;
+function deadlineFor(card: { trello_due?: string | null } | undefined): string | null {
+  return card?.trello_due ?? null;
 }
 
 /**
@@ -195,13 +211,13 @@ function deadlineFor(
  * It fetched them itself at first, with `WorkCard.find({project_id, active})`
  * byte-identical to the caller's own line and a `Deliverable.find` re-reading
  * what the caller already had as `rows`. That cost ~478 extra documents per
- * call — doubled in practice, because the client fires `/deliverables` and
- * `/deadlines` in one `Promise.all` and both go through `loadPipeline`.
+ * call — doubled while the client still fetched `/deliverables` and
+ * `/deadlines` in one `Promise.all`, both through `loadPipeline`.
  *
- * Taking `rows` rather than raw deliverables also removes a second spelling of
- * BR-9: `rows[].deadline` is resolved by the `deliverables_v` view, which
- * invariant 14 names as the ONE home for "Trello due wins, else the sheet".
- * The re-derivation here was a fourth copy of that rule.
+ * `deliverableRows` once fed the deadline — the MC group's earliest client
+ * date, retired by owl #78 §2 (see `deadlineFor`). It STAYS for the asset
+ * badge: `assetType` is the one sheet field a row borrows from its group, and
+ * only when the group agrees on it (PLAN.md B17).
  */
 export async function loadSprintItems(
   projectId: Types.ObjectId,
@@ -215,12 +231,17 @@ export async function loadSprintItems(
      swap places between requests, so the list appears to shuffle on refresh. */
   const items = await SprintItem.find({ project_id: projectId }).sort({ position: 1, _id: 1 }).lean();
 
-  /* Earliest client date per MC group — see `deadlineFor` for why earliest. */
-  const mcDeadline = new Map<string, string>();
+  /* The MC group's asset type — ONE value or none. Three states in the map:
+     `undefined` is "no deliverable of this MC seen yet", null is "seen and not
+     agreed" (two rows differ, or a row carries none), and a string survives
+     only while every deliverable under the MC repeats it. `rows[].assetType`
+     is the sheet's FR-4.1 type as `toRow` carries it; nothing is re-derived. */
+  const mcAssetType = new Map<string, string | null>();
   for (const d of deliverableRows) {
-    if (!d.mcNumber || !d.deadline) continue;
-    const held = mcDeadline.get(d.mcNumber);
-    if (!held || d.deadline < held) mcDeadline.set(d.mcNumber, d.deadline);
+    if (!d.mcNumber) continue;
+    const held = mcAssetType.get(d.mcNumber);
+    if (held === undefined) mcAssetType.set(d.mcNumber, d.assetType);
+    else if (held !== d.assetType) mcAssetType.set(d.mcNumber, null);
   }
 
   const byId = new Map(workCards.map((w) => [w.trello_card_id as string, w]));
@@ -233,12 +254,7 @@ export async function loadSprintItems(
     const w = byId.get(it.trello_card_id as string);
     const startsOn = (it.starts_on as string | null) ?? null;
     const finish = w && startsOn ? finishOf(w, startsOn, model) : null;
-    /* THE ROW'S OWN `mc_number`, not the card's current one. They can differ:
-       the row snapshots the group at add time and the sync follows the card, so
-       a card re-titled into another MC in Trello would otherwise be grouped
-       under one MC while being measured against another's client date. One
-       source for identity and deadline, whichever it is. */
-    const deadline = deadlineFor(w, it.mc_number as string, mcDeadline);
+    const deadline = deadlineFor(w);
     return {
       id: String(it._id),
       sprintId: String(it.sprint_id),
@@ -254,13 +270,21 @@ export async function loadSprintItems(
          own state and the UI must be able to say so. */
       status: w ? classifyList(w.current_list as string | undefined) : null,
       trelloUrl: (w?.trello_url as string) ?? null,
+      figmaUrl: (w?.figma_url as string) ?? null,
+      /* THE ROW'S OWN `mc_number`, not the card's current one. They can differ:
+         the row snapshots the group at add time and the sync follows the card,
+         so a card re-titled into another MC in Trello would otherwise be
+         grouped under one MC while wearing another's asset badge. One source
+         for identity and for what is borrowed from the group, whichever it is.
+         (The deadline used to be keyed the same way; it borrows nothing now.) */
+      assetType: mcAssetType.get(it.mc_number as string) ?? null,
       /* THE CARD'S OWN label (owl #78, 2026-09-05), and nothing inherited.
          This retired the #58 judgement, which took the MC group's urgency —
          "any urgent main card under the MC makes the group urgent" — on the
          reasoning that task cards carry no labels. They do now: a website
          request can hold an urgent screen and non-urgent assets, so the
-         group's value cannot be true of each row. Unlike the deadline just
-         above there is NO fallback to the group: an absent card, or a card
+         group's value cannot be true of each row. Like the deadline since
+         #78 §2, there is NO fallback to the group: an absent card, or a card
          without the label, is simply not urgent. */
       urgent: w?.urgency === 'Urgent',
       startsOn,

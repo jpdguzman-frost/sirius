@@ -79,6 +79,14 @@
   border-right: 1px solid var(--slate-200);
   background: var(--surface-background);
 }
+/* The DEADLINE setter (sprint-rules.md §9) opens its popover INSIDE this pane.
+   The pane is a stacking context (sticky + a z-index), so the popover's own
+   fixed-position layer is confined to it, and every later row's pane — same
+   z-index, opaque ground, later in tree order — would paint over it. The one
+   pane holding an open popover lifts a step; Pipeline never needed this
+   because its popover sits in a plain cell with no positioned ancestor
+   (block 3 build finding, C). */
+.gantt .gpin:has(.duepop) { z-index: 3; }
 /* The pin's right border IS the 952px pane boundary (it doubles as the cover
    the sticky column scrolls under), so the FIRST timeline cell of every strip
    drops its own left border — otherwise the two 1px rules sit adjacent and the

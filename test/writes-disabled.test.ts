@@ -5,7 +5,7 @@
  * Sirius-local planning writes stay allowed — only Trello writes are gated.
  *
  * The registry's card kinds since owl #78 (2026-09-05): W1 urgency and W3
- * difficulty write the WORK card only; W2 deadline writes either kind. The
+ * difficulty and W2 deadline all write the WORK card only (owl #78, block 3). The
  * gate is asserted on every route that exists, at the kind it targets.
  */
 
@@ -59,11 +59,6 @@ describe('G7 observation mode — per-project write switch', () => {
       .send({ urgent: true })
       .expect(403);
     expect(urgency.body.error.code).toBe('WRITES_DISABLED');
-    const deadline = await agent
-      .patch(`/api/projects/${p._id}/deliverables/c1/deadline`)
-      .send({ date: '2026-09-01' })
-      .expect(403);
-    expect(deadline.body.error.code).toBe('WRITES_DISABLED');
     const taskDeadline = await agent
       .patch(`/api/projects/${p._id}/workcards/w1/deadline`)
       .send({ date: '2026-09-01' })

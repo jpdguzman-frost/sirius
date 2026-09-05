@@ -1,0 +1,57 @@
+{{! The DEADLINE CARD — one WORK card, drawn on the day its forecast finish
+    falls. Sources: owls miles→jp #74 §3 (the card's anatomy and the quote
+    bar), #75 §1/§3 (the three counts are independent; a finished card is the
+    whole card faded, nothing else restyled) and #78 §2 (a deadline belongs to
+    a work card). Nodes read through Rex: I731:100872;724:50210;810:122333
+    (Urgent), the same instance ending 810:122334 (Non-Urgent) and 810:122394
+    (Inactive).
+
+    WHY THIS FILE EXISTS AT ALL: a partial registers template-wide ONLY at the
+    top level of a template piece. Nested inside an element it goes local,
+    every call from another view renders empty, and the build still passes —
+    so it has to live beside the calendar partial, with its tag as the first
+    thing in the file, and be reached through the layout's partial marker
+    (frontend/CLAUDE.md; standing guard test/template-partials.test.ts).
+
+    The card is READ-ONLY and wholly derived (#74 §3: "the card writes
+    nothing"). There is no control on it, no drag handle, no date field. The
+    only thing that moves a card from one day to the next is the server's
+    rollover job, and it leaves no marker here (#75 §2, jp→miles #59 §3).
+
+    Both callers in 50-deadlines.html bind the alias `c`, so every reference
+    below resolves in the enclosing each-block's context. }}
+{{#partial dlCard}}
+<article class="dlcard {{#if c.urgent}}urgent{{/if}} {{#if c.done}}done{{/if}}">
+  {{! The quote bar: the left edge only, curved into the card's own corner
+      radius, and drawn ONLY on an urgent card — a non-urgent card carries no
+      bar at all, pale or otherwise (#74 §3). The path is the frame's own
+      export carried across verbatim rather than redrawn, and the card clips
+      it, so the curve and the corner cannot drift apart. The extra content
+      inset on an urgent card is the stylesheet's job, not a second element
+      here. }}
+  {{#if c.urgent}}<svg class="dlquote" viewBox="-2 1 12 180" aria-hidden="true"><path d="M10 181 C3.37 181, -2 175.6, -2 169 V13 C-2 6.37, 3.37 1, 10 1 C7.79 1, 6 4.58, 6 9 V173 C6 177.4, 7.79 181, 10 181 Z"/></svg>{{/if}}
+  {{! Badges, in the frame's order and wrapping: urgency ALWAYS (Trello has an
+      Urgent label and no label meaning not urgent, so the absence is a value
+      and is stated), then difficulty when the card is labelled, then the MC
+      group's asset type when its deliverable rows agree on one, then the raw
+      lane name. The lane text is the Trello list verbatim — it is never
+      rewritten to the classified state, which is what the colourway carries
+      elsewhere. }}
+  <div class="dlbadges">
+    <span class="dlbadge {{c.urgent ? 'b-urgent' : 'b-nonurgent'}}">{{c.urgent ? 'Urgent' : 'Non-Urgent'}}</span>
+    {{#if c.difficulty}}<span class="dlbadge b-{{c.difficulty}}">{{c.difficulty}}</span>{{/if}}
+    {{#if c.assetType}}<span class="dlbadge b-asset">Asset: {{c.assetType}}</span>{{/if}}
+    {{#if c.lane}}<span class="dlbadge b-lane">{{c.lane}}</span>{{/if}}
+  </div>
+  {{! MC number and card name as ONE label, clamped in the stylesheet to the
+      three lines the frame draws. The value is never clamped in data — the
+      clamp is a display treatment, so search and screen readers still have
+      the whole string.
+
+      There is NO DATE on this card. The column it sits in IS the date, and
+      the deadline it is measured against lives on Sprint Schedules, where the
+      tick and the bar can be compared (#74 §3, #78 §2). }}
+  <p class="dltitle">{{c.label}}</p>
+  <p class="dllinks">{{#if c.trelloUrl}}<a href="{{c.trelloUrl}}" target="_blank" rel="noopener" aria-label="Open {{c.mc}} in Trello">{{{icon.trello}}}</a>{{/if}}{{#if c.figmaUrl}}<a href="{{c.figmaUrl}}" target="_blank" rel="noopener" aria-label="Open {{c.mc}} in Figma">{{{icon.figma}}}</a>{{/if}}</p>
+</article>
+{{/partial}}

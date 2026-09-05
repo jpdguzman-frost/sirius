@@ -129,11 +129,20 @@ describe('the grey wash reaches only tabs that have not been rebuilt', () => {
      Asserted as the RULE — a tab with a rulebook is a rebuilt tab and must not
      be washed — rather than as today's list, so the guard keeps working when
      Admin is eventually designed. */
-  const REBUILT_TABS: Record<string, string> = {
-    requests: 'requests-frame-notes.md',
-    pipeline: 'pipeline-frame-notes.md',
-    schedules: 'gantt-frame-notes.md', // the planner's law predates the tab's name
-    deadlines: 'deadlines-frame-notes.md',
+  /* Each tab's rulebook, by the name(s) that count as one. A LIST rather than a
+     single name because a rebuild can rename its own law: Deadlines was rebuilt
+     whole on 2026-09-05 (owls #74/#75, PLAN.md block 3), and its rulebook
+     becomes `deadlines-rules.md` (R-d2-*) while `deadlines-frame-notes.md` is
+     archived behind the gantt-frame-notes banner. The main thread writes the
+     new file at CLOSE, so until then EITHER name proves the same thing this
+     guard has always cared about: the tab has a law on disk.
+     2026-09-05 — the main thread narrows this entry to the single new name at
+     CLOSE, once the file exists. */
+  const REBUILT_TABS: Record<string, string[]> = {
+    requests: ['requests-frame-notes.md'],
+    pipeline: ['pipeline-frame-notes.md'],
+    schedules: ['gantt-frame-notes.md'], // the planner's law predates the tab's name
+    deadlines: ['deadlines-rules.md', 'deadlines-frame-notes.md'],
   };
 
   const specDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'specs', '001-sirius-v1');
@@ -146,8 +155,9 @@ describe('the grey wash reaches only tabs that have not been rebuilt', () => {
   })();
 
   it('every tab named as rebuilt really does have a rulebook on disk', () => {
-    for (const [tab, notes] of Object.entries(REBUILT_TABS)) {
-      expect(fs.existsSync(path.join(specDir, notes)), `${tab} claims a rulebook that is not there`).toBe(true);
+    for (const [tab, names] of Object.entries(REBUILT_TABS)) {
+      const found = names.some((n) => fs.existsSync(path.join(specDir, n)));
+      expect(found, `${tab} claims a rulebook that is not there: ${names.join(' or ')}`).toBe(true);
     }
   });
 

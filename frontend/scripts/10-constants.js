@@ -226,64 +226,188 @@ function fmtRange(fromIso, toIso) {
   return fy === ty ? `${left} – ${right}` : `${left}, ${fy} – ${right}`;
 }
 
-/* ---- Deadlines tab (owl #64, node 630:51389) ----------------------------
+/* ---- Deadlines tab (owls #74/#75/#78 §2; nodes 731:100853, 731:100859,
+   731:100872, 810:121954; PLAN.md block 3 B1–B7, B12–B16) ----------------
+   The tab is a VIEW over the schedule's own rows: a work card appears only
+   when it is added to a sprint AND plotted AND has a forecast finish (#74 §1
+   — doubly opt-in, never reconciled against the board), on the day of its
+   forecast FINISH (B2 — the day rollover moves, and what "slated for a day"
+   means for a delivery). Every helper below is PURE — no app access — so the
+   recipe suite can execute it from shipped source against fixture rows, and
+   the milestone tab's own recipes (a rule table, a week-range and two card
+   formatters) left with the tab they described (B9).
 
-   The frame writes its week range DAY-FIRST and without punctuation between
-   the days: '3-7 Aug 2026', and '31 Aug-4 Sep 2026' where the week straddles
-   two months. That is not fmtRange's shape (month-first, en dash, comma before
-   the year), so it gets its own formatter rather than a flag on that one - two
-   callers wanting two different strings is not one formatter with an option.
-   Same fixed month table and the same pure string math: no Date, no timezone,
-   so the day can never shift under a browser in another zone. */
-function fmtWeekRange(mondayIso) {
+   THE MONTH TABLE IS THE FRAME'S OWN, and it is a SECOND table on purpose:
+   the Deadlines frame spells September the long way (731:100859 reads
+   'Aug 31 – Sept 30, 2026'; the lane heading '31 Aug - 4 Sept 2026') where
+   the planner and Pipeline frames spell 'Sep' and forbid the long form (the
+   table above). Two frames, two spellings, neither derived from the other —
+   deriving one from the other would make one of the two frames wrong. */
+const DL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+
+/* THE WEEKS OF A MONTH — the same set `lib/calendar.ts monthWeeks` produces
+   (B3; the recipe suite executes both across two years of months): walk the
+   Mondays from the Monday of the first, stop after the month's last day, and
+   skip a week whose Friday lands before the first. A week that straddles two
+   months is therefore in BOTH — the Monday that is the last day of August
+   starts August's fifth week and September's first — exactly as the engine
+   keys it. Local-midnight Date math for the walk and string comparison for
+   the two tests, so only calendar fields move and nothing shifts under a
+   browser in another zone; `m` is zero-based like the Date constructor. */
+function dlMonthWeeks(y, m) {
+  const firstIso = isoOf(new Date(y, m, 1));
+  const lastIso = isoOf(new Date(y, m + 1, 0));
+  const monday = new Date(y, m, 1);
+  const dow = monday.getDay() === 0 ? 7 : monday.getDay();
+  monday.setDate(monday.getDate() - (dow - 1));
+  const out = [];
+  for (;;) {
+    const key = isoOf(monday);
+    if (key > lastIso) break;
+    const friday = new Date(monday);
+    friday.setDate(friday.getDate() + 4);
+    if (isoOf(friday) >= firstIso) out.push(key);
+    monday.setDate(monday.getDate() + 7);
+  }
+  return out;
+}
+
+/* THE NAVIGATOR LABEL (731:100859): first shown Monday → the month's last
+   day, month-first, the year once at the end — 'Aug 31 – Sept 30, 2026'
+   (B3, B16; en dash). The month is read off the FIRST Monday's Friday: that
+   Friday is inside the month by construction — dlMonthWeeks keeps a week
+   only when its Friday reaches the first, and the first kept Monday is never
+   more than a week past it — where the LAST Monday's Friday can already be
+   in the next month (September's last Monday in the frame's own year ends
+   on the second of October). A January that opens on a December Monday reads
+   'Dec 28 – Jan 31, 2027': the year is the month's own, once, per B16's
+   shape. Empty input renders nothing. */
+function dlRangeLabel(mondays) {
+  if (!mondays || !mondays.length) return '';
+  const [fy, fm, fd] = mondays[0].slice(0, 10).split('-').map(Number);
+  const friday = new Date(fy, fm - 1, fd + 4); // the constructor normalises the overflow
+  const y = friday.getFullYear();
+  const m = friday.getMonth();
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  return `${DL_MONTHS[fm - 1]} ${fd} – ${DL_MONTHS[m]} ${lastDay}, ${y}`;
+}
+
+/* THE LANE'S RANGE (731:100872): day-first, a spaced hyphen, the year once —
+   '31 Aug - 4 Sept 2026'; the month once when both ends share it,
+   '3 - 7 Aug 2026'; both years when the week straddles them,
+   '29 Dec 2025 - 2 Jan 2026' (B16). The right-hand end is always whole and
+   the left end sheds first the year and then the month as the two ends
+   converge — the retired formatter's shape in the frame's new spelling and
+   spacing. Pure string math but for the one Friday walk, which the Date
+   constructor does by normalising the day overflow at local midnight. */
+function dlWeekRange(mondayIso) {
   if (!mondayIso) return '';
-  // the week's own Friday, by the named helper rather than a bare +4
-  const friday = fridayIso(mondayIso);
-  const [y1, m1, d1] = mondayIso.slice(0, 10).split('-');
-  const [y2, m2] = friday.slice(0, 10).split('-');
-  // the right-hand end always carries the year, so it is fmtLongIso; only the
-  // left end varies, shedding first the year and then the month as the two
-  // ends converge. No third copy of the month-table lookup.
-  const right = fmtLongIso(friday);
-  if (y1 !== y2) return `${fmtLongIso(mondayIso)}-${right}`;
-  if (m1 !== m2) return `${fmtDayMonth(mondayIso)}-${right}`;
-  return `${Number(d1)}-${right}`;
-}
-/** '6 Aug' - the card caption's milestone date, day-first and year-less. */
-function fmtDayMonth(iso) {
-  if (!iso) return '';
-  const [, m, d] = iso.slice(0, 10).split('-');
-  return `${Number(d)} ${MONTHS_SHORT[Number(m) - 1]}`;
-}
-/* The CLIENT DEADLINE in the card's subtitle. The frame drops the year, which
-   reads fine while both dates sit in one year and misleads the moment they do
-   not - so the year appears only when the deadline leaves the milestone's own
-   year. The two dates on this card mean different things and the frame is
-   explicit that they must stay separately legible (owl #64). */
-function fmtDeadlineShort(iso, refIso) {
-  if (!iso) return '';
-  return refIso && iso.slice(0, 4) === refIso.slice(0, 4) ? fmtDayMonth(iso) : fmtLongIso(iso);
+  const [y1, m1, d1] = mondayIso.slice(0, 10).split('-').map(Number);
+  const friday = new Date(y1, m1 - 1, d1 + 4);
+  const y2 = friday.getFullYear();
+  const m2 = friday.getMonth() + 1;
+  const right = `${friday.getDate()} ${DL_MONTHS[m2 - 1]} ${y2}`;
+  if (y1 !== y2) return `${d1} ${DL_MONTHS[m1 - 1]} ${y1} - ${right}`;
+  if (m1 !== m2) return `${d1} ${DL_MONTHS[m1 - 1]} - ${right}`;
+  return `${d1} - ${right}`;
 }
 
-/* THE THREE ACKNOWLEDGEABLE RULES, plus replotting which is not one of them.
-   `word` is the badge voice ('1 overlap'), `label` the legend's own heading.
-   The legend TEXT is quoted verbatim from the Model Constants panel and must
-   not drift from the engine's rules - the same three the server detects. */
-const DL_RULES = [
-  { rule: 'urgent-overlap', word: 'overlap', chip: '⚡ Urgent overlap', label: 'URGENT OVERLAP', text: 'Two or more urgent milestones in one week.' },
-  { rule: 'over-capacity', word: 'over capacity', chip: '▤ Over capacity', label: 'OVER CAPACITY', text: "Cards due exceed the week's capacity, taken from the project's typical week in ARES. Non-urgent items in that week are listed as displaced." },
-  /* Reworded 2026-08-27 with the rule itself (JP). It used to read "the
-     forecast date falls after the client's stated deadline", which stopped
-     being what the code measures: the forecast date shown on the card still
-     includes the client's review wait, and the warning no longer does. Leaving
-     the old words would have had the legend explain a comparison the reader
-     can make on screen and get a different answer to. */
-  { rule: 'past-deadline', word: 'past deadline', chip: '🛡 Past deadline', label: 'PAST DEADLINE', text: 'the design work alone runs past the client deadline. The forecast date shown also includes the wait for client review, so it can fall later than the deadline without this being flagged.' },
-];
-/** The one row for a rule, or a stub carrying the key so nothing renders blank. */
-const dlRule = (rule) => DL_RULES.find((r) => r.rule === rule) || { rule, word: rule, chip: rule, label: rule, text: '' };
-/** The badge/summary word for a rule; the rule's own key if it is not one of the three. */
-const dlRuleWord = (rule) => dlRule(rule).word;
+/** 'Mon'…'Fri' for a day column's header (810:121954): the LOCAL weekday of the calendar date, so a browser in another zone still names the day the string says. */
+function dlDayName(iso) {
+  if (!iso) return '';
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(iso.slice(0, 10) + 'T00:00:00').getDay()];
+}
+
+/* THE TAB'S WHOLE DATA, in one pass (B2, B4, B5, B7). Takes the schedule's
+   rows as the server sends them (`sprintItems.rows`, position-sorted per
+   sprint), the Mondays of the shown month, the ARES holiday calendar and the
+   week's capacity; returns one DlWeek per Monday, in order:
+     { key, label: 'Week N', range, cards, pending, urgent, done, load,
+       capPct, days: [{ day, name, holiday, cards, pending, done }] }
+   and inside them one DlCard per drawn row:
+     { id, cardId, mc, label, urgent, difficulty, assetType, lane, status,
+       done, trelloUrl, figmaUrl, day }.
+
+   THE OPT-IN GATE (#74 §1, B2): a row without `startsOn` (listed, not
+   plotted) or without `finish` (no difficulty label, or the card has left
+   the board) is skipped — nothing to draw, and the rollover never moves it
+   either. A finish outside the shown weeks is not drawn: month scope.
+
+   THE DAY is the forecast FINISH (B2). A card lands in its day's column, and
+   the collapsed lane stacks the days in order with each day's cards in the
+   rows' own order (B7) — nothing here re-sorts, and a holiday column still
+   renders (the frame has no holiday state); the engine's WORKDAY never puts
+   a finish on one, so nothing can land there.
+
+   THE COUNTS are three INDEPENDENT tallies (#75 §1, B4): pending is the
+   pending lane, done the done lane, urgent the label on ANY status. An
+   ongoing card is in neither of the first two, and none of the three is
+   derived from another. The week header reads all three, a day header the
+   first and the last (#75 §4 — the asymmetry is drawn; leave it).
+
+   THE PROGRESS LINE is a PLAIN count over `capacity.weekly` (B5; the node's
+   'N / C Work Cards') — not BR-6c card-equivalents, which were the retired
+   tab's unit. The bar caps at one hundred percent; a capacity of zero (a
+   project whose slider was never set, or the first paint before the payload
+   lands) divides by one rather than printing NaN into a width. */
+function dlBuild(rows, mondays, holidays, cap) {
+  const skip = new Set(holidays || []);
+  const weeks = (mondays || []).map((key, i) => ({
+    key,
+    label: `Week ${i + 1}`,
+    range: dlWeekRange(key),
+    cards: [],
+    pending: 0,
+    urgent: 0,
+    done: 0,
+    load: 0,
+    capPct: '0.0',
+    days: [0, 1, 2, 3, 4].map((n) => {
+      const day = isoAddDays(key, n);
+      return { day, name: dlDayName(day), holiday: skip.has(day), cards: [], pending: 0, done: 0 };
+    }),
+  }));
+  // day → its column, so each row is placed by one lookup rather than a scan
+  const slot = new Map();
+  for (const w of weeks) for (const d of w.days) slot.set(d.day, { w, d });
+  for (const r of rows || []) {
+    if (!r.startsOn || !r.finish) continue; // the gate: listed but unplotted, or no forecast
+    const at = slot.get(r.finish);
+    if (!at) continue; // outside the shown month
+    const card = {
+      id: r.id,
+      cardId: r.cardId,
+      mc: r.mcNumber,
+      label: addLabel(r.mcNumber, r.name),
+      urgent: !!r.urgent,
+      difficulty: r.difficulty || null,
+      assetType: r.assetType || null,
+      lane: r.currentList || null,
+      status: r.status || null,
+      done: r.status === 'done',
+      trelloUrl: r.trelloUrl || null,
+      figmaUrl: r.figmaUrl || null,
+      day: r.finish,
+    };
+    at.d.cards.push(card);
+    if (r.status === 'pending') {
+      at.d.pending += 1;
+      at.w.pending += 1;
+    }
+    if (card.done) {
+      at.d.done += 1;
+      at.w.done += 1;
+    }
+    if (card.urgent) at.w.urgent += 1;
+  }
+  const denom = cap > 0 ? cap : 1;
+  for (const w of weeks) {
+    w.cards = w.days.flatMap((d) => d.cards);
+    w.load = w.cards.length;
+    w.capPct = Math.min(100, (w.load / denom) * 100).toFixed(1);
+  }
+  return weeks;
+}
 
 /* The intake sheet's MONTH encoding is not known until the credential lands —
    the fixtures carry full names ('August'), the column could equally arrive as

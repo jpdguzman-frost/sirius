@@ -1,7 +1,8 @@
 /**
  * Sirius worker (T033) — owns ALL sync; sync never runs inside a web request.
  * Cadence per contracts/worker.md: ares 15 min · intake 15 min (phase 5) ·
- * model nightly (phase 6) · health daily.
+ * model nightly (phase 6) · health daily · rollover at the end of every
+ * SUCCESSFUL ares tick (PLAN.md B10, block 3 — see rolloverTick).
  */
 
 import 'dotenv/config';
@@ -40,6 +41,38 @@ async function aresTick() {
     console.log('[sirius-worker] ares sync complete');
   } catch (err) {
     console.error('[sirius-worker] ares sync failed:', (err as Error).message);
+    return; // no rollover off a failed read — stale lanes would roll cards the board has finished
+  }
+  await rolloverTick();
+}
+
+/**
+ * Rollover (PLAN.md B10; owl #75 §2; jp→miles #59 §3): after a SUCCESSFUL
+ * ares sync, every plotted, unfinished work card whose forecast finish has
+ * passed (Manila) moves forward to the next working day until its finish is
+ * today or later, sprint membership following the finish day; one audit row
+ * per moved card, actor `system`; no UI marker. The rules and their sources
+ * live in src/services/rollover.ts — this is only the seam.
+ *
+ * AFTER the sync, never before it, and never off a failed or skipped one:
+ * the sync is what shows a card went done in Trello, and a done card does
+ * not roll (#75 §3) — so a card finished over the weekend is seen as done
+ * before Saturday's tick would have rolled it to Monday. The health gate and
+ * the sync's own catch both return before reaching here.
+ *
+ * Its own try/catch, so a rollover failure never masks the sync's own log
+ * line above, and the sync's failure never reads as a rollover one. Dynamic
+ * import in calendarTick's style. The holiday set this walks on is the one
+ * calendarTick loaded into this process — it runs before the first ares
+ * tick and daily after, so the worker's calendar is the ARES-canonical one.
+ */
+async function rolloverTick() {
+  try {
+    const { rollUnfinished } = await import('../src/services/rollover.ts');
+    const res = await rollUnfinished();
+    console.log(`[sirius-worker] rollover: ${res.moved} moved (${res.projects} projects)`);
+  } catch (err) {
+    console.error('[sirius-worker] rollover failed:', (err as Error).message);
   }
 }
 

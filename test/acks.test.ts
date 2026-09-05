@@ -406,19 +406,20 @@ describe('drift guard — one key recipe, server-side only', () => {
     }
   });
 
-  it('the client holds NO key recipe — it echoes the opaque string back', () => {
+  it('the client holds NO key recipe — since block 3 it holds no acknowledgement call at all', () => {
     const js = appScripts(); // the WHOLE shipped script set, not one file
     for (const rule of ['urgent-overlap|', 'over-capacity|', 'past-deadline|']) {
       expect(js).not.toContain(rule);
     }
-    // ack/restore pass their `key` argument through untouched
-    const passes = js.split('\n').filter((l) => l.includes('conflict_key'));
-    expect(passes).toHaveLength(2);
-    for (const l of passes) expect(l).toContain('conflict_key: key');
-    // the ONE split('|') in the client is the drag payload, never a conflict key
-    const splits = js.split('\n').filter((l) => l.includes("split('|')"));
-    expect(splits).toHaveLength(1);
-    expect(splits[0]).toContain('dataTransfer');
+    /* Until 2026-09-05 the ack/restore handlers passed their opaque `key`
+       through untouched (two `conflict_key: key` lines) and the one
+       split('|') in the client was the day-planner's drag payload. Both left
+       with the milestone Deadlines tab (owl #74: no conflict indicator; JP
+       2026-09-05: the acknowledgement UI retires, the server half parks). The
+       rule stands in its strongest form: the client neither builds a key nor
+       echoes one — the server routes below are the only holders. */
+    expect(js.split('\n').filter((l) => l.includes('conflict_key'))).toHaveLength(0);
+    expect(js.split('\n').filter((l) => l.includes("split('|')"))).toHaveLength(0);
   });
 });
 

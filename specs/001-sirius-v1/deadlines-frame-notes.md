@@ -1,11 +1,21 @@
 # Deadlines frame notes — owl miles→jp #64, node `630:51389`
 
+> **ARCHIVE (2026-09-05)** — the law of the OLD milestone-unit Deadlines tab (owl #64,
+> node `630:51389`, deliverable × phase), superseded whole by the work-card rebuild of
+> owls #74/#75/#78 §2 (JP ruling 2026-08-27; built block 3, 2026-09-05). Current law:
+> `deadlines-rules.md`; where this file and it disagree, `deadlines-rules.md` wins. Kept
+> because it records WHY R-dl-a…n were built as they were — the acknowledge/day-planner
+> hold (R-dl-i) is now PARKED server-side with no caller (JP 2026-09-05), and R-dl-n (the
+> acknowledged-state design) is still with product. The node `630:51389` no longer
+> exists in the file.
+
 Layer-2 law for the redesigned Deadlines tab. Five categorized annotations were
 read off the frame and verified against the owl before a line was written; the
 count and the content matched. Where the frame and the owl differ, **the frame
 wins** — the rule that has already served this project twice.
 
-Asserted by `test/deadlines-frame.test.ts` unless the last column says otherwise.
+Was asserted by `test/deadlines-frame.test.ts` — deleted with the tab on 2026-09-05; the
+current law is asserted by `test/deadlines-tab.test.ts`.
 
 | # | Rule | Asserted |
 |---|---|---|

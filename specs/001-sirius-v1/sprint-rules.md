@@ -168,3 +168,28 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
 - **R8-i** Server: the sprint is re-asserted AFTER the batch (gone → rows
   taken back, audited, 409); an audit row failing takes its row back (500
   PARTIAL says how far it got); one audit row per created row.
+
+## 9. The DEADLINE cell — the W2 setter (owl #78 §2, 2026-09-05)
+
+- **R9-a** The DEADLINE cell on a work-card row IS the due-date setter: W2 write
+  access lives here, on work cards, and nowhere else ("sa isang place lang
+  sila"). The Pipeline popover recipe verbatim — `.duewrap` / `.datefield` /
+  `.duepop`, the `dueCalendar` partial, `openDuePopover(ctx, cardId)`,
+  commit-on-Apply, Clear sends null (a work card has no sheet fallback) —
+  gated on `writesEnabled` (UX only: `writeGuards` enforces server-side).
+  `saving…` shows in flight and the trigger is disabled for the flight. A
+  row with no deadline reads `Select Date` (writes on) / `No Due Date`
+  (writes off) — the em-dash left this cell. Pipeline only REFLECTS the date.
+  [#78 §2;
+  PLAN block 3 B12/B13; `test/sprint-schedule-render.test.ts`]
+- **R9-b** A row's deadline is the card's OWN Trello due date or none. The MC
+  group's deliverable dates are never inherited (#78 §2 retired jp→miles
+  #58's judgement — main cards have no deadline; the Pipeline work row and
+  this cell must agree about one card). No deadline → no tick, `late` false.
+  [`src/services/sprint-items.ts deadlineFor`; `test/sprint-items.test.ts`]
+- **R9-c** The write's reload is what re-derives the tick and `late`; nothing
+  client-side recomputes either. The cell wears the `missing` dress only — no
+  overdue tint here, because the tick and the red bar already say late.
+- **R9-d** Rollover (deadlines-rules.md §4) moves `starts_on` server-side; the
+  bar translates whole and the FORECASTED cell moves with it by construction;
+  sprint membership follows the card's finish day. No marker on the row.

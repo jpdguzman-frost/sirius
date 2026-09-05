@@ -1,203 +1,259 @@
-/* Deadlines tab v2 — owl miles→jp #64, node 630:51389. Every value binds to a
-   token (05-tokens.css). Shared chrome is REUSED, not restated: `.metrics` (the
-   Breakdown), `.searchbar`, `.pbadge` and its `d-Easy/d-Medium/d-Hard` colours,
-   and the day-planner recipes still in 10-ui.css. Only the deltas live here.
+/* Deadlines tab, rebuilt on the WORK-CARD unit — owls miles→jp #74 and #75,
+   Rex nodes: container 731:100853, range navigator 731:100859, collapsed lane
+   731:100872, expanded lane 810:121954, cards 810:122333 (Urgent) /
+   810:122334 (Non-Urgent) / 810:122394 (Inactive), empty cards 810:121571.
 
-   ⚠️ No table recipes. The frame's component is still named 'Request Tab Table'
-   but there is no column table on this tab — it is a search field over week
-   groups holding cards, and inheriting the Requests/Pipeline table treatment
-   would be following a leftover name instead of the design. */
+   This sheet REPLACES the v1 tab (owl #64, node 630:51389) whole. The stats
+   strip, the notice banners and their detail rows, the acknowledge and restore
+   controls, the search field, the week rule badges, the capacity bar and the
+   day-drag planner entries are DELETED rather than parked: the markup they
+   dressed no longer exists, and a recipe with no consumer is the kind of thing
+   a later edit lands on by mistake. The conflict machinery those controls
+   fronted stays server-side, untouched — nothing in this sheet speaks for it.
 
-.dltoolbar { margin-bottom: var(--space-16); }
+   Every colour is a token (05-tokens.css). The raw pixel values that remain
+   are BOX GEOMETRY read off the nodes, for which the scale has no name — pane
+   and column widths, lane and card heights, the inset the urgency bar buys.
+   Those are measurements, not palette choices; spacing and radii still come
+   from the tokens. */
 
-/* ---- A. Breakdown — the shared .metrics recipe; only the fourth colour is
-   new. Purple is NEEDS REPLOTTING's own: red is urgency and amber is conflict,
-   and replotting is neither — it is work handed back to the PM. ---- */
-.metrics .metric.purple .mlabel,
-.metrics .metric.purple .mvalue { color: var(--violet-500); }
-
-/* ---- B. alert-group — summary banner, then one detail row per conflict.
-   BUILT AS DRAWN. These banners are queued for conversion to the row-level
-   warning pattern Pipeline already ships; that conversion is deferred, so the
-   pattern here is deliberately the old one and is not evidence of drift. ---- */
-.dlalert {
-  display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;
-  padding: var(--space-12) var(--space-16);
-  background: var(--status-destructive-light);
-  border: 1px solid var(--red-300); border-radius: var(--radius-md);
-  color: var(--status-destructive-strong);
+/* ---- A. the range navigator (731:100859). The frame calls it a date-range
+   picker and draws no calendar: it is a previous / next pair around a static
+   label, and that label is the scope every lane below is drawn for. One
+   chevron lives in the sprite and the previous button turns its own copy
+   around — the icon set gains nothing for a mirrored twin. ---- */
+.dlnav {
+  display: flex; align-items: center; gap: var(--space-16);
+  height: 36px; margin: 0 0 var(--space-16);
 }
-.dlalert svg { flex: none; }
-.dlalert .dlatitle { font-size: var(--text-body); font-weight: 600; line-height: 1.4; }
-
-.dldetails { display: flex; flex-direction: column; margin-top: var(--space-8); }
-.dldetail {
-  display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;
-  padding: var(--space-12) var(--space-16);
-  background: var(--slate-50);
-  border: 1px solid var(--border-border); border-radius: var(--radius-md);
+.dlnavbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex: none; padding: 0;
+  background: var(--slate-100); border: 0; border-radius: var(--radius-sm);
+  color: var(--surface-foreground); cursor: pointer;
 }
-.dldetail + .dldetail { margin-top: var(--space-4); }
-/* action first, then the subject, then the reason — the frame's order, and the
-   reason it reads well: the row opens with what to do about it */
-.dldetail .dlaction { font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
-.dldetail .dldash { color: var(--slate-400); }
-.dldetail .dlwhy { font-size: var(--text-body); font-weight: 400; line-height: 1.4; color: var(--slate-700); }
-/* the acknowledge control — NOT from this frame; see the template's note */
-.dldetail .dlack {
-  margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; flex: none; padding: 0;
-  background: transparent; border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
-  color: var(--slate-500); cursor: pointer;
-}
-.dldetail .dlack:hover { background: var(--white); color: var(--surface-foreground); }
-.dldetail .dlack:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+.dlnavbtn:hover { background: var(--slate-200); }
+.dlnavbtn:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
+.dlnavbtn svg { display: block; }
+.dlnavbtn.prev svg { transform: rotate(180deg); }
+/* the node's near-black is the neutral ramp's darkest, not a slate — the
+   navigator label is the one place on this tab that wears it */
+.dlrange { font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--neutral-950); }
 
-.dlacked {
-  display: flex; align-items: center; gap: var(--space-8); flex-wrap: wrap;
-  margin-top: var(--space-8); padding: var(--space-8) var(--space-16);
-  background: var(--slate-50); border-radius: var(--radius-md);
-}
-.dlacked .dlackedhead { font-size: var(--text-label); font-weight: 600; color: var(--surface-muted-foreground); }
-.dlacked .dlrestore {
-  padding: 0 var(--space-8); height: 22px;
-  background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-sm);
-  font-family: var(--font-sans); font-size: var(--text-label); color: var(--slate-700); cursor: pointer;
-}
-.dlacked .dlrestore:hover { border-color: var(--slate-400); }
-.dlacked .dlrestore:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
-
-.dlsearch { padding-top: var(--space-16); padding-bottom: var(--space-16); }
-
-/* ---- C. the week list. Weeks read LEFT TO RIGHT and the row of them scrolls
-   horizontally inside its own box — the frame puts a horizontal scrollbar under
-   the cards, and the page body must never scroll sideways. ---- */
+/* ---- B. the week lanes (731:100866). They read left to right and the ROW of
+   them is the one box on this tab that scrolls sideways; the page body never
+   does. That rule is carried over from the v1 sheet and survives the rebuild
+   unchanged. ---- */
 .dlscroll { overflow-x: auto; overflow-y: hidden; padding-bottom: var(--space-8); }
-.dlweeks { display: flex; align-items: flex-start; gap: var(--space-16); min-width: min-content; }
-.dlweek {
-  flex: 0 0 288px; box-sizing: border-box;
-  display: flex; flex-direction: column; gap: var(--space-8);
-  padding: var(--space-16);
-  background: var(--slate-50); border-radius: var(--radius-md);
-}
-/* §6.1, unchanged from v1: the week tints ONLY when it is over capacity.
-   Every other warning has a banner and a badge; a second tint for those would
-   say the same thing twice in a weaker voice. */
-.dlweek.flagged { background: var(--status-warning-light); }
-/* an opened week needs the room its day columns take */
-.dlweek.expanded { flex: 0 0 640px; }
+.dlweeks { display: flex; align-items: flex-start; gap: var(--space-12); min-width: min-content; }
 
-.dlwhead { display: flex; align-items: center; gap: var(--space-8); }
-.dlwhead .dlwtitle { font-size: var(--text-subtitle); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
-.dlwhead .dlwrange { font-size: var(--text-body); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
+/* A lane is a FIXED box in both states (731:100872 collapsed, 810:121954
+   expanded): its height is the frame's and does not grow with its contents, so
+   a heavy week never makes the whole row of lanes taller than the light weeks
+   beside it — the stack inside scrolls instead. Opening a lane swaps its width
+   and its surface and nothing else; heading, progress line and height are
+   shared between the two states on purpose. */
+.dlweek {
+  flex: 0 0 350px; height: 799px;
+  display: flex; flex-direction: column; gap: var(--space-16);
+  padding: var(--space-12) 20px 20px;
+  background: var(--slate-50); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+.dlweek.expanded {
+  flex: 0 0 1830px;
+  padding: var(--space-8) var(--space-16) var(--space-16);
+  background: var(--slate-100);
+}
+
+.dlwhead { display: flex; align-items: center; gap: var(--space-12); height: 24px; flex: none; }
+.dlwhead .dlwtitle { font-size: var(--text-subtitle); font-weight: 600; line-height: 1.5; color: var(--surface-foreground); }
+/* everything after the range sits at the right edge: the counts when the lane
+   is open, then the toggle. ONE auto margin does that — a second one on the
+   toggle would SHARE the free space with the first instead of pushing past
+   it, and the counts would drift to the middle of the heading. */
+.dlwhead .dlwrange { margin-right: auto; font-size: var(--text-body); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
+
+/* the header counts (#75 §1). Pending, Urgent and Done are three INDEPENDENT
+   readings of the same lane — never one derived from another — so they are
+   separate spans with their own colours and a separator between, not one
+   sentence. The day heading carries two of them and the week heading three;
+   that asymmetry is the design (#75 §4), not an omission here. */
+.dlcount {
+  display: inline-flex; align-items: center; gap: var(--space-8);
+  font-size: var(--text-body); font-weight: 500; line-height: 1.4;
+  white-space: nowrap;
+}
+.dlcount .dlc.pending { color: var(--slate-500); }
+.dlcount .dlc.urgent { color: var(--red-600); }
+.dlcount .dlc.done { color: var(--green-600); }
+.dlcount .dldot { font-size: var(--text-label); color: var(--slate-400); }
+
+/* the frame draws one round action per lane; this tab has exactly one per-week
+   action, so that is what it opens. Same chevron as the navigator, turned a
+   quarter when the lane is open. */
 .dlwhead .dlwexpand {
-  margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; flex: none; padding: 0;
-  background: var(--neutral-950); border: 0; border-radius: var(--radius-full);
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; flex: none; padding: 0;
+  background: var(--surface-foreground); border: 0; border-radius: var(--radius-full);
   color: var(--white); cursor: pointer;
 }
 .dlwhead .dlwexpand:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
+.dlwhead .dlwexpand svg { display: block; }
 .dlweek.expanded .dlwhead .dlwexpand svg { transform: rotate(90deg); }
 
-/* the week badge names the RULE and the CARDS — the header carries the
-   evidence, not just a count (owl #64) */
-.dlwbadge { align-self: flex-start; max-width: 100%; white-space: normal; text-align: left; }
-.dlwbadge.r-urgent-overlap { background: var(--red-50); border-color: var(--red-300); color: var(--status-destructive-strong); }
-.dlwbadge.r-over-capacity, .dlrule.r-over-capacity { background: var(--amber-50); border-color: var(--amber-500); color: var(--amber-700); }
-.dlwbadge.r-past-deadline, .dlrule.r-past-deadline { background: var(--blue-50); border-color: var(--blue-300); color: var(--blue-700); }
-.dlwbadge.r-replot { background: var(--amber-50); border-color: var(--amber-400); color: var(--amber-800); }
-.dlrule.r-urgent-overlap { background: var(--white); border-color: var(--red-300); color: var(--status-destructive-strong); }
+/* ---- C. the progress line — the week's work cards over the project's weekly
+   capacity (node; both lane states carry it). A plain count over a plain
+   capacity: the card-EQUIVALENT arithmetic the v1 footer printed is not what
+   this line says, and reading it as that was the drift. The fill is capped
+   upstream, so a lane over capacity reads full rather than spilling past its
+   own track. ---- */
+.dlprogress { display: flex; flex-direction: column; gap: var(--space-8); flex: none; }
+.dlprogress .dlbar { height: 6px; border-radius: var(--radius-full); background: var(--slate-200); overflow: hidden; }
+.dlprogress .dlfill { height: 100%; background: var(--green-600); }
+.dlprogress .dlload { margin: 0; font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-400); }
 
-.dlwsum { margin: 0; font-size: var(--text-label); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
-.dlwsum .dlwdot { color: var(--slate-400); }
-.dlweek .capbar { height: 4px; border-radius: var(--radius-full); background: var(--slate-200); overflow: hidden; }
-.dlweek .capbar .fill { height: 100%; background: var(--green-500); }
-.dlweek.flagged .capbar .fill { background: var(--status-warning); }
-.dlwload { margin: 0; font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
+/* the card stack takes whatever the heading and the progress line leave and
+   scrolls itself. A minimum height of zero is what LETS it: without one a flex
+   item refuses to shrink below its content and the lane grows instead of the
+   stack scrolling. It clips sideways so the fixed-width card can never hand
+   this box a sideways scrollbar of its own — the row of lanes above stays the
+   only such scroller on the tab. */
+.dlcards {
+  display: flex; flex-direction: column; gap: var(--space-16);
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overflow-x: hidden;
+}
 
-/* ---- D. the deadline card ---- */
+/* ---- D. the day columns (810:121954). Monday to Friday, each a lane of its
+   own that clips and scrolls independently, so a heavy Tuesday does not push
+   its neighbours down. A weekday still renders when it is a holiday: the frame
+   draws no holiday state and nothing can be slated on one anyway. ---- */
+.dldays { display: flex; align-items: stretch; gap: var(--space-12); height: 683px; flex: none; }
+.dlday {
+  flex: none; width: 350px;
+  display: flex; flex-direction: column; gap: var(--space-12);
+  padding: 20px;
+  background: var(--slate-50);
+  /* the radius token the day column shares with the date field — one value,
+     two roles, and the scale has no other name for it */
+  border-radius: var(--radius-input);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.dlday .dlcards { gap: var(--space-12); }
+.dldhead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-12); height: 24px; flex: none; }
+.dldhead .dldname { font-size: var(--text-subtitle); font-weight: 600; line-height: 1.5; color: var(--surface-foreground); }
+
+/* ---- E. the work card (810:122333 / 810:122334). A FIXED box, not a floor:
+   every card in a stack is the same size whatever it holds, which is what lets
+   the stacks read as columns at all. The title clamps and the badge row wraps
+   INSIDE it; anything that still does not fit is clipped by the card and never
+   allowed to change its height. Nothing on the card is a control — it is
+   read-only and writes nothing (#74 §3), so it carries no hover or focus
+   chrome of its own beyond the two links. ---- */
 .dlcard {
-  position: relative; display: flex; flex-direction: column; gap: var(--space-8);
-  padding: var(--space-12); padding-left: var(--space-16);
-  background: var(--white); border: 1px solid var(--border-border); border-radius: var(--radius-md);
+  position: relative; overflow: hidden;
+  flex: none; width: 308px; height: 180px;
+  display: flex; flex-direction: column; gap: var(--space-12);
+  padding: 14px;
+  background: var(--white); border-radius: var(--radius-md);
   box-shadow: var(--shadow-xs);
 }
-/* the left accent is URGENCY, which is why every card carries one: red where
-   the card is urgent, blue where it is not. It is not a conflict marker — the
-   week badge and the banner are where a conflict is stated. */
-.dlcard::before {
-  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-  border-radius: var(--radius-md) 0 0 var(--radius-md);
-  background: var(--blue-500);
+/* an urgent card gives its left inset back to the bar (#74 §3) */
+.dlcard.urgent { padding-left: 18px; }
+/* the done state is the WHOLE card faded and nothing else re-styled (#75 §3,
+   node 810:122394, read twice to be sure). It is deliberately the only rule in
+   this sheet that fades anything: a second one would make "done" ambiguous. */
+.dlcard.done { opacity: 0.4; }
+
+/* the urgency bar (#74 §3, from the exported path). It belongs to the URGENT
+   card alone — a non-urgent card carries no bar at all, pale or otherwise —
+   and it is a painted path rather than an edge on the box so it can follow the
+   card's own corner curve. The card clips it, which is what keeps that curve
+   honest at the top and bottom. */
+.dlquote {
+  position: absolute; left: 0; top: 0; display: block;
+  width: 12px; height: 180px;
+  fill: var(--red-500);
 }
-.dlcard.urgent::before { background: var(--red-500); }
 
-.dlcapt { display: flex; align-items: center; gap: var(--space-4); margin: 0; flex-wrap: wrap; }
-.dlcapt .dlmc { font-size: var(--text-subtitle); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
-.dlcapt .dldot { color: var(--slate-400); }
-/* THE FORECAST MILESTONE. The other date on this card is the client deadline;
-   they mean different things and are never collapsed into one (owl #64). */
-.dlcapt .dlmilestone { font-size: var(--text-subtitle); font-weight: 400; line-height: 1.4; color: var(--slate-700); }
-.dlcapt .dlphase { margin-left: auto; background: var(--amber-50); border-color: var(--amber-400); color: var(--amber-700); text-transform: capitalize; }
-
-.dlname { margin: 0; font-size: var(--text-subtitle); font-weight: 400; line-height: 1.4; color: var(--surface-foreground); }
-.dlbadges { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin: 0; }
-/* the urgency pill borrows the Pipeline recipe exactly — one board-wide
-   vocabulary for urgency, so a reader who learned it there reads it here */
-.dlbadges .dlurg.urgent, .dldetail .dlurg.urgent { background: var(--status-destructive-light); border-color: var(--red-300); color: var(--status-destructive-strong); }
-.dlbadges .dlurg.nonurgent, .dldetail .dlurg.nonurgent { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
-.dlbadges .dlstatus { background: var(--blue-50); border-color: var(--blue-300); color: var(--blue-600); }
-.dlbadges .dlwho { background: var(--slate-50); border-color: var(--slate-200); color: var(--slate-500); }
-
-.dlsub { display: flex; align-items: center; gap: var(--space-4); margin: 0; font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
-.dlsub .dllinks { margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-8); }
-.dlsub .dllinks a { display: inline-flex; }
-.dlsub .dllinks svg { display: block; }
-
-/* ---- the day planner's milestone entries (FR-12). The rebuild renamed the
-   container from `.weekcard` to `.dlweek`, which orphaned the v1 recipe these
-   were wearing — the entries rendered as unstyled runs of text and, worse, the
-   LATE and URGENT left accents disappeared with it. BR-9a: a card-level late
-   flag is never suppressed, so that accent is load-bearing, not decoration.
-   `.daycol .entry` also carries `cursor: grab` and its focus ring from
-   10-ui.css; only the box and the accents live here. */
-.daycol .entry {
-  display: flex; align-items: center; gap: var(--space-8);
-  margin: var(--space-4) 0; padding: var(--space-4) var(--space-8);
-  background: var(--white);
-  border: 1px solid var(--border-border); border-left: 3px solid var(--border-border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-label); line-height: 1.4;
+/* ---- F. the card badges — ONE recipe with colour variants (#74 §3). The
+   order the template emits them in is the meaning: urgency always, then
+   difficulty where the card is labelled, then the asset type where the group
+   agrees on one, then the lane. The box carries a transparent stroke at rest
+   so a variant can colour it or dash it without any of them changing the
+   rendered footprint. ---- */
+.dlbadges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; flex: none; }
+.dlbadge {
+  display: inline-flex; align-items: center;
+  height: 19px; padding: var(--space-4) var(--space-8);
+  border: 1px solid transparent; border-radius: var(--radius-xs);
+  font-size: var(--text-caption); font-weight: 600; line-height: 1;
+  max-width: 100%; white-space: nowrap; overflow: hidden;
 }
-.daycol .entry.urgent { border-left-color: var(--amber-500); }
-/* late wins over urgent — the template's own elseif says so, and a forecast
-   past the client's deadline is the louder of the two */
-.daycol .entry.late { border-left-color: var(--red-500); }
-.daycol .entry .who { font-weight: 600; white-space: nowrap; }
-.daycol .entry .chev {
-  margin-left: auto; padding: 0 var(--space-4);
-  background: none; border: 0; color: var(--slate-400); cursor: pointer;
-}
-.daycol .entry .chev:hover { color: var(--surface-foreground); }
+/* Urgent is amber everywhere on the board since owls #78/#79 — the same fill
+   and ink the Pipeline pill wears, so a reader who learned urgency there reads
+   it here without relearning. The stroke matches the fill, which keeps this
+   box the same size as the dashed one beside it. */
+.dlbadge.b-urgent { background: var(--amber-600); border-color: var(--amber-600); color: var(--amber-50); }
+/* Non-Urgent draws an ABSENCE: Trello has an Urgent label and nothing meaning
+   not-urgent, so a solid stroke would assert a value the data does not hold.
+   The dash is kept (#74 §3); a plain dashed stroke is as close as CSS comes to
+   the node's own dash pattern, the same call the Pipeline pill made. */
+.dlbadge.b-nonurgent { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
+/* difficulty — the node's trio, fill one step above the card and label one
+   step darker than the stroke, the reading owls #78/#79 settled */
+.dlbadge.b-Hard { background: var(--red-50); border-color: var(--red-600); color: var(--red-600); }
+.dlbadge.b-Medium { background: var(--amber-50); border-color: var(--amber-500); color: var(--amber-600); }
+.dlbadge.b-Easy { background: var(--green-100); border-color: var(--green-500); color: var(--green-600); }
+/* the asset type the group agrees on — the quietest badge on the card, because
+   it says what the work IS rather than how it is going */
+.dlbadge.b-asset { background: var(--slate-100); border-color: var(--slate-300); color: var(--slate-500); }
+/* the Trello lane, printed verbatim. It is a NAME, not a state: which lanes
+   mean pending, ongoing or done is not this tab's to assert (JP, jp→miles
+   #59), so the badge never colours itself by what the lane might mean. */
+.dlbadge.b-lane { background: var(--blue-50); border-color: var(--blue-500); color: var(--blue-500); }
 
-/* a week with nothing due keeps its place and says so — a different state from
-   a week the SEARCH emptied, which is dropped entirely */
+/* the label is the MC number and the card name composed upstream. It clamps at
+   three lines — the frame's own card shows three — and the value is never cut
+   in the data: this is a display clamp, the same call the schedule row makes
+   for a long name (#73). */
+.dltitle {
+  margin: 0; min-height: 0;
+  display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3; line-clamp: 3;
+  overflow: hidden;
+  font-size: var(--text-subtitle); font-weight: 500; line-height: 1.4; color: var(--surface-foreground);
+}
+
+/* the links row is pinned to the card's bottom edge by the auto margin, so a
+   card with a one-line title and a card with three put their links on the same
+   baseline down a stack. Each link appears only when the card actually carries
+   it, so this row can hold two, one or nothing. */
+.dllinks { margin: auto 0 0; display: flex; align-items: center; gap: var(--space-4); flex: none; }
+.dllinks a { display: inline-flex; border-radius: var(--radius-xs); }
+.dllinks a:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
+/* the sprite draws both marks larger than this row wants them; the box is
+   sized here rather than a second copy of each glyph entering the set */
+.dllinks svg { display: block; width: 16px; height: 16px; }
+
+/* ---- G. the empty states (810:121571 and its day-column sibling). A day with
+   nothing slated and a week with nothing slated wear the SAME card: a white
+   box holding a dashed box holding one line of pale text, only the sentence
+   differs. The node's copy and its tokens win over the prose in #74 and over
+   the general empty-state pattern in #80 §5 — raised with Miles at CLOSE.
+
+   The stroke is a plain dash: CSS has no dash pattern on a border, and the
+   node's is close enough to the default that painting a stand-in would cost
+   more than it buys — the same call the non-urgent badge made above. ---- */
 .dlempty {
-  margin: 0; padding: var(--space-24) var(--space-12); text-align: center;
-  background: var(--white); border: 1px dashed var(--slate-200); border-radius: var(--radius-md);
-  font-size: var(--text-body); color: var(--slate-400);
+  flex: none; width: 310px; height: 104px; padding: var(--space-12);
+  background: var(--white); border-radius: var(--radius-sm);
 }
-.dlnohits { margin: var(--space-16) 0 0; font-size: var(--text-body); color: var(--slate-500); }
-
-/* ---- E. alert-container: the Model Constants legend. Its wording is the
-   engine's rules quoted back — the copy here and the rules there must not
-   drift, which is why it renders FROM the rule table rather than beside it. */
-.dllegend {
-  margin-top: var(--space-24); padding: var(--space-16);
-  background: var(--slate-50); border-radius: var(--radius-md);
+.dlemptybox {
+  display: flex; align-items: center; justify-content: center;
+  height: 80px; padding: var(--space-16); text-align: center;
+  border: 1px dashed var(--slate-200); border-radius: var(--radius-sm);
+  font-size: var(--text-body); font-weight: 400; line-height: 1.4; color: var(--slate-300);
 }
-.dllegendhead { margin: 0 0 var(--space-12); font-size: var(--text-body); font-weight: 600; line-height: 1.4; color: var(--surface-foreground); }
-.dlformulas { display: flex; gap: var(--space-24); flex-wrap: wrap; }
-.dlformula { flex: 1 1 240px; min-width: 0; }
-.dlformula .dlflabel { margin: 0 0 var(--space-4); font-size: var(--text-label); font-weight: 600; line-height: 1; text-transform: uppercase; letter-spacing: 0.02em; color: var(--surface-foreground); }
-.dlformula .dlftext { margin: 0; font-size: var(--text-body); font-weight: 400; line-height: 1.5; color: var(--slate-700); }

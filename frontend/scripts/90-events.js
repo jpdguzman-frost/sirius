@@ -74,6 +74,14 @@ async function resetForProjectSwitch() {
     // the hand-collapse overrides go with it (PLAN.md B10): keyed on the same
     // per-project mc_number, and meaningless against another project's groups
     pipeShut: {},
+    /* Deadlines view state (PLAN.md block 3 B15; drift row thirty-five, a
+       pre-existing gap): the navigator's month and the one open lane are
+       about THIS project's schedule. Carried over, the lane key would name a
+       week the next project may have nothing in, and the month offset would
+       open the new project wherever the last one was left. Both return to
+       rest with the reload. */
+    monthOffset: 0,
+    expandedWeek: null,
   });
   await loadAll();
 }
@@ -485,18 +493,18 @@ app.on({
 
   /* ---- due-date popover (node 415:54979, write registry W2) ----
      Commit-on-Apply: clicking a day only stages it. The popover opens on the
-     value the CELL shows (BR-9 precedence — Trello due first, else the sheet)
-     and remembers it as dueBaseline, so Apply on an untouched popover writes
-     nothing — including the case where the shown date came from the sheet. */
-  openDuePopover(ctx, cardId, kind) {
-    // `kind` arrives from the template, which knows it BY CONSTRUCTION
-    // (parent row vs the task each-block) — the client never re-derives the
-    // card kind from set-membership, so `rows` being the complete deliverable
-    // store is not load-bearing. A task's shown date IS its Trello due — no
-    // sheet, no precedence (owl #45).
-    const current = kind === 'task'
-      ? findWorkCard(cardId)?.card.due || null
-      : app.get('rows').find((r) => r.cardId === cardId)?.deadline || null;
+     WORK CARD's own Trello due and remembers it as dueBaseline, so Apply on
+     an untouched popover writes nothing. Work card ONLY since owl #78 §2
+     (PLAN.md block 3 B12/B13): deadlines live on work cards, a main card has
+     none, so the `kind` the template used to pass — parent row vs the task
+     each-block, each with its own store and precedence — has nothing left to
+     choose between. The trigger is the Sprint Schedules DEADLINE cell
+     (`row.cardId` there is the work card's Trello id); Pipeline shows the
+     date read-only. A work card's shown date IS its Trello due — no sheet,
+     no precedence (owl #45) — and the locator is the same `findWorkCard`
+     the write itself re-finds the card through. */
+  openDuePopover(ctx, cardId) {
+    const current = findWorkCard(cardId)?.card.due || null;
     openOverlay(ctx, cardId, {
       key: 'duePopover', posKey: 'duePopPos', saving: 'savingDeadline',
       h: DUE_POP_H, gap: 4, clampW: DUE_POP_W, // clamped both ways — the box stays fully on screen
@@ -581,16 +589,16 @@ app.on({
     const iso = which === 'week' ? isoAddDays(today, 7) : which === 'monday' ? isoNextMonday(today) : today;
     app.set({ dueStaged: iso, dueMonth: monthOf(iso) });
   },
-  async dueApply(_ctx, cardId, kind) {
+  async dueApply(_ctx, cardId) {
     const staged = app.get('dueStaged') || null;
     const baseline = app.get('dueBaseline') || null;
     closeMenus({ restoreFocus: true });
     if (staged === baseline) return; // nothing staged — no call, no audit
-    await writeDeadline(cardId, staged, kind);
+    await writeDeadline(cardId, staged);
   },
-  async dueClear(_ctx, cardId, kind) {
+  async dueClear(_ctx, cardId) {
     closeMenus({ restoreFocus: true });
-    await writeDeadline(cardId, null, kind); // confirm-free; the sheet deadline (if any) takes over
+    await writeDeadline(cardId, null); // confirm-free; a work card has no sheet date to fall back to
   },
 
   weekShiftView(_ctx, dir) { app.set('weekStart', mondayShift(app.get('weekStart'), dir)); },
@@ -867,66 +875,25 @@ app.on({
     }
   },
 
+  /* ---- Deadlines (owls #74/#75; node 731:100859; PLAN.md block 3 B3, B7)
+     The navigator is a month scope: one step moves `monthOffset`, and the
+     dlMondays → dlRange → dlWeeks chain re-derives from it — nothing to
+     recompute by hand, which is why the old explicit rebuild call is gone.
+     The open lane closes with the month: its key is a Monday the new month
+     may not show. */
   monthShift(_ctx, dir) {
     app.set('monthOffset', app.get('monthOffset') + dir);
     app.set('expandedWeek', null);
-    computeDeadlines();
   },
-
-  /* ---- daily plotting (FR-12): one week open at a time ---- */
+  /* ONE lane open at a time (B7; the shipped semantics — the frame cannot
+     say): the chevron-circle expands a week into its five day columns and a
+     second click collapses it. Presentation only — the cards are read-only
+     and derived (#74 §3: "the card writes nothing"); the day-drag planner,
+     its keyboard moves, its clear and the conflict acknowledge/restore pair
+     that used to follow this handler retired with the milestone tab (B9; the
+     rollover job is the only thing that moves a card's day now, #75 §2). */
   toggleWeek(_ctx, key) {
     app.set('expandedWeek', app.get('expandedWeek') === key ? null : key);
-  },
-  dragMilestone(ctx, cardId, phase) {
-    ctx.event.dataTransfer.setData('text/plain', `${cardId}|${phase}`);
-    ctx.event.dataTransfer.effectAllowed = 'move';
-  },
-  dayDragOver(ctx, holiday) {
-    if (!holiday) ctx.event.preventDefault(); // holidays reject drops (FR-12.4)
-  },
-  async dropOnDay(ctx, day, holiday) {
-    ctx.event.preventDefault();
-    if (holiday) return;
-    const [cardId, phase] = ctx.event.dataTransfer.getData('text/plain').split('|');
-    if (cardId && phase) await writeDayPlan(cardId, phase, day);
-  },
-  async milestoneKey(ctx, cardId, phase, currentDay, weekKey) {
-    const key = ctx.event.key;
-    if (key === 'Backspace' || key === 'Delete') {
-      ctx.event.preventDefault();
-      await writeDayPlan(cardId, phase, null);
-      return;
-    }
-    if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
-    ctx.event.preventDefault();
-    const cols = app.get('dayCols')(weekKey);
-    const open = cols.filter((c) => !c.holiday).map((c) => c.day); // arrows skip holidays
-    const at = open.indexOf(currentDay);
-    const next = open[(at < 0 ? 0 : at) + (key === 'ArrowRight' ? 1 : -1)];
-    if (next) await writeDayPlan(cardId, phase, next);
-  },
-  async clearDayPlan(_ctx, cardId, phase) { await writeDayPlan(cardId, phase, null); },
-  async ackConflict(_ctx, key) {
-    const reason = window.prompt('Acknowledge this conflict — optional reason (it goes to the audit log):', '');
-    if (reason === null) return;
-    try {
-      await api.send('POST', `/api/projects/${app.get('activeProjectId')}/conflicts/acknowledge`, { conflict_key: key, ...(reason ? { reason } : {}) });
-      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
-      app.set('deadlinePayload', res);
-      computeDeadlines();
-    } catch (err) {
-      flashBanner(`Acknowledge failed — the conflict stays visible. ${errText(err)}`);
-    }
-  },
-  async restoreConflict(_ctx, key) {
-    try {
-      await api.send('POST', `/api/projects/${app.get('activeProjectId')}/conflicts/restore`, { conflict_key: key });
-      const res = await api.get(`/api/projects/${app.get('activeProjectId')}/deadlines`);
-      app.set('deadlinePayload', res);
-      computeDeadlines();
-    } catch (err) {
-      flashBanner(`Restore failed. ${errText(err)}`);
-    }
   },
 });
 

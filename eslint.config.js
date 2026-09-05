@@ -17,7 +17,7 @@ const FRONTEND_SHARED = [
   // 2026-08-18): everything below is defined in one of those pieces and read
   // in a later one. Same shared-<script> scope as above.
   'app', 'blobRequests', 'CAP_MAX_FALLBACK', 'CAP_MIN_FALLBACK', 'capacityBand', 'clarified',
-  'closeMenus', 'computeDeadlines', 'DUE_POP_H', 'DUE_POP_W', 'errText', 'findWorkCard', 'flashBanner',
+  'closeMenus', 'DUE_POP_H', 'DUE_POP_W', 'errText', 'findWorkCard', 'flashBanner',
   'fmtInstant', 'fmtLongIso', 'fmtMonthDay', 'fmtRange', 'fridayIso', 'HARD_CEILING',
   'HARD_IDEAL', 'initialRoute', 'isoAddDays', 'isoNextMonday', 'isoOf', 'itemCount',
   'loadAdmin', 'loadAll', 'loadShell', 'MANILA_TIME', 'manilaToday', 'mcRank',
@@ -27,14 +27,14 @@ const FRONTEND_SHARED = [
   'PIPE_MENU_W', 'pipeBackToTop',
   'pipeMatches', 'pipePick', 'pipeFacetList', 'pipeChipList', 'pipeValueLabel', 'pipeSortLabel',
   'pipeWorkMatch', // 10-constants.js → the pipeKids computed (block 4, owl #78 §4)
-  'DL_RULES', 'dlRule', 'dlRuleWord', 'fmtWeekRange', 'fmtDayMonth', 'fmtDeadlineShort',
+  'DL_MONTHS', 'dlMonthWeeks', 'dlRangeLabel', 'dlWeekRange', 'dlDayName', 'dlBuild', // block 3 (owls #74/#75): the Deadlines helpers in 10-constants.js
   'NO_OVERLAYS', 'OVERLAY_KEYS', 'patchRow', 'patchWorkCard', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
   'REQ_MENU_H', 'REQ_MENU_W', 'REQ_PAGE_SIZE', 'reqComparator', 'reqFilterKeys', 'reqFiltersCleared',
-  'REQUEST_SEGMENTS', 'requestBlob', 'resetForProjectSwitch', 'rowLoad', 'rowWarning', 'scrollerOf',
+  'REQUEST_SEGMENTS', 'requestBlob', 'resetForProjectSwitch', 'rowWarning', 'scrollerOf',
   'selectTab', 'showWarnPop', 'sprintPayload', 'STATUS_FILED', 'thumbKeyOf',
   'unranked', 'updateThumb', 'WARN_CLOSE_MS', 'WARN_POP_H', 'WARN_POP_W', 'WARN_SHADOW_BLEED', 'warnPopCancelClose',
   'WEEK_COUNT', 'WEEK_PX', 'weekAtX', 'withRouterSuppressed', 'WORKDAYS_PER_WEEK', 'workingDaysBetween',
-  'writeCapacity', 'writeDayPlan', 'writeDeadline',
+  'writeCapacity', 'writeDeadline',
 ];
 
 // Shared names ASSIGNED outside their defining file (60-overlays.js declares

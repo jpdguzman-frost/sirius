@@ -297,30 +297,25 @@
             <!-- owl #78 §3 — REQUESTOR is gone from this table AND from the
                  filter panel (#66 put it "everywhere"; #78 is newer and takes
                  it off Pipeline only — the Requests table keeps its column).
-                 The axis went with the column rather than being stranded. DUE
-                 is now DEADLINE, matching Sprint Schedules; the date control
-                 inside is unchanged here and moves out in a later block. -->
-            <td class="col-deadline"><div class="duewrap">
-              {{#if writesEnabled}}
-                <button class="datefield {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}} {{#if savingDeadline[row.cardId]}}saving{{/if}}"
-                  disabled="{{savingDeadline[row.cardId]}}"
-                  on-click="['openDuePopover', row.cardId]" aria-haspopup="dialog" aria-expanded="{{duePopover === row.cardId ? 'true' : 'false'}}"
-                  title="{{row.deadline ? 'Source: ' + row.deadlineSource : 'No due date'}} — Apply writes the Trello due date (write registry W2)">
-                  <span class="dpdate">{{#if savingDeadline[row.cardId]}}saving…{{elseif row.deadline}}{{fmtLong(row.deadline)}}{{else}}Select Date{{/if}}</span><svg class="i16"><use href="#i-calendar" /></svg>
-                </button>
-                {{#if duePopover === row.cardId}}
-                  <div class="duepop" role="dialog" aria-label="Due date" style="left:{{duePopPos.left}}px;top:{{duePopPos.top}}px;">
-                    {{>dueCalendar}}
-                    <div class="dueact">
-                      <button class="dueclear" disabled="{{!row.trelloDue}}" on-click="['dueClear', row.cardId]" title="{{row.trelloDue ? 'Clear the Trello due date — the sheet deadline (if any) takes over' : (row.deadline ? 'This date comes from the intake sheet — Sirius cannot clear it' : 'No due date to clear')}}">Clear Due Date</button>
-                      <button class="dueapply" on-click="['dueApply', row.cardId]">Apply</button>
-                    </div>
-                  </div>
-                {{/if}}
-              {{else}}
-                <span class="datefield readonly {{row.deadline ? (row.overdue ? 'overdue' : '') : 'missing'}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{row.deadline ? fmtLong(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
-              {{/if}}
-            </div></td>
+                 The axis went with the column rather than being stranded.
+
+                 owl #78 §2, node 809:83486 — DEADLINE is READ-ONLY on this
+                 tab, and a MAIN card has no deadline of its own to read: the
+                 node draws an em-dash on every parent row it samples. A
+                 deadline is a property of the WORK card (one request can
+                 hold a screen wanted this week and assets wanted whenever,
+                 so a single value on the parent cannot be true), which is
+                 the same reason urgency and difficulty dash out two cells
+                 to the left. The dash is not a pending value, not inherited
+                 from the children and not a mixed-state marker.
+
+                 The date control that used to sit here has left Pipeline
+                 altogether. It now lives on the Sprint Schedules DEADLINE
+                 cell, where the tick and the forecast bar give the date
+                 something to be compared against — one setter in the whole
+                 product, so two screens can never be set apart. Static on
+                 purpose: no control, no handler, nothing to press. -->
+            <td class="col-deadline"><span class="dimcell">—</span></td>
             <td class="col-started">{{#if row.workStarted}}<span class="plaincell nowrap" title="{{fmtInstant(row.workStarted, row.workStartedTs)}}">{{fmtLong(row.workStarted)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-done">{{#if row.workDone}}<span class="plaincell nowrap" title="{{fmtInstant(row.workDone, row.workDoneTs)}}">{{fmtLong(row.workDone)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <td class="col-links">
@@ -428,38 +423,19 @@
                   {{/if}}
                 </div></td>
                 <td class="col-status">{{#if w.currentList}}<span class="pbadge s-{{w.status}}">{{w.currentList}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
-                <td class="col-deadline"><div class="duewrap">
-                  {{#if writesEnabled}}
-                    <!-- the SAME W2 popover recipe as the parent row, bound to
-                         the task card (scope ruled by JP 2026-08-18 —
-                         contracts/trello-write.md §W2). A task has no sheet
-                         fallback, so `w.due` plays both the display and the
-                         Clear-eligibility role the parent splits across
-                         deadline/trelloDue. The calendar is the shared
-                         dueCalendar partial; only this footer and the trigger
-                         are kind-specific — and the 'task' argument on all
-                         three handlers is the template SAYING the kind it
-                         knows by construction, so the client never re-derives
-                         it from set-membership. -->
-                    <button class="datefield {{w.due ? (w.overdue ? 'overdue' : '') : 'missing'}} {{#if savingDeadline[w.cardId]}}saving{{/if}}"
-                      disabled="{{savingDeadline[w.cardId]}}"
-                      on-click="['openDuePopover', w.cardId, 'task']" aria-haspopup="dialog" aria-expanded="{{duePopover === w.cardId ? 'true' : 'false'}}"
-                      title="{{w.due ? 'Task due date' : 'No due date'}} — Apply writes the Trello due date (write registry W2, task-card scope)">
-                      <span class="dpdate">{{#if savingDeadline[w.cardId]}}saving…{{elseif w.due}}{{fmtLong(w.due)}}{{else}}Select Date{{/if}}</span><svg class="i16"><use href="#i-calendar" /></svg>
-                    </button>
-                    {{#if duePopover === w.cardId}}
-                      <div class="duepop" role="dialog" aria-label="Due date" style="left:{{duePopPos.left}}px;top:{{duePopPos.top}}px;">
-                        {{>dueCalendar}}
-                        <div class="dueact">
-                          <button class="dueclear" disabled="{{!w.due}}" on-click="['dueClear', w.cardId, 'task']" title="{{w.due ? 'Clear the Trello due date' : 'No due date to clear'}}">Clear Due Date</button>
-                          <button class="dueapply" on-click="['dueApply', w.cardId, 'task']">Apply</button>
-                        </div>
-                      </div>
-                    {{/if}}
-                  {{else}}
-                    <span class="datefield readonly {{w.due ? (w.overdue ? 'overdue' : '') : 'missing'}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{w.due ? fmtLong(w.due) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
-                  {{/if}}
-                </div></td>
+                <!-- owl #78 §2, node 809:83486 — the work card DOES carry a
+                     deadline of its own, and Pipeline REFLECTS it. This is
+                     the read-only dress that used to be the observation-mode
+                     branch, now the only branch: there is no picker on this
+                     tab for either row kind. The setter moved to the Sprint
+                     Schedules DEADLINE cell (write registry W2, work-card
+                     scope), so the date has exactly one place it can be
+                     changed and the two screens cannot be edited apart.
+
+                     The overdue and missing dressings stay — reflecting a
+                     date honestly includes reflecting that it has passed, or
+                     that the card has none. -->
+                <td class="col-deadline"><span class="datefield readonly {{w.due ? (w.overdue ? 'overdue' : '') : 'missing'}}"><span class="dpdate">{{w.due ? fmtLong(w.due) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span></td>
                 <td class="col-started">{{#if w.started}}<span class="plaincell nowrap" title="{{fmtInstant(w.started, w.startedTs)}}">{{fmtLong(w.started)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
                 <td class="col-done">{{#if w.done}}<span class="plaincell nowrap" title="{{fmtInstant(w.done, w.doneTs)}}">{{fmtLong(w.done)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
                 <td class="col-links">

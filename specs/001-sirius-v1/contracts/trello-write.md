@@ -11,7 +11,7 @@ to any source system exists; Google Sheets has no write path, ever.
 | # | Field | Trello op | Sirius surface | Audit action | Since |
 |---|---|---|---|---|---|
 | W1 | `Urgent` label | `POST /cards/{id}/idLabels` · `DELETE /cards/{id}/idLabels/{labelId}` | Pipeline urgency control (work-card rows) | `urgency.set` | v1 (FR-4.6) |
-| W2 | Due date | `PUT /cards/{id}` with `{due}`; `{due: null}` clears | Deadline edit in Pipeline | `due.set` | 2026-08-04 (FR-9.1) |
+| W2 | Due date | `PUT /cards/{id}` with `{due}`; `{due: null}` clears | The DEADLINE cell on Sprint Schedules (work-card rows; Pipeline read-only since #78 §2) | `due.set` | 2026-08-04 (FR-9.1) |
 | W3 | `Difficulty: …` label | `POST /cards/{id}/idLabels` (new value) · `DELETE /cards/{id}/idLabels/{labelId}` (stale values) | Pipeline difficulty control (work-card rows) | `difficulty.set` | 2026-08-12 (BRD-§9-A1) |
 
 Interfaces live in `lib/trello.ts` only: `setUrgency(cardId, boardId, urgent)` (§5.3 verbatim
@@ -64,6 +64,18 @@ shape, unchanged), `setDue(cardId, isoDateTimeOrNull)`, and
   retired; deadline inheritance is untouched.
 
 ## W2 semantics — due date
+
+- **Scope NARROWED to the work card (product owl miles→jp #78 §2, 2026-09-04; built
+  2026-09-05, block 3):** "W2 write access lives in Sprint Schedules, on work cards, and
+  nowhere else." The Sprint Schedules DEADLINE cell is the one setter; Pipeline's DEADLINE
+  column is read-only (main rows draw an em-dash — a main card has no deadline; work rows
+  reflect the date). **The deliverable-scoped route is gone, not dormant**: `PATCH
+  …/deliverables/:cardId/deadline` no longer exists (404), exactly as W1/W3's deliverable
+  routes were deleted; `PATCH …/workcards/:cardId/deadline` through the same `writeGuards`
+  door is the whole of W2. Not a registry change — the field is unchanged, the surface
+  shrank. The 2026-08-18 scope note below is history. A main card's Trello due still
+  reconciles IN and still feeds `deliverables_v` precedence for the Requests view.
+
 
 - **Scope clarification (JP, 2026-08-18, for the expanded-MC-row build — owl miles→jp #45):**
   W2 covers the due date of **any card Sirius surfaces in Pipeline** — the deliverable

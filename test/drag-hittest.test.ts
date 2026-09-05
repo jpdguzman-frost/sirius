@@ -6,12 +6,16 @@
  * ────────────────────────────────────────────────────────────────────────────
  * WHAT SURVIVES THE TRIM, AND WHY.
  *
- * 1. THE DRAG-SOURCE SWEEP, for the ONE drag left: the Deadlines day entry.
- *    The schedules sources (`.grun`, `.growr`) died with their drag, but
- *    `test/deadlines-frame.test.ts` still names this file as the owner of the
- *    day entry's hit-testability — deleting the sweep would have orphaned a
- *    living drag. The source count drops 3 → 1; the sweep still derives its
- *    sources from the template, so a new `draggable` joins it automatically.
+ * 1. THE DRAG-SOURCE SWEEP — now over the EMPTY set. The schedules sources
+ *    (`.grun`, `.growr`) died with their drag on 2026-08-28, and the Deadlines
+ *    day entry — the one that survived that trim — died with the day planner on
+ *    2026-09-05 (owls #74/#75, PLAN.md block 3: the rebuilt cards are read-only
+ *    and derived, and the server's rollover is the only thing that moves one).
+ *    The sweep is KEPT and stays wired to the template, so a new `draggable`
+ *    rejoins it automatically; what changed is that its non-vacuity is proven
+ *    against a fixture source (`FIXTURE_SOURCES`) rather than against a shipped
+ *    element, because a sweep over an empty list finds nothing for reasons that
+ *    have nothing to do with the law.
  *
  * 2. THE WEEK-CELL SWEEP, same law, NEW CONSUMER. The `.gweek` cells used to
  *    be the drop path outside the coloured run; they are now the columns a
@@ -30,15 +34,15 @@
  *    (50-gantt-geometry.js) and `plotHover` now feeds it the pointer, so the
  *    arithmetic that used to place a DROP places a CLICK.
  *
- * Gone with the drag: the `.grun`/`.gbar` source sweeps and their `auto`
+ * Gone with the drags: the `.grun`/`.gbar` source sweeps and their `auto`
  * dependency pair, the `.gdragging` mid-drag sweep (the class is withdrawn),
  * the dropOnBar/dropOnWeek wiring suite, and the pinned/unscheduled render
- * suites. The Deadlines drag carries no mid-drag state class, so no mid-drag
- * sweep replaces the old one.
+ * suites. No mid-drag sweep replaces the old one — neither retired drag ever
+ * carried a mid-drag state class.
  * ────────────────────────────────────────────────────────────────────────────
  * HONESTY NOTE — READ BEFORE TRUSTING A GREEN RUN.
  *
- * Nothing in this file can prove the remaining drag — or a click — works.
+ * Nothing in this file can prove a drag — or a click — works.
  * This repo has no jsdom and no browser runner, so every assertion below is a
  * read of the shipped source text or an execution of a slice of it. A
  * synthetic `DragEvent` NEVER enters Chrome's drag machinery (gantt-rules
@@ -303,6 +307,33 @@ const TEMPLATE_ELEMENTS = PARSED.elements;
 /** Every element in the shipped template that carries a `draggable` directive. */
 const DRAG_SOURCES: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) => /\bdraggable=/.test(e.source));
 
+/**
+ * A SYNTHETIC drag source, parsed by the SAME `parseTemplate` the shipped sweep
+ * uses — and the reason this file still means something after 2026-09-05.
+ *
+ * The Deadlines rebuild (owls #74/#75, PLAN.md block 3) retired the day-drag
+ * planner: the cards are read-only and derived, and the only thing that moves
+ * one is the server's rollover. So `DRAG_SOURCES` is EMPTY today, and every
+ * sweep over it passes for free. That is exactly the state in which a guard
+ * quietly stops being a guard.
+ *
+ * The law it defends has not changed and the app has not lost the ability to
+ * grow a drag — so the machinery is kept, wired to the template so a new
+ * `draggable` joins it the day it appears, and its non-vacuity is proven
+ * against this fixture instead of against a shipped element that no longer
+ * exists. The fixture wears the retired chain (a scroller, a column, an entry
+ * with two state classes) because that is the shape the bug wore twice.
+ */
+const FIXTURE_TEMPLATE = [
+  '<div class="dlscroll"><div class="dlweeks"><section class="dlweek">',
+  '<div class="daygrid"><div class="daycol {{#if d.holiday}}holiday{{/if}}">',
+  '<article class="entry {{#if m.late}}late{{/if}} {{#if m.urgent}}urgent{{/if}}" draggable="true"></article>',
+  '</div></div></section></div></div>',
+].join('');
+const FIXTURE_SOURCES: TemplateElement[] = parseTemplate(FIXTURE_TEMPLATE).elements.filter((e) =>
+  /\bdraggable=/.test(e.source),
+);
+
 const isSubsetOf = (tokens: string[], possible: string[]): boolean =>
   tokens.length > 0 && tokens.every((t) => possible.includes(t));
 
@@ -336,6 +367,8 @@ const targetsFor = (label: string, els: { name: string; classes: string[] }[]): 
   els.map((e) => ({ name: `${label} <${e.name}${e.classes.map((c) => `.${c}`).join('')}>`, classes: e.classes }));
 
 const SOURCE_TARGETS = targetsFor('the drag source', DRAG_SOURCES);
+/** The same target list, built from the fixture — what keeps the sweeps honest. */
+const FIXTURE_TARGETS = targetsFor('the drag source', FIXTURE_SOURCES);
 
 const dedupe = (els: { name: string; classes: string[] }[]): { name: string; classes: string[] }[] => [
   ...new Map(els.map((a) => [`${a.name}.${a.classes.join('.')}`, a])).values(),
@@ -368,13 +401,18 @@ const declaresAuto = (rules: CssRule[], src: { classes: string[] }): boolean =>
 /**
  * The ancestor sweep, PER SOURCE. A source that re-enables itself drops out of
  * the sweep entirely; every other source keeps its whole chain.
+ *
+ * `sources` is a parameter rather than a closure over `DRAG_SOURCES` because
+ * the shipped set is empty today (see `FIXTURE_SOURCES`): the fixture proofs
+ * have to be able to point the same sweep at a source that exists, or they
+ * would be proving that an empty list finds nothing.
  */
-const ancestorOffenders = (rules: CssRule[]): string[] =>
+const ancestorOffenders = (rules: CssRule[], sources: TemplateElement[] = DRAG_SOURCES): string[] =>
   offendersIn(
     rules,
     targetsFor(
       'an ancestor of a drag source',
-      dedupe(DRAG_SOURCES.filter((src) => !declaresAuto(rules, src)).flatMap((s) => s.ancestors)),
+      dedupe(sources.filter((src) => !declaresAuto(rules, src)).flatMap((s) => s.ancestors)),
     ),
   );
 
@@ -459,11 +497,14 @@ describe('the guard’s own parsers actually see the shipped files', () => {
     expect(TEMPLATE_ELEMENTS.length).toBeGreaterThan(200);
   });
 
-  it('gives the day entry the ancestors the browser will give it', () => {
-    // owl #64 rebuilt the Deadlines tab around the horizontal week scroller;
-    // the chain is DERIVED so it keeps tracking whatever the tab becomes
-    const entry = DRAG_SOURCES.find((s) => s.classes[0] === 'entry');
-    expect(entry, 'no day entry drag source in the template').toBeDefined();
+  it('still gives a drag source the ancestors the browser would give it', () => {
+    /* The derivation, proven against the fixture now that the shipped template
+       carries no drag (see `FIXTURE_SOURCES`). It is the ancestor CHAIN that
+       matters — `pointer-events` inherits — and it comes off the template's own
+       nesting, so a wrapper added tomorrow is swept the day it appears rather
+       than the day someone remembers to add it to a list. */
+    const entry = FIXTURE_SOURCES.find((s) => s.classes[0] === 'entry');
+    expect(entry, 'the draggable derivation stopped seeing a draggable element').toBeDefined();
     expect(entry!.ancestors.flatMap((a) => a.classes)).toEqual(
       expect.arrayContaining(['dlscroll', 'dlweeks', 'dlweek', 'daygrid', 'daycol']),
     );
@@ -475,18 +516,24 @@ describe('the guard’s own parsers actually see the shipped files', () => {
  * ====================================================================== */
 
 describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT prove this — real input only)', () => {
-  it('enumerates the drag sources FROM the template — the count is ONE since the schedules drag withdrew', () => {
-    // 2026-08-28 (#72): `.grun` and `.growr` died with the planner drag; the
-    // Deadlines day entry is the one drag left, and deadlines-frame points at
-    // this file for its hit-testability. A second source joins this guard
-    // automatically — and must justify itself here when it does.
-    const primary = DRAG_SOURCES.map((s) => s.classes[0]).sort();
-    expect(primary).toEqual(['entry']);
-    expect(DRAG_SOURCES).toHaveLength(1);
+  it('enumerates the drag sources FROM the template — the set is EMPTY since the day planner withdrew', () => {
+    /* 2026-08-28 (#72): `.grun` and `.growr` died with the planner drag, and
+       the Deadlines day entry was the one drag left. 2026-09-05 (owls #74/#75,
+       PLAN.md block 3) retires that one too — the cards on the rebuilt tab are
+       read-only and derived, and the server's rollover is the only thing that
+       moves a card now. So the shipped app drags NOTHING.
+
+       Asserted as the empty SET rather than by deleting the sweep: the count is
+       a fact about today, the law is not, and the derivation below still reads
+       the template — so a `draggable` added tomorrow rejoins every guard in
+       this suite automatically, and has to justify itself here when it does. */
+    expect(DRAG_SOURCES.map((s) => s.classes[0]).sort()).toEqual([]);
   });
 
   it('reads the conditional class tokens too — a rule may target a state, not a resting class', () => {
-    const entry = DRAG_SOURCES.find((s) => s.classes[0] === 'entry')!;
+    // proven on the fixture: a source's STATE classes are part of what a
+    // selector can bite, and dropping them would let `.entry.late` slip past
+    const entry = FIXTURE_SOURCES.find((s) => s.classes[0] === 'entry')!;
     expect(entry.classes).toEqual(['entry', 'late', 'urgent']);
   });
 
@@ -494,13 +541,15 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     // THIS IS THE BUG. A rule whose SUBJECT is the element carrying
     // `draggable` cancels the drag in the tick it starts. NO EXEMPTION HERE,
     // ever: a source that turns ITSELF off has nothing left to cure it.
+    // Vacuous while nothing drags — kept armed, and kept honest by the fixture
+    // proof below, which runs the same function against a real source.
     expect(offendersIn(ALL_RULES, SOURCE_TARGETS)).toEqual([]);
   });
 
-  it('IS NOT VACUOUS — it flags the batch-7 bug shape re-worn by the surviving source', () => {
+  it('IS NOT VACUOUS — it flags the batch-7 bug shape on a source that exists', () => {
     // a guard that cannot fail on the known bug proves nothing. These are the
-    // 1e13088 shapes, rewritten onto the source that carries `draggable` today.
-    const fixture = (css: string) => offendersIn(cssRules('fixture.css', css), SOURCE_TARGETS);
+    // 1e13088 shapes, worn by the fixture source (see `FIXTURE_SOURCES`).
+    const fixture = (css: string) => offendersIn(cssRules('fixture.css', css), FIXTURE_TARGETS);
 
     expect(fixture('.daycol .entry { position: absolute; pointer-events: none; cursor: grab; }')).toHaveLength(1);
     expect(fixture('.entry.late { pointer-events: none; }')).toHaveLength(1); // a state class is still the element
@@ -512,7 +561,7 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
   });
 
   it('does NOT cry wolf over rules that target something else', () => {
-    const fixture = (css: string) => offendersIn(cssRules('fixture.css', css), SOURCE_TARGETS);
+    const fixture = (css: string) => offendersIn(cssRules('fixture.css', css), FIXTURE_TARGETS);
     expect(fixture('.entry .cliptext { pointer-events: none; }')).toEqual([]); // subject is the child
     expect(fixture('.daycol .entry { pointer-events: auto; }')).toEqual([]); // not a `none`
     expect(fixture('.ubadge.saving { pointer-events: none; }')).toEqual([]);
@@ -533,15 +582,17 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
   });
 
   it('sweeps ANCESTORS too, because pointer-events is an inherited property', () => {
-    // a transparent `.daycol` would disable the `.entry` inside it just as
-    // surely, and the chains come from the template's own nesting so a wrapper
-    // added tomorrow is swept the day it appears
-    expect(DRAG_SOURCES.flatMap((s) => s.ancestors).length).toBeGreaterThan(3);
+    // a transparent wrapper would disable the source inside it just as surely,
+    // and the chains come from the template's own nesting so one added
+    // tomorrow is swept the day it appears. Empty today, armed all the same.
     expect(ancestorOffenders(ALL_RULES)).toEqual([]);
+    // the chain the sweep WOULD walk is real — proven on the fixture, so this
+    // pair cannot both be empty for the same uninteresting reason
+    expect(FIXTURE_SOURCES.flatMap((s) => s.ancestors).length).toBeGreaterThan(3);
   });
 
   it('the ancestor sweep IS NOT VACUOUS either — a transparent wrapper is flagged wherever it sits', () => {
-    const fixture = (css: string) => ancestorOffenders(cssRules('fixture.css', css));
+    const fixture = (css: string) => ancestorOffenders(cssRules('fixture.css', css), FIXTURE_SOURCES);
     expect(fixture('.daycol { pointer-events: none; }')).toHaveLength(1);
     expect(fixture('.daycol.holiday { pointer-events: none; }')).toHaveLength(1); // a state up the chain
     expect(fixture('.dlweeks { pointer-events: none; }')).toHaveLength(1);
@@ -558,7 +609,7 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     // interaction. The mirror image is forbidden: a `:hover` cure holds at
     // mousedown and evaporates mid-drag, and a `@media` cure simply is not
     // there at other viewports.
-    const fixture = (css: string) => ancestorOffenders(cssRules('fixture.css', css));
+    const fixture = (css: string) => ancestorOffenders(cssRules('fixture.css', css), FIXTURE_SOURCES);
     expect(fixture('.daycol { pointer-events: none; } .entry:hover { pointer-events: auto; }')).toHaveLength(1);
     expect(
       fixture('.daycol { pointer-events: none; } @media (max-width: 600px) { .entry { pointer-events: auto; } }'),
@@ -569,7 +620,7 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     // it, so the ban side keeps seeing it
     const inMedia = cssRules('fixture.css', '@media (max-width: 600px) { .daycol .entry { pointer-events: none; } }');
     expect(inMedia.map((r) => r.conditional)).toEqual([true]);
-    expect(offendersIn(inMedia, SOURCE_TARGETS)).toHaveLength(1);
+    expect(offendersIn(inMedia, FIXTURE_TARGETS)).toHaveLength(1);
   });
 
   it('sweeps the WEEK CELLS — the columns every placement CLICK lands through (same law, new consumer)', () => {
@@ -627,6 +678,8 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     // guard can see it. Neither exists today, and this is what keeps it so.
     const styleOf = (el: TemplateElement): string => /style="([^"]*)"/.exec(el.source)?.[1] ?? '';
     for (const el of TEMPLATE_ELEMENTS) expect(styleOf(el)).not.toMatch(/pointer-events/i);
+    // the stricter per-source clause: empty while nothing drags, kept armed for
+    // the day something does — the whole-template line above is what bites now
     for (const src of DRAG_SOURCES) expect(styleOf(src)).not.toMatch(/pointer-events|visibility|display/i);
     for (const { js } of SCRIPTS) {
       // the properties that actually take an element out of hit-testing:

@@ -29,6 +29,14 @@
  * `workCardsByMc` — section E executes the computeds out of the shipped
  * scripts and renders the gate both ways.
  *
+ * BLOCK 3, 2026-09-05 (owl #78 §2, PLAN.md block 3 B12): the DEADLINE cell is
+ * READ-ONLY on both row kinds now. Pipeline reflects the work card's Trello
+ * due date and cannot set it; the main row draws the em-dash beside the two
+ * cells #78 §1 already dimmed. Section D was the task-card half of W2 and is
+ * now the guard that no picker survives here — the setter moved to the
+ * DEADLINE cell of a work-card row on Sprint Schedules, where the red tick
+ * gives the date something to be compared against.
+ *
  * Like every suite here: `toHTML()` has no layout, no pointer and no clock,
  * so widths, row heights and the live due write are the live pass's to
  * prove. This file proves structure, wiring and recipes.
@@ -55,6 +63,7 @@ import {
   renderMetrics,
   renderPipelineTable,
   stampRows,
+  tabView,
 } from './helpers/gantt-render.ts';
 
 const jsCode = APP_JS_CODE;
@@ -357,103 +366,112 @@ describe('the parent’s SubTone is WITHDRAWN (JP, 2026-08-27)', () => {
 });
 
 /* ---------------------------------------------------------------------- */
-/* D — the task due date: W2's task-card half (cell renamed col-deadline)    */
+/* D — the DEADLINE cell is READ-ONLY on BOTH row kinds (owl #78 §2)        */
 /* ---------------------------------------------------------------------- */
 
-describe('the task due cell is the SAME W2 recipe, bound to the task card', () => {
-  /* The CLASS is `col-deadline` since owl #78 §3 renamed the column DUE →
-     DEADLINE, matching the word Sprint Schedules uses for the same date; the
-     class moved with the label so header, cells and width rule cannot drift
-     over a name only half of them changed. The W2 picker itself is untouched
-     here — #78 §2 makes Pipeline's deadline read-only, and that lands with the
-     Sprint Schedules half rather than in this block. */
-  it('renders the datefield with the task’s date, keyed on the task’s own cardId', () => {
+/**
+ * The Pipeline view as shipped, with prose stripped.
+ *
+ * Guards below assert that a control is ABSENT, and the rebuilt template says
+ * in its own comments where that control went — naming it. Reading raw text
+ * would make the guard fire on the record of the decision (test/CLAUDE.md rule
+ * 3, in the kind direction): what must be gone is the markup, not the
+ * explanation.
+ */
+const pipelineView = (): string =>
+  tabView('pipeline')
+    .replace(/\{\{![\s\S]*?\}\}/g, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ');
+
+describe('Pipeline REFLECTS the deadline and never sets it (owl #78 §2)', () => {
+  /* THE RULE, and the reason it is a rule: W2 writes the work card's Trello due
+     date, and there is exactly ONE place in the product where that write is
+     armed — the DEADLINE cell of a work-card row on Sprint Schedules, where the
+     red tick gives the date something to be compared against. Pipeline shows
+     the same date and cannot change it. Two armed pickers over one field is how
+     two screens start disagreeing about which of them last wrote.
+
+     The main row shows an em-dash for the reason #78 §1 gives about urgency and
+     difficulty one column over: a main card does not HAVE this property. Not
+     blank-pending-a-value, not inherited from its work cards — absent. */
+
+  it('draws the static em-dash on the MAIN row, and no control at all', () => {
+    /* Asserted on the main row ALONE — `taskRows` is stripped out first, or the
+       work rows' own cells would satisfy every negative below and the guard
+       would pass against the defect it exists to catch. */
+    const mainOnly = WRITABLE.replace(/<tr class="ptask">[\s\S]*?<\/tr>/g, '');
+    expect(cell(mainOnly, 'col-deadline')).toBe('<td class="col-deadline"><span class="dimcell">—</span></td>');
+    expect(mainOnly, 'a date control survived on the main row').not.toContain('datefield');
+  });
+
+  it('draws the WORK row’s own date, read-only, with the calendar mark kept', () => {
     const due = cell(taskRows(WRITABLE)[0]!, 'col-deadline');
-    expect(due).toContain('class="datefield');
-    expect(due).toContain('2026-08-07');
-    expect(due).toContain('write registry W2, task-card scope');
-  });
-
-  it('shows `Select Date` and the missing dress on a task without one', () => {
-    const due = cell(taskRows(WRITABLE)[1]!, 'col-deadline');
-    expect(due).toContain('Select Date');
-    expect(due).toMatch(/class="datefield[^"]*missing/);
-  });
-
-  it('opens the shared popover inside the task cell, Clear enabled exactly when a due exists', () => {
-    const withDue = cell(taskRows(open({ writesEnabled: true, duePopover: 'task-1' }))[0]!, 'col-deadline');
-    expect(withDue).toContain('class="duepop"');
-    expect(withDue).toContain('Clear Due Date');
-    expect(withDue).not.toMatch(/<button class="dueclear" disabled/);
-
-    const withoutDue = cell(taskRows(open({ writesEnabled: true, duePopover: 'task-2' }))[1]!, 'col-deadline');
-    expect(withoutDue).toContain('class="duepop"');
-    expect(withoutDue).toMatch(/<button class="dueclear" disabled/);
-  });
-
-  it('renders read-only datefields when the project’s writes are off', () => {
-    const due = cell(taskRows(OPEN)[0]!, 'col-deadline')  // writesEnabled false is the default;
     expect(due).toContain('class="datefield readonly');
-    expect(due).not.toContain('<button');
+    expect(due).toContain('2026-08-07');
+    expect(due).toContain('i-calendar');
+    expect(due, 'the work row still carries a pressable date field').not.toContain('<button');
   });
 
-  it('the template SAYS the kind — every task-cell due handler passes it explicitly', () => {
-    /* The dispatch rule: which half of W2 a write takes is decided where the
-       kind is KNOWN — the template's task each-block — never re-derived from
-       set-membership, so `rows` being the complete deliverable store is not
-       load-bearing. Asserted on both sides of the boundary: the task cell
-       passes 'task' on all three handlers, and the parent cell passes none. */
-    for (const h of ['openDuePopover', 'dueApply', 'dueClear']) {
-      expect(TEMPLATE).toContain(`['${h}', w.cardId, 'task']`);
-      expect(TEMPLATE).toContain(`['${h}', row.cardId]`);
-      expect(TEMPLATE).not.toContain(`['${h}', row.cardId, `);
+  it('is read-only EVEN ON A WRITEABLE PROJECT — that is the whole change', () => {
+    /* The adversarial case. Before #78 §2 the cell branched on `writesEnabled`,
+       so a guard that only ever rendered a read-only project would have gone on
+       passing while the picker stayed armed for every real user. Both renders
+       are compared, and they must not differ. */
+    const off = cell(taskRows(OPEN)[0]!, 'col-deadline'); // writesEnabled false
+    const on = cell(taskRows(WRITABLE)[0]!, 'col-deadline'); // writesEnabled true
+    expect(on).toBe(off);
+    expect(on).not.toContain('duepop');
+    expect(on).not.toContain('Select Date');
+  });
+
+  it('says `No Due Date` and wears the missing dress when the card has none', () => {
+    const due = cell(taskRows(WRITABLE)[1]!, 'col-deadline');
+    expect(due).toContain('No Due Date');
+    expect(due).toMatch(/class="datefield readonly[^"]*missing/);
+  });
+
+  it('keeps the OVERDUE tint — reflecting a date includes reflecting that it has passed', () => {
+    const late = renderPipelineTable({
+      pipelineRows: [PARENT], rowWarning,
+      workCardsByMc: { 'MC-837': [task({ overdue: true })] },
+      expanded: { 'MC-837': true }, writesEnabled: true,
+    });
+    expect(cell(taskRows(late)[0]!, 'col-deadline')).toMatch(/class="datefield readonly[^"]*overdue/);
+    // …and a current one stays undressed
+    expect(cell(taskRows(WRITABLE)[0]!, 'col-deadline')).not.toContain('overdue');
+  });
+
+  it('carries NO picker anywhere in the Pipeline view — trigger, popover or calendar', () => {
+    /* Stated over the whole view rather than per cell: the popover used to be
+       drawn twice here (once per row kind), so a guard that checked one cell
+       could leave the other armed. Nothing that opens, stages or applies a date
+       may remain on this tab. */
+    const view = pipelineView();
+    for (const gone of ['dueCalendar', 'duewrap', 'duepop', 'dueact', 'dueapply', 'dueclear', 'duePopPos']) {
+      expect(view, `\`${gone}\` outlived the Pipeline picker`).not.toContain(gone);
     }
+    for (const handler of ['openDuePopover', 'dueApply', 'dueClear', 'duePick', 'dueNav', 'dueShortcut']) {
+      expect(view, `\`${handler}\` is still wired on Pipeline`).not.toContain(handler);
+    }
+    expect(view, 'a deadline write is still flagged behind the project gate here').not.toMatch(
+      /savingDeadline/,
+    );
   });
 
-  it('each half posts to its OWN endpoint, and only that one', () => {
-    // the rule, not the mechanism's text: the task half owns /workcards/,
-    // the deliverable half owns /deliverables/, and neither names the other's
-    const taskHalf = fnBody('writeTaskDue');
-    expect(taskHalf).toContain('/workcards/');
-    expect(taskHalf).not.toContain('/deliverables/');
-    const oneDoor = fnBody('writeDeadline');
-    expect(oneDoor).toContain('/deliverables/');
-    expect(oneDoor).not.toContain('/workcards/');
-    /* same optimistic contract on the task half, asserted as ORDER, not as a
-       source snapshot (rule 1): the no-op comparison against the task's own
-       due must come BEFORE the network call, and a failure reverts + says so.
-       Both the optimistic set and the revert go through `patchWorkCard`, the
-       one door that RE-FINDS the card — the same shape the urgency and
-       difficulty handlers are held to below, for the same reason: a keypath
-       held across the await can land on another card, or on another project's
-       map after a switch. */
-    const guardAt = taskHalf.search(/=== \(found\.card\.due/);
-    expect(guardAt, 'no no-op comparison against the task due').toBeGreaterThan(-1);
-    const sendAt = taskHalf.indexOf('api.send');
-    expect(guardAt).toBeLessThan(sendAt);
-    expect(taskHalf, 'the task due write does not patch the work-card store').toContain('patchWorkCard(cardId, { due:');
-    expect(taskHalf.indexOf('patchWorkCard(cardId'), 'nothing is set optimistically').toBeLessThan(sendAt);
-    expect(taskHalf.lastIndexOf('patchWorkCard(cardId'), 'the write never reverts').toBeGreaterThan(sendAt);
-    expect(taskHalf).toContain('flashBanner');
+  it('leaves the deliverable half of W2 unreachable from the client', () => {
+    /* The registry entry narrowed to the work card (PLAN.md, contract §W2), and
+       the deliverable route went with it. A client that still knew the URL
+       would be one restored route away from writing to a main card again. */
+    expect(APP_JS_CODE, 'the client can still PATCH a deliverable deadline').not.toMatch(
+      /deliverables\/\$\{[^}]*\}\/deadline/,
+    );
   });
 
-  it('the popover opener reads the task’s current date from the task store, by kind', () => {
-    const at = jsCode.indexOf('openDuePopover(');
-    const body = jsCode.slice(at, jsCode.indexOf('\n  },', at));
-    expect(body).toContain('findWorkCard(cardId)');
-    expect(body).toMatch(/kind === 'task'/);
-  });
-
-  it('the shared calendar is ONE partial, used by both popovers', () => {
-    // owl #45 hardening: the month nav / day grid / shortcuts exist once as
-    // the top-level dueCalendar partial — a calendar change lands in both
-    // popovers or in neither. Only the action footers are per-kind.
-    expect([...TEMPLATE.matchAll(/\{\{#partial dueCalendar\}\}/g)]).toHaveLength(1);
-    expect([...TEMPLATE.matchAll(/\{\{>dueCalendar\}\}/g)]).toHaveLength(2);
-    expect([...TEMPLATE.matchAll(/class="duegrid"/g)]).toHaveLength(1);
-    expect([...TEMPLATE.matchAll(/class="dueshort"/g)]).toHaveLength(1);
-    // the footers stay inline and per-kind: two dueact blocks
-    expect([...TEMPLATE.matchAll(/class="dueact"/g)]).toHaveLength(2);
+  it('keeps the column itself — the same class, the same header word', () => {
+    // #78 §3 renamed DUE → DEADLINE and moved the class with the label so
+    // header, cells and width rule cannot drift over a half-applied rename
+    expect(PIPE_COLS.map((c) => c.cls)).toContain('col-deadline');
+    expect(PIPE_COLS.find((c) => c.cls === 'col-deadline')!.label).toMatch(/deadline/i);
   });
 });
 
@@ -754,21 +772,27 @@ describe('the template gates on the DERIVED maps, not on the raw state (block 4)
 describe('a multi-deliverable MC renders its task list ONCE (invariant 3)', () => {
   /* mc_number is not unique — MC-825 carries 99 deliverable rows — and
      expansion is per-MC, so the block after EVERY sibling row rendered the
-     whole task list once per sibling: 99×N duplicated rows and, with a task
-     popover open, 99 duplicate role=dialog boxes. The list and the SubTone
-     hang under the group's FIRST row only, via the stamped firstOfMc. */
+     whole task list once per sibling: 99×N duplicated rows and, when the cell
+     still held an openable popover, 99 duplicate role=dialog boxes. The list
+     and the SubTone hang under the group's FIRST row only, via the stamped
+     firstOfMc. */
   const SIBLING = row({ cardId: 'main-1b', displayId: 'MC-837.2', name: 'Second deliverable, same MC' });
   const multi = renderPipelineTable({
     pipelineRows: [PARENT, SIBLING, CHILDLESS], rowWarning, workCardsByMc: TASKS,
-    expanded: { 'MC-837': true }, duePopover: 'task-1', writesEnabled: true,
+    expanded: { 'MC-837': true }, writesEnabled: true,
   });
 
   it('renders each task row once, not once per sibling', () => {
     expect(taskRows(multi)).toHaveLength(2);
   });
 
-  it('renders an open task popover once, not once per sibling', () => {
-    expect([...multi.matchAll(/<div class="duepop"/g)]).toHaveLength(1);
+  it('renders each task’s DEADLINE cell once, not once per sibling', () => {
+    /* The duplication used to be measured on the open popover; the picker left
+       Pipeline with #78 §2, so it is measured on the cell that replaced it —
+       same defect, same arithmetic, a surface that still exists. */
+    expect(taskRows(multi).map((r) => cell(r, 'col-deadline'))).toHaveLength(2);
+    // three main rows plus the two tasks, each with exactly one cell
+    expect([...multi.matchAll(/<td class="col-deadline">/g)]).toHaveLength(5);
   });
 
   it('hangs the task list under the FIRST sibling, not the second', () => {
@@ -836,33 +860,12 @@ describe('the keyboard path refuses exactly where the chevron refuses (R-exp-c)'
   });
 });
 
-describe('the shared calendar really renders (the rule-6 vacuous hazard)', () => {
-  it('a task popover render contains the partial’s own blocks', () => {
-    // the partial is registered on the render instance from the SHIPPED
-    // template's own body; if that registration breaks, these vanish and
-    // this fails instead of every calendar guard passing against nothing
-    const due = cell(taskRows(renderPipelineTable({
-      pipelineRows: [PARENT], rowWarning, workCardsByMc: TASKS,
-      expanded: { 'MC-837': true }, duePopover: 'task-1', writesEnabled: true,
-    }))[0]!, 'col-deadline');
-    expect(due).toContain('class="duehead"');
-    expect(due).toContain('class="dueshort"');
-    expect(due).toContain('Next Monday');
-  });
-});
-
-describe('the task due wears the parent’s FULL dress, overdue included', () => {
-  it('tints a past-due task the way the parent recipe would', () => {
-    const late = renderPipelineTable({
-      pipelineRows: [PARENT], rowWarning,
-      workCardsByMc: { 'MC-837': [task({ overdue: true })] },
-      expanded: { 'MC-837': true },
-    });
-    expect(cell(taskRows(late)[0]!, 'col-deadline')).toMatch(/class="datefield readonly overdue/);
-    // …and a current one stays undressed
-    expect(cell(taskRows(OPEN)[0]!, 'col-deadline')).not.toContain('overdue');
-  });
-});
+/* The Pipeline picker's own render guards retired WITH the picker (owl #78
+   §2, block 3): the shared `dueCalendar` partial now has ONE consumer, the
+   DEADLINE cell on Sprint Schedules, and test/sprint-schedule-render.test.ts
+   owns proving that it really renders there — including the rule-6 vacuity
+   check this file used to carry. The overdue dress moved into section D
+   above, where it is now asserted on the READ-ONLY span. */
 
 /* ---------------------------------------------------------------------- */
 /* G — owl #52: an MC that several deliverables share                       */

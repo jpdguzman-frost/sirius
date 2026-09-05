@@ -246,9 +246,11 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 /**
  * `withSprintItems` is opt-in because only ONE of this function's four callers
  * returns them. `GET /deadlines`, `PUT /deadlines/day` and `POST /suggest` all
- * load the pipeline and never look at `sprintItems` — and the client fires
- * `/deliverables` and `/deadlines` in a single `Promise.all`, so loading them
- * unconditionally did the work twice on every refresh and threw half away.
+ * load the pipeline and never look at `sprintItems` — and while the client
+ * still fired `/deliverables` and `/deadlines` in a single `Promise.all`
+ * (before block 3 made Deadlines a view over `sprintItems.rows`), loading
+ * them unconditionally did the work twice on every refresh and threw half
+ * away.
  */
 export async function loadPipeline(
   projectId: Types.ObjectId,
@@ -276,8 +278,10 @@ export async function loadPipeline(
       status: classifyList(w.current_list),
       trelloUrl: w.trello_url ?? null,
       figmaUrl: w.figma_url ?? null,
-      // expanded MC row (owl #45): the child row shows Due (W2-writable,
-      // task-card scope — contracts/trello-write.md), Started and Done. Task
+      // expanded MC row (owl #45): the child row shows Due, Started and Done.
+      // Since owl #78 §2 (block 3) Pipeline shows the due READ-ONLY — W2's
+      // setter is the Sprint Schedules DEADLINE cell, work card only, and
+      // this is the same field it writes (contracts/trello-write.md). Task
       // dues play NO part in deadline precedence or forecasting — those stay
       // deliverable-only, which is why this is a plain field, not a resolver.
       // No due INSTANT rides along: nothing reads one, the server preserves
@@ -357,6 +361,9 @@ export async function loadPipeline(
     mcNumbers: unattachedMcs,
   };
 
+  /* `rows` rides along for ONE thing since block 3 (owl #78 §2): the MC
+     group's agreed asset type, `SprintItemRow.assetType`. A schedule row's
+     deadline no longer reads the group — it is its card's own due or none. */
   const sprintItems = opts.withSprintItems
     ? await loadSprintItems(projectId, model, workCards, rows)
     : emptySprintItems();
