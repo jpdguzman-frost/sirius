@@ -88,6 +88,14 @@ moves them.
   patch both copies.** One phase→colour map, one banner recipe, one key
   recipe. It binds documentation the same way — content MOVES, the old home
   points at the new one, it never copies.
+- **Token discipline (JP 2026-09-05).** One session per block, resumed from
+  `docs/MAP.md` + `STATE.md`. The main thread stays under ~250K context:
+  browser E2E, revert proofs, VALIDATE runs and file reading run in fresh
+  agents that return schema'd conclusions; reports stay on disk. Simplification
+  is one agent; refuters stay two per finding, each with the finder's repro and
+  a 15-turn budget; survey reports are reused across blocks; a file over ~50KB
+  is split by area before agents read it whole again. Measured cause: 1.5B
+  cached-input tokens in one four-block day — main thread 39%, review 26%.
 
 ## Caps and guards (asserted by `test/context-architecture.test.ts`)
 
