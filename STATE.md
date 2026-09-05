@@ -16,7 +16,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12**; T073/T091 ⏸, T075 pending | write-enable on rt-837 = next JP gate |
 | 19 | **The ARES-sourced, tag-classified cycle-time model** (T179–T183, ~3–4d) — replaces the inter-event dwell derivation that produced `Medium/design = 0.13d`. Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
-| 18f | **Sprint Schedules search-based add + Add All** (owl #77 §0, nodes 840:31597 · 841:33668 · 841:33689 · 833:68629): the 08-28 dropdown flow retired whole; always-visible search row per sprint, token-AND matching, Add All = one batch request (`POST …/sprint-items/batch`, per-row audit, skips never fatal, sprint re-asserted after the act) | **BUILT 2026-09-05, NOT DEPLOYED** (`0cbbe60` build · `55f572f` review fixes · `b435ac1` simplify): 37 proofs, review 12/21 stood, simplify 9/17, E2E real pointer on the local rt-test copy, console clean. Deploy on JP's word; owl draft for Miles in the scratchpad. Queue after: #74/#75 + #78 §2 → #77 §1–4 → W4 |
+| 18f | **Sprint Schedules search-based add + Add All** (owl #77 §0, nodes 840:31597 · 841:33668 · 841:33689 · 833:68629): the 08-28 dropdown flow retired whole; always-visible search row per sprint, token-AND matching, Add All = one batch request (`POST …/sprint-items/batch`, per-row audit, skips never fatal, sprint re-asserted after the act) | **DEPLOYED 2026-09-05** (`1533788`, JP's ship; build `0cbbe60` · review `55f572f` · simplify `b435ac1`): 37 proofs, review 12/21 stood, simplify 9/17, E2E real pointer on the local rt-test copy; live healthz 200 ×3, bundle carries the search row, old flow absent, urgency smoke green. Queue: #74/#75 + #78 §2 → #77 §1–4 → W4 |
 | 18 | **The redesign** (owls #67–#74): Forecast tab withdrawn · OPEN WORK blue/500 · the client-review wait out of the past-deadline warning · **the scheduled unit becomes the WORK CARD** — `sprint_items`, migration 009, no backfill | **DEPLOYED 2026-08-27** (`2382bfb`) — server half only; the frontend for both rebuilt tabs is the next block of work |
 
 **Build health (2026-09-05):** 1230/1230 tests + 24 `it.todo`, 63 files — green
@@ -57,7 +57,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
   before building on one. **Thread**: miles→jp acked through **#71** + #76, #78, #79;
   **#72–#74 UNACKED** (screens pending), **#75/#77/#80 open** until their blocks;
-  jp→miles sent through **#61**; **#62 sent** 2026-09-05 on JP's yes (block 4); **block-2 reply drafted** (scratchpad block2/owl-reply-draft.md), awaits JP. Product is fixing frame defects; **until they
+  jp→miles sent through **#63**; **#62 sent** 2026-09-05 on JP's yes (block 4); **#63 sent** 2026-09-05 on JP's yes (block 2: five calls to veto, three held, the §4 checks answered). Product is fixing frame defects; **until they
   confirm, this build is authoritative over those frames** — including the
   past-deadline legend reworded 2026-08-27. **Awaiting Miles**: the Deadlines
   acknowledged-state design (R-dl-n), and a ruling on the reworded legend.
@@ -109,5 +109,5 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
-- 2026-09-05 (later still) — **Sprint Schedules search-based add + Add All** (owl #77 §0): 31-row drift, gate on JP's yes; review found the partial banner wiped by the reload and the per-sprint disable lying against a global guard; server re-asserts the sprint after the batch. Real pointer on the local rt-test copy. BUILT, not deployed. → docs/history/state-log/2026-09-05.md
+- 2026-09-05 (later still) — **Sprint Schedules search-based add + Add All** (owl #77 §0): 31-row drift, gate on JP's yes; review found the partial banner wiped by the reload and the per-sprint disable lying against a global guard; server re-asserts the sprint after the batch. Real pointer on the local rt-test copy. DEPLOYED 2026-09-05. → docs/history/state-log/2026-09-05.md
 - 2026-09-05 (later) — **Pipeline filter + sort rework** (owl #78 §4/§5): 49-row drift, gate on JP's yes; the STATE agent stopped on the facet arithmetic (two work axes ticked → under-count, B12) and the plan was amended; review found the back-to-top rule had never scrolled the page since #62; simplify put R-pf-h in one observer. Real round trip on rt-test. DEPLOYED 2026-09-05. → docs/history/state-log/2026-09-05.md
