@@ -38,6 +38,7 @@ import { describe, expect, it } from 'vitest';
 import {
   APP_JS,
   APP_JS_CODE,
+  COMPUTED_CTX_JS,
   PIPE_COLS,
   PIPELINE_CSS,
   TEMPLATE,
@@ -45,13 +46,15 @@ import {
   type PipeRow,
   type WorkCardRow,
   cssRule,
-  decl,
   divFragment,
   fnBody,
   handlerBody,
   method,
+  observerCalls,
+  pipeRecipeDecls,
   renderMetrics,
   renderPipelineTable,
+  stampRows,
 } from './helpers/gantt-render.ts';
 
 const jsCode = APP_JS_CODE;
@@ -502,35 +505,17 @@ interface OpenHarness {
    source-text assertion could show `pipeOpen` exists without showing it ever
    opens a group, or that it refuses a childless one.
 
-   `set` re-stamps `work`/`hasTasks` on the rows the way `loadAll` does, so
-   the computeds read the row shape the browser hands them; the stamp itself
-   is guarded at its source below ("stamps hasTasks in loadAll"). */
+   `set` re-stamps `work`/`hasTasks` on the rows through the render helper's
+   own `stampRows` — the one restatement of `loadAll`'s stamp the suites
+   share — so the computeds read the row shape the browser hands them; the
+   stamp itself is guarded at its source below ("stamps hasTasks in loadAll"). */
 const openHarness = (): OpenHarness =>
-  new Function(`
-    ${decl(APP_JS, 'DIFF_RANK')}
-    ${decl(APP_JS, 'PIPE_SORTS')}
-    ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
-    ${decl(APP_JS, 'pipeTiebreak')}
-    ${decl(APP_JS, 'pipeCompare')}
-    ${decl(APP_JS, 'pipeSortRows')}
-    ${decl(APP_JS, 'PIPE_COLS')}
-    ${decl(APP_JS, 'pipeColLabel')}
-    ${decl(APP_JS, 'PIPE_FILTERS')}
-    ${decl(APP_JS, 'unranked')}
-    ${decl(APP_JS, 'alphaSort')}
-    ${decl(APP_JS, 'pipePick')}
-    ${decl(APP_JS, 'pipeValueLabel')}
-    ${decl(APP_JS, 'PIPE_FILTERS_EMPTY')}
-    ${decl(APP_JS, 'pipeWorkMatch')}
-    ${decl(APP_JS, 'pipeWorkKids')}
-    ${decl(APP_JS, 'pipeValues')}
-    ${decl(APP_JS, 'pipeWorkKeys')}
-    ${decl(APP_JS, 'pipeMatches')}
-    ${decl(APP_JS, 'mcRank')}
-    const computed = { ${['pipeSearched', 'pipelineRows', 'pipeWorkLive', 'pipeAutoOpen', 'pipeOpen', 'pipeKids'].map((n) => method(n)).join(', ')} };
+  new Function('stampRows', `
+    ${pipeRecipeDecls()}
+    const computed = { ${['pipeSearched', 'pipeSortDef', 'pipelineRows', 'pipeWorkLive', 'pipeAutoOpen', 'pipeOpen', 'pipeKids'].map((n) => method(n)).join(', ')} };
     const DATA = { rows: [], searchQ: '', pipeFilters: PIPE_FILTERS_EMPTY(), pipeSort: null, expanded: {}, pipeShut: {}, workCardsByMc: {} };
-    const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k) ? computed[k].call(ctx) : DATA[k]) };
-    const stamp = () => DATA.rows.forEach((r) => { r.work = DATA.workCardsByMc[r.mcNumber] || []; r.hasTasks = r.work.length > 0; });
+    ${COMPUTED_CTX_JS}
+    const stamp = () => { DATA.rows = stampRows(DATA.rows, () => null, DATA.workCardsByMc); };
     return {
       set: (k, v) => { DATA[k] = v; stamp(); },
       empty: () => PIPE_FILTERS_EMPTY(),
@@ -540,7 +525,7 @@ const openHarness = (): OpenHarness =>
       kids: () => computed.pipeKids.call(ctx),
       rows: () => computed.pipelineRows.call(ctx),
     };
-  `)() as OpenHarness;
+  `)(stampRows) as OpenHarness;
 
 describe('a work-card axis or a work-card-derived sort opens the groups it explains (block 4)', () => {
   const URGENT_HARD = task({ cardId: 'task-u', name: 'MC-837 Render Icon: Urgent one', urgency: 'Urgent', difficulty: 'Hard' });
@@ -660,19 +645,11 @@ describe('a work-card axis or a work-card-derived sort opens the groups it expla
        closed the group; a different filter or a different sort is a different
        question, and the group it explains should open again. One observer on
        both keys — asserted as a call whose keypath names both and whose body
-       empties the map, not as a text snapshot of the line. */
-    const observers = [...APP_JS_CODE.matchAll(/app\.observe\('([^']+)'/g)];
-    const hit = observers.find((m) => {
-      const keys = m[1]!.split(/\s+/);
-      if (!keys.includes('pipeFilters') || !keys.includes('pipeSort')) return false;
-      // the call, paren-balanced from `app.observe(`
-      let depth = 0;
-      for (let i = m.index! + 'app.observe'.length; i < APP_JS_CODE.length; i++) {
-        if (APP_JS_CODE[i] === '(') depth++;
-        else if (APP_JS_CODE[i] === ')' && --depth === 0) return /app\.set\('pipeShut',\s*\{\}\)/.test(APP_JS_CODE.slice(m.index, i));
-      }
-      return false;
-    });
+       empties the map (it may first check the map is not already empty), not
+       as a text snapshot of the line. */
+    const hit = observerCalls().find(
+      (o) => o.keys.includes('pipeFilters') && o.keys.includes('pipeSort') && /app\.set\('pipeShut',\s*\{\}\)/.test(o.call),
+    );
     expect(hit, 'no observer on pipeFilters AND pipeSort that empties pipeShut').toBeTruthy();
   });
 

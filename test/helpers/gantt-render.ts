@@ -426,9 +426,17 @@ export interface PipelineTableState {
   warnPopPos?: { left: number; top: number; up?: boolean; over?: boolean };
   /** the SHIPPED recipe, executed out of the app scripts — never a stub */
   rowWarning: (row: PipeRow) => unknown;
-  /** expanded MC groups (owl #45): mcNumber → true is the reader's HAND-opened state */
+  /**
+   * expanded MC groups (owl #45): mcNumber → true is the reader's HAND-opened
+   * state. The template never reads it — it is the harness's fallback for
+   * `pipeOpen` below (a guard in test/pipeline-expanded.test.ts proves the
+   * subtree gates on the derived map alone).
+   */
   expanded?: Record<string, boolean>;
-  /** the wire's task-card map, as src/services/pipeline.ts shapes it */
+  /**
+   * the wire's task-card map, as src/services/pipeline.ts shapes it — what
+   * `stampRows` reads `work`/`hasTasks` from, and the fallback for `pipeKids`
+   */
   workCardsByMc?: Record<string, WorkCardRow[]>;
   /**
    * Block 4 (owl #78 §4/§5): the template gates a group on the DERIVED
@@ -466,8 +474,10 @@ export type WorkCardRow = Pick<WorkCardWire, 'cardId' | 'name'> & Partial<WorkCa
  * row per render (the performance law). The harness stamps them the same way
  * rather than handing Ractive functions: the recipes under test are still the
  * shipped ones, and the render proves the same wiring the browser runs.
+ * Exported so the executed-computed harnesses re-stamp through the same
+ * recipe rather than restating it.
  */
-const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, byMc: Record<string, WorkCardRow[]>) => {
+export const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, byMc: Record<string, WorkCardRow[]>) => {
   const seen = new Set<string>();
   /* owl #52: how many deliverable rows carry each MC number. Counted from the
      rows themselves, which is exactly what the server does (`rowsByMc` in
@@ -546,46 +556,55 @@ export function renderPipelineTable(state: PipelineTableState): string {
   const instance = new Ractive({
     template: divFragment('<div class="pscrollwrap">'),
     partials: { dueCalendar: DUE_CALENDAR_PARTIAL },
-    data: {
-      pipeCols: PIPE_COLS,
-      pipelineRows: stampRows(state.pipelineRows, state.rowWarning, state.workCardsByMc ?? {}),
-      pipeMcAnchor: mcAnchor(state.pipelineRows),
-      warnPop: state.warnPop ?? null,
-      warnPopPos: state.warnPopPos ?? { left: 0, top: 0, up: false },
-      expanded: state.expanded ?? {},
-      workCardsByMc: state.workCardsByMc ?? {},
-      // the two DERIVED gates the table reads (block 4); absent, they are what
-      // the shipped computeds yield with no work axis and no derived sort live
-      pipeOpen: state.pipeOpen ?? state.expanded ?? {},
-      pipeKids: state.pipeKids ?? state.workCardsByMc ?? {},
-      writesEnabled: state.writesEnabled ?? false,
-      savingUrgency: {},
-      savingDifficulty: {},
-      savingDeadline: {},
-      urgencyMenu: null,
-      diffMenu: null,
-      duePopover: state.duePopover ?? null,
-      urgencyMenuPos: { left: 0, top: 0 },
-      diffMenuPos: { left: 0, top: 0 },
-      pipeThumb: { needed: false },
-      icon: {},
-      // the highlighter wraps query matches in <mark>; with no query it is
-      // identity, which is what these assertions want to read
-      hl: (s: unknown) => String(s ?? ''),
-      fmtLong: (s: unknown) => String(s ?? ''),
-      fmtInstant: () => '',
-      // the due popover's calendar internals are another suite's business —
-      // an empty grid renders the popover SHELL (head, shortcuts, Clear,
-      // Apply), which is all the structural assertions here read
-      dueGrid: () => [],
-      dueMonthLabel: () => '',
-      dueMonth: '',
-      dueStaged: null,
-      dowNames: [],
-      duePopPos: { left: 0, top: 0 },
-    },
+    data: pipeTableData(state),
   });
   return instance.toHTML();
+}
+
+/**
+ * The Ractive data the Pipeline TABLE subtree reads, for a given view state —
+ * every array it iterates stubbed (rule 6), the rows stamped as `loadAll`
+ * stamps them. Split out of `renderPipelineTable` so a renderer of a LARGER
+ * subtree (the `.pipestack` swap in test/pipeline-sortfilter.test.ts) can
+ * spread it under its own toolbar keys rather than keep a second copy.
+ */
+export function pipeTableData(state: PipelineTableState): Record<string, unknown> {
+  return {
+    pipeCols: PIPE_COLS,
+    pipelineRows: stampRows(state.pipelineRows, state.rowWarning, state.workCardsByMc ?? {}),
+    pipeMcAnchor: mcAnchor(state.pipelineRows),
+    warnPop: state.warnPop ?? null,
+    warnPopPos: state.warnPopPos ?? { left: 0, top: 0, up: false },
+    // the two DERIVED gates the table reads (block 4); absent, they are what
+    // the shipped computeds yield with no work axis and no derived sort live
+    pipeOpen: state.pipeOpen ?? state.expanded ?? {},
+    pipeKids: state.pipeKids ?? state.workCardsByMc ?? {},
+    writesEnabled: state.writesEnabled ?? false,
+    savingUrgency: {},
+    savingDifficulty: {},
+    savingDeadline: {},
+    urgencyMenu: null,
+    diffMenu: null,
+    duePopover: state.duePopover ?? null,
+    urgencyMenuPos: { left: 0, top: 0 },
+    diffMenuPos: { left: 0, top: 0 },
+    pipeThumb: { needed: false },
+    icon: {},
+    // the highlighter wraps query matches in <mark>; with no query it is
+    // identity, which is what these assertions want to read
+    hl: (s: unknown) => String(s ?? ''),
+    fmtLong: (s: unknown) => String(s ?? ''),
+    fmtInstant: () => '',
+    // the due popover's calendar internals are another suite's business —
+    // an empty grid renders the popover SHELL (head, shortcuts, Clear,
+    // Apply), which is all the structural assertions here read
+    dueGrid: () => [],
+    dueMonthLabel: () => '',
+    dueMonth: '',
+    dueStaged: null,
+    dowNames: [],
+    duePopPos: { left: 0, top: 0 },
+  };
 }
 
 /** One frost note as `/requests` puts it on the wire. */
@@ -710,6 +729,51 @@ export function method(name: string, src: string = APP_JS): string {
     else if (src[i] === '}' && --depth === 0) return src.slice(at, i + 1);
   }
   throw new Error(`gantt-render: unterminated computed \`${name}()\``);
+}
+
+/**
+ * Every top-level const the Pipeline sort + filter recipe needs, in the order
+ * the shipped source can evaluate them (PIPE_FILTERS calls pipeColLabel at
+ * declaration; PIPE_WORK_FILTERS filters PIPE_FILTERS). ONE list: three
+ * harnesses execute this recipe — the sortfilter recipe and no-results
+ * harness, the expanded open harness — and three hand-copied decl lists
+ * drifted by a name each time a helper was added (block 4). A new helper is
+ * added here once. Names are the frozen ones (PLAN.md block 4).
+ */
+const PIPE_RECIPE_NAMES = [
+  'DIFF_RANK', 'PIPE_SORTS', 'PIPE_SORT_DEFAULT', 'cmpNullsLast', 'pipeTiebreak', 'pipeCompare', 'pipeSortRows',
+  'PIPE_COLS', 'pipeColLabel', 'PIPE_FILTERS', 'PIPE_WORK_FILTERS', 'unranked', 'alphaSort', 'pipePick', 'pipeWorkPick',
+  'pipeValueLabel', 'PIPE_FILTERS_EMPTY', 'pipeWorkMatch', 'pipeWorkKids', 'pipeValues', 'pipeWorkKeys', 'pipeMatches',
+  'pipeFacetList', 'pipeChipList', 'pipeSortLabel', 'mcRank',
+];
+/** The recipe's declarations as one `new Function` prelude, plus any the caller adds. */
+export const pipeRecipeDecls = (extra: string[] = []): string =>
+  [...PIPE_RECIPE_NAMES, ...extra].map((n) => decl(APP_JS, n)).join('\n');
+
+/**
+ * The executed-computed resolver: a `this` whose `get` answers a computed by
+ * CALLING it (so a computed that reads another goes through the same door)
+ * and anything else from a `DATA` object. Expects `computed` and `DATA` in
+ * scope — every harness declares both, then this line.
+ */
+export const COMPUTED_CTX_JS =
+  'const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k) ? computed[k].call(ctx) : DATA[k]) };';
+
+/**
+ * Every `app.observe('keys', …)` call in the shipped client: the keypaths it
+ * names and the call's full text, paren-balanced from `app.observe(`. A guard
+ * about an observer asserts the RULE — which keys, what the body does — from
+ * this rather than from a text snapshot of the line (test/CLAUDE.md rule 1).
+ */
+export function observerCalls(src: string = APP_JS_CODE): Array<{ keys: string[]; call: string }> {
+  return [...src.matchAll(/app\.observe\('([^']+)'/g)].map((m) => {
+    let depth = 0;
+    for (let i = m.index! + 'app.observe'.length; i < src.length; i++) {
+      if (src[i] === '(') depth++;
+      else if (src[i] === ')' && --depth === 0) return { keys: m[1]!.split(/\s+/), call: src.slice(m.index, i + 1) };
+    }
+    throw new Error(`gantt-render: an app.observe('${m[1]}') call never closes`);
+  });
 }
 
 /**

@@ -88,16 +88,10 @@ function applyRequestFilter(f) {
    left halfway down a list that is no longer the list you scrolled into is the
    same disorientation paging was protecting against. Inventing a `pipePage`
    nobody reads would have satisfied the words and nothing else. Raised in
-   jp→miles #50. */
+   jp→miles #50. WHEN it runs is stated once, as the observer on the three
+   narrowing keys in 80-loaders.js — no handler calls this on its own. */
 function pipeBackToTop() {
-  // `scrollerOf` is the codebase's single "which scroller" resolver; querying
-  // `.pscroll` here was a second way to find the same element today and a way
-  // to find a different one tomorrow.
-  const el = scrollerOf(null);
-  if (el) el.scrollTop = 0;
-  // the PAGE is the vertical scroller — the table box only scrolls sideways —
-  // so without this line nobody was returned anywhere (2026-09-05 block 4
-  // review, finding 3)
+  // the page is the vertical scroller; the table box scrolls x only
   const doc = document.scrollingElement || document.documentElement;
   if (doc) doc.scrollTop = 0;
 }
@@ -260,12 +254,10 @@ app.on({
      the urgency menu uses, and it means the popup can always undo itself. */
   pickPipeSort(_ctx, key) {
     app.set('pipeSort', app.get('pipeSort') === key ? null : key);
-    pipeBackToTop();
     closeMenus({ restoreFocus: true });
   },
   clearPipeSort() {
     app.set('pipeSort', null);
-    pipeBackToTop();
     closeMenus({ restoreFocus: true });
   },
   /* MULTI-select: OR within a category, AND across (owl #62). The panel STAYS
@@ -277,7 +269,6 @@ app.on({
     if (at > -1) cur.splice(at, 1);
     else cur.push(value);
     app.set(`pipeFilters.${axis}`, cur);
-    pipeBackToTop();
   },
   /* THE CHIP'S HOVER PANEL (node 593:80073) — the chip's own filter group,
      opened under it so a reader can see and change what the chip names without
@@ -313,14 +304,13 @@ app.on({
   },
   /* The indicator's ✕ clears ONE AXIS, not one value: the chip names an axis
      and lists its values, so removing it removes what it names. Returning to
-     the top is the same rule every other narrowing follows (R-pf-h). */
+     the top follows from the write, like every other narrowing (R-pf-h, the
+     observer in 80-loaders.js). */
   removePipeAxis(_ctx, axis) {
     app.set(`pipeFilters.${axis}`, []);
-    pipeBackToTop();
   },
   clearPipeFilters() {
     app.set('pipeFilters', PIPE_FILTERS_EMPTY());
-    pipeBackToTop();
     closeMenus({ restoreFocus: true });
   },
   // annotation 70:10024: row focusable, Enter toggles the MC group's tasks

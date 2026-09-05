@@ -290,9 +290,13 @@ const app = new Ractive({
     pipelineRows() {
       const sel = this.get('pipeFilters');
       const rows = this.get('pipeSearched').filter((r) => pipeMatches(r, sel, null));
-      const key = this.get('pipeSort');
-      const sort = key ? PIPE_SORTS.find((s) => s.key === key) : PIPE_SORT_DEFAULT;
-      return sort ? pipeSortRows(rows, sort, sel) : rows;
+      return pipeSortRows(rows, this.get('pipeSortDef'), sel);
+    },
+    /** THE ACTIVE SORT, as one derivation: the PIPE_SORTS entry `pipeSort`
+        names, or the natural order — for null and for a key the list no
+        longer carries alike, so a stale key can never leave the table unordered. */
+    pipeSortDef() {
+      return PIPE_SORTS.find((s) => s.key === this.get('pipeSort')) || PIPE_SORT_DEFAULT;
     },
     /* The facet counts live in `pipeFacetList` beside the axes and the matcher
        they depend on (10-constants), so the panel and the table cannot disagree
@@ -366,9 +370,10 @@ const app = new Ractive({
     /* ---- auto-open (owl #78 §4/§5; PLAN.md B3, B10, B11) -----------------
        A work-card axis filters, and a derived sort orders, by values the
        table shows only INSIDE a group — so the groups open, or the reader is
-       looking at a result with nothing on screen to explain it. Three
-       questions, one computed each; the template reads pipeOpen and
-       pipeKids, never `expanded` or `workCardsByMc` directly. */
+       looking at a result with nothing on screen to explain it. Four
+       questions, one computed each — is a work axis live, should the groups
+       open, which are open, which children each draws; the template reads
+       pipeOpen and pipeKids, never `expanded` or `workCardsByMc` directly. */
     /** Is any WORK-CARD axis filtering? */
     pipeWorkLive() {
       const sel = this.get('pipeFilters');
@@ -376,7 +381,7 @@ const app = new Ractive({
     },
     /** Should the groups open on their own — a live work-card axis, or a derived sort. */
     pipeAutoOpen() {
-      return this.get('pipeWorkLive') || (PIPE_SORTS.find((s) => s.key === this.get('pipeSort')) || {}).derived === true;
+      return this.get('pipeWorkLive') || this.get('pipeSortDef').derived === true;
     },
     /* WHICH GROUPS ARE OPEN, per MC, over the rows as rendered. Auto-open on:
        every group with tasks, minus the ones collapsed by hand (`pipeShut`);

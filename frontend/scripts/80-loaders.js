@@ -459,12 +459,20 @@ app.observe('pipeFilters', () => {
    derived sort is live; a change to either is a new question, and a group the
    reader folded under the last one reopens under this one. Once nothing is
    live any more, `expanded` is the whole truth again, with nothing carried
-   over from the auto-open spell. */
-app.observe('pipeFilters pipeSort', () => app.set('pipeShut', {}), { init: false });
-/* R-pf-h closed for search (PLAN.md, item 7): every other narrowing returns
-   the reader to the top from its own handler; the search box writes `searchQ`
-   through its binding and has no handler, so the rule is stated here. */
-app.observe('searchQ', () => pipeBackToTop(), { init: false });
+   over from the auto-open spell. A search is NOT a trigger change, so this
+   stays apart from the back-to-top observer below; and an already-empty map
+   is left alone rather than replaced, so a plain filter click re-renders
+   nothing that reads `pipeShut`. */
+app.observe('pipeFilters pipeSort', () => {
+  if (Object.keys(app.get('pipeShut') || {}).length) app.set('pipeShut', {});
+}, { init: false });
+/* R-pf-h AT ONE ALTITUDE: any narrowing — a filter, a sort, a search term —
+   returns the reader to the top. The five filter and sort handlers used to
+   spell the call each, and the search box, two-way bound with no handler,
+   needed an observer of its own; one observer on the three keys now owns the
+   rule, a handler cannot forget it, and the project-switch reset (which
+   writes two of these keys) gets it without an edit. */
+app.observe('pipeFilters pipeSort searchQ', () => pipeBackToTop(), { init: false });
 
 app.observe('requests', () => {
   const last = app.get('reqPageCount');

@@ -373,38 +373,32 @@ const PIPE_SORTS = [
    day it was onboarded. A row not yet re-read has none and sorts last. */
 const PIPE_SORT_DEFAULT = { key: null, dir: -1, value: (r) => r.filedAt || null };
 
+/* NULLS LAST, THEN COMPARE — the one shape every Pipeline comparison takes.
+   An unranked value sorts after a ranked one whichever way `dir` points, two
+   unranked are a tie, two ranked compare in `dir`. Zero only on a tie, so a
+   caller chains the next comparison with `||`. */
+const cmpNullsLast = (av, bv, dir) => {
+  const an = unranked(av);
+  const bn = unranked(bv);
+  if (an || bn) return an && bn ? 0 : an ? 1 : -1;
+  return av === bv ? 0 : (av < bv ? -1 : 1) * dir;
+};
+
 /* THE TIEBREAK (PLAN.md B7 — owl #78 §5.B.4 taken as the build's reading, for
    all ten sorts). Two KEYLESS rows: MC number ascending, so the tail of the
    table reads in one order whichever sort put it there. Two EQUAL keys: the
    table's natural order — filedAt descending, never-read last — then MC
-   ascending. Before this a tie fell to the server's row order, which is not
-   an order a reader can name. Both arguments are DECORATED entries, see
-   pipeSortRows; a row with no MC number sorts after the ones that have one. */
-const pipeTiebreak = (a, b, keyless) => {
-  if (!keyless) {
-    const ae = unranked(a.f);
-    const be = unranked(b.f);
-    if (ae !== be) return ae ? 1 : -1;
-    if (!ae && a.f !== b.f) return a.f < b.f ? 1 : -1;
-  }
-  const am = unranked(a.m);
-  const bm = unranked(b.m);
-  if (am || bm) return am && bm ? 0 : am ? 1 : -1;
-  return a.m === b.m ? 0 : a.m < b.m ? -1 : 1;
-};
+   ascending. Both arguments are DECORATED entries, see pipeSortRows; a row
+   with no MC number sorts after the ones that have one. */
+const pipeTiebreak = (a, b, keyless) => (keyless ? 0 : cmpNullsLast(a.f, b.f, -1)) || cmpNullsLast(a.m, b.m, 1);
 
 /* Keyless last, always — before direction is applied, so it holds both ways.
    Compares two DECORATED entries `{ r, v, f, m }` — row, sort value, filedAt,
-   MC rank — never two rows: see pipeSortRows. Every tie goes to pipeTiebreak;
-   only a pair equal on key, filedAt AND MC rank keeps the array's own order
-   (2026-09-05 block 4 review, finding 2). */
-const pipeCompare = (sort, a, b) => {
-  const ae = unranked(a.v);
-  const be = unranked(b.v);
-  if (ae || be) return ae && be ? pipeTiebreak(a, b, true) : ae ? 1 : -1;
-  if (a.v === b.v) return pipeTiebreak(a, b, false);
-  return (a.v < b.v ? -1 : 1) * sort.dir;
-};
+   MC rank — never two rows: see pipeSortRows. Every tie goes to pipeTiebreak,
+   a keyless pair and an equal-key pair alike; only a pair equal on key,
+   filedAt AND MC rank keeps the array's own order (2026-09-05 block 4 review,
+   finding 2). */
+const pipeCompare = (sort, a, b) => cmpNullsLast(a.v, b.v, sort.dir) || pipeTiebreak(a, b, unranked(a.v));
 
 /* Decorate, sort, undecorate — `value()` runs ONCE PER ROW, not once per
    comparison. 480 rows is ~4,300 comparisons, so extracting inside the
@@ -420,7 +414,18 @@ const pipeCompare = (sort, a, b) => {
    aggregation, pipeWorkKeys, runs HERE, once per row, never in the
    comparator. The two tiebreak fields ride on the entry for the same reason. */
 const pipeSortRows = (rows, sort, sel) => {
-  const decorated = rows.map((r) => ({ r, v: sort.value(r, sel), f: r.filedAt || null, m: mcRank(r.mcNumber) }));
+  // siblings of a shared MC (MC-825, 99 rows) share one `work` array, so a
+  // derived key is aggregated once per array and read back for the rest
+  const memo = sort.derived ? new Map() : null;
+  const decorated = rows.map((r) => {
+    let v;
+    if (memo && memo.has(r.work)) v = memo.get(r.work);
+    else {
+      v = sort.value(r, sel);
+      if (memo) memo.set(r.work, v);
+    }
+    return { r, v, f: r.filedAt || null, m: mcRank(r.mcNumber) };
+  });
   decorated.sort((a, b) => pipeCompare(sort, a, b));
   return decorated.map((d) => d.r);
 };
@@ -507,6 +512,8 @@ const PIPE_FILTERS = [
   { key: 'urgency', col: 'col-urgency', label: pipeColLabel('col-urgency'), work: 'urgency', order: ['Non-Urgent', 'Urgent'] },
   { key: 'status', col: 'col-status', label: pipeColLabel('col-status'), pick: (r) => r.currentList, scroll: true },
 ];
+/** The WORK-CARD axes alone — the two a card is tested against, derived so a fifth axis is one entry above. */
+const PIPE_WORK_FILTERS = PIPE_FILTERS.filter((f) => f.work);
 /** Absence is DRAWN as the word None — one rule, so the chip and the panel
     cannot disagree about it (owl #63). */
 const pipeValueLabel = (v) => (v === null ? 'None' : v);
@@ -522,6 +529,8 @@ const pipePick = (f, row) => {
   const v = f.pick(row);
   return unranked(v) ? null : v;
 };
+/** A work card's value on a work-card axis — the same absence rule, read off the card field the axis names. */
+const pipeWorkPick = (f, w) => (unranked(w[f.work]) ? null : w[f.work]);
 /** Empty SELECTION object - one array per axis, derived so another axis is one entry. */
 const PIPE_FILTERS_EMPTY = () => Object.fromEntries(PIPE_FILTERS.map((f) => [f.key, []]));
 /* ---- the work-card side of an axis (owl #78 §4; PLAN.md B3) ----------------
@@ -532,11 +541,11 @@ const PIPE_FILTERS_EMPTY = () => Object.fromEntries(PIPE_FILTERS.map((f) => [f.k
    work-card axis admits. */
 /** Does a work card satisfy every LIVE work-card axis except the one named? (`null` = every axis.) */
 const pipeWorkMatch = (w, sel, exceptKey) =>
-  PIPE_FILTERS.every((f) => {
-    if (!f.work || f.key === exceptKey) return true;
-    const want = (sel && sel[f.key]) || [];
+  PIPE_WORK_FILTERS.every((f) => {
+    if (f.key === exceptKey) return true;
+    const want = sel[f.key] || [];
     if (!want.length) return true; // an empty axis constrains nothing
-    const v = unranked(w[f.work]) ? null : w[f.work];
+    const v = pipeWorkPick(f, w);
     // an axis that offers no None cannot match a card that has no value there
     if (v === null && !f.none) return false;
     return want.indexOf(v) > -1; // OR within, AND across (owl #62)
@@ -557,7 +566,7 @@ const pipeValues = (f, row, sel) => {
   }
   const out = [];
   for (const w of pipeWorkKids(row, sel, f.key)) {
-    const v = unranked(w[f.work]) ? null : w[f.work];
+    const v = pipeWorkPick(f, w);
     if (v === null && !f.none) continue;
     if (out.indexOf(v) < 0) out.push(v);
   }
@@ -575,14 +584,16 @@ const pipeWorkKeys = (row, sel) => {
   const kids = pipeWorkKids(row, sel, null);
   let due = null;
   let hard = null;
+  let urgent = false;
   for (const w of kids) {
     if (w.due && (due === null || w.due < due)) due = w.due;
+    if (w.urgency === 'Urgent') urgent = true;
     // own keys only (2026-09-05 block 4 review, finding 1): the mapper and W3 hold the wire
     // vocabulary; this holds the key to number|null as B6 promises, never an inherited function
     const rank = Object.hasOwn(DIFF_RANK, w.difficulty) ? DIFF_RANK[w.difficulty] : null;
     if (rank !== null && (hard === null || rank > hard)) hard = rank;
   }
-  return { due, urgent: kids.length ? (kids.some((w) => w.urgency === 'Urgent') ? 1 : 0) : null, hard };
+  return { due, urgent: kids.length ? (urgent ? 1 : 0) : null, hard };
 };
 
 /** Does a row satisfy every axis EXCEPT the one named? (`null` = every axis.)
@@ -658,15 +669,27 @@ const pipeFacetList = (rows, sel) => {
      still reporting "1 applied", and no way to un-pick it short of Clear. The
      template already draws a zero-count-but-picked value as enabled. */
   for (const facet of facets) for (const v of facet.picked) facet.counts.set(v, 0);
+  /* WHICH POOL an axis failure lands in: each MAIN axis is its own pool, and
+     the WORK-CARD axes share one, because they fail as a single conjunction
+     (B3/B12) — so a row's failures are counted per pool, not per axis. */
+  const pool = facets.map(({ f }, i) => (f.work ? 'work' : i));
+  /* a work-card axis's value set is a function of the row's `work` array and
+     the selection alone, and siblings of a shared MC (MC-825, 99 rows) share
+     one array — so each set is read once per array per pass, not per row */
+  const wmemo = facets.map((x) => (x.f.work ? new Map() : null));
   const vals = new Array(facets.length);
   for (const r of rows) {
-    let mainFails = 0;
-    let failedMain = -1;
-    let workFail = false;
+    let fails = 0;
+    let failed = null;
     for (let i = 0; i < facets.length; i++) {
       const { f, picked, counts } = facets[i];
       // the row's VALUES on this axis, read once per row per axis
-      const set = pipeValues(f, r, sel);
+      let set;
+      if (wmemo[i] && wmemo[i].has(r.work)) set = wmemo[i].get(r.work);
+      else {
+        set = pipeValues(f, r, sel);
+        if (wmemo[i]) wmemo[i].set(r.work, set);
+      }
       vals[i] = set;
       // every value PRESENT on the board is seeded, even at zero against this
       // pool — the frame wants empty categories exposed, not hidden
@@ -675,18 +698,16 @@ const pipeFacetList = (rows, sel) => {
       // a row fails an axis when NONE of its values there is picked — a row
       // with no value on an axis that offers no None has no values, so it fails
       if (!picked.length || set.some((v) => picked.indexOf(v) > -1)) continue;
-      if (f.work) workFail = true;
-      else {
-        mainFails++;
-        failedMain = i;
+      if (pool[i] !== failed) {
+        fails++;
+        failed = pool[i];
       }
     }
-    const fails = mainFails + (workFail ? 1 : 0);
     if (fails > 1) continue;
     for (let i = 0; i < facets.length; i++) {
-      // one failure: the failed MAIN axis's own pool, or — when it is the
-      // work-card conjunction that failed — every WORK-CARD pool
-      if (fails === 1 && (failedMain >= 0 ? failedMain !== i : !facets[i].f.work)) continue;
+      // one failure: only the pool that failed counts the row — a MAIN axis's
+      // own, or every WORK-CARD axis when it was the conjunction
+      if (fails === 1 && pool[i] !== failed) continue;
       const { counts } = facets[i];
       for (const v of vals[i]) counts.set(v, counts.get(v) + 1);
     }

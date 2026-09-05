@@ -38,7 +38,23 @@
 import { readFileSync } from 'node:fs';
 import RactiveModule from 'ractive';
 import { describe, expect, it } from 'vitest';
-import { APP_JS, APP_JS_CODE, PIPELINE_CSS, TEMPLATE, cssRule, decl, divFragment, fnBody, handlerBody, method } from './helpers/gantt-render.ts';
+import {
+  APP_JS,
+  APP_JS_CODE,
+  COMPUTED_CTX_JS,
+  PIPELINE_CSS,
+  TEMPLATE,
+  type PipeRow,
+  cssRule,
+  decl,
+  divFragment,
+  fnBody,
+  handlerBody,
+  method,
+  observerCalls,
+  pipeRecipeDecls,
+  pipeTableData,
+} from './helpers/gantt-render.ts';
 
 type Sel = Record<string, (string | null)[]>;
 interface Sort { key: string; group: string; label: string; dir: number; derived?: boolean; value: (r: unknown, sel?: Sel) => unknown }
@@ -47,34 +63,13 @@ interface FacetValue { value: string | null; label: string; count: number; on: b
 interface Facet { key: string; label: string; scroll: boolean; values: FacetValue[] }
 interface WorkKeys { due: string | null; urgent: 0 | 1 | null; hard: number | null }
 
-/* The block-4 helpers ride in the same recipe: `DIFF_RANK` and the five
-   `pipeWork*`/`pipeValues`/`pipeTiebreak` consts are what the ten sorts and
-   the four axes call, so a decl-list without them would throw at the first
-   derived key. Names are the frozen ones (PLAN.md block 4). */
+/* The whole sort + filter recipe, sliced out of the shipped scripts by the
+   helper's ONE dependency-ordered name list (`pipeRecipeDecls`) — the same
+   prelude the no-results harness below and the open harness in
+   test/pipeline-expanded.test.ts execute, so a helper added to the recipe is
+   added in one place. Names are the frozen ones (PLAN.md block 4). */
 const recipe = new Function(`
-  ${decl(APP_JS, 'DIFF_RANK')}
-  ${decl(APP_JS, 'PIPE_SORTS')}
-  ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
-  ${decl(APP_JS, 'pipeTiebreak')}
-  ${decl(APP_JS, 'pipeCompare')}
-  ${decl(APP_JS, 'pipeSortRows')}
-  ${decl(APP_JS, 'PIPE_COLS')}
-  ${decl(APP_JS, 'pipeColLabel')}
-  ${decl(APP_JS, 'PIPE_FILTERS')}
-  ${decl(APP_JS, 'unranked')}
-  ${decl(APP_JS, 'alphaSort')}
-  ${decl(APP_JS, 'pipePick')}
-  ${decl(APP_JS, 'pipeValueLabel')}
-  ${decl(APP_JS, 'PIPE_FILTERS_EMPTY')}
-  ${decl(APP_JS, 'pipeWorkMatch')}
-  ${decl(APP_JS, 'pipeWorkKids')}
-  ${decl(APP_JS, 'pipeValues')}
-  ${decl(APP_JS, 'pipeWorkKeys')}
-  ${decl(APP_JS, 'pipeMatches')}
-  ${decl(APP_JS, 'pipeFacetList')}
-  ${decl(APP_JS, 'pipeChipList')}
-  ${decl(APP_JS, 'pipeSortLabel')}
-  ${decl(APP_JS, 'mcRank')}
+  ${pipeRecipeDecls()}
   return { DIFF_RANK, PIPE_COLS, pipeChipList, PIPE_SORTS, PIPE_SORT_DEFAULT, pipeSortRows, PIPE_FILTERS, PIPE_FILTERS_EMPTY, pipeMatches, pipeFacetList, pipeSortLabel, pipeWorkMatch, pipeWorkKids, pipeValues, pipeWorkKeys, pipeTiebreak };
 `)() as {
   DIFF_RANK: Record<string, number>;
@@ -111,6 +106,11 @@ const wc = (over: Record<string, unknown> = {}) => ({
 });
 const sel = (over: Sel = {}): Sel => ({ ...recipe.PIPE_FILTERS_EMPTY(), ...over });
 const ids = (rows: unknown[]) => rows.map((r) => (r as { cardId: string }).cardId);
+/** The ids of the rows the shipped matcher admits under a selection — the table, by id. */
+const matching = (rs: unknown[], live: Sel) => ids(rs.filter((r) => recipe.pipeMatches(r, live, null)));
+/** One axis's facet — values, counts, ticks — as the shipped pass reads it over `rows`. */
+const facet = (rows: unknown[], key: string, live: Sel = recipe.PIPE_FILTERS_EMPTY()) =>
+  recipe.pipeFacetList(rows, live).find((f) => f.key === key)!;
 const sortBy = (key: string | null, rows: unknown[], live: Sel = sel()) => {
   const s = key ? recipe.PIPE_SORTS.find((x) => x.key === key)! : recipe.PIPE_SORT_DEFAULT;
   // the SHIPPED sort path, decorate-sort-undecorate and all — not a
@@ -441,8 +441,7 @@ describe('filtering is OR within a category and AND across them', () => {
     row({ cardId: 'b', assetType: 'UI', currentList: 'Backlogs: Icon' }),
     row({ cardId: 'c', assetType: 'Icon', currentList: 'Backlogs: Icon' }),
   ];
-  const pick = (sel: Record<string, string[]>) =>
-    rows.filter((r) => recipe.pipeMatches(r, { ...recipe.PIPE_FILTERS_EMPTY(), ...sel }, null)).map((r) => r.cardId);
+  const pick = (over: Record<string, string[]>) => matching(rows, sel(over));
 
   it('carries the FOUR axes in the frame’s order — Type, Difficulty, Urgency, Status', () => {
     /* SUPERSEDES block 1's two-axis pin. #78 §4 (frame 841:53782) rebuilds
@@ -506,9 +505,8 @@ describe('filtering is OR within a category and AND across them', () => {
       row({ cardId: 'b', assetType: 'UI', work: [wc({ difficulty: 'Hard' })] }),
       row({ cardId: 'c', assetType: 'Icon', work: [wc({ difficulty: 'Hard' })] }),
     ];
-    const hit = (s: Sel) => rows.filter((r) => recipe.pipeMatches(r, s, null)).map((r) => r.cardId);
-    expect(hit(sel({ difficulty: ['Easy', 'Hard'] }))).toEqual(['a', 'b', 'c']);
-    expect(hit(sel({ type: ['Icon'], difficulty: ['Hard'] }))).toEqual(['c']);
+    expect(matching(rows, sel({ difficulty: ['Easy', 'Hard'] }))).toEqual(['a', 'b', 'c']);
+    expect(matching(rows, sel({ type: ['Icon'], difficulty: ['Hard'] }))).toEqual(['c']);
   });
 
   it('pipeValues: a main axis yields one value (or nothing where None is not offered); a work axis the DISTINCT child values', () => {
@@ -568,6 +566,11 @@ describe('filtering is OR within a category and AND across them', () => {
 /* ---------------------------------------------------------------------- */
 
 describe('a category counts against the OTHER categories, never its own', () => {
+  /* the two readers every count below goes through: one axis's values off a
+     facet list, and those values as `[label, count]` pairs */
+  const facetOf = (facets: Facet[], key: string): FacetValue[] => facets.find((f) => f.key === key)?.values ?? [];
+  const counts = (facets: Facet[], key: string) => facetOf(facets, key).map((v) => [v.label, v.count]);
+
   it('ignoring its own selection is what keeps a second value reachable', () => {
     /* the whole reason for the third option: counted against ALL filters
        including its own, picking Icon drops UI to zero and it can never be
@@ -588,16 +591,14 @@ describe('a category counts against the OTHER categories, never its own', () => 
       row({ cardId: 'b', mcNumber: 'MC-2', work: [wc()] }),
       row({ cardId: 'c', mcNumber: 'MC-3' }), // childless: on no pool of a work axis
     ];
-    const urgency = recipe.pipeFacetList(rows, sel()).find((f) => f.key === 'urgency')!;
-    expect(urgency.values.map((v) => [v.label, v.count])).toEqual([['Non-Urgent', 2], ['Urgent', 1]]);
+    expect(counts(recipe.pipeFacetList(rows, sel()), 'urgency')).toEqual([['Non-Urgent', 2], ['Urgent', 1]]);
     /* …and the unit is the ROW, not the MC: siblings on a shared MC carry the
        same `work` (invariant 3 — MC-825's 99 rows read Urgent 99 with one
        urgent card), and every one is a row the table draws (2026-09-05 block 4
        review, finding 4) */
     const shared = [wc({ urgency: 'Urgent' })];
     const siblings = [row({ cardId: 'a', mcNumber: 'MC-825', work: shared }), row({ cardId: 'b', mcNumber: 'MC-825', work: shared })];
-    const onShared = recipe.pipeFacetList(siblings, sel()).find((f) => f.key === 'urgency')!;
-    expect(onShared.values.map((v) => [v.label, v.count])).toEqual([['Urgent', 2]]);
+    expect(counts(recipe.pipeFacetList(siblings, sel()), 'urgency')).toEqual([['Urgent', 2]]);
   });
 
   it('ignores its OWN axis on a work axis too, and sees the other work axis’s narrowing', () => {
@@ -610,13 +611,11 @@ describe('a category counts against the OTHER categories, never its own', () => 
       row({ cardId: 'b', mcNumber: 'MC-2', assetType: 'UI', work: [wc({ difficulty: 'Easy' })] }),
     ];
     const facets = recipe.pipeFacetList(rows, sel({ urgency: ['Urgent'] }));
-    const of = (k: string) => facets.find((f) => f.key === k)!.values.map((v) => [v.label, v.count]);
-    expect(of('urgency'), 'own axis ignored: Non-Urgent still reachable').toEqual([['Non-Urgent', 2], ['Urgent', 1]]);
-    expect(of('difficulty'), 'the other work axis counts urgent children only').toEqual([['Hard', 1]]);
-    expect(of('type'), 'a main axis sees the narrowing').toEqual([['Icon', 1]]);
+    expect(counts(facets, 'urgency'), 'own axis ignored: Non-Urgent still reachable').toEqual([['Non-Urgent', 2], ['Urgent', 1]]);
+    expect(counts(facets, 'difficulty'), 'the other work axis counts urgent children only').toEqual([['Hard', 1]]);
+    expect(counts(facets, 'type'), 'a main axis sees the narrowing').toEqual([['Icon', 1]]);
     // …and a MAIN axis's selection narrows the WORK axes' counts in turn
-    const byType = recipe.pipeFacetList(rows, sel({ type: ['UI'] }));
-    expect(byType.find((f) => f.key === 'difficulty')!.values.map((v) => [v.label, v.count])).toEqual([['Easy', 1]]);
+    expect(counts(recipe.pipeFacetList(rows, sel({ type: ['UI'] })), 'difficulty')).toEqual([['Easy', 1]]);
   });
 
   /* ---- BOTH work-card axes live (PLAN.md B12; owl #78 §4; R-pf-c) ----------
@@ -636,8 +635,6 @@ describe('a category counts against the OTHER categories, never its own', () => 
   const both = row({ cardId: 'both', mcNumber: 'MC-1', assetType: 'Icon', work: [wc({ urgency: 'Urgent', difficulty: 'Hard' })] });
   const split = row({ cardId: 'split', mcNumber: 'MC-2', assetType: 'Icon', work: [wc({ urgency: 'Urgent', difficulty: 'Easy' }), wc({ cardId: 'w2', difficulty: 'Hard' })] });
   const far = row({ cardId: 'far', mcNumber: 'MC-3', assetType: 'UI', work: [wc({ urgency: 'Urgent', difficulty: 'Easy' }), wc({ cardId: 'w2', difficulty: 'Hard' })] });
-  const facetOf = (facets: Facet[], key: string): FacetValue[] => facets.find((f) => f.key === key)?.values ?? [];
-  const counts = (facets: Facet[], key: string) => facetOf(facets, key).map((v) => [v.label, v.count]);
   const asMap = (facets: Facet[], key: string) => new Map(facetOf(facets, key).map((v) => [v.value, v.count] as const));
   /* the rule EXECUTED from the shipped matcher and value set, so the facet
      pass is checked against the rule and not against a copy of its own
@@ -664,7 +661,7 @@ describe('a category counts against the OTHER categories, never its own', () => 
        `split` reaches Easy and Non-Urgent, and no MAIN pool. */
     const rows = [both, split];
     const live = sel({ urgency: ['Urgent'], difficulty: ['Hard'] });
-    expect(ids(rows.filter((r) => recipe.pipeMatches(r, live, null)))).toEqual(['both']);
+    expect(matching(rows, live)).toEqual(['both']);
     const facets = recipe.pipeFacetList(rows, live);
     expect(counts(facets, 'difficulty'), 'split reaches Easy through its Urgent child').toEqual([['Easy', 1], ['Hard', 1]]);
     expect(counts(facets, 'urgency'), 'split reaches Non-Urgent through its Hard child').toEqual([['Non-Urgent', 1], ['Urgent', 1]]);
@@ -682,7 +679,7 @@ describe('a category counts against the OTHER categories, never its own', () => 
          TYPE       = matching Urgent + Hard → both                ⇒ Icon 1 */
     const rows = [both, split, far];
     const live = sel({ type: ['Icon'], urgency: ['Urgent'], difficulty: ['Hard'] });
-    expect(ids(rows.filter((r) => recipe.pipeMatches(r, live, null)))).toEqual(['both']);
+    expect(matching(rows, live)).toEqual(['both']);
     const facets = recipe.pipeFacetList(rows, live);
     expect(counts(facets, 'type'), 'UI is nowhere — far failed two axes').toEqual([['Icon', 1]]);
     expect(counts(facets, 'difficulty')).toEqual([['Easy', 1], ['Hard', 1]]);
@@ -735,9 +732,6 @@ describe('the MC-number sort actually orders by the MC number', () => {
 /* F — "None" is a value (owl #63, closing R-pf-i)                          */
 /* ---------------------------------------------------------------------- */
 
-const facet = (rows: unknown[], key: string, sel: Record<string, (string | null)[]> = recipe.PIPE_FILTERS_EMPTY()) =>
-  recipe.pipeFacetList(rows, sel).find((f) => f.key === key)!;
-
 describe('absence is selectable on the axis that can lack a value', () => {
   it('offers None on TYPE and DIFFICULTY, and never on URGENCY or STATUS', () => {
     /* AMENDED twice on 2026-09-05. Block 1 parked DIFFICULTY with its column
@@ -782,7 +776,7 @@ describe('absence is selectable on the axis that can lack a value', () => {
     expect(facet(oneUnlabelled, 'difficulty', sel({ urgency: ['Urgent'] })).values.map((v) => v.label)).toEqual(['Hard']);
     // …and selecting None reaches exactly the groups with an unlabelled matching card
     const rows = [...labelled, ...oneUnlabelled.map((r) => ({ ...r, cardId: 'b', mcNumber: 'MC-2' })), ...childless.map((r) => ({ ...r, cardId: 'c', mcNumber: 'MC-3' }))];
-    expect(rows.filter((r) => recipe.pipeMatches(r, sel({ difficulty: [null] }), null)).map((r) => r.cardId)).toEqual(['b']);
+    expect(matching(rows, sel({ difficulty: [null] }))).toEqual(['b']);
   });
 
   it('DERIVES None like every other value — a complete board never shows it', () => {
@@ -793,15 +787,15 @@ describe('absence is selectable on the axis that can lack a value', () => {
   });
 
   it('selects exactly the rows with no value there', () => {
-    // read on TYPE since #78 parked the difficulty axis; the rule is unchanged
+    // read on TYPE, the main-row axis that offers None: a main row's value is
+    // its own, so absence is the row's — the work-axis half (a MATCHING child
+    // lacking the label) is the previous test's
     const rows = [
       row({ cardId: 'a', assetType: 'Icon' }),
       row({ cardId: 'b' }),
       row({ cardId: 'c', assetType: '' }), // empty string is absence too
     ];
-    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: [null] };
-    const hit = rows.filter((r) => recipe.pipeMatches(r, sel, null)).map((r) => r.cardId);
-    expect(hit).toEqual(['b', 'c']);
+    expect(matching(rows, sel({ type: [null] }))).toEqual(['b', 'c']);
   });
 
   it('THE POINT — every row is now reachable, which is what R-pf-i said was broken', () => {
@@ -845,8 +839,7 @@ describe('absence is selectable on the axis that can lack a value', () => {
     for (const key of noneWork) {
       const all = facet(rows, key).values.map((v) => v.value);
       expect(all, key).toContain(null);
-      const reached = rows.filter((r) => recipe.pipeMatches(r, sel({ [key]: all }), null)).map((r) => r.cardId);
-      expect(reached, key).toEqual(['a', 'b', 'c']);
+      expect(matching(rows, sel({ [key]: all })), key).toEqual(['a', 'b', 'c']);
     }
   });
 
@@ -863,8 +856,7 @@ describe('absence is selectable on the axis that can lack a value', () => {
     expect(values.map((v) => v.value)).toEqual(['None', null]);
     expect(values.map((v) => v.count)).toEqual([1, 1]);
 
-    const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: ['None'] };
-    expect(rows.filter((r) => recipe.pipeMatches(r, sel, null)).map((r) => r.cardId)).toEqual(['a']);
+    expect(matching(rows, sel({ type: ['None'] }))).toEqual(['a']);
   });
 
   it('sorts None LAST — it is the residue, not a value in the vocabulary', () => {
@@ -1405,38 +1397,42 @@ describe('the filter indicator says what is filtered, in words', () => {
     const body = handlerBody('removePipeAxis');
     expect(body).toContain('pipeFilters.${axis}');
     expect(body).toContain('[]');
-    expect(body).toContain('pipeBackToTop()');
     expect(TEMPLATE).toContain("on-click=\"['clearPipeFilters']\">Clear all");
   });
 
-  it('returns the reader to the top on a SEARCH change as well (R-pf-h, closed in block 4)', () => {
-    /* I7: every filter and sort handler called `pipeBackToTop()`; the search
-       field is two-way bound and had no handler, so it was the one narrowing
-       that left the reader halfway down a list that was no longer the list.
-       Stated once, as an observer on the bound key — the same shape the
-       chipPop observer takes — rather than a keystroke handler. */
-    const at = APP_JS_CODE.indexOf("app.observe('searchQ'");
-    expect(at, 'no observer on searchQ').toBeGreaterThan(-1);
-    expect(APP_JS_CODE.slice(at, APP_JS_CODE.indexOf(');', at))).toContain('pipeBackToTop()');
+  it('returns the reader to the top on EVERY narrowing — filter, sort and search — from ONE observer (R-pf-h)', () => {
+    /* I7 closed R-pf-h for search in block 4: the five filter and sort
+       handlers each spelled `pipeBackToTop()`, and the search field — two-way
+       bound, no handler — was the one narrowing that left the reader halfway
+       down a list that was no longer the list. The simplify pass (PLAN.md
+       B13) then lifted the rule to one altitude: an observer on the three
+       keys owns it, so a handler cannot forget it and the project-switch
+       reset gets it for free. Asserted as the RULE — which keys, what the
+       body does, and that no handler still carries a private copy — never as
+       a snapshot of the line. */
+    const hit = observerCalls().find((o) => ['pipeFilters', 'pipeSort', 'searchQ'].every((k) => o.keys.includes(k)));
+    expect(hit, 'no one observer on pipeFilters, pipeSort AND searchQ').toBeTruthy();
+    expect(hit!.call).toContain('pipeBackToTop()');
+    for (const h of ['pickPipeSort', 'clearPipeSort', 'togglePipeFilter', 'removePipeAxis', 'clearPipeFilters']) {
+      expect(handlerBody(h), `${h} spells the rule on its own`).not.toContain('pipeBackToTop');
+    }
   });
 
-  it('returns the PAGE to the top, not only the table box — the box scrolls sideways, the page scrolls down', () => {
+  it('returns the PAGE to the top — the page is the vertical scroller, the table box scrolls sideways', () => {
     /* 2026-09-05 block 4 review, finding 3: `.pscroll` has no vertical
-       overflow, so resetting its scrollTop alone left every R-pf-h caller and
-       the searchQ observer returning nobody anywhere. The shipped body runs
-       against a fake resolver and a fake document; that the page really lands
-       at scrollY 0 is the live pass's to measure. */
-    const run = (doc: Record<string, unknown>) => {
-      const box = { scrollTop: 480 };
-      new Function('scrollerOf', 'document', `function pipeBackToTop() ${fnBody('pipeBackToTop')}\n pipeBackToTop();`)(() => box, doc);
-      return box.scrollTop;
-    };
+       overflow (20-pipeline.css gives it overflow-x alone), so a reset of its
+       scrollTop returned nobody anywhere; the page's scroller is the one that
+       has to reach zero. The shipped body runs against a fake document — it
+       needs nothing else — and that the page really lands at scrollY 0 is the
+       live pass's to measure. */
+    const run = (doc: Record<string, unknown>) =>
+      new Function('document', `function pipeBackToTop() ${fnBody('pipeBackToTop')}\n pipeBackToTop();`)(doc);
     const page = { scrollTop: 900 };
-    expect(run({ scrollingElement: page, documentElement: { scrollTop: 1 } }), 'the table box').toBe(0);
+    run({ scrollingElement: page, documentElement: { scrollTop: 1 } });
     expect(page.scrollTop, 'the page').toBe(0);
     // no scrollingElement (an older engine): the root element is the page
     const root = { scrollTop: 900 };
-    expect(run({ scrollingElement: null, documentElement: root })).toBe(0);
+    run({ scrollingElement: null, documentElement: root });
     expect(root.scrollTop).toBe(0);
   });
 
@@ -1512,7 +1508,8 @@ describe('the panels behave like every other overlay', () => {
        filled STATUS with rows nobody could ever pick. Nothing is disabled now,
        because nothing unpickable is drawn. */
     expect(TEMPLATE).not.toContain('disabled="{{!v.count');
-    // read on STATUS since #78 parked the difficulty axis; the rule is the same
+    // read on STATUS, a main-row axis: the rows carry their own values, so the
+    // fixture needs no work cards to put an axis on the panel and then empty it
     const rows = [row({ cardId: 'a', currentList: 'Design' }), row({ cardId: 'b', currentList: 'Backlogs: Icon' })];
     const sel = { ...recipe.PIPE_FILTERS_EMPTY(), type: ['Icon'] }; // matches nothing
     const status = recipe.pipeFacetList(rows, sel).find((f) => f.key === 'status');
@@ -1721,30 +1718,10 @@ interface NoResultsHarness {
    reaches for the facet pass (its own guard above pins that ordering). */
 const noResultsHarness = (): NoResultsHarness =>
   new Function(`
-    ${decl(APP_JS, 'DIFF_RANK')}
-    ${decl(APP_JS, 'PIPE_SORTS')}
-    ${decl(APP_JS, 'PIPE_SORT_DEFAULT')}
-    ${decl(APP_JS, 'pipeTiebreak')}
-    ${decl(APP_JS, 'pipeCompare')}
-    ${decl(APP_JS, 'pipeSortRows')}
-    ${decl(APP_JS, 'PIPE_COLS')}
-    ${decl(APP_JS, 'pipeColLabel')}
-    ${decl(APP_JS, 'PIPE_FILTERS')}
-    ${decl(APP_JS, 'unranked')}
-    ${decl(APP_JS, 'alphaSort')}
-    ${decl(APP_JS, 'pipePick')}
-    ${decl(APP_JS, 'pipeValueLabel')}
-    ${decl(APP_JS, 'PIPE_FILTERS_EMPTY')}
-    ${decl(APP_JS, 'pipeWorkMatch')}
-    ${decl(APP_JS, 'pipeWorkKids')}
-    ${decl(APP_JS, 'pipeValues')}
-    ${decl(APP_JS, 'pipeWorkKeys')}
-    ${decl(APP_JS, 'pipeMatches')}
-    ${decl(APP_JS, 'pipeChipList')}
-    ${decl(APP_JS, 'mcRank')}
-    const computed = { ${['pipeSearched', 'pipelineRows', 'pipeChips', 'pipeNoResults'].map((n) => method(n)).join(', ')} };
+    ${pipeRecipeDecls()}
+    const computed = { ${['pipeSearched', 'pipeSortDef', 'pipelineRows', 'pipeChips', 'pipeNoResults'].map((n) => method(n)).join(', ')} };
     const DATA = { rows: [], searchQ: '', pipeFilters: PIPE_FILTERS_EMPTY(), pipeSort: null, chipPop: null };
-    const ctx = { get: (k) => (Object.prototype.hasOwnProperty.call(computed, k) ? computed[k].call(ctx) : DATA[k]) };
+    ${COMPUTED_CTX_JS}
     return { set: (k, v) => { DATA[k] = v; }, verdict: () => computed.pipeNoResults.call(ctx) };
   `)() as NoResultsHarness;
 
@@ -1755,18 +1732,18 @@ const noResultsHarness = (): NoResultsHarness =>
  * this renders the enclosing balanced `.pipestack` subtree through the
  * helper's own `divFragment` (rule 6's mechanics: shipped template, real
  * `toHTML()`, every iterated array stubbed, the recipe under test executed
- * from shipped source by the harness above rather than stubbed). The data
- * set mirrors `renderPipelineTable`'s; the toolbar chrome renders with no
- * menus open and no chips, which is not what these assertions read anyway.
+ * from shipped source by the harness above rather than stubbed). The table's
+ * data set IS `renderPipelineTable`'s, spread from the helper's
+ * `pipeTableData`; the toolbar chrome on top renders with no menus open and
+ * no chips, which is not what these assertions read anyway.
  */
 const RactiveCtor = RactiveModule as unknown as {
   new (opts: { template: string; data: Record<string, unknown> }): { toHTML(): string };
 };
-const renderPipestack = (state: { pipeNoResults: boolean; pipelineRows?: unknown[] }): string =>
+const renderPipestack = (state: { pipeNoResults: boolean; pipelineRows?: PipeRow[] }): string =>
   new RactiveCtor({
     template: divFragment('<div class="pipestack">'),
     data: {
-      icon: {},
       searchQ: '',
       pipeFilterCount: 0,
       pipeSort: null,
@@ -1779,29 +1756,7 @@ const renderPipestack = (state: { pipeNoResults: boolean; pipelineRows?: unknown
       chipPop: null,
       chipPopFlip: false,
       pipeNoResults: state.pipeNoResults,
-      pipeCols: recipe.PIPE_COLS,
-      pipelineRows: state.pipelineRows ?? [],
-      pipeMcAnchor: {},
-      expanded: {},
-      workCardsByMc: {},
-      pipeOpen: {},
-      pipeKids: {},
-      writesEnabled: false,
-      savingUrgency: {},
-      savingDifficulty: {},
-      savingDeadline: {},
-      urgencyMenu: null,
-      diffMenu: null,
-      duePopover: null,
-      urgencyMenuPos: { left: 0, top: 0 },
-      diffMenuPos: { left: 0, top: 0 },
-      duePopPos: { left: 0, top: 0 },
-      warnPop: null,
-      warnPopPos: { left: 0, top: 0, up: false },
-      pipeThumb: { needed: false },
-      hl: (s: unknown) => String(s ?? ''),
-      fmtLong: (s: unknown) => String(s ?? ''),
-      fmtInstant: () => '',
+      ...pipeTableData({ pipelineRows: state.pipelineRows ?? [], rowWarning: () => null }),
     },
   }).toHTML();
 
@@ -1871,7 +1826,7 @@ describe('the no-results state replaces the whole table block (owl #76)', () => 
   });
 
   it('renders the table — thead and all — whenever the verdict is false', () => {
-    const rows = [{ cardId: 'c1', mcNumber: 'MC-800', mcLabel: 'MC-800', displayId: 'MC-800', name: 'A card', urgency: 'Non-Urgent' }];
+    const rows: PipeRow[] = [{ cardId: 'c1', mcNumber: 'MC-800', mcLabel: 'MC-800', displayId: 'MC-800', name: 'A card', urgency: 'Non-Urgent', missing: [], trelloUrl: null }];
     const html = renderPipestack({ pipeNoResults: false, pipelineRows: rows });
     expect(html).toContain('<thead');
     expect(html).toContain('pscrollwrap');
