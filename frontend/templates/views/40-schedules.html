@@ -224,7 +224,7 @@
                           {{/if}}
                         </div>
                       {{else}}
-                        <span class="datefield readonly {{row.deadline ? '' : 'missing'}}" title="Read-only project — Trello writes are disabled"><span class="dpdate">{{row.deadline ? fmtLongIso(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
+                        <span class="datefield readonly {{row.deadline ? '' : 'missing'}}" title="{{row.status === null ? 'This card is no longer on the board' : 'Read-only project — Trello writes are disabled'}}"><span class="dpdate">{{row.deadline ? fmtLongIso(row.deadline) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span>
                       {{/if}}
                     </div>
                     <div class="gcell c-fc">{{#if row.finish}}{{fmtLongIso(row.finish)}}{{else}}<span class="gdim">—</span>{{/if}}</div>

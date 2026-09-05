@@ -619,7 +619,8 @@ describe('pipeline read (FR-4.1–4.4)', () => {
     expect(res.body.rows).toHaveLength(2);
     const r1 = res.body.rows.find((r: { cardId: string }) => r.cardId === 'c1');
     expect(r1.forecast.sketchDelivery).toBeTruthy();
-    expect(r1.deadlineSource).toBe('sheet');
+    // invariant 14 / BR-9: no Trello due, so the SHEET date is the deadline the row is measured against
+    expect(r1.deadline).toBe('2026-09-04');
     const corrections = res.body.corrections.map((c: { cardId: string }) => c.cardId);
     expect(corrections).toContain('c2');
     expect(res.body.capacity.weekly).toBe(3);

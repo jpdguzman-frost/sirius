@@ -205,6 +205,32 @@ function deadlineFor(card: { trello_due?: string | null } | undefined): string |
 }
 
 /**
+ * THE TAIL POSITION of a sprint's list — where a row JOINS it: one past the
+ * highest position held, and zero for an empty list. `last` is the sprint's
+ * highest-positioned row, or nothing. ONE home for the off-by-one: the single
+ * add, the batch add, the PATCH move and the rollover all join a list by this
+ * rule, and the load sorts on position — four private copies of the same
+ * expression were four places for list order to break (simplification pass
+ * 2026-09-05, R5).
+ */
+export const tailPosition = (last: { position?: number } | null | undefined): number =>
+  ((last?.position as number) ?? -1) + 1;
+
+/**
+ * The tail position read FRESH, under the project (invariant 1) — for the
+ * callers that have no earlier read to fold it into: the PATCH move and the
+ * rollover. The add routes read the tail inside their own `Promise.all` and
+ * hand the row to `tailPosition` themselves.
+ */
+export async function nextTailPosition(projectId: Types.ObjectId, sprintId: Types.ObjectId | string): Promise<number> {
+  const last = await SprintItem.findOne({ project_id: projectId, sprint_id: sprintId })
+    .sort({ position: -1 })
+    .select({ position: 1 })
+    .lean();
+  return tailPosition(last);
+}
+
+/**
  * ONE query. The work cards and the deliverable rows are handed in by
  * `loadPipeline`, which has just read both.
  *

@@ -36,50 +36,39 @@ import type { Types } from 'mongoose';
 import { ensureAuthenticated, type SessionUser } from '../auth/session.ts';
 import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
-import { Deliverable, SyncRun, WorkCard } from '../models/index.ts';
+import { SyncRun, WorkCard } from '../models/index.ts';
 import { composeDueIso, type TrelloWriter } from '../../lib/trello.ts';
 import type { Env } from '../config/env.ts';
 
-interface WriteContext<TDoc> {
+/**
+ * THE ONE document kind a registry write targets: the work card. W1, W2 and
+ * W3 all write it (the header). The door was generic over a card kind while
+ * W2 still had a deliverable route; block 3 deleted that route, and the
+ * generic, the second lookup arm and the `kind` threaded through every commit
+ * went with it (simplification pass 2026-09-05, S-1/ALT-2) — a live lookup
+ * path into a collection no registry entry may write is exactly the dormant
+ * write path the header refuses to keep. A future main-card entry is a
+ * constitution amendment and brings its own branch with it.
+ */
+type RegistryDoc = InstanceType<typeof WorkCard>;
+
+interface WriteContext {
   projectId: Types.ObjectId;
   boardId: string;
   cardId: string;
   actor: string;
-  doc: TDoc;
+  doc: RegistryDoc;
   trello: TrelloWriter;
 }
 
-/** The card kinds a registry write can target, and each kind's doc type. */
-type KindDoc = {
-  deliverable: InstanceType<typeof Deliverable>;
-  work_card: InstanceType<typeof WorkCard>;
-};
-
 /**
  * Guards shared by every registry write; responds and returns null on refusal.
- * `kind` names the collection the card is looked up in — a card id of the
- * other kind is a 404, which is the cross-kind guard every route relies on.
- * Every refusal guard is identical for both kinds, which is the point of the
- * ONE door (src/CLAUDE.md rule 3). Generic over the kind, so `ctx.doc` is
- * COMPILER-typed at every call site: a literal kind narrows to its doc. Every
- * route passes 'work_card' since block 3 deleted W2's deliverable route (owl
- * #78 §2); the deliverable branch is a LOOKUP a future main-card entry would
- * come through with the same guards, never a write path on its own — a
- * registry entry is what reaches it, and growing the registry is a
- * constitution amendment.
- *
- * `kind` is REQUIRED. It used to default to 'deliverable' when that was the
- * only kind; since owl #78 no route targets a deliverable at all, and a
- * default that silently picks a collection is the shape of the wrong-target
- * write the #78 build removed.
+ * The card is looked up in the WORK CARD collection and nowhere else — a main
+ * card's id is a 404 like any other stranger's, which is the cross-kind guard
+ * every route relies on. Every refusal guard is the same for every entry,
+ * which is the point of the ONE door (src/CLAUDE.md rule 3).
  */
-async function writeGuards<K extends keyof KindDoc>(
-  env: Env,
-  trello: TrelloWriter | null,
-  req: Request,
-  res: Response,
-  kind: K,
-): Promise<WriteContext<KindDoc[K]> | null> {
+async function writeGuards(env: Env, trello: TrelloWriter | null, req: Request, res: Response): Promise<WriteContext | null> {
   const projectId = res.locals.project._id as Types.ObjectId;
   const boardId = res.locals.project.trello_board_id as string;
   const cardId = String(req.params.cardId);
@@ -109,10 +98,7 @@ async function writeGuards<K extends keyof KindDoc>(
   // active: true — a card that flipped kind (gained/lost the Main Card
   // label) leaves a deactivated doc in its old collection, and that ghost
   // must not keep answering writes (review pass 2026-08-18).
-  const doc =
-    kind === 'work_card'
-      ? await WorkCard.findOne({ project_id: projectId, trello_card_id: cardId, active: true })
-      : await Deliverable.findOne({ project_id: projectId, trello_card_id: cardId, active: true });
+  const doc = await WorkCard.findOne({ project_id: projectId, trello_card_id: cardId, active: true });
   if (!doc) {
     res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
     return null;
@@ -125,25 +111,18 @@ async function writeGuards<K extends keyof KindDoc>(
     res.status(503).json({ ok: false, error: { code: 'TRELLO_NOT_CONFIGURED', message: 'TRELLO_API_KEY / TRELLO_TOKEN are not set.' } });
     return null;
   }
-  // the branch above proves doc matches `kind`; TS cannot narrow K from a
-  // value comparison, so this is the ONE place the correspondence is asserted
-  return { projectId, boardId, cardId, actor: (req.user as SessionUser).email, doc: doc as KindDoc[K], trello };
+  return { projectId, boardId, cardId, actor: (req.user as SessionUser).email, doc, trello };
 }
-
-/** Either kind's document — the commit below touches only what both carry. */
-type RegistryDoc = KindDoc[keyof KindDoc];
 
 /** What one registry entry has to say about itself to be committed. */
 interface RegistryCommit {
-  /** the card kind written: the audit row's `entity`, and part of the run stats */
-  kind: 'deliverable' | 'work_card';
   /** audit action stem — `<action>.set` on success, `<action>.set_failed` on failure */
   action: 'urgency' | 'due' | 'difficulty';
   /** the document field the audit's before/after snapshots are keyed on */
   field: 'urgency' | 'trello_due' | 'difficulty';
   before: string | null;
   after: string | null;
-  /** what this entry adds to the sync_runs stats, beside cardId and kind */
+  /** what this entry adds to the sync_runs stats, beside cardId and the card kind */
   stats: Record<string, unknown>;
   /** Trello FIRST, then the document field — see the order note below */
   apply: () => Promise<void>;
@@ -170,12 +149,14 @@ interface RegistryCommit {
  * left Trello unchanged, so there is nothing for a later read to contradict.
  */
 async function commitRegistryWrite(
-  ctx: WriteContext<RegistryDoc>,
+  ctx: WriteContext,
   res: Response,
-  { kind, action, field, before, after, stats, apply, respond }: RegistryCommit,
+  { action, field, before, after, stats, apply, respond }: RegistryCommit,
 ): Promise<void> {
-  const entry = { project_id: ctx.projectId, actor: ctx.actor, entity: kind, entity_id: ctx.cardId };
-  const runStats = { cardId: ctx.cardId, kind, ...stats };
+  // the audit row's `entity` and the run's `kind` name the one card kind the
+  // registry writes — stated here, once, rather than by every caller
+  const entry = { project_id: ctx.projectId, actor: ctx.actor, entity: 'work_card', entity_id: ctx.cardId };
+  const runStats = { cardId: ctx.cardId, kind: 'work_card', ...stats };
   try {
     await apply();
     ctx.doc.registry_written_at = new Date();
@@ -209,14 +190,13 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
       }
-      const ctx = await writeGuards(env, trello, req, res, 'work_card');
+      const ctx = await writeGuards(env, trello, req, res);
       if (!ctx) return;
 
-      const doc = ctx.doc; // typed work card by the guard's generic — W1's only surface since #78
+      const doc = ctx.doc; // the work card — W1's only surface since #78
       const before = doc.urgency;
       const after = body.data.urgent ? 'Urgent' : 'Non-Urgent';
       await commitRegistryWrite(ctx, res, {
-        kind: 'work_card',
         action: 'urgency',
         field: 'urgency',
         before,
@@ -265,10 +245,10 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
       return;
     }
-    const ctx = await writeGuards(env, trello, req, res, 'work_card');
+    const ctx = await writeGuards(env, trello, req, res);
     if (!ctx) return;
 
-    const doc = ctx.doc; // typed work card by the guard's generic — W2's only surface since #78 §2
+    const doc = ctx.doc; // the work card — W2's only surface since #78 §2
     const before = doc.trello_due ?? null;
     const after = body.data.date;
     if (before === after) {
@@ -279,7 +259,6 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
 
     const dueIso = after === null ? null : composeDueIso(after, doc.trello_due_at ?? null);
     await commitRegistryWrite(ctx, res, {
-      kind: 'work_card',
       action: 'due',
       field: 'trello_due',
       before,
@@ -316,10 +295,10 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
       }
-      const ctx = await writeGuards(env, trello, req, res, 'work_card');
+      const ctx = await writeGuards(env, trello, req, res);
       if (!ctx) return;
 
-      const doc = ctx.doc; // typed work card by the guard's generic — W3's only surface since #78
+      const doc = ctx.doc; // the work card — W3's only surface since #78
       const before = doc.difficulty ?? null;
       const after = body.data.difficulty;
       if (before === after) {
@@ -329,7 +308,6 @@ export function writesRouter(env: Env, trello: TrelloWriter | null): Router {
       }
 
       await commitRegistryWrite(ctx, res, {
-        kind: 'work_card',
         action: 'difficulty',
         field: 'difficulty',
         before,

@@ -102,8 +102,9 @@ import { Project, Sprint, SprintItem, SyncRun, WorkCard } from '../models/index.
 import { audit } from './audit.ts';
 import { loadProjectModel } from './model-grid.ts';
 import { manilaToday } from './pipeline.ts';
-import { finishOf } from './sprint-items.ts';
+import { finishOf, nextTailPosition } from './sprint-items.ts';
 import { classifyList } from './status-rules.ts';
+import { READ_SOURCES, latestRead } from './sync-status.ts';
 
 /**
  * R3-1: how old the project's latest successful read may be for this tick
@@ -226,11 +227,7 @@ export async function rollUnfinished(
      earlier iteration has already written into the same sprint. */
   for (const p of projects) {
     const counts = await rollProject(p._id, today, now);
-    total.moved += counts.moved;
-    total.skipped += counts.skipped;
-    total.raced += counts.raced;
-    total.failed += counts.failed;
-    total.capped += counts.capped;
+    for (const k of Object.keys(counts) as (keyof RolloverCounts)[]) total[k] += counts[k];
   }
   return total;
 }
@@ -240,12 +237,12 @@ export async function rollUnfinished(
  * roll"; otherwise the reason the project sits this tick out. The LATEST row
  * of any outcome, not the latest success: a failure after a success is the
  * current state of the read, and a stale lane set must not be rolled on.
+ * The read itself is `latestRead` (services/sync-status.ts) over every read
+ * source — the full sync and a push drain — for the FR-9.6 reason the header
+ * gives; only the freshness judgement is this file's.
  */
 async function syncGate(projectId: Types.ObjectId, now: Date): Promise<SkipReason | null> {
-  const last = await SyncRun.findOne({ project_id: projectId, source: { $in: ['ares', 'ares_push'] } })
-    .sort({ at: -1 })
-    .select({ ok: 1, at: 1 })
-    .lean();
+  const last = await latestRead(projectId, { sources: READ_SOURCES });
   if (!last) return 'sync_missing';
   if (!last.ok) return 'sync_failed';
   if (now.getTime() - last.at.getTime() > SYNC_FRESH_MS) return 'sync_stale';
@@ -309,12 +306,20 @@ async function rollRows(projectId: Types.ObjectId, today: string, counts: Rollov
 
   /* The project's model — frozen projects read the shipped snapshot, which is
      what the schedule's own bars are drawn from (loadProjectModel decides,
-     not this file). Active cards only: a deactivated card has left the board
-     and its row keeps its place with no bar (#72 §5). */
+     not this file); provenance is not read here, so its round trip is
+     declined (E5). Only the ROWS' cards, projected to the fields the pass
+     reads — the unique `{ project_id, trello_card_id }` index serves the
+     `$in` — rather than every card of the project as whole documents (E1);
+     a card absent from the result still means "card gone". Active cards
+     only: a deactivated card has left the board and its row keeps its place
+     with no bar (#72 §5). */
+  const ids = [...new Set(items.map((it) => it.trello_card_id as string))];
   const [{ model }, cards, sprints] = await Promise.all([
-    loadProjectModel(projectId),
-    WorkCard.find({ project_id: projectId, active: true }).lean(),
-    Sprint.find({ project_id: projectId }).lean(),
+    loadProjectModel(projectId, { provenance: false }),
+    WorkCard.find({ project_id: projectId, active: true, trello_card_id: { $in: ids } })
+      .select({ trello_card_id: 1, difficulty: 1, current_list: 1, task_prefix: 1 })
+      .lean(),
+    Sprint.find({ project_id: projectId }).select({ starts_on: 1, ends_on: 1 }).lean(),
   ]);
   const byId = new Map(cards.map((w) => [w.trello_card_id, w] as const));
   const ranges = sprints.map((s) => ({ id: String(s._id), starts_on: s.starts_on, ends_on: s.ends_on }));
@@ -347,7 +352,14 @@ async function rollRow(
   today: string,
 ): Promise<RowOutcome> {
   const startsOn = it.starts_on as string;
-  const engine = (s: string) => finishOf(w, s, model);
+  /* Memoised per row and discarded with it: the walk asks the engine for a
+     day, and the two sentinel reads below ask again for the walk's first and
+     last days — a Map hit each instead of a second forecast (E2). */
+  const finishes = new Map<string, string | null>();
+  const engine = (s: string) => {
+    if (!finishes.has(s)) finishes.set(s, finishOf(w, s, model));
+    return finishes.get(s)!;
+  };
   /* `nextFinishDay` answers null for two different reasons — no finish at
      all, and a walk that hit the cap. The first is settled here, before the
      walk, so the null the walk returns can only be the cap (R3-5: today's
@@ -376,14 +388,7 @@ async function rollRow(
      keeps the row where it is listed. */
   const target = sprintFor(finish, ranges);
   const moves = target !== null && target !== before.sprint_id;
-  let position = before.position;
-  if (moves) {
-    const tail = await SprintItem.findOne({ project_id: projectId, sprint_id: target })
-      .sort({ position: -1 })
-      .select({ position: 1 })
-      .lean();
-    position = ((tail?.position as number) ?? -1) + 1;
-  }
+  const position = moves ? await nextTailPosition(projectId, target as string) : before.position;
   const after = { starts_on: next, sprint_id: moves ? (target as string) : before.sprint_id, position };
 
   /* R3-2: ONE conditional update. The row moves only if it still reads

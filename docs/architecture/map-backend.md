@@ -63,6 +63,7 @@ _last-verified: 2026-08-18_
 - `src/services/rollover.ts` — the rollover job: late plotted rows walk to today one working day at a time, the sprint follows the finish day (owl #75 §2); gated on a fresh successful read, conditional updates, audit-or-revert, one sync_runs row per project; nextFinishDay/sprintFor/rollUnfinished.
 - `src/services/sprint-items.ts` — hand-placed work-card schedule rows (owl #72); loadSprintItems/finishOf.
 - `src/services/status-rules.ts` — BR-10 list name → pending/ongoing/done; classifyList.
+- `src/services/sync-status.ts` — the ONE sync_runs latest-read query: READ_SOURCES (ares + ares_push) for the rollover gate, `ares` alone for the FR-8.6 freshness chip (its push-healthy wording is JP's call); latestRead.
 - `src/types/express-session.d.ts` — session returnTo typing.
 - `worker/drainPush.ts` — drains push_events → per-card reconciles; poll fallback; drainPushEvents/pushHealth.
 - `worker/index.ts` — cadence: ares 15 min (hourly while push healthy), intake 15 min, model nightly, calendar.

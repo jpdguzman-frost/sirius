@@ -1,8 +1,11 @@
 {{! The due popover's CALENDAR — month nav, day-of-week strip, day grid,
-    shortcuts. One copy, used by BOTH due popovers (the deliverable row's and
-    the task row's, owl #45): everything here reads root state (dueMonth,
-    dueStaged, dowNames) and never row context, which is what makes the share
-    legal. Only the action footers differ per kind and they stay inline. }}
+    shortcuts. ONE consumer today: the Sprint Schedules DEADLINE cell of a
+    work-card row (owl #78 §2, block 3) — the two Pipeline popovers that
+    once shared it (owl #45) left with the setter. The standing condition any
+    second caller must meet: everything here reads root state (dueMonth,
+    dueStaged, dowNames) and never row context; the action footer stays
+    inline at the call site. The file sits at ten because partials
+    concatenate alphabetically, not by consumer. }}
 {{#partial dueCalendar}}
   <div class="duehead">
     <button class="duenav prev" on-click="['dueNav', -1]" aria-label="Previous month"><svg class="i16"><use href="#i-rowChevron" /></svg></button>

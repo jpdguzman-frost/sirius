@@ -88,44 +88,10 @@ import {
   cssRule,
   renderSprintSchedule,
   tabView,
+  topDecl,
   type SprintGroup,
   type SprintScheduleRow,
 } from './helpers/gantt-render.ts';
-
-/**
- * Slice one top-level declaration — `function` or `const` — out of the shipped
- * source. Kept local (the test/gantt-run-geometry.test.ts precedent, whose
- * arithmetic this file inherits): the helper's `decl` is const-only and cannot
- * slice `function dayIndex` or `function sprintWeekLoad`, both needed here.
- */
-function fnDecl(name: string, src: string = APP_JS): string {
-  const fnAt = src.indexOf(`\nfunction ${name}(`);
-  if (fnAt >= 0) {
-    // balance the PARAMETER LIST first — `capacityBand(value, { least, … })`
-    // destructures, so the first `{` after the name is not the body's
-    let i = src.indexOf('(', fnAt);
-    for (let parens = 0; i < src.length; i++) {
-      if (src[i] === '(') parens++;
-      else if (src[i] === ')' && --parens === 0) break;
-    }
-    let depth = 0;
-    for (let j = src.indexOf('{', i); j < src.length; j++) {
-      if (src[j] === '{') depth++;
-      else if (src[j] === '}' && --depth === 0) return src.slice(fnAt, j + 1);
-    }
-    throw new Error(`sprint-schedule-render: unterminated function \`${name}\``);
-  }
-  const at = src.indexOf(`\nconst ${name} =`);
-  if (at < 0) throw new Error(`sprint-schedule-render: no declaration of \`${name}\` in the shipped frontend source`);
-  let depth = 0;
-  for (let i = at + 1; i < src.length; i++) {
-    const c = src[i]!;
-    if (c === '{' || c === '[' || c === '(') depth++;
-    else if (c === '}' || c === ']' || c === ')') depth--;
-    else if (c === ';' && depth === 0) return src.slice(at, i + 1);
-  }
-  throw new Error(`sprint-schedule-render: unterminated declaration \`${name}\``);
-}
 
 /**
  * The SECOND argument of a top-level `app.set('name', …)` — the registered
@@ -183,11 +149,11 @@ interface GroupsHarness {
 let groupsHarness: GroupsHarness | undefined;
 const H = (): GroupsHarness =>
   (groupsHarness ??= new Function(`
-    ${fnDecl('fmtDate')}
-    ${fnDecl('itemCount')}
-    ${fnDecl('CAP_TYPICAL_TOLERANCE')}
-    ${fnDecl('CAP_EDGE_SHARE')}
-    ${fnDecl('capacityBand')}
+    ${topDecl('fmtDate')}
+    ${topDecl('itemCount')}
+    ${topDecl('CAP_TYPICAL_TOLERANCE')}
+    ${topDecl('CAP_EDGE_SHARE')}
+    ${topDecl('capacityBand')}
     const computed = { ${['sprintGroups', 'footCaption'].map((n) => method(n)).join(', ')} };
     const DATA = {
       sprintItems: { rows: [], addable: {} },
@@ -998,13 +964,13 @@ interface AddHarness {
  * `mcRank` ships from a LATER file in build.js's order; a runtime call sees it
  * either way, so the prelude declares it first.
  *
- * Sliced LAZILY, as `G()` is: `fnDecl` throws when a declaration is absent,
+ * Sliced LAZILY, as `G()` is: `topDecl` throws when a declaration is absent,
  * and a throw at module scope would take the render suites down with it.
  */
 let addHarness: AddHarness | undefined;
 const A = (): AddHarness =>
   (addHarness ??= new Function(`
-    ${['mcRank', 'unranked', 'cmpNullsLast', 'addLabel', 'addTokens', 'addMatches'].map((n) => fnDecl(n)).join('\n')}
+    ${['mcRank', 'unranked', 'cmpNullsLast', 'addLabel', 'addTokens', 'addMatches'].map((n) => topDecl(n)).join('\n')}
     const computed = { ${method('addPanels')} };
     const DATA = { sprints: [], addQ: {}, sprintItems: { addable: {} } };
     ${COMPUTED_CTX_JS}
@@ -1149,7 +1115,7 @@ interface AddRun {
 }
 
 /** Every top-level `const`/`function` the shipped bundle declares — what
-    `fnDecl` can slice. The two shared top-level `let`s are stubbed by name. */
+    `topDecl` can slice. The two shared top-level `let`s are stubbed by name. */
 const TOP_LEVEL = new Set([...APP_JS_CODE.matchAll(/\n(?:const|function)\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]!));
 
 /** The stub scope every handler run is given. */
@@ -1174,7 +1140,7 @@ const shippedDeps = (body: string): string => {
       const name = m[1]!;
       if (seen.has(name) || !TOP_LEVEL.has(name)) continue;
       seen.add(name);
-      const decl = fnDecl(name);
+      const decl = topDecl(name);
       out.push(decl);
       queue.push(decl);
     }
@@ -1523,13 +1489,13 @@ describe('the 08-28 add flow is withdrawn whole — zone, pending row, dropdowns
   });
 
   it('left the overlay law with it — no addMenu key, no .gdd shield, no anchored entry', () => {
-    const keys = new Function(`${fnDecl('OVERLAY_KEYS')} return OVERLAY_KEYS;`)() as string[];
+    const keys = new Function(`${topDecl('OVERLAY_KEYS')} return OVERLAY_KEYS;`)() as string[];
     expect(keys.length, 'no overlay keys at all — the assertion below would be vacuous').toBeGreaterThan(0);
     expect(keys, 'addMenu is still an overlay — the dropdown it shielded is gone').not.toContain('addMenu');
-    const anchored = new Function(`${fnDecl('OVERLAY_ANCHORED')} return OVERLAY_ANCHORED;`)() as string[];
+    const anchored = new Function(`${topDecl('OVERLAY_ANCHORED')} return OVERLAY_ANCHORED;`)() as string[];
     expect(anchored).not.toContain('addMenu');
-    expect(fnDecl('OVERLAY_SHIELDS'), 'the .gdd shield outlived its dropdown').not.toContain('.gdd');
-    expect(fnDecl('OVERLAY_SELF_SCROLL'), 'the .gddmenu self-scroll entry outlived its menu').not.toContain('.gddmenu');
+    expect(topDecl('OVERLAY_SHIELDS'), 'the .gdd shield outlived its dropdown').not.toContain('.gdd');
+    expect(topDecl('OVERLAY_SELF_SCROLL'), 'the .gddmenu self-scroll entry outlived its menu').not.toContain('.gddmenu');
   });
 });
 
@@ -1563,7 +1529,7 @@ interface GeoHarness {
  * one-key stand-in is the whole surface the shipped bodies need. Window:
  * 2026-08-03 (a Monday) through 12 columns × 5 workdays = 60 units.
  *
- * Sliced LAZILY (the drag-hittest weekAtX precedent): `fnDecl` throws when a
+ * Sliced LAZILY (the drag-hittest weekAtX precedent): `topDecl` throws when a
  * declaration is absent, and a throw at module scope would take the WHOLE
  * file down — render suites included — while the scripts land.
  */
@@ -1571,7 +1537,7 @@ let geo: GeoHarness | undefined;
 const G = (): GeoHarness => {
   if (!geo) {
     const src = ['WEEK_COUNT', 'WEEK_PX', 'WORKDAYS_PER_WEEK', 'TOTAL_UNITS', 'dayIndex', 'clampUnits', 'pctOf', 'unitPct', 'MIN_GRAB_PX', 'UNIT_PX', 'MIN_GRAB_UNITS', 'itemBar', 'itemPhase']
-      .map((n) => fnDecl(n))
+      .map((n) => topDecl(n))
       .join('\n');
     geo = new Function(`
       const app = { get: (k) => { if (k !== 'weekStart') throw new Error('geometry harness: unstubbed app.get(' + k + ')'); return '2026-08-03'; } };
@@ -1736,7 +1702,7 @@ describe('the deadline tick — dress per 731:98733; a PAST deadline pins LEFT (
   const tick = (): ((row: { deadline?: string | null }) => string | null) =>
     new Function(`
       const app = { get: (k) => { if (k !== 'weekStart') throw new Error('tick harness: unstubbed app.get(' + k + ')'); return '2026-08-03'; } };
-      ${['WEEK_COUNT', 'WORKDAYS_PER_WEEK', 'TOTAL_UNITS', 'dayIndex', 'pctOf', 'unitPct'].map((n) => fnDecl(n)).join('\n')}
+      ${['WEEK_COUNT', 'WORKDAYS_PER_WEEK', 'TOTAL_UNITS', 'dayIndex', 'pctOf', 'unitPct'].map((n) => topDecl(n)).join('\n')}
       return (${appSetArg('deadlineTick')});
     `)() as (row: { deadline?: string | null }) => string | null;
 
@@ -1775,9 +1741,9 @@ interface FootHarness {
 let foot: FootHarness | undefined;
 const F = (): FootHarness =>
   (foot ??= new Function(`
-    ${fnDecl('isoOf')}
-    ${fnDecl('isoAddDays')}
-    ${fnDecl('sprintWeekLoad')}
+    ${topDecl('isoOf')}
+    ${topDecl('isoAddDays')}
+    ${topDecl('sprintWeekLoad')}
     const DATA = { sprintItems: { rows: [] }, capacity: { weekly: 8 } };
     const app = {
       get: (k) => { if (!(k in DATA)) throw new Error('foot harness: unstubbed app.get(' + k + ')'); return DATA[k]; },

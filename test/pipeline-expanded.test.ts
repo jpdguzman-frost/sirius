@@ -63,7 +63,7 @@ import {
   renderMetrics,
   renderPipelineTable,
   stampRows,
-  tabView,
+  tabViewCode,
 } from './helpers/gantt-render.ts';
 
 const jsCode = APP_JS_CODE;
@@ -378,10 +378,7 @@ describe('the parent’s SubTone is WITHDRAWN (JP, 2026-08-27)', () => {
  * 3, in the kind direction): what must be gone is the markup, not the
  * explanation.
  */
-const pipelineView = (): string =>
-  tabView('pipeline')
-    .replace(/\{\{![\s\S]*?\}\}/g, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ');
+const pipelineView = (): string => tabViewCode('pipeline');
 
 describe('Pipeline REFLECTS the deadline and never sets it (owl #78 §2)', () => {
   /* THE RULE, and the reason it is a rule: W2 writes the work card's Trello due

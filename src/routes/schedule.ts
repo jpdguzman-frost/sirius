@@ -15,6 +15,7 @@ import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
 import { classifyList } from '../services/status-rules.ts';
 import { loadPipeline, manilaToday, toMilestones } from '../services/pipeline.ts';
+import { nextTailPosition, tailPosition } from '../services/sprint-items.ts';
 import { ConflictAcknowledgement, Deliverable, MilestoneDayPlan, Sprint, SprintItem, WorkCard } from '../models/index.ts';
 import { sprintIssues, suggestPlan, type PlannerCard } from '../../lib/planner.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
@@ -525,7 +526,7 @@ export function scheduleRouter(): Router {
           trello_card_id: card.trello_card_id,
           // optional on the single add (PLAN.md B13); absent → unplotted (#72 §6)
           starts_on: body.data.starts_on,
-          position: ((last?.position as number) ?? -1) + 1,
+          position: tailPosition(last),
           added_by: actor,
         });
         await audit({
@@ -611,7 +612,7 @@ export function scheduleRouter(): Router {
       /* The tail is read ONCE and counted up per CREATED row, so the batch
          lands in list order after whatever the sprint already holds; a skip
          consumes no position, so the created rows stay contiguous. */
-      let position = ((last?.position as number) ?? -1) + 1;
+      let position = tailPosition(last);
       const skipped: Array<{ card_id: string; code: BatchSkipCode }> = [];
       /* The rows this request created, in the order it created them: the
          rollback below walks them, and their COUNT is what the answer reports
@@ -780,12 +781,8 @@ export function scheduleRouter(): Router {
            position across let the row tie with one already there, and the load
            sorts on position — so the two swapped places between requests and
            the row appeared to jump around the list. Same rule the insert uses. */
-        const tail = await SprintItem.findOne({ project_id: projectId, sprint_id: body.data.sprint_id })
-          .sort({ position: -1 })
-          .select({ position: 1 })
-          .lean();
         item.sprint_id = new Types.ObjectId(body.data.sprint_id);
-        item.position = ((tail?.position as number) ?? -1) + 1;
+        item.position = await nextTailPosition(projectId, body.data.sprint_id);
       }
       if (body.data.starts_on !== undefined) item.starts_on = body.data.starts_on ?? undefined;
       await item.save();

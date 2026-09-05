@@ -20,6 +20,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import request from 'supertest';
 import type { Types } from 'mongoose';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
+import { mkWorkCard, otherProject } from './helpers/schedule-fixture.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { loadPipeline } from '../src/services/pipeline.ts';
@@ -74,18 +75,6 @@ async function setup() {
   return { project, sprint, agent };
 }
 
-/** One task card under MC-07 — #73's sample: three assets, sketch and render each. */
-const mkCard = (projectId: Types.ObjectId, id: string, over: Record<string, unknown> = {}) =>
-  WorkCard.create({
-    project_id: projectId, mc_number: 'MC-07', trello_card_id: id,
-    name: `Sketch Asset: ${id}`, task_prefix: 'Sketch Asset', difficulty: 'Medium',
-    current_list: 'Working on Design', ...over,
-  });
-
-/** A SECOND project — every cross-project guard here needs one (invariant 1). */
-const otherProject = () =>
-  Project.create({ code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22 });
-
 /**
  * Runs `intrude` immediately before the route's FIRST `SprintItem` insert and
  * then lets that insert proceed — the seam both race guards below need, and
@@ -134,9 +123,9 @@ const addAndPlot = async (
 describe('the schedule is opt-in — it is NOT a mirror of the board', () => {
   it('a board full of task cards yields an EMPTY schedule', async () => {
     const { project } = await setup();
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'w2');
-    await mkCard(project._id, 'w3');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w3');
 
     const { rows } = await load(project._id);
     /* #72 §2, flagged hard by product because every OTHER surface in Sirius
@@ -149,8 +138,8 @@ describe('the schedule is opt-in — it is NOT a mirror of the board', () => {
 
   it('offers every incomplete card for ADDING, keyed by MC', async () => {
     const { project } = await setup();
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w2');
 
     const { addable } = await load(project._id);
     expect(addable['MC-07']!.map((c) => c.cardId).sort()).toEqual(['w1', 'w2']);
@@ -158,9 +147,9 @@ describe('the schedule is opt-in — it is NOT a mirror of the board', () => {
 
   it('sorts the pool alphabetically by the FULL label — Render before Sketch', async () => {
     const { project } = await setup();
-    await mkCard(project._id, 'r1', { name: 'Render Asset: GRaf Playing Flute', task_prefix: 'Render Asset' });
-    await mkCard(project._id, 's1', { name: 'Sketch Asset: GRaf Playing Flute' });
-    await mkCard(project._id, 'r2', { name: 'Render Asset: GCat Twirling', task_prefix: 'Render Asset' });
+    await mkWorkCard(project._id, 'r1', { name: 'Render Asset: GRaf Playing Flute', task_prefix: 'Render Asset' });
+    await mkWorkCard(project._id, 's1', { name: 'Sketch Asset: GRaf Playing Flute' });
+    await mkWorkCard(project._id, 'r2', { name: 'Render Asset: GCat Twirling', task_prefix: 'Render Asset' });
 
     /* #73's warning, made a test so nobody "fixes" it: alphabetical puts
        Render before Sketch — the reverse of the order the work happens in.
@@ -177,7 +166,7 @@ describe('the schedule is opt-in — it is NOT a mirror of the board', () => {
   it('stores the FULL card name — the result row’s ellipsis is a display clamp, not the value', async () => {
     const { project, sprint, agent } = await setup();
     const full = 'Sketch Asset: Corey G Singing "Chicosci Vampire Social Club" by Chicosci';
-    await mkCard(project._id, 'long', { name: full });
+    await mkWorkCard(project._id, 'long', { name: full });
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'long' }).expect(201);
 
     // #73: 71 characters that only LOOK truncated. Two cards under one MC can
@@ -194,7 +183,7 @@ describe('the schedule is opt-in — it is NOT a mirror of the board', () => {
 describe('adding a card and plotting its bar are two acts', () => {
   it('lands UNPLOTTED, and unplotted is a real state rather than missing data', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
 
     const { rows } = await load(project._id);
@@ -213,7 +202,7 @@ describe('adding a card and plotting its bar are two acts', () => {
      (test/CLAUDE.md rule 2). Both sides now execute the shipped engine. */
   it('the click sets the START and the finish is the ENGINE’s own phase delivery', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
 
     const { rows } = await load(project._id);
@@ -304,7 +293,7 @@ describe('adding a card and plotting its bar are two acts', () => {
     const finishes = new Set<string>();
     for (const [i, prefix] of ['Sketch Asset', 'Render Asset', 'Icon Clean Up'].entries()) {
       const id = `p${i}`;
-      await mkCard(project._id, id, { difficulty: 'Easy', task_prefix: prefix, name: `${prefix}: X` });
+      await mkWorkCard(project._id, id, { difficulty: 'Easy', task_prefix: prefix, name: `${prefix}: X` });
       await addAndPlot(agent, project._id, id, String(sprint._id), '2026-08-03');
     }
     const { rows } = await load(project._id);
@@ -332,7 +321,7 @@ describe('adding a card and plotting its bar are two acts', () => {
 
   it('draws no bar for a card with no difficulty label', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1', { difficulty: null });
+    await mkWorkCard(project._id, 'w1', { difficulty: null });
     await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
 
     const { rows } = await load(project._id);
@@ -342,7 +331,7 @@ describe('adding a card and plotting its bar are two acts', () => {
 
   it('un-plots back to the list rather than deleting the row', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
     await agent.patch(itemUrl(project._id, id)).send({ starts_on: null }).expect(200);
 
@@ -359,8 +348,8 @@ describe('adding a card and plotting its bar are two acts', () => {
 describe('every row is placed by hand, render included (BR-1a)', () => {
   it('plotting a sketch creates NOTHING for its render', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'sketch1');
-    await mkCard(project._id, 'render1', { name: 'Render Asset: GCat', task_prefix: 'Render Asset' });
+    await mkWorkCard(project._id, 'sketch1');
+    await mkWorkCard(project._id, 'render1', { name: 'Render Asset: GCat', task_prefix: 'Render Asset' });
     await addAndPlot(agent, project._id, 'sketch1', String(sprint._id), '2026-08-03');
 
     /* Auto-placing render the moment sketch is forecast to land is exactly the
@@ -379,8 +368,8 @@ describe('every row is placed by hand, render included (BR-1a)', () => {
 describe('two rules that look alike and are not (#72 §5)', () => {
   it('a card already complete is never OFFERED', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'done1', { current_list: 'Done' });
-    await mkCard(project._id, 'open1');
+    await mkWorkCard(project._id, 'done1', { current_list: 'Done' });
+    await mkWorkCard(project._id, 'open1');
 
     const { addable } = await load(project._id);
     expect(addable['MC-07']!.map((c) => c.cardId)).toEqual(['open1']);
@@ -390,7 +379,7 @@ describe('two rules that look alike and are not (#72 §5)', () => {
 
   it('a card that completes AFTER being scheduled STAYS', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
 
     await WorkCard.updateOne({ project_id: project._id, trello_card_id: 'w1' }, { $set: { current_list: 'Done' } });
@@ -405,7 +394,7 @@ describe('two rules that look alike and are not (#72 §5)', () => {
 
   it('keeps a scheduled row whose card has left the board', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     await WorkCard.updateOne({ project_id: project._id, trello_card_id: 'w1' }, { $set: { active: false } });
 
@@ -424,7 +413,7 @@ describe('two rules that look alike and are not (#72 §5)', () => {
 describe('one row = one task card = one bar', () => {
   it('refuses a second row for the same card', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     const dup = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(409);
     expect(dup.body.error.code).toBe('ALREADY_SCHEDULED');
@@ -443,7 +432,7 @@ describe('one row = one task card = one bar', () => {
        show the SAME date for the same card, and the card has none. */
     const { project, sprint, agent } = await setup();
     await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { sheet_deadline: '2026-08-04' } });
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
 
     const { rows } = await load(project._id);
@@ -462,7 +451,7 @@ describe('one row = one task card = one bar', () => {
       name: 'Second', difficulty: 'Medium', lane: 'design', current_list: 'Design',
       trello_due: '2026-09-01',
     });
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
 
     expect((await load(project._id)).rows[0]!.deadline).toBeNull();
@@ -473,7 +462,7 @@ describe('one row = one task card = one bar', () => {
        urgency. Task cards carry their own `Urgent` label now, and W1 writes
        it there. The row follows the card. */
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     expect((await load(project._id)).rows[0]!.urgent).toBe(false);
 
@@ -494,7 +483,7 @@ describe('one row = one task card = one bar', () => {
        website request can hold an urgent screen and non-urgent assets, so
        the group's value cannot be true of each row. */
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
 
     await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { urgency: 'Urgent' } });
@@ -503,7 +492,7 @@ describe('one row = one task card = one bar', () => {
 
   it('the deadline is the card’s OWN Trello due date, and nothing else', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1', { trello_due: '2026-08-20' });
+    await mkWorkCard(project._id, 'w1', { trello_due: '2026-08-20' });
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     // the field W2 writes on the work card (contracts/trello-write.md §W2)
     expect((await load(project._id)).rows[0]!.deadline).toBe('2026-08-20');
@@ -519,8 +508,8 @@ describe('one row = one task card = one bar', () => {
 
   it('flags late when the WORK runs past ITS date, and never without one', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1', { trello_due: '2026-08-04' });
-    await mkCard(project._id, 'w2'); // undated — and the group's main card IS dated (fixture)
+    await mkWorkCard(project._id, 'w1', { trello_due: '2026-08-04' });
+    await mkWorkCard(project._id, 'w2'); // undated — and the group's main card IS dated (fixture)
     await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
     await addAndPlot(agent, project._id, 'w2', String(sprint._id), '2026-08-03');
 
@@ -535,8 +524,8 @@ describe('one row = one task card = one bar', () => {
   it('carries the card’s Figma link for the Deadlines card, and null when there is none (#74 §3)', async () => {
     const { project, sprint, agent } = await setup();
     const figma = 'https://www.figma.com/design/abc/Fx?node-id=1-2';
-    await mkCard(project._id, 'w1', { figma_url: figma });
-    await mkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w1', { figma_url: figma });
+    await mkWorkCard(project._id, 'w2');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w2' }).expect(201);
 
@@ -564,7 +553,7 @@ describe('the asset badge reads the MC group, and only when the group agrees (PL
   it('agreed: every deliverable under the MC carries the same type → that type', async () => {
     const { project, sprint, agent } = await setup();
     await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { asset_type: 'Illustration' } });
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     expect((await rowFor(project._id)).assetType).toBe('Illustration'); // one deliverable agrees with itself
 
@@ -576,7 +565,7 @@ describe('the asset badge reads the MC group, and only when the group agrees (PL
     const { project, sprint, agent } = await setup();
     await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { asset_type: 'Illustration' } });
     await secondDeliverable(project._id, { asset_type: 'Icon' });
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     expect((await rowFor(project._id)).assetType).toBeNull();
   });
@@ -584,7 +573,7 @@ describe('the asset badge reads the MC group, and only when the group agrees (PL
   it('absent: no deliverable under the MC carries a type → null', async () => {
     const { project, sprint, agent } = await setup(); // the fixture's main card has none
     await secondDeliverable(project._id);
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     expect((await rowFor(project._id)).assetType).toBeNull();
   });
@@ -597,7 +586,7 @@ describe('the asset badge reads the MC group, and only when the group agrees (PL
     const { project, sprint, agent } = await setup();
     await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { asset_type: 'Illustration' } });
     await secondDeliverable(project._id);
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     expect((await rowFor(project._id)).assetType).toBeNull();
   });
@@ -610,7 +599,7 @@ describe('the asset badge reads the MC group, and only when the group agrees (PL
       name: 'Stranger', asset_type: 'Icon',
     });
     await Deliverable.updateOne({ trello_card_id: 'main07' }, { $set: { asset_type: 'Illustration' } });
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     expect((await rowFor(project._id)).assetType).toBe('Illustration');
   });
@@ -623,7 +612,7 @@ describe('the asset badge reads the MC group, and only when the group agrees (PL
 describe('the routes are Sirius-owned planning writes', () => {
   it('audits add, plot and remove (invariant 10)', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
     await agent.delete(itemUrl(project._id, id)).expect(200);
 
@@ -633,7 +622,7 @@ describe('the routes are Sirius-owned planning writes', () => {
 
   it('records the before AND after of a move, so a plot is reconstructable', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
     await agent.patch(itemUrl(project._id, id)).send({ starts_on: '2026-08-10' }).expect(200);
 
@@ -651,7 +640,7 @@ describe('the routes are Sirius-owned planning writes', () => {
     const later = await Sprint.create({
       project_id: project._id, name: 'Sprint 13', starts_on: '2026-08-17', ends_on: '2026-08-28', position: 1,
     });
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
     await agent.patch(itemUrl(project._id, id)).send({ sprint_id: String(later._id) }).expect(200);
 
@@ -666,7 +655,7 @@ describe('the routes are Sirius-owned planning writes', () => {
     const foreignSprint = await Sprint.create({
       project_id: other._id, name: 'S', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 0,
     });
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
     await agent.patch(itemUrl(project._id, id)).send({ sprint_id: String(foreignSprint._id) }).expect(404);
 
@@ -675,7 +664,7 @@ describe('the routes are Sirius-owned planning writes', () => {
 
   it('answers 400 for a malformed id in the BODY and 404 for one in the PATH', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     // same class of bad input used to get two different answers
     await add(agent, project._id, { sprint_id: 'not-an-id', card_id: 'w1' }).expect(400);
     const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
@@ -685,7 +674,7 @@ describe('the routes are Sirius-owned planning writes', () => {
 
   it('refuses a field Sirius does not own', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     // strict body: an unknown key is REFUSED, not ignored (src/CLAUDE.md §2)
     await agent
@@ -703,7 +692,7 @@ describe('the routes are Sirius-owned planning writes', () => {
 
   it('refuses a malformed date rather than storing it', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1' }).expect(201);
     await agent.patch(itemUrl(project._id, res.body.id)).send({ starts_on: '3 Aug' }).expect(400);
   });
@@ -718,7 +707,7 @@ describe('the routes are Sirius-owned planning writes', () => {
       project_id: other._id, mc_number: 'MC-07', trello_card_id: 'foreign',
       name: 'Foreign', difficulty: 'Medium', current_list: 'Working on Design',
     });
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
 
     // a sprint belonging to another project
     await add(agent, project._id, { sprint_id: String(otherSprint._id), card_id: 'w1' }).expect(404);
@@ -755,7 +744,7 @@ describe('Add All is one request that answers per card', () => {
 
   it('adds every listed card in LIST order, after the sprint’s tail', async () => {
     const { project, sprint, agent } = await setup();
-    for (const id of ['a0', 'w1', 'w2', 'w3']) await mkCard(project._id, id);
+    for (const id of ['a0', 'w1', 'w2', 'w3']) await mkWorkCard(project._id, id);
     // the sprint already holds a row: the batch lands AFTER it, never around it
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'a0' }).expect(201);
 
@@ -777,10 +766,10 @@ describe('Add All is one request that answers per card', () => {
       project_id: other._id, mc_number: 'MC-07', trello_card_id: 'foreign',
       name: 'Foreign', difficulty: 'Medium', current_list: 'Working on Design',
     });
-    await mkCard(project._id, 'open1');
-    await mkCard(project._id, 'open2');
-    await mkCard(project._id, 'done1', { current_list: 'Done' });
-    await mkCard(project._id, 'sched1');
+    await mkWorkCard(project._id, 'open1');
+    await mkWorkCard(project._id, 'open2');
+    await mkWorkCard(project._id, 'done1', { current_list: 'Done' });
+    await mkWorkCard(project._id, 'sched1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'sched1' }).expect(201);
 
     /* Never fatal (#77 §0, Miles: no confirmation, no count-check, no review
@@ -811,8 +800,8 @@ describe('Add All is one request that answers per card', () => {
 
   it('dedupes a repeated id — first occurrence keeps the order, and a repeat is not a skip', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w2');
 
     /* A duplicate in the body is a client echo, not a fact to report: without
        the dedupe the second `w1` would hit the unique index and come back as
@@ -824,7 +813,7 @@ describe('Add All is one request that answers per card', () => {
 
   it('audits one sprintItem.add per CREATED row, in the single add’s own shape (invariant 10)', async () => {
     const { project, sprint, agent } = await setup();
-    for (const id of ['s1', 'b1', 'b2', 'done1']) await mkCard(project._id, id, id === 'done1' ? { current_list: 'Done' } : {});
+    for (const id of ['s1', 'b1', 'b2', 'done1']) await mkWorkCard(project._id, id, id === 'done1' ? { current_list: 'Done' } : {});
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 's1' }).expect(201);
     await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['b1', 'b2', 'done1'] }).expect(200);
 
@@ -855,8 +844,8 @@ describe('Add All is one request that answers per card', () => {
     const otherSprint = await Sprint.create({
       project_id: other._id, name: 'S', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 0,
     });
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w2');
 
     // the sprint is the one thing that fails the WHOLE request (invariant 1):
     // there is no list to land in, so no card can be "the rest"
@@ -867,7 +856,7 @@ describe('Add All is one request that answers per card', () => {
 
   it('refuses a malformed body rather than adding some of it', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const sprintId = String(sprint._id);
 
     const bad: Record<string, unknown>[] = [
@@ -888,8 +877,8 @@ describe('Add All is one request that answers per card', () => {
 
   it('lands every row UNPLOTTED — the batch carries no starts_on and refuses one', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w2');
 
     /* Two acts (#72 §6), for a batch as for a single add: the result rows draw
        no + (node 840:31630), so there is no click to carry. The single add's
@@ -911,8 +900,8 @@ describe('Add All is one request that answers per card', () => {
 
   it('turns a row that lands between the pre-read and the insert into a skip, not a 500', async () => {
     const { project, sprint, agent } = await setup();
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w2');
 
     /* The batch reads "already scheduled" ONCE, then inserts one by one. The
        race is a second actor scheduling `w1` after that read and before the
@@ -941,7 +930,7 @@ describe('Add All is one request that answers per card', () => {
 
   it('takes its own rows back and refuses when the sprint vanished mid-batch (review 2026-09-05, S1)', async () => {
     const { project, sprint, agent } = await setup();
-    for (const id of ['w1', 'w2']) await mkCard(project._id, id);
+    for (const id of ['w1', 'w2']) await mkWorkCard(project._id, id);
     /* The sprints editor removes a sprint and cascades its rows in one act.
        Simulated at the seam: the route's FIRST insert is preceded by exactly
        that act, so every row the batch creates hangs off a sprint that is
@@ -967,7 +956,7 @@ describe('Add All is one request that answers per card', () => {
 
   it('rolls back a row whose audit row failed and says how far it got (review 2026-09-05, S2)', async () => {
     const { project, sprint, agent } = await setup();
-    for (const id of ['w1', 'w2', 'w3']) await mkCard(project._id, id);
+    for (const id of ['w1', 'w2', 'w3']) await mkWorkCard(project._id, id);
     // the SECOND audit write fails: w1 stands with its row, w2 is taken back, w3 is never reached
     const original = AuditLog.create.bind(AuditLog) as (doc: Record<string, unknown>) => Promise<unknown>;
     let calls = 0;
@@ -991,7 +980,7 @@ describe('Add All is one request that answers per card', () => {
 
   it('answers a vanished sprint with plain words, on both add routes (review 2026-09-05, B2-R5)', async () => {
     const { project, agent } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const gone = await Sprint.create({
       project_id: project._id, name: 'Gone', starts_on: '2026-09-07', ends_on: '2026-09-18', position: 1,
     });

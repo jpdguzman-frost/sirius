@@ -103,10 +103,14 @@ export interface PipelineRow {
   workDone: string | null;
   workStartedTs: string | null;
   workDoneTs: string | null;
+  /**
+   * The resolved client date — `deliverables_v`'s invariant-14 precedence
+   * (Trello due, else sheet deadline, else none). Its source, the raw Trello
+   * due and an overdue flag once rode beside it for the main-row picker;
+   * that picker left Pipeline in block 3 (owl #78 §2) and the three fields
+   * had no reader left (simplification pass 2026-09-05, S-2/E3).
+   */
   deadline: string | null;
-  deadlineSource: string | null;
-  overdue: boolean; // deadline < today, computed where deadline lives (one 'today' in the system)
-  trelloDue: string | null;
   /**
    * The Trello card's own creation instant — the table's NATURAL order
    * ("by order of filing, most recently ingested first", owl #62). ISO, not a
@@ -288,7 +292,7 @@ export async function loadPipeline(
       // time-of-day from its own doc, and a stale copy after an optimistic
       // write would be a trap for its first consumer (review pass 2026-08-18).
       due: w.trello_due ?? null,
-      // same comparison the deliverable's overdue uses: Manila day strings
+      // Manila day strings on both sides — the ONE `today` in the system
       overdue: !!w.trello_due && w.trello_due < today,
       started: w.work_started_at ? manilaDate(w.work_started_at) : null,
       startedTs: w.work_started_at ? w.work_started_at.toISOString() : null,
@@ -508,9 +512,6 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
     workStartedTs: startedAt ? startedAt.toISOString() : null,
     workDoneTs: doneAt ? doneAt.toISOString() : null,
     deadline: (d.deadline as string) ?? null,
-    deadlineSource: (d.deadline_source as string) ?? null,
-    overdue: d.deadline != null && (d.deadline as string) < today,
-    trelloDue: (d.trello_due as string) ?? null, // W2 edit target (FR-9.1)
     trelloUrl: (d.trello_url as string) ?? null,
     figmaUrl: (d.figma_url as string) ?? null,
     slottedWeek,

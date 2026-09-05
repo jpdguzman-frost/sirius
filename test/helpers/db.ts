@@ -24,12 +24,19 @@ export async function stopTestDb(): Promise<void> {
   }
 }
 
+/**
+ * Empties every collection but the migrations ledger. The deletes are issued
+ * TOGETHER: the collections are independent and unordered, and a sequential
+ * await per collection was the measurable per-case cost across the thirty-odd
+ * db-backed suites (simplification pass 2026-09-05, E6).
+ */
 export async function clearCollections(): Promise<void> {
   const db = mongoose.connection.db;
   if (!db) return;
   const collections = await db.listCollections({ type: 'collection' }).toArray();
-  for (const c of collections) {
-    if (c.name === 'migrations' || c.name.startsWith('system.')) continue;
-    await db.collection(c.name).deleteMany({});
-  }
+  await Promise.all(
+    collections
+      .filter((c) => c.name !== 'migrations' && !c.name.startsWith('system.'))
+      .map((c) => db.collection(c.name).deleteMany({})),
+  );
 }

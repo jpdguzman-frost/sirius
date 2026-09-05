@@ -369,9 +369,9 @@ app.on({
      cannot be true — and the shipped build was writing both onto the parent,
      which is why this is a defect fix and not a feature. `cardId` here is a
      WORK card id in every one of these four handlers, and the optimistic set
-     and its rollback go through patchWorkCard, never patchRow: the main row's
-     own stored values are read-only in Sirius now, reconciled from that card's
-     own Trello labels. Annotations 169:26074 / 169:26364 drew these controls
+     and its rollback go through patchWorkCard, never a write against the
+     deliverable rows: the main row's own stored values are read-only in
+     Sirius now, reconciled from that card's own Trello labels. Annotations 169:26074 / 169:26364 drew these controls
      on the main row; #78 supersedes that placement, not the chrome. */
   openUrgencyMenu(ctx, cardId) {
     openOverlay(ctx, cardId, { key: 'urgencyMenu', posKey: 'urgencyMenuPos', saving: 'savingUrgency', h: 92, gap: 3 });

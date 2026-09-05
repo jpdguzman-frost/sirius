@@ -427,25 +427,24 @@ const app = new Ractive({
        viewer whose calendar date differs from Manila's at the moment they
        look must not open on a different month; the retired tab had the same
        rule) shifted by the navigator, through the same week rule the engine
-       keys on. The Date constructor normalises the shifted month, so
-       December plus one is the next January without a second branch. */
+       keys on. */
     dlMondays() {
-      const [y, m] = this.get('dlToday').split('-').map(Number);
-      const base = new Date(y, m - 1 + this.get('monthOffset'), 1);
-      return dlMonthWeeks(base.getFullYear(), base.getMonth());
+      const [y, m] = monthShiftYm(monthOf(this.get('dlToday')), this.get('monthOffset')).split('-').map(Number);
+      return dlMonthWeeks(y, m - 1);
     },
     /** The navigator's label (731:100859) — first shown Monday → the month's end. */
     dlRange() {
       return dlRangeLabel(this.get('dlMondays'));
     },
-    /* THE LANES: the pure builder over the rows, the Mondays, the ARES
-       holiday calendar (R-f-8's same feed) and the COMMITTED capacity —
-       `capacity.weekly`, never capDraft: the progress line states the number
-       the server holds, as the footer does; the live thumb has capBand. A
-       card's day, its counts and its badges are all decided in dlBuild, so
-       the template stays a layout. */
+    /* THE LANES: the pure builder over the rows, the Mondays and the
+       COMMITTED capacity — `capacity.weekly`, never capDraft: the progress
+       line states the number the server holds, as the footer does; the live
+       thumb has capBand. A card's day, its counts and its badges are all
+       decided in dlBuild, so the template stays a layout. The holiday
+       calendar is not read: the frame draws no holiday state, and a calendar
+       refresh must not rebuild every lane for a flag nothing renders. */
     dlWeeks() {
-      return dlBuild(this.get('sprintItems.rows'), this.get('dlMondays'), this.get('holidays'), this.get('capacity.weekly'));
+      return dlBuild(this.get('sprintItems.rows'), this.get('dlMondays'), this.get('capacity.weekly'));
     },
     /* ---- Requests §3: segment + search + four selects, AND-combined, all
        client-side over the single unfiltered payload. The counts stay on

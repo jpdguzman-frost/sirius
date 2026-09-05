@@ -44,6 +44,7 @@ import { manilaToday } from '../src/services/pipeline.ts';
 import { EMPIRICAL } from '../lib/model.ts';
 import { getHolidays, isHoliday, localIso, parseDate, setHolidays, workday } from '../lib/calendar.ts';
 import { AuditLog, Project, Sprint, SprintItem, SyncRun, WorkCard } from '../src/models/index.ts';
+import { SAMPLE_CARD, mkWorkCard, otherProject } from './helpers/schedule-fixture.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -59,11 +60,8 @@ beforeEach(async () => {
 /* fixture                                                                 */
 /* ---------------------------------------------------------------------- */
 
-/** #73's sample card: Medium, in a design lane. The lane comes from the LIST alone. */
-const CARD = { difficulty: 'Medium', current_list: 'Working on Design', task_prefix: 'Sketch Asset' };
-
 /** The engine's finish for a start — the ONE number every expectation is built from. */
-const finishFor = (start: string, card: typeof CARD = CARD): string => {
+const finishFor = (start: string, card: typeof SAMPLE_CARD = SAMPLE_CARD): string => {
   const f = finishOf(card, start, EMPIRICAL);
   if (!f) throw new Error(`no finish for ${start} — the fixture card must carry a difficulty`);
   return f;
@@ -112,19 +110,13 @@ async function setup(
   return { project, sprintA };
 }
 
-/** A second ongoing project with its own sprint A and a fresh sync — the scope and record cases. */
-async function otherProject() {
-  const b = await Project.create({ code: 'rt-999', name: 'Other', trello_board_id: 'fxB', weekly_capacity: 22 });
+/** The shared second project, READY TO ROLL: its own sprint A and a fresh sync — the scope and record cases. */
+async function otherProjectReady() {
+  const b = await otherProject();
   await syncRow(b._id);
   const sb = await Sprint.create({ project_id: b._id, ...SPRINT_A });
   return { b, sb };
 }
-
-const mkCard = (projectId: Types.ObjectId, id: string, over: Record<string, unknown> = {}) =>
-  WorkCard.create({
-    project_id: projectId, mc_number: 'MC-07', trello_card_id: id, name: `Sketch Asset: ${id}`,
-    ...CARD, ...over,
-  });
 
 /** A plotted row — the two acts (add, plot) collapsed, since only the plotted state rolls. */
 const mkItem = (
@@ -142,7 +134,7 @@ const mkItem = (
 /** The one late row most cases start from: card + plotted row + the pass. */
 async function lateRow(start: string, today: string, cardOver: Record<string, unknown> = {}) {
   const { project, sprintA } = await setup();
-  await mkCard(project._id, 'w1', cardOver);
+  await mkWorkCard(project._id, 'w1', cardOver);
   const item = await mkItem(project._id, sprintA._id, 'w1', start);
   const result = await rollUnfinished({ today, projectId: project._id });
   const after = await SprintItem.findById(item._id).orFail();
@@ -282,7 +274,7 @@ describe('rows that never move', () => {
 
   it('an unplotted row — there is no bar to move', async () => {
     const { project, sprintA } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const item = await mkItem(project._id, sprintA._id, 'w1', null);
     const result = await rollUnfinished({ today: wayLate(), projectId: project._id });
     expect(result.moved).toBe(0);
@@ -307,7 +299,7 @@ describe('rows that never move', () => {
      years behind must not read as "nothing was late" on the worker's line. */
   it('a walk that hits the step cap leaves the row where it is and counts it capped', async () => {
     const { project, sprintA } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const farBack = '2024-01-02'; // ~670 working days before the today below — well past 400 steps
     const item = await mkItem(project._id, sprintA._id, 'w1', farBack);
     // the premise: the walk really does give up at the default cap for this distance
@@ -337,8 +329,8 @@ describe('sprint membership follows the NEW finish day (#75 §2)', () => {
   it('crosses into the next sprint: sprint_id changes and the row takes the TAIL position', async () => {
     const { project, sprintA } = await setup();
     const sprintB = await Sprint.create({ project_id: project._id, ...SPRINT_B });
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'b1');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'b1');
     // B already lists a row at position four — unplotted, so it cannot itself roll
     await mkItem(project._id, sprintB._id, 'b1', null, { position: 4 });
     const item = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY);
@@ -359,8 +351,8 @@ describe('sprint membership follows the NEW finish day (#75 §2)', () => {
   it('two rows crossing in one pass take DISTINCT tail positions, in list order', async () => {
     const { project, sprintA } = await setup();
     const sprintB = await Sprint.create({ project_id: project._id, ...SPRINT_B });
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w2');
     const first = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY, { position: 0 });
     const second = await mkItem(project._id, sprintA._id, 'w2', WEDNESDAY, { position: 1 });
 
@@ -374,7 +366,7 @@ describe('sprint membership follows the NEW finish day (#75 §2)', () => {
 
   it('no sprint covers the new finish → sprint_id and position stay as they were', async () => {
     const { project, sprintA } = await setup(); // sprint A alone; the week after is a gap
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const item = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY, { position: 3 });
 
     const today = crossing();
@@ -393,7 +385,7 @@ describe('sprint membership follows the NEW finish day (#75 §2)', () => {
 
   it('the same sprint still covers the finish → the row keeps its position', async () => {
     const { project, sprintA } = await setup({ ends_on: SPRINT_B.ends_on }); // one two-week sprint
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const item = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY, { position: 3 });
 
     await rollUnfinished({ today: crossing(), projectId: project._id });
@@ -441,7 +433,7 @@ describe('R3-1 — a project rolls only on a FRESH, SUCCESSFUL ARES read of its 
     if (later) {
       await SyncRun.create({ project_id: project._id, source: later.source ?? 'ares', ok: later.ok, error: later.ok ? undefined : 'ARES 502', at: new Date() });
     }
-    for (const id of ['w1', 'w2', 'w3']) await mkCard(project._id, id);
+    for (const id of ['w1', 'w2', 'w3']) await mkWorkCard(project._id, id);
     const a = await mkItem(project._id, sprintA._id, 'w1', MONDAY, { position: 0 });
     const b = await mkItem(project._id, sprintA._id, 'w2', MONDAY, { position: 1 });
     await mkItem(project._id, sprintA._id, 'w3', null, { position: 2 });
@@ -522,9 +514,9 @@ describe('R3-1 — a project rolls only on a FRESH, SUCCESSFUL ARES read of its 
 
   it('the gate is per project: a failed read on one project never holds the other back', async () => {
     const { project: a, sprintA: sa } = await setup({}, {}, { ok: false });
-    const { b, sb } = await otherProject();
-    await mkCard(a._id, 'w1');
-    await mkCard(b._id, 'w1');
+    const { b, sb } = await otherProjectReady();
+    await mkWorkCard(a._id, 'w1');
+    await mkWorkCard(b._id, 'w1');
     const ia = await mkItem(a._id, sa._id, 'w1', MONDAY);
     const ib = await mkItem(b._id, sb._id, 'w1', MONDAY);
 
@@ -552,7 +544,7 @@ describe('R3-2 — a row rewritten between the job’s read and its write is lef
 
   it('the PM re-plots the row in the window → the PM’s day stands, no audit, counted raced', async () => {
     const { project, sprintA } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const item = await mkItem(project._id, sprintA._id, 'w1', MONDAY);
     const spy = underTheJob((f) => SprintItem.collection.updateOne({ _id: f._id }, { $set: { starts_on: PM_DAY } }));
     try {
@@ -571,7 +563,7 @@ describe('R3-2 — a row rewritten between the job’s read and its write is lef
 
   it('the PM un-plots the row in the window → it stays unplotted, never re-plotted by the job', async () => {
     const { project, sprintA } = await setup();
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const item = await mkItem(project._id, sprintA._id, 'w1', MONDAY);
     const spy = underTheJob((f) => SprintItem.collection.updateOne({ _id: f._id }, { $unset: { starts_on: 1 } }));
     try {
@@ -585,8 +577,8 @@ describe('R3-2 — a row rewritten between the job’s read and its write is lef
 
   it('the PM deletes the row in the window → no throw, the pass goes on to the next row', async () => {
     const { project, sprintA } = await setup();
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w2');
     const gone = await mkItem(project._id, sprintA._id, 'w1', MONDAY, { position: 0 });
     const stays = await mkItem(project._id, sprintA._id, 'w2', MONDAY, { position: 1 });
     const spy = underTheJob((f) => SprintItem.collection.deleteOne({ _id: f._id }));
@@ -618,8 +610,8 @@ describe('R3-3 — a move that cannot be audited is taken back, and one failure 
   it('AuditLog.create rejects once → that row is back where it was (day, sprint, position), the next row moves and audits', async () => {
     const { project, sprintA } = await setup();
     const sprintB = await Sprint.create({ project_id: project._id, ...SPRINT_B });
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w2');
     // both cross into sprint B — so the revert has all three fields to put back
     const first = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY, { position: 0 });
     const second = await mkItem(project._id, sprintA._id, 'w2', WEDNESDAY, { position: 1 });
@@ -661,9 +653,9 @@ describe('R3-3 — a move that cannot be audited is taken back, and one failure 
 
   it('a project whose pass throws outside the row guard → its record says so, the other project still rolls', async () => {
     const { project: a, sprintA: sa } = await setup();
-    const { b, sb } = await otherProject();
-    await mkCard(a._id, 'w1');
-    await mkCard(b._id, 'w1');
+    const { b, sb } = await otherProjectReady();
+    await mkWorkCard(a._id, 'w1');
+    await mkWorkCard(b._id, 'w1');
     const ia = await mkItem(a._id, sa._id, 'w1', MONDAY);
     const ib = await mkItem(b._id, sb._id, 'w1', MONDAY);
 
@@ -703,9 +695,9 @@ describe('R3-3 — a move that cannot be audited is taken back, and one failure 
 describe('R5-6 — every project’s pass writes ONE sync_runs row, source rollover', () => {
   it('one row per project per run, ok, stats in the five-count shape, no error field', async () => {
     const { project: a, sprintA: sa } = await setup();
-    const { b, sb } = await otherProject();
-    await mkCard(a._id, 'w1');
-    await mkCard(b._id, 'w1');
+    const { b, sb } = await otherProjectReady();
+    await mkWorkCard(a._id, 'w1');
+    await mkWorkCard(b._id, 'w1');
     await mkItem(a._id, sa._id, 'w1', MONDAY);
     await mkItem(b._id, sb._id, 'w1', '2099-01-04'); // not late
 
@@ -745,9 +737,9 @@ describe('scope — ongoing projects, optionally one of them (invariant 1)', () 
 
   it('projectId narrows the pass; a second project’s rows are untouched until its own pass', async () => {
     const { project: a, sprintA: sa } = await setup();
-    const { b, sb } = await otherProject();
-    await mkCard(a._id, 'w1');
-    await mkCard(b._id, 'w1');
+    const { b, sb } = await otherProjectReady();
+    await mkWorkCard(a._id, 'w1');
+    await mkWorkCard(b._id, 'w1');
     const ia = await mkItem(a._id, sa._id, 'w1', MONDAY);
     const ib = await mkItem(b._id, sb._id, 'w1', MONDAY);
 
@@ -763,7 +755,7 @@ describe('scope — ongoing projects, optionally one of them (invariant 1)', () 
 
   it('a project that is not ongoing is not visited, even when named', async () => {
     const { project, sprintA } = await setup({}, { status: 'archived' });
-    await mkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w1');
     const item = await mkItem(project._id, sprintA._id, 'w1', MONDAY);
 
     expect(await rollUnfinished({ today: late(), projectId: project._id })).toEqual(counts({ projects: 0 }));
@@ -773,8 +765,8 @@ describe('scope — ongoing projects, optionally one of them (invariant 1)', () 
 
   it('today defaults to the Manila calendar day (invariant 11)', async () => {
     const { project, sprintA } = await setup();
-    await mkCard(project._id, 'w1');
-    await mkCard(project._id, 'w2');
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'w2');
     // forty-five calendar days back is well inside the walk's cap; the year 2099 is not late
     const behind = await mkItem(project._id, sprintA._id, 'w1', plusDays(manilaToday(), -45));
     const ahead = await mkItem(project._id, sprintA._id, 'w2', '2099-01-04', { position: 1 });

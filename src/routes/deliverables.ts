@@ -8,6 +8,7 @@ import { Router } from 'express';
 import { ensureAuthenticated } from '../auth/session.ts';
 import { ensureProjectMember } from '../auth/membership.ts';
 import { loadProjectModel } from '../services/model-grid.ts';
+import { latestRead } from '../services/sync-status.ts';
 import { loadPipeline, manilaToday, toMilestones } from '../services/pipeline.ts';
 import { detectConflicts, replotList } from '../services/conflicts.ts';
 import { dayCapacities } from '../../lib/dayplan.ts';
@@ -31,16 +32,20 @@ export function deliverablesRouter(): Router {
         withSprintItems: true,
       });
       const sprints = await Sprint.find({ project_id: projectId }).sort({ position: 1 }).lean();
-      const lastAres = await SyncRun.findOne({ project_id: projectId, source: 'ares' }).sort({ at: -1 }).lean();
+      /* The chip's "latest read" is the FULL sync alone — `ares`, not the push
+         drains the rollover's gate also counts (READ_SOURCES in
+         services/sync-status.ts). Whether the chip should keep reading "sync
+         failing" while push keeps a project fresh is a WORDING question and
+         JP's to change (simplification pass 2026-09-05, ALT-4); until ruled,
+         the list is explicit here so the divergence is one named argument. */
+      const lastAres = await latestRead(projectId, { sources: ['ares'] });
       // FR-8.6: `at`/`ok` describe the last ATTEMPT — that is what the header
       // chip reports ("sync failing — showing last good data"). The Requests
       // strip names when the data on screen was actually read, which is the
       // last SUCCESSFUL run: a failed attempt does not un-sync the good data
       // still being displayed. Same lastGood shape the requests route emits
       // for the sheet sync.
-      const lastAresGood = lastAres?.ok
-        ? lastAres
-        : await SyncRun.findOne({ project_id: projectId, source: 'ares', ok: true }).sort({ at: -1 }).lean();
+      const lastAresGood = lastAres?.ok ? lastAres : await latestRead(projectId, { sources: ['ares'], okOnly: true });
       // FR-8.6 + FR-9.6: push channel freshness beside the poll freshness.
       const lastPush = await PushEvent.findOne({ project_id: projectId }).sort({ received_at: -1 }).select('received_at').lean();
       res.json({

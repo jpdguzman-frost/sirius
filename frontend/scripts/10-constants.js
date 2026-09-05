@@ -244,6 +244,10 @@ function fmtRange(fromIso, toIso) {
    table above). Two frames, two spellings, neither derived from the other —
    deriving one from the other would make one of the two frames wrong. */
 const DL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+/* The five day-column headings (810:121954), by index: a lane's days are the
+   Monday plus zero to four, so the name is fixed by position and no Date is
+   parsed to discover it. */
+const DL_DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
 /* THE WEEKS OF A MONTH — the same set `lib/calendar.ts monthWeeks` produces
    (B3; the recipe suite executes both across two years of months): walk the
@@ -251,23 +255,16 @@ const DL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept
    skip a week whose Friday lands before the first. A week that straddles two
    months is therefore in BOTH — the Monday that is the last day of August
    starts August's fifth week and September's first — exactly as the engine
-   keys it. Local-midnight Date math for the walk and string comparison for
-   the two tests, so only calendar fields move and nothing shifts under a
-   browser in another zone; `m` is zero-based like the Date constructor. */
+   keys it. The walk is the shared Monday helpers (mondayIso, mondayShift,
+   fridayIso — local-midnight Date math, so only calendar fields move and
+   nothing shifts under a browser in another zone) and the two tests are
+   string comparisons; `m` is zero-based like the Date constructor. */
 function dlMonthWeeks(y, m) {
   const firstIso = isoOf(new Date(y, m, 1));
   const lastIso = isoOf(new Date(y, m + 1, 0));
-  const monday = new Date(y, m, 1);
-  const dow = monday.getDay() === 0 ? 7 : monday.getDay();
-  monday.setDate(monday.getDate() - (dow - 1));
   const out = [];
-  for (;;) {
-    const key = isoOf(monday);
-    if (key > lastIso) break;
-    const friday = new Date(monday);
-    friday.setDate(friday.getDate() + 4);
-    if (isoOf(friday) >= firstIso) out.push(key);
-    monday.setDate(monday.getDate() + 7);
+  for (let key = mondayIso(firstIso); key <= lastIso; key = mondayShift(key, 1)) {
+    if (fridayIso(key) >= firstIso) out.push(key);
   }
   return out;
 }
@@ -284,12 +281,10 @@ function dlMonthWeeks(y, m) {
    shape. Empty input renders nothing. */
 function dlRangeLabel(mondays) {
   if (!mondays || !mondays.length) return '';
-  const [fy, fm, fd] = mondays[0].slice(0, 10).split('-').map(Number);
-  const friday = new Date(fy, fm - 1, fd + 4); // the constructor normalises the overflow
-  const y = friday.getFullYear();
-  const m = friday.getMonth();
-  const lastDay = new Date(y, m + 1, 0).getDate();
-  return `${DL_MONTHS[fm - 1]} ${fd} – ${DL_MONTHS[m]} ${lastDay}, ${y}`;
+  const [, fm, fd] = mondays[0].slice(0, 10).split('-').map(Number);
+  const [y, m] = fridayIso(mondays[0]).split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return `${DL_MONTHS[fm - 1]} ${fd} – ${DL_MONTHS[m - 1]} ${lastDay}, ${y}`;
 }
 
 /* THE LANE'S RANGE (731:100872): day-first, a spaced hyphen, the year once —
@@ -298,35 +293,26 @@ function dlRangeLabel(mondays) {
    '29 Dec 2025 - 2 Jan 2026' (B16). The right-hand end is always whole and
    the left end sheds first the year and then the month as the two ends
    converge — the retired formatter's shape in the frame's new spelling and
-   spacing. Pure string math but for the one Friday walk, which the Date
-   constructor does by normalising the day overflow at local midnight. */
-function dlWeekRange(mondayIso) {
-  if (!mondayIso) return '';
-  const [y1, m1, d1] = mondayIso.slice(0, 10).split('-').map(Number);
-  const friday = new Date(y1, m1 - 1, d1 + 4);
-  const y2 = friday.getFullYear();
-  const m2 = friday.getMonth() + 1;
-  const right = `${friday.getDate()} ${DL_MONTHS[m2 - 1]} ${y2}`;
+   spacing. Pure string math over the Monday and its fridayIso. */
+function dlWeekRange(monday) {
+  if (!monday) return '';
+  const [y1, m1, d1] = monday.slice(0, 10).split('-').map(Number);
+  const [y2, m2, d2] = fridayIso(monday).split('-').map(Number);
+  const right = `${d2} ${DL_MONTHS[m2 - 1]} ${y2}`;
   if (y1 !== y2) return `${d1} ${DL_MONTHS[m1 - 1]} ${y1} - ${right}`;
   if (m1 !== m2) return `${d1} ${DL_MONTHS[m1 - 1]} - ${right}`;
   return `${d1} - ${right}`;
 }
 
-/** 'Mon'…'Fri' for a day column's header (810:121954): the LOCAL weekday of the calendar date, so a browser in another zone still names the day the string says. */
-function dlDayName(iso) {
-  if (!iso) return '';
-  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(iso.slice(0, 10) + 'T00:00:00').getDay()];
-}
-
 /* THE TAB'S WHOLE DATA, in one pass (B2, B4, B5, B7). Takes the schedule's
    rows as the server sends them (`sprintItems.rows`, position-sorted per
-   sprint), the Mondays of the shown month, the ARES holiday calendar and the
-   week's capacity; returns one DlWeek per Monday, in order:
+   sprint), the Mondays of the shown month and the week's capacity; returns
+   one DlWeek per Monday, in order:
      { key, label: 'Week N', range, cards, pending, urgent, done, load,
-       capPct, days: [{ day, name, holiday, cards, pending, done }] }
+       capPct, days: [{ day, name, cards, pending, done }] }
    and inside them one DlCard per drawn row:
-     { id, cardId, mc, label, urgent, difficulty, assetType, lane, status,
-       done, trelloUrl, figmaUrl, day }.
+     { id, cardId, mc, label, urgent, difficulty, assetType, lane, done,
+       trelloUrl, figmaUrl }.
 
    THE OPT-IN GATE (#74 §1, B2): a row without `startsOn` (listed, not
    plotted) or without `finish` (no difficulty label, or the card has left
@@ -335,9 +321,9 @@ function dlDayName(iso) {
 
    THE DAY is the forecast FINISH (B2). A card lands in its day's column, and
    the collapsed lane stacks the days in order with each day's cards in the
-   rows' own order (B7) — nothing here re-sorts, and a holiday column still
-   renders (the frame has no holiday state); the engine's WORKDAY never puts
-   a finish on one, so nothing can land there.
+   rows' own order (B7) — nothing here re-sorts. A holiday column renders like
+   any other and carries no flag: the frame draws no holiday state, and the
+   engine's WORKDAY never puts a finish on one, so nothing can land there.
 
    THE COUNTS are three INDEPENDENT tallies (#75 §1, B4): pending is the
    pending lane, done the done lane, urgent the label on ANY status. An
@@ -350,22 +336,16 @@ function dlDayName(iso) {
    tab's unit. The bar caps at one hundred percent; a capacity of zero (a
    project whose slider was never set, or the first paint before the payload
    lands) divides by one rather than printing NaN into a width. */
-function dlBuild(rows, mondays, holidays, cap) {
-  const skip = new Set(holidays || []);
+function dlBuild(rows, mondays, cap) {
+  // `cards`, `load` and `capPct` are set in the closing loop, off the days
   const weeks = (mondays || []).map((key, i) => ({
     key,
     label: `Week ${i + 1}`,
     range: dlWeekRange(key),
-    cards: [],
     pending: 0,
     urgent: 0,
     done: 0,
-    load: 0,
-    capPct: '0.0',
-    days: [0, 1, 2, 3, 4].map((n) => {
-      const day = isoAddDays(key, n);
-      return { day, name: dlDayName(day), holiday: skip.has(day), cards: [], pending: 0, done: 0 };
-    }),
+    days: [0, 1, 2, 3, 4].map((n) => ({ day: isoAddDays(key, n), name: DL_DAY_NAMES[n], cards: [], pending: 0, done: 0 })),
   }));
   // day → its column, so each row is placed by one lookup rather than a scan
   const slot = new Map();
@@ -383,11 +363,9 @@ function dlBuild(rows, mondays, holidays, cap) {
       difficulty: r.difficulty || null,
       assetType: r.assetType || null,
       lane: r.currentList || null,
-      status: r.status || null,
       done: r.status === 'done',
       trelloUrl: r.trelloUrl || null,
       figmaUrl: r.figmaUrl || null,
-      day: r.finish,
     };
     at.d.cards.push(card);
     if (r.status === 'pending') {

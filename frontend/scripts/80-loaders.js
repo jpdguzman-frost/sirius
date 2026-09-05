@@ -110,11 +110,12 @@ function findWorkCard(cardId) {
   return null;
 }
 
-/* patchRow's twin for the WORK CARD map (owl #78 §1: urgency and difficulty
-   are written on the work card, so their optimistic set and their rollback
-   both land here). Same rule as patchRow, for the same reason: the card is
-   RE-FOUND at every step and never held as an index or a keypath across an
-   await — a loadAll can replace the map while a PATCH is in flight, and a
+/* The ONE optimistic writer for the WORK CARD map (owl #78 §1: urgency,
+   difficulty and the due date are written on the work card, so their
+   optimistic set and their rollback all land here; the deliverable rows have
+   no writer since W2's deliverable half went in block 3). The rule: the card
+   is RE-FOUND at every step and never held as an index or a keypath across
+   an await — a loadAll can replace the map while a PATCH is in flight, and a
    stale keypath would write into a different card, or into another project's
    map after a switch, fabricating an entry the server never sent.
 

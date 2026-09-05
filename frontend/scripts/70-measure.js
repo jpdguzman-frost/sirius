@@ -1,13 +1,3 @@
-/* loadAll may have replaced the rows array while a PATCH was in flight, so a
-   row is re-found by cardId at every step and never held as an index. */
-function patchRow(cardId, fields) {
-  const i = app.get('rows').findIndex((r) => r.cardId === cardId);
-  if (i < 0) return;
-  const patch = {};
-  for (const k of Object.keys(fields)) patch[`rows.${i}.${k}`] = fields[k];
-  app.set(patch);
-}
-
 const errText = (err) => (err.detail && err.detail.message) || err.message;
 /* After an add's reload the element that held focus can be GONE — the Add
    the user clicked left with its row, Add All left with the emptied panel —

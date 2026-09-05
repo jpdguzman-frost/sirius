@@ -158,6 +158,19 @@ export function tabView(tab: string, src: string = TEMPLATE): string {
   return src.slice(at, end > at ? end : undefined);
 }
 
+/**
+ * `tabView` with the prose stripped — Ractive `{{! }}` and HTML comments —
+ * for guards that assert a control is ABSENT. A rebuilt template records in
+ * its own comments where a control went, naming it; read raw, an absence
+ * guard fires on the record of the decision (test/CLAUDE.md rule 3, in the
+ * kind direction). What must be gone is the markup, not the explanation.
+ * The same APP_JS / APP_JS_CODE pairing, for the template.
+ */
+export const tabViewCode = (tab: string, src?: string): string =>
+  tabView(tab, src)
+    .replace(/\{\{![\s\S]*?\}\}/g, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ');
+
 /* ------------------------------------------------------------------ *
  * Sprint Schedules — the work-card rebuild (owls #72/#73, frame 731:98513)
  *
@@ -370,7 +383,12 @@ export function renderSprintSchedule(state: SprintScheduleState = {}): string {
  * proves is the other half, which nodes each lane state emits.
  * ------------------------------------------------------------------ */
 
-/** One card as the shipped `dlBuild` emits it (PLAN.md block 3, frozen). */
+/**
+ * One card as the shipped `dlBuild` emits it (PLAN.md block 3, frozen; amended
+ * by the simplification pass 2026-09-05 — `status` and `day` went, since
+ * `done` carries the only status fact the tab draws and the enclosing
+ * `DlDay.day` carries the date).
+ */
 export interface DlCard {
   id: string;
   cardId: string;
@@ -380,19 +398,15 @@ export interface DlCard {
   difficulty: string | null;
   assetType: string | null;
   lane: string | null;
-  status: string | null;
   done: boolean;
   trelloUrl: string | null;
   figmaUrl: string | null;
-  /** the forecast FINISH — which day column the card sits in (PLAN.md B2) */
-  day: string;
 }
 
-/** One day column of an expanded lane. */
+/** One day column of an expanded lane — `day` is the date every card in it finishes on (PLAN.md B2). */
 export interface DlDay {
   day: string;
   name: string;
-  holiday: boolean;
   cards: DlCard[];
   pending: number;
   done: number;
@@ -894,15 +908,40 @@ export function renderRequestsTable(state: RequestsTableState): string {
 }
 
 /**
- * One top-level `const NAME = …;` declaration, sliced out of the shipped
- * frontend source so a test can EXECUTE the recipe the browser runs rather
- * than a retyped copy of it. The declaration ends at the first `;` outside
- * any bracket — which is why every shared recipe has to be a column-0 `const`
+ * One top-level declaration — `function NAME(…) { … }` or `const NAME = …;` —
+ * sliced out of the shipped frontend source so a test can EXECUTE the recipe
+ * the browser runs rather than a retyped copy of it. Which form a helper
+ * takes is the author's choice rather than a contract (10-constants.js
+ * carries both), so a slicer that knew only one would fail a correct file.
+ *
+ * The `function` arm balances the PARAMETER LIST first — `capacityBand(value,
+ * { least, … })` destructures, so the first `{` after the name is not the
+ * body's — then the braces. The `const` arm ends at the first `;` outside any
+ * bracket, which is why every shared recipe has to be a column-0 declaration
  * rather than an inline arrow inside the `data:` object or a `computed:`
- * method. (test/suggest-counts.test.ts keeps its own copy of this plus a
- * `method()` slicer for computeds; this one serves the batch-5 suites.)
+ * method (those are `method`'s). Reads the comment-free corpus by default,
+ * as `fnBody` does.
+ *
+ * Three suites had kept byte-identical private copies of this (deadlines-tab,
+ * sprint-schedule-render, and `decl` below as the const-only half); the
+ * parameter-list subtlety is now stated once (simplification pass
+ * 2026-09-05, R2/T-1).
  */
-export function decl(src: string, name: string): string {
+export function topDecl(name: string, src: string = APP_JS_CODE): string {
+  const fnAt = src.indexOf(`\nfunction ${name}(`);
+  if (fnAt >= 0) {
+    let i = src.indexOf('(', fnAt);
+    for (let parens = 0; i < src.length; i++) {
+      if (src[i] === '(') parens++;
+      else if (src[i] === ')' && --parens === 0) break;
+    }
+    let depth = 0;
+    for (let j = src.indexOf('{', i); j < src.length; j++) {
+      if (src[j] === '{') depth++;
+      else if (src[j] === '}' && --depth === 0) return src.slice(fnAt, j + 1);
+    }
+    throw new Error(`gantt-render: unterminated function \`${name}\``);
+  }
   const at = src.indexOf(`\nconst ${name} =`);
   if (at < 0) throw new Error(`gantt-render: no declaration of \`${name}\` in the source given`);
   let depth = 0;
@@ -913,6 +952,15 @@ export function decl(src: string, name: string): string {
     else if (c === ';' && depth === 0) return src.slice(at, i + 1);
   }
   throw new Error(`gantt-render: unterminated declaration \`${name}\``);
+}
+
+/**
+ * `topDecl` with the batch-5 suites' argument order — kept so their call
+ * sites (`decl(APP_JS, name)`) read as they always did. (test/suggest-counts
+ * .test.ts keeps its own copy of the const arm plus a `method()` slicer.)
+ */
+export function decl(src: string, name: string): string {
+  return topDecl(name, src);
 }
 
 /**

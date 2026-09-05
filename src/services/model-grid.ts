@@ -19,8 +19,15 @@ export interface ModelProvenance {
   sampleSizes: Record<string, number>;
 }
 
+/**
+ * `provenance: false` skips the work that only feeds the provenance string —
+ * today the held-cell count on a frozen project. The rollover discards
+ * provenance and runs for every ongoing project every tick (simplification
+ * pass 2026-09-05, E5); the model itself is identical either way.
+ */
 export async function loadProjectModel(
   projectId: Types.ObjectId,
+  opts: { provenance?: boolean } = {},
 ): Promise<{ model: EmpiricalModel; provenance: ModelProvenance }> {
   /* THE FREEZE (JP, 2026-08-27) — invariant 7's release gate, enforced.
      A frozen project forecasts off the shipped reference snapshot and ignores
@@ -29,7 +36,7 @@ export async function loadProjectModel(
      Why: see `model_frozen` on the project schema. */
   const project = await Project.findById(projectId).select({ model_frozen: 1 }).lean();
   if (project?.model_frozen !== false) {
-    const waiting = await ModelGrid.countDocuments({ project_id: projectId });
+    const waiting = opts.provenance === false ? 0 : await ModelGrid.countDocuments({ project_id: projectId });
     return {
       model: EMPIRICAL,
       provenance: {

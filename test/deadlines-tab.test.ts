@@ -13,7 +13,7 @@
  * section F, so nothing can quietly grow back.
  *
  * WHAT IS PROVEN, AND HOW:
- *  - the week arithmetic and the four formatters are EXECUTED out of the
+ *  - the week arithmetic and the formatters are EXECUTED out of the
  *    shipped scripts (test/CLAUDE.md rule 2) — `dlMonthWeeks` against
  *    `lib/calendar.ts monthWeeks` itself, so the tab and the planner cannot
  *    end up disagreeing about which Monday a week is;
@@ -44,46 +44,14 @@ import {
   fnBody,
   handlerBody,
   renderDeadlines,
-  tabView,
+  tabViewCode,
+  topDecl,
 } from './helpers/gantt-render.ts';
 
 /* ====================================================================== *
- * The shipped recipes, sliced and executed.
+ * The shipped recipes, sliced and executed (`topDecl`, the helper's slicer
+ * for a `function` or a `const` at column zero).
  * ====================================================================== */
-
-/**
- * One top-level declaration — `function NAME(…)` or `const NAME = …` — sliced
- * out of the shipped source. The helper's `decl` is const-only, and which form
- * a helper takes is the author's choice rather than a contract (10-constants.js
- * carries both), so a slicer that only knows one of them would fail a correct
- * file. Same recipe as test/sprint-schedule-render.test.ts's `fnDecl`.
- */
-function topLevel(name: string, src: string = APP_JS): string {
-  const fnAt = src.indexOf(`\nfunction ${name}(`);
-  if (fnAt >= 0) {
-    let i = src.indexOf('(', fnAt);
-    for (let parens = 0; i < src.length; i++) {
-      if (src[i] === '(') parens++;
-      else if (src[i] === ')' && --parens === 0) break;
-    }
-    let depth = 0;
-    for (let j = src.indexOf('{', i); j < src.length; j++) {
-      if (src[j] === '{') depth++;
-      else if (src[j] === '}' && --depth === 0) return src.slice(fnAt, j + 1);
-    }
-    throw new Error(`deadlines-tab: unterminated function \`${name}\``);
-  }
-  const at = src.indexOf(`\nconst ${name} =`);
-  if (at < 0) throw new Error(`deadlines-tab: no declaration of \`${name}\` in the shipped frontend source`);
-  let depth = 0;
-  for (let i = at + 1; i < src.length; i++) {
-    const c = src[i]!;
-    if (c === '{' || c === '[' || c === '(') depth++;
-    else if (c === '}' || c === ']' || c === ')') depth--;
-    else if (c === ';' && depth === 0) return src.slice(at, i + 1);
-  }
-  throw new Error(`deadlines-tab: unterminated declaration \`${name}\``);
-}
 
 /** A schedule row as the `/deliverables` payload carries it — only the fields `dlBuild` reads. */
 interface DlRow {
@@ -106,32 +74,35 @@ interface Recipe {
   DL_MONTHS: string[];
   dlMonthWeeks(year: number, month: number): string[];
   dlRangeLabel(mondays: string[]): string;
-  dlWeekRange(mondayIso: string): string;
-  dlDayName(iso: string): string;
-  dlBuild(rows: DlRow[], mondays: string[], holidays: string[] | Set<string>, cap: number): DlWeek[];
+  dlWeekRange(monday: string): string;
+  dlBuild(rows: DlRow[], mondays: string[], cap: number): DlWeek[];
 }
 
-/* Sliced LAZILY: `topLevel` throws when a name is absent, and a throw at module
+/* Sliced LAZILY: `topDecl` throws when a name is absent, and a throw at module
    scope would take every describe in the file down together — including the
    withdrawal sweep, which is exactly the guard you want to still read when the
    new helpers have not landed. Dependencies come FIRST: these are `const`
    arrows in the shipped bundle, so a consumer declared above its dependency
-   would hit the temporal dead zone rather than the value. */
+   would hit the temporal dead zone rather than the value. The Monday helpers
+   (`mondayIso`, `mondayShift`, `fridayIso`) are the shared date recipes the
+   week walk and the two range formatters call. */
 let recipeCache: Recipe | undefined;
 const R = (): Recipe =>
   (recipeCache ??= new Function(`
-    ${topLevel('isoOf')}
-    ${topLevel('MONTHS_SHORT')}
-    ${topLevel('mondayIso')}
-    ${topLevel('isoAddDays')}
-    ${topLevel('addLabel')}
-    ${topLevel('DL_MONTHS')}
-    ${topLevel('dlMonthWeeks')}
-    ${topLevel('dlRangeLabel')}
-    ${topLevel('dlWeekRange')}
-    ${topLevel('dlDayName')}
-    ${topLevel('dlBuild')}
-    return { DL_MONTHS, dlMonthWeeks, dlRangeLabel, dlWeekRange, dlDayName, dlBuild };
+    ${topDecl('isoOf')}
+    ${topDecl('MONTHS_SHORT')}
+    ${topDecl('mondayIso')}
+    ${topDecl('mondayShift')}
+    ${topDecl('fridayIso')}
+    ${topDecl('isoAddDays')}
+    ${topDecl('addLabel')}
+    ${topDecl('DL_MONTHS')}
+    ${topDecl('DL_DAY_NAMES')}
+    ${topDecl('dlMonthWeeks')}
+    ${topDecl('dlRangeLabel')}
+    ${topDecl('dlWeekRange')}
+    ${topDecl('dlBuild')}
+    return { DL_MONTHS, dlMonthWeeks, dlRangeLabel, dlWeekRange, dlBuild };
   `)() as Recipe);
 
 /* ====================================================================== *
@@ -158,12 +129,10 @@ const row = (over: Partial<DlRow> = {}): DlRow => ({
   ...over,
 });
 
-const build = (rows: DlRow[], mondays: string[] = AUG, holidays: string[] = [], cap = 120): DlWeek[] =>
-  R().dlBuild(rows, mondays, holidays, cap);
+const build = (rows: DlRow[], mondays: string[] = AUG, cap = 120): DlWeek[] => R().dlBuild(rows, mondays, cap);
 
 /** The single week a one-row fixture lands in. */
-const oneWeek = (rows: DlRow[], holidays: string[] = [], cap = 120): DlWeek =>
-  build(rows, [AUG[0]!], holidays, cap)[0]!;
+const oneWeek = (rows: DlRow[], cap = 120): DlWeek => build(rows, [AUG[0]!], cap)[0]!;
 
 const card = (over: Partial<DlCard> = {}): DlCard => ({
   id: 'i1',
@@ -174,18 +143,15 @@ const card = (over: Partial<DlCard> = {}): DlCard => ({
   difficulty: 'Hard',
   assetType: null,
   lane: 'Working on design',
-  status: 'ongoing',
   done: false,
   trelloUrl: 'https://trello.com/c/w1',
   figmaUrl: null,
-  day: '2026-08-05',
   ...over,
 });
 
 const day = (over: Partial<DlWeek['days'][number]> = {}): DlWeek['days'][number] => ({
   day: '2026-08-03',
   name: 'Mon',
-  holiday: false,
   cards: [],
   pending: 0,
   done: 0,
@@ -209,10 +175,7 @@ const week = (over: Partial<DlWeek> = {}): DlWeek => ({
 });
 
 /** The deadlines view as shipped, with prose stripped: guards read CODE, not comments. */
-const deadlinesView = (): string =>
-  tabView('deadlines')
-    .replace(/\{\{![\s\S]*?\}\}/g, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ');
+const deadlinesView = (): string => tabViewCode('deadlines');
 
 /** One `<article class="dlcard…">…</article>` per rendered card. */
 const cards = (html: string): string[] =>
@@ -292,7 +255,7 @@ describe('the month’s weeks ARE the planner’s weeks (PLAN.md B3)', () => {
 });
 
 /* ====================================================================== *
- * B — the four formatters (PLAN.md B16; node 731:100859)
+ * B — the formatters (PLAN.md B16; node 731:100859)
  * ====================================================================== */
 
 describe('the labels are written the way the frame writes them', () => {
@@ -345,19 +308,14 @@ describe('the labels are written the way the frame writes them', () => {
     expect(R().dlWeekRange('2025-12-29')).toBe('29 Dec 2025 - 2 Jan 2026');
   });
 
-  it('names the five weekdays, and nothing else', () => {
-    const names = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07'].map((d) => R().dlDayName(d));
-    expect(names).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
-  });
-
   it('derives every one of them with no locale call, so no timezone can shift a day', () => {
     /* The lesson `fmtLongIso` and `fmtWeekRange` were both built on: pure
        string maths over a fixed month table cannot be moved by the host's
        clock, and `toLocaleDateString` under a non-Manila TZ once shipped a
        label a day out. The suites run TZ=UTC and TZ=Asia/Manila, which is what
        makes this assertion checkable rather than decorative. */
-    for (const name of ['dlWeekRange', 'dlRangeLabel', 'dlDayName']) {
-      expect(topLevel(name), `${name} reads the host locale`).not.toContain('toLocaleDateString');
+    for (const name of ['dlWeekRange', 'dlRangeLabel', 'DL_DAY_NAMES']) {
+      expect(topDecl(name), `${name} reads the host locale`).not.toContain('toLocaleDateString');
     }
   });
 });
@@ -390,7 +348,6 @@ describe('a card is on this tab only because someone put it there (#74 §1)', ()
     // PLAN.md B2: the finish is what "slated for a day" means for a delivery,
     // and it is what the rollover moves
     const w = oneWeek([row({ startsOn: '2026-08-03', finish: '2026-08-06' })]);
-    expect(w.cards[0]!.day).toBe('2026-08-06');
     expect(w.days.find((d) => d.day === '2026-08-06')!.cards.map((c) => c.cardId)).toEqual(['w1']);
     expect(w.days.find((d) => d.day === '2026-08-03')!.cards).toEqual([]);
   });
@@ -413,14 +370,13 @@ describe('a card is on this tab only because someone put it there (#74 §1)', ()
       difficulty: 'Easy',
       assetType: 'Icon',
       lane: 'Working on design',
-      status: 'ongoing',
       done: false,
       trelloUrl: 'https://trello.com/c/w1',
       figmaUrl: 'https://figma.com/f/1',
     });
     // the label is `addLabel`'s, the same recipe the schedule's search shows —
     // built, not restated, so the two lists cannot start reading differently
-    expect(c.label).toBe(new Function(`${topLevel('addLabel')} return addLabel('MC-655', 'Sketch Asset: Hero render');`)());
+    expect(c.label).toBe(new Function(`${topDecl('addLabel')} return addLabel('MC-655', 'Sketch Asset: Hero render');`)());
   });
 
   it('reads the lane VERBATIM — no translation, no keyword tidying (#75 §1)', () => {
@@ -492,35 +448,34 @@ describe('the progress line counts work cards, not weighted load (PLAN.md B5)', 
   });
 
   it('fills the bar by load over capacity, to one decimal', () => {
-    expect(oneWeek([row()], [], 8).capPct).toBe('12.5');
-    expect(oneWeek([], [], 8).capPct).toBe('0.0');
+    expect(oneWeek([row()], 8).capPct).toBe('12.5');
+    expect(oneWeek([], 8).capPct).toBe('0.0');
   });
 
   it('CAPS the fill at one hundred — an over-capacity week cannot overrun its track', () => {
     const heavy = Array.from({ length: 5 }, (_, i) => row({ id: `x${i}`, cardId: `x${i}` }));
-    expect(oneWeek(heavy, [], 2).load).toBe(5);
-    expect(oneWeek(heavy, [], 2).capPct).toBe('100.0');
+    expect(oneWeek(heavy, 2).load).toBe(5);
+    expect(oneWeek(heavy, 2).capPct).toBe('100.0');
   });
 });
 
-describe('the day columns are the working week, holidays flagged (PLAN.md B7)', () => {
-  it('draws Monday to Friday in order, and no weekend', () => {
+describe('the day columns are the working week (PLAN.md B7)', () => {
+  it('draws Monday to Friday in order, named by position, and no weekend', () => {
+    /* The frame draws no holiday state, so a column carries no flag and the
+       builder reads no calendar (simplification pass, F-1): the engine's
+       WORKDAY never puts a finish on a holiday, so nothing can land there,
+       and the column renders like any other. The names are fixed by position
+       — the Monday plus zero to four — never parsed from the date. */
     const w = oneWeek([]);
     expect(w.days.map((d) => d.name)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
     expect(w.days.map((d) => d.day)).toEqual([
       '2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07',
     ]);
-  });
-
-  it('flags a holiday column without removing it — nothing can land there, and the reader is told why', () => {
-    // the ARES working-day calendar is canonical (invariant 5); the set
-    // arrives on the payload rather than from a second local list
-    const w = oneWeek([], ['2026-08-05']);
-    expect(w.days.map((d) => d.holiday)).toEqual([false, false, true, false, false]);
-  });
-
-  it('takes the holiday set as an ARRAY or a Set, because the payload carries an array', () => {
-    expect(build([], [AUG[0]!], new Set(['2026-08-05']) as unknown as string[])[0]!.days[2]!.holiday).toBe(true);
+    // the same five names, whichever Monday the lane starts on
+    expect(build([], ['2025-12-29'])[0]!.days.map((d) => d.name)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+    expect(build([], ['2025-12-29'])[0]!.days.map((d) => d.day)).toEqual([
+      '2025-12-29', '2025-12-30', '2025-12-31', '2026-01-01', '2026-01-02',
+    ]);
   });
 
   it('numbers and dates the lanes in shown order', () => {
@@ -545,10 +500,10 @@ describe('the day columns are the working week, holidays flagged (PLAN.md B7)', 
   });
 
   it('is PURE — it reads no app state and no clock', () => {
-    // it takes rows, weeks, holidays and capacity as arguments precisely so a
-    // test can execute it; an `app.get` inside would make that impossible and
-    // would put a second source of the month scope in the build
-    const body = topLevel('dlBuild');
+    // it takes rows, weeks and capacity as arguments precisely so a test can
+    // execute it; an `app.get` inside would make that impossible and would
+    // put a second source of the month scope in the build
+    const body = topDecl('dlBuild');
     for (const forbidden of ['app.get', 'app.set', 'manilaToday', 'new Date()']) {
       expect(body, `dlBuild reaches for ${forbidden}`).not.toContain(forbidden);
     }
@@ -742,7 +697,7 @@ describe('the card is the frame’s card (nodes …810:122333 / 122334 / 122394)
   });
 
   it('marks a finished card `done`, and marks nothing else about it (#75 §3)', () => {
-    const done = cards(renderDeadlines({ dlWeeks: [week({ cards: [card({ status: 'done', done: true })] })] }))[0]!;
+    const done = cards(renderDeadlines({ dlWeeks: [week({ cards: [card({ done: true })] })] }))[0]!;
     expect(done).toMatch(/class="dlcard[^"]*\bdone\b/);
     // the frame restyles NOTHING else — same badges, same links, same title
     expect(done).toContain('b-nonurgent');

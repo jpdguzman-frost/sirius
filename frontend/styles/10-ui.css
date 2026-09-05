@@ -72,9 +72,6 @@
 
 .chev { border: none; background: none; cursor: pointer; color: var(--faint); font: inherit; padding: 0 0.2rem; }
 
-/* ---- daily plotting (FR-12): expanded week, Mon–Fri columns ---- */
-.weekcard .wexpand { border: none; background: none; cursor: pointer; font: inherit; font-weight: 700; padding: 0; }
-.weekcard.expanded { grid-column: 1 / -1; }
 /* The FR-12 day-planner recipes (day grid, day columns, the draggable entry)
    left with the milestone Deadlines tab on 2026-09-05 (owl #74: card fields
    are read-only; rollover is the only mover). Nothing renders them. */
