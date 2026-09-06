@@ -15,7 +15,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 |---|---|---|---|
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12**; T073/T091 ⏸, T075 pending | write-enable on rt-837 = next JP gate |
-| 18h | **Requests filter + sort panels · UNIT · Recently requested · footer · one no-results** (owl #77 §1–4): six axes, per-value chips, eight sorts, tiles drive STATUS, header sort retired, Business Unit alias + multi-value warning, divergence sentence | **BUILT 2026-09-06, NOT deployed** (`f6eb941` · `5d88db4` · `98b8433` · E2E fixes in the CLOSE commit): VALIDATE ×4, 62 proofs, review 22 → 7 confirmed fixed, real pointer on the local rt-test copy. Deploy = JP's word. Queue: #80 §1/§3/§4 → W4 |
+| 18h | **Requests filter + sort panels · UNIT · Recently requested · footer · one no-results** (owl #77 §1–4): six axes, per-value chips, eight sorts, tiles drive STATUS, header sort retired, Business Unit alias + multi-value warning, divergence sentence | **DEPLOYED 2026-09-06** (`f6eb941` · `5d88db4` · `98b8433` · `01df01e`, JP's "yes/yes"): VALIDATE ×4, 62 proofs, review 22 → 7 confirmed fixed, real pointer on the local rt-test copy; live healthz 200 ×3, every new marker in the bundle and none of the old, worker ticking, urgency smoke green. Queue: #80 §1/§3/§4 → W4 (block 6) |
 | 19 | **The ARES-sourced, tag-classified cycle-time model** (T179–T183, ~3–4d) — replaces the inter-event dwell derivation that produced `Medium/design = 0.13d`. Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
 
 **Build health (2026-09-06):** 1494 tests + 24 `it.todo`, 83 files — green
@@ -55,8 +55,8 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
   before building on one. **Thread**: miles→jp acked through **#71** + #76, #78, #79;
-  **#72/#73 UNACKED** (screens pending), **#74/#75 ACKED** with #64, **#77 §1–4 BUILT** (block 5 — ack + owl on JP's yes; draft in the session scratchpad), **#80 §2 processed**, §1/§3/§4 open (W4);
-  jp→miles: **#65 drafted** (block 5, unsent); sent through **#64** (block 3, 2026-09-05 on JP's yes: six calls to veto, three node-vs-prose findings, the acks retirement, the lane-mapping reminder); **#62 sent** 2026-09-05 on JP's yes (block 4); **#63 sent** 2026-09-05 on JP's yes (block 2: five calls to veto, three held, the §4 checks answered). Product is fixing frame defects; **until they
+  **#72/#73 UNACKED** (screens pending), **#74/#75 ACKED** with #64, **#77 ACKED** (block 5 built + deployed), **#80 §2 processed**, §1/§3/§4 open (W4);
+  jp→miles sent through **#65** (block 5, 2026-09-06 on JP's yes: eight calls to veto, six node findings, four questions); **#64** (block 3, 2026-09-05 on JP's yes: six calls to veto, three node-vs-prose findings, the acks retirement, the lane-mapping reminder); **#62 sent** 2026-09-05 on JP's yes (block 4); **#63 sent** 2026-09-05 on JP's yes (block 2: five calls to veto, three held, the §4 checks answered). Product is fixing frame defects; **until they
   confirm, this build is authoritative over those frames** — including the
   past-deadline legend reworded 2026-08-27. **Awaiting Miles**: the Deadlines
   acknowledged-state design (R-dl-n), and a ruling on the reworded legend.
@@ -109,4 +109,4 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
-- 2026-09-06 — **Block 5 built** (owl #77 §1–4, JP "go"): Requests gains Pipeline's filter/sort panels, UNIT, Recently requested, the footer, one shared no-results; 12 decisions + 3 fix amendments; 62 proofs, 24 refuters, one simplify agent (179 lines out), E2E by real pointer with 2 defects fixed; frame-notes Batch 6; `vitest.config.ts` excludes agent worktrees. Commits `f6eb941` · `5d88db4` · `98b8433` + the CLOSE commit. NOT deployed. Full narrative: `docs/history/state-log/2026-09-06.md`.
+- 2026-09-06 — **Block 5 built** (owl #77 §1–4, JP "go"): Requests gains Pipeline's filter/sort panels, UNIT, Recently requested, the footer, one shared no-results; 12 decisions + 3 fix amendments; 62 proofs, 24 refuters, one simplify agent (179 lines out), E2E by real pointer with 2 defects fixed; frame-notes Batch 6; `vitest.config.ts` excludes agent worktrees. Commits `f6eb941` · `5d88db4` · `98b8433` · `01df01e`. **DEPLOYED** on JP's yes/yes; owl #65 sent, #77 acked. Full narrative: `docs/history/state-log/2026-09-06.md`.
