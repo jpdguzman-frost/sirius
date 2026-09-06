@@ -49,13 +49,6 @@ async function loadAdmin() {
   }
 }
 
-/* §3 stat bar: with a status filter on, every card but the active one drops
-   to 45% opacity (REQUESTS included — it is the show-all, not a status) */
-app.set('statOff', (f) => {
-  const cur = app.get('requestFilter');
-  return cur !== 'all' && cur !== f;
-});
-
 /* The MC# provenance line links into the intake sheet only when the project
    payload carries the sheet id. /api/projects does not select it today, so
    this returns '' and the template renders plain dim text — never a dead
@@ -403,17 +396,16 @@ function closeNoteEditor() {
 
 /* Any filter OR sort change starts the pager over — page 4 of the old order is
    not page 4 of the new one — and closes the note editor, which the new order
-   may have moved out of sight. One observer owns both rules, so the sort
-   handler repeats neither. A reload only clamps the pager, so saving a note
-   does not yank the reader back to page 1. */
-app.observe(
-  `reqQ requestFilter reqSortKey reqSortDir ${reqFilterKeys.join(' ')}`,
-  () => {
-    app.set('reqPage', 1);
-    closeNoteEditor();
-  },
-  { init: false },
-);
+   may have moved out of sight. One observer owns both rules, so no handler
+   repeats either. A reload only clamps the pager, so saving a note does not
+   yank the reader back to page 1. `reqFilters` is observed as the WHOLE
+   object: Ractive fires a keypath's observer for a change anywhere beneath it,
+   so a tick in one axis and the whole-object reset both land here exactly
+   once — `reqFilters.*` would fire once per axis on a reset. */
+app.observe('reqQ reqFilters reqSort', () => {
+  app.set('reqPage', 1);
+  closeNoteEditor();
+}, { init: false });
 /* AN OVERLAY WHOSE SUBJECT IS GONE MUST CLOSE. Clearing the last value of an
    axis unmounts its chip, but `chipPop` kept naming it — `anyMenuOpen()` then
    stayed true against a panel nobody could see, and every hover overlay refused
@@ -424,6 +416,16 @@ app.observe(
 app.observe('pipeFilters', () => {
   const open = app.get('chipPop');
   if (open && !(app.get(`pipeFilters.${open}`) || []).length) app.set('chipPop', null);
+}, { init: false });
+/* The same rule for the Requests chips, read against the CHIP rather than the
+   axis: one chip is one value (PLAN D7), so the panel's subject is gone as soon
+   as its own value is un-ticked, even where the axis still has others standing
+   — which is exactly what a ✕ on the hovered chip does. Containment says both
+   things at once: an emptied axis contains nothing, so the case this replaced
+   is still covered (PLAN.md §Fix amendment 1). */
+app.observe('reqFilters', () => {
+  const open = app.get('chipPop');
+  if (open && !(app.get(`reqFilters.${open}`) || []).includes(app.get('chipPopValue'))) app.set('chipPop', null);
 }, { init: false });
 /* THE HAND-COLLAPSE OVERRIDES RESET WITH THEIR TRIGGER (owl #78 §4/§5;
    PLAN.md B10). `pipeShut` means something only while a work-card axis or a

@@ -66,7 +66,10 @@ describe('the hover-card wiring, read out of the shipped template', () => {
  * already detached.
  */
 describe('every overlay closes through ONE path — commit as well as dismiss', () => {
-  const OVERLAYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop'];
+  /* The roll-call is the OVERLAYS the rule is proved against, not a copy of
+     the shipped list — the Requests select bar's one menu became the sort and
+     filter panels (owl #77 §1), so both stand where it stood. */
+  const OVERLAYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqSortMenu', 'reqFilterMenu', 'warnPop'];
 
   it('names the overlays once and derives the three lists from that name', () => {
     expect(APP_JS).toContain('const OVERLAY_KEYS = ');
@@ -85,7 +88,10 @@ describe('every overlay closes through ONE path — commit as well as dismiss', 
 
   it('returns focus to the trigger when a choice is committed, not only on Escape', () => {
     for (const handler of [
-      'async chooseUrgency(', 'async chooseDifficulty(', 'async dueApply(', 'async dueClear(', 'pickReqFilter(',
+      // `pickReqSort` is the Requests handler that COMMITS a choice and closes
+      // its panel — the seat `pickReqFilter` held before the select bar went
+      // (a filter tick keeps its panel open, so it commits nothing to close)
+      'async chooseUrgency(', 'async chooseDifficulty(', 'async dueApply(', 'async dueClear(', 'pickReqSort(',
     ]) {
       const at = APP_JS.indexOf(handler);
       expect(at, handler).toBeGreaterThan(-1);
@@ -236,7 +242,7 @@ describe('opening the hover card is idempotent, and never destroys an edit', () 
     expect(body).toContain('OVERLAY_KEYS');
     // …and it must derive that from the list, not restate it: a second hardcoded
     // roll-call is the thing OVERLAY_KEYS exists to prevent
-    expect(body).not.toMatch(/'(urgencyMenu|diffMenu|duePopover|reqMenu)'/);
+    expect(body).not.toMatch(/'(urgencyMenu|diffMenu|duePopover|reqSortMenu|reqFilterMenu)'/);
   });
 
   it('nulls the captured trigger BEFORE closing on focus-out, or focus is trapped', () => {

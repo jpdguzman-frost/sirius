@@ -14,6 +14,11 @@
  *   - duplicate MC number            → REJECTED (first occurrence wins;
  *     intake_requests is keyed (project, mc_number))
  *   - otherwise                      → OK, mirrored
+ *
+ * Warnings (block 5, PLAN D1) are NOT rejections: a mirrored row can carry a
+ * data problem worth a look. Today there is one — a UNIT cell holding more
+ * than one unit. The value is stored WHOLE; splitting it here would invent
+ * data the sheet never agreed to.
  */
 
 export interface ParsedRequest {
@@ -36,9 +41,17 @@ export interface ParsedReject {
   reason: string;
 }
 
+/** A mirrored row that still deserves a human's eye — never a rejection. */
+export interface IntakeWarning {
+  sheet_row: number;
+  field: 'use_case';
+  reason: 'multi-value';
+}
+
 export interface ParseResult {
   ok: ParsedRequest[];
   rejects: ParsedReject[];
+  warnings: IntakeWarning[];
   reserved: number;
   skipped: number;
 }
@@ -53,7 +66,10 @@ const HEADER_ALIASES: Record<string, string> = {
   'deliverable name': 'name',
   requestor: 'requestor',
   'primary requestor': 'requestor',
+  // UNIT on screen; `use_case` in storage and on the wire (PLAN D1). Both
+  // sheet headers map — the tab was renamed, older tabs were not.
   'use case': 'use_case',
+  'business unit': 'use_case',
   brief: 'brief',
   description: 'brief',
   deadline: 'deadline',
@@ -131,12 +147,12 @@ export function mapHeader(header: string[]): HeaderMap {
 const MC_RE = /MC[-\s]?(\d+)/i;
 
 export function parseIntake(allRows: string[][]): ParseResult {
-  if (allRows.length === 0) return { ok: [], rejects: [], reserved: 0, skipped: 0 };
+  if (allRows.length === 0) return { ok: [], rejects: [], warnings: [], reserved: 0, skipped: 0 };
   const width = Math.max(...allRows.map((r) => r.length));
   const rows = padRagged(allRows, width);
   const map = mapHeader(rows[0]!);
 
-  const result: ParseResult = { ok: [], rejects: [], reserved: 0, skipped: 0 };
+  const result: ParseResult = { ok: [], rejects: [], warnings: [], reserved: 0, skipped: 0 };
   const seenMc = new Set<string>();
 
   rows.slice(1).forEach((row, i) => {
@@ -177,6 +193,13 @@ export function parseIntake(allRows: string[][]): ParseResult {
     }
     seenMc.add(mc);
 
+    // Only a mirrored row warns: a rejected, duplicate or skipped row is
+    // already surfaced elsewhere and never reaches the mirror.
+    const useCase = get('use_case');
+    if (useCase.includes(',')) {
+      result.warnings.push({ sheet_row: sheetRow, field: 'use_case', reason: 'multi-value' });
+    }
+
     const prod = norm(get('in_frost_prod'));
     result.ok.push({
       mc_number: mc,
@@ -184,7 +207,7 @@ export function parseIntake(allRows: string[][]): ParseResult {
       name,
       requestor: get('requestor'),
       asset_type: get('asset_type'),
-      use_case: get('use_case'),
+      use_case: useCase, // WHOLE, comma and all — we never split the sheet's value
       brief: get('brief'),
       deadline: parseDeadline(get('deadline')),
       // optional: a tab without these columns parses exactly as before

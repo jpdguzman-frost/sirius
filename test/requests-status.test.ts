@@ -20,6 +20,13 @@
  * a strict SUBSET of the unfiled set, so a filed row can never enter it however
  * it is flagged. The counts are the same numbers the three-state model produced
  * for every input — the rename is a vocabulary change, not a counting change.
+ *
+ * BLOCK 5 (D2) left every line of that standing. The STATUS filter axis the
+ * Requests toolbar gained offers THREE values, but they are DERIVED from the
+ * same two-valued payload and the same clarification predicate — one row can
+ * belong to two of them, which is the ⊂ rule the tiles already used. The
+ * payload's own vocabulary is unchanged and stays two-valued; the last test
+ * below is the join that keeps the derived third from drifting into a status.
  */
 
 import fs from 'node:fs';
@@ -30,6 +37,7 @@ import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { loggedInProjectFixture } from './helpers/fixtures.ts';
 import { byMc, getRequests, mcsOf, putNote } from './helpers/requests.ts';
 import { Deliverable, IntakeRequest } from '../src/models/index.ts';
+import { APP_JS, decl } from './helpers/gantt-render.ts';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const ROUTE_SRC = fs.readFileSync(path.join(dir, '..', 'src', 'routes', 'requests.ts'), 'utf8');
@@ -156,6 +164,21 @@ describe('requests STATUS vocabulary (owls #34–#35; FR-11.3)', () => {
     const clar = await getRequests(agent, p._id, '?filter=clarification');
     expect(mcsOf(clar.requests)).toEqual(['MC-C']);
     expect(mcsOf(clar.requests).every((mc) => mcsOf(unfiled.requests).includes(mc))).toBe(true);
+  });
+
+  it('the filter axis offers the payload’s own two words plus ONE derived value (D2)', () => {
+    /* The axis is client-side and its values are strings, so a rename on
+       either side would leave a filter that matches nothing under two green
+       suites. Read out of the shipped client rather than retyped: the two
+       words must be the payload's, and the third must be the only addition. */
+    const values = new Function(`
+      ${decl(APP_JS, 'STATUS_FILED')}
+      ${decl(APP_JS, 'REQUEST_SEGMENT_STATUS')}
+      ${decl(APP_JS, 'REQ_STATUS_VALUES')}
+      return REQ_STATUS_VALUES;
+    `)() as string[];
+    for (const word of VOCABULARY) expect(values, `the axis cannot offer ${word}`).toContain(word);
+    expect(values.filter((v) => !VOCABULARY.includes(v))).toEqual(['For Clarification']);
   });
 
   it('the retired literals are gone from the route source, so the rename cannot half-land', () => {

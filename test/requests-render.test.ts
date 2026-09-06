@@ -19,6 +19,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   APP_JS,
+  APP_JS_CODE,
   REQUESTS_CSS,
   TEMPLATE,
   TOKENS_CSS,
@@ -26,21 +27,18 @@ import {
   type ReqRow,
   cssRule,
   decl,
+  fnBody,
+  handlerBody,
+  renderRequests,
   renderRequestsTable,
+  reqClient,
+  reqCols,
+  tabViewCode,
 } from './helpers/gantt-render.ts';
 
-interface Client {
-  STATUS_FILED: string;
-  clarified: (r: ReqRow) => boolean;
-  noteText: (n: ReqNote | null) => string;
-}
-
-const client = new Function(`
-  ${decl(APP_JS, 'STATUS_FILED')}
-  ${decl(APP_JS, 'clarified')}
-  ${decl(APP_JS, 'noteText')}
-  return { STATUS_FILED, clarified, noteText };
-`)() as Client;
+/* the shipped status literal, clarification predicate and note resolver,
+   executed out of the app scripts by the harness (test/CLAUDE.md rule 2) */
+const client = reqClient();
 
 /** What the server sends for an unfiled row — the client never spells it. */
 const FOR_FILING = 'For Filing';
@@ -254,14 +252,16 @@ describe('a note save cannot move the status any more', () => {
 /* ---------------------------------------------------------------------- */
 
 describe('frame 731:101090 — the three narrowed columns', () => {
-  it('narrows YEAR, MONTH and USE CASE, and leaves every other width alone', () => {
+  it('narrows YEAR, MONTH and UNIT, and leaves every other width alone', () => {
     /* These three were specced in a revision and never landed, which is how
        the drift was found: every OTHER column already matched the frame to
        the pixel, so three misses in a row could not be coincidence. Pinned
-       with their frame nodes — 101106 / 101107 / 101111. */
+       with their frame nodes — 101106 / 101107 / 101111. The third column is
+       UNIT since block 5 (D1, node 809:85709): the same 160px, the class
+       renamed `col-rcase` → `col-runit` with the label. */
     expect(cssRule('.rtable .col-ryear', REQUESTS_CSS)).toContain('width: 80px');
     expect(cssRule('.rtable .col-rmonth', REQUESTS_CSS)).toContain('width: 80px');
-    expect(cssRule('.rtable .col-rcase', REQUESTS_CSS)).toContain('width: 160px');
+    expect(cssRule('.rtable .col-runit', REQUESTS_CSS)).toContain('width: 160px');
     // the untouched ones, so a future sweep cannot "tidy" them to match
     expect(cssRule('.rtable .col-rmc', REQUESTS_CSS)).toContain('width: 120px');
     expect(cssRule('.rtable .col-rdue', REQUESTS_CSS)).toContain('width: 128px');
@@ -451,9 +451,260 @@ describe('frame 731:101090 — what the annotations get WRONG about the build', 
        Clarification'" and "clearing the flag must ... revert the status".
        Owls #34/#35 retired that on 2026-08-17 — the flag is NOTE state. The
        frame's own DRAWING agrees with the build (every sample row reads For
-       Filing, including the flagged one); only its prose is stale. */
+       Filing, including the flagged one); only its prose is stale.
+
+       BLOCK 5 (D2) gave the words a SECOND, separate home: the STATUS filter
+       axis offers three DERIVED values, and `For Clarification` is one of
+       them. The rule the old blanket `not.toContain` was defending is the one
+       asserted here instead — the string may exist only in the filter axis's
+       own vocabulary, never anywhere the badge could reach it. */
     const declared = REQUESTS_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
     expect(declared).not.toContain('.sbadge.clar');
-    expect(APP_JS).not.toContain('For Clarification');
+    const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/gm, '$1');
+    const occurrences = (s: string) => s.split('For Clarification').length - 1;
+    const vocabulary = strip(decl(APP_JS, 'REQUEST_SEGMENT_STATUS') + decl(APP_JS, 'REQ_STATUS_VALUES'));
+    expect(occurrences(vocabulary), 'the filter axis no longer names the value it derives').toBeGreaterThan(0);
+    expect(
+      occurrences(APP_JS_CODE),
+      'For Clarification is spelled somewhere other than the STATUS filter vocabulary',
+    ).toBe(occurrences(vocabulary));
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* BLOCK 5 — the table's own chrome, rebuilt (owl #77 §1–§4; nodes         */
+/* 809:85709 header + toolbar, 809:85294 footer, 809:111116 no-results).    */
+/*                                                                         */
+/* Four selects and an inline pager became one toolbar, one footer and a    */
+/* shared empty state. These render the WHOLE tab (`renderRequests`)        */
+/* rather than the table's own div: the footer is a SIBLING of the          */
+/* scroller and the empty state REPLACES the branch that holds both, so a   */
+/* renderer that started inside the table could not see either.             */
+/* ---------------------------------------------------------------------- */
+
+/** the tab with rows — one page of the four fixtures, the footer's own state */
+const view = (over: Parameters<typeof renderRequests>[0] = {}) =>
+  renderRequests({
+    reqRows: ROWS,
+    reqPageRange: { from: 1, to: 4, total: 4 },
+    reqPageCount: 1,
+    reqPages: [{ n: 1 }],
+    ...over,
+  });
+
+/** the substring between two markers — placement, asserted on the render */
+const between = (html: string, from: string, to: string) => {
+  const a = html.indexOf(from);
+  const b = html.indexOf(to, a);
+  expect(a, `no ${from} in the render`).toBeGreaterThan(-1);
+  expect(b, `no ${to} after ${from}`).toBeGreaterThan(a);
+  return html.slice(a, b);
+};
+
+describe('D1 — the UNIT column is one rename, spelled in one place', () => {
+  it('renames the class and the label together, and keeps the 160px width', () => {
+    /* `reqCols()` is the SHIPPED REQ_COLS, executed — not a copy of it — so
+       this reads the table the browser draws. The old spelling is asserted
+       gone from all three of its homes (defs, markup, stylesheet), because a
+       rename that lands in two of them is exactly the half-landing D1 names. */
+    const unit = reqCols().find((c) => c.cls === 'col-runit');
+    expect(unit, 'no col-runit column in the shipped REQ_COLS').toBeDefined();
+    expect(unit!.label).toBe('Unit');
+    expect(reqCols().map((c) => c.cls)).not.toContain('col-rcase');
+    expect(reqCols().map((c) => c.label)).not.toContain('Use Case');
+    const html = view();
+    expect(html).toContain('<th class="col-runit">Unit</th>');
+    expect(html).toContain('<td class="col-runit">');
+    expect(html).not.toContain('col-rcase');
+    expect(REQUESTS_CSS.replace(/\/\*[\s\S]*?\*\//g, '')).not.toContain('col-rcase');
+  });
+
+  it('keeps the WIRE on use_case — the screen renamed, storage did not', () => {
+    /* D1's whole reason: `use_case` also lives on Deliverable and the schedule
+       duplicate flow, so a storage rename would be a migration for a word.
+       The cell must therefore still read the payload's own field. */
+    const html = view({ reqRows: [req({ mc_number: 'MC-U', use_case: 'Brand' })] });
+    expect(html).toContain('<td class="col-runit"><span class="rtext">Brand</span></td>');
+  });
+
+  it('draws every column the defs name, in their order, and nothing else', () => {
+    const drawn = [...view().matchAll(/<th class="(col-r[a-z]+)">([^<]*)<\/th>/g)].map((m) => [m[1], m[2]]);
+    expect(drawn).toEqual(reqCols().map((c) => [c.cls, c.label]));
+  });
+});
+
+describe('D6 — the sort panel is the one sort door, so the headers are plain', () => {
+  it('renders no button, no arrow and no aria-sort in the header row', () => {
+    const thead = between(view(), '<thead>', '</thead>');
+    expect(thead).not.toContain('<button');
+    expect(thead).not.toContain('aria-sort');
+    expect(thead).not.toContain('sarrow');
+  });
+
+  it('leaves no header-click sort wiring in the view at all', () => {
+    /* prose stripped: the template RECORDS why the headers went plain, and
+       an absence guard must not fire on the record (test/CLAUDE.md rule 3) */
+    const src = tabViewCode('requests');
+    for (const gone of ['reqSortBy', 'sortbtn', 'reqSortKey', 'reqSortDir']) {
+      expect(src, `the retired header-sort wiring still names ${gone}`).not.toContain(gone);
+    }
+  });
+});
+
+describe('the toolbar replaced the four selects (node 809:85709)', () => {
+  it('renders one search field and the two icon buttons in a .reqtools row', () => {
+    const html = view();
+    expect(html).toContain('class="reqtools"');
+    expect(html).toContain('class="searchbar reqsearch"');
+    expect([...html.matchAll(/class="sfbtn[^"]*"/g)]).toHaveLength(2);
+    expect(html).toContain('title="Filter"');
+    expect(html).toContain('title="Sort"');
+  });
+
+  it('names what each button holds, and names the panels for THIS table', () => {
+    /* R-pf-f: the face of the sort button says its one selection, the filter
+       button says how many values are applied — the count has no other route
+       for a reader who cannot see the fill change. The panels are the shared
+       Pipeline recipe, so only their accessible names say which table. */
+    const html = view({
+      reqFilterCount: 2,
+      reqSort: 'recent',
+      reqSortLabelText: 'Dates: Recently requested',
+      reqFilterMenu: 'filter',
+    });
+    expect(html).toContain('aria-label="Filter, 2 applied"');
+    expect(html).toContain('aria-label="Sort, Dates: Recently requested"');
+    expect(html).toContain('<span class="sflabel">Dates: Recently requested</span>');
+    expect(html).toContain('aria-label="Filter the requests"');
+    expect(view({ reqSortMenu: 'sort' })).toContain('aria-label="Sort the requests"');
+  });
+
+  it('leaves no select markup, handler or recipe behind', () => {
+    const src = tabViewCode('requests');
+    for (const gone of ['filterbar', 'rfilter', 'selwrap', 'seltrigger', 'openReqMenu', 'pickReqFilter', 'reqFilterDefs']) {
+      expect(src, `the retired select filter bar still names ${gone}`).not.toContain(gone);
+    }
+    const css = REQUESTS_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const gone of ['.filterbar', '.rfilter', '.selwrap', '.reqmenu']) {
+      expect(css, `${gone} outlived the controls it dressed`).not.toContain(gone);
+    }
+  });
+});
+
+describe('D8 — the footer sits inside the rows branch, under the table', () => {
+  it('renders the range and the pager together, after the table, at ONE page', () => {
+    const html = view();
+    const foot = between(html, '<div class="reqfoot">', '</nav>');
+    expect(html.indexOf('<div class="reqfoot">')).toBeGreaterThan(html.indexOf('</table>'));
+    expect(foot).toContain('Showing <b>1-4</b> of <b>4</b> requests');
+    expect(foot).toContain('<nav class="pager"');
+    expect(foot).toContain('class="pbtn on"'); // the active page, inside the footer
+  });
+
+  it('draws the pager ONCE — the inline one above the table is gone', () => {
+    expect([...view().matchAll(/<nav class="pager"/g)]).toHaveLength(1);
+  });
+
+  it('sits UNDER the scroller, not inside it — it must not scroll with the table', () => {
+    /* `renderRequestsTable` renders exactly the scroll wrapper. The footer is
+       1784 wide against a table that is wider than its viewport, so a footer
+       inside the scroller would slide out of sight sideways. */
+    expect(html()).not.toContain('reqfoot');
+    expect(view()).toContain('reqfoot');
+  });
+
+  it('leaves with the table: no rows, no footer', () => {
+    /* the count and the pager describe rows; with the empty state up there is
+       nothing for them to count, which is why they live in the rows branch */
+    expect(view({ reqFiltered: [], reqNoResults: true })).not.toContain('reqfoot');
+  });
+});
+
+describe('D9 — the filtered-empty state is the SHARED no-results block', () => {
+  it('replaces the table with the shared partial, tiles and toolbar surviving', () => {
+    const html = view({
+      reqFiltered: [],
+      reqNoResults: true,
+      reqStats: [{ key: 'requests', label: 'REQUESTS', value: 4, cls: 'all', on: false }],
+    });
+    expect(html).toContain('class="pnores"');
+    expect(html).toContain('No results found');
+    expect(html).toContain('Try adjusting your search term or clearing active filters');
+    // the whole table goes, thead included — not a header row over an empty body
+    expect(html).not.toContain('<table');
+    expect(html).not.toContain('<thead');
+    // ...and the way back stays: the tiles, the strip and the toolbar
+    expect(html).toContain('class="metrics rstats"');
+    expect(html).toContain('class="reqtools"');
+    expect(html).toContain('class="syncstrip"');
+  });
+
+  it('retired its own copy rather than keeping two wordings', () => {
+    expect(TEMPLATE).not.toContain('No requests match');
+    expect(TEMPLATE).not.toContain('Clear the search, the status card or a filter');
+  });
+
+  it('keeps the two empty states that are NOT the reader’s doing', () => {
+    /* D9 moves the FILTERED empty state only. A sheet whose every row was
+       rejected, and a project with nothing loaded, still say so in their own
+       words — "adjust your search term" would be advice for a filter the
+       reader never set. */
+    expect(view({ reqFiltered: [], reqNoResults: false })).toContain('No usable requests');
+    expect(renderRequests({ requests: [], rejects: [] })).toContain('No requests loaded');
+  });
+});
+
+describe('D4 — the tiles and the filter panel are ONE state', () => {
+  it('writes the STATUS axis on a tile click, through the segment vocabulary', () => {
+    /* EXECUTED, not read: the mapping is the whole of D4, and a source-text
+       assertion could show the keypath without showing what lands on it. The
+       segment→value table is the shipped one, so a tile can never set a value
+       the axis does not offer. */
+    expect(handlerBody('setRequestFilter')).toContain('applyRequestFilter');
+    expect(fnBody('applyRequestFilter')).toContain('REQUEST_SEGMENT_STATUS');
+    const store: Record<string, unknown> = { 'reqFilters.status': [] };
+    const app = { get: (k: string) => store[k], set: (k: string, v: unknown) => { store[k] = v; } };
+    const apply = new Function('app', `
+      ${decl(APP_JS, 'STATUS_FILED')}
+      ${decl(APP_JS, 'REQUEST_SEGMENT_STATUS')}
+      ${decl(APP_JS, 'applyRequestFilter')}
+      return applyRequestFilter;
+    `)(app) as (segKey: string) => void;
+    const axis = () => store['reqFilters.status'];
+
+    apply('filing');
+    expect(axis(), 'a tile sets the axis to exactly its own value').toEqual(['For Filing']);
+    apply('filing');
+    expect(axis(), 'the pressed tile clears the axis').toEqual([]);
+    apply('clarification');
+    expect(axis()).toEqual(['For Clarification']);
+    apply('filed');
+    expect(axis(), 'a second tile REPLACES the first — the tiles are single-select').toEqual([client.STATUS_FILED]);
+    apply('requests');
+    expect(axis(), 'REQUESTS is the show-all, so it clears the axis').toEqual([]);
+  });
+
+  it('retired the second state key, so the two doors cannot disagree', () => {
+    /* `requestFilter` was the tiles' own single-select. Two controls over one
+       field is the drift D4 removes — asserted on the client AND the view,
+       because either half surviving alone re-opens it. */
+    expect(APP_JS_CODE).not.toMatch(/\brequestFilter\b/);
+    expect(tabViewCode('requests')).not.toMatch(/\brequestFilter\b/);
+  });
+
+  it('derives the pressed tile from the axis, never from a second flag', () => {
+    const stats = [
+      { key: 'requests', label: 'REQUESTS', value: 4, cls: 'all', on: false },
+      { key: 'filing', label: 'FOR FILING', value: 2, cls: 'file', on: true },
+    ];
+    const html = view({ reqStats: stats, reqFilters: { year: [], month: [], type: [], unit: [], requestor: [], status: ['For Filing'] } });
+    const tiles = [...html.matchAll(/<button class="metric rstat ([^"]*)"[^>]*aria-pressed="(true|false)"/g)];
+    expect(tiles.map((m) => [m[1]!.split(' ')[0], m[2]])).toEqual([['all', 'false'], ['file', 'true']]);
+    // the unpressed tile dims only because SOME status is picked — the axis again
+    expect(tiles[0]![1], 'the unpressed tile is not dimmed while a status is picked').toContain('off');
+    expect(tiles[1]![1], 'the pressed tile dimmed itself').not.toContain('off');
+    // ...and with the axis empty, nothing dims
+    const clear = view({ reqStats: stats.map((s) => ({ ...s, on: false })) });
+    expect(clear).not.toContain('rstat all off');
   });
 });

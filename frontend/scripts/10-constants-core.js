@@ -86,11 +86,6 @@ const noteText = (n) => {
   return [...new Set(parts)].join(' — ');
 };
 const REQ_PAGE_SIZE = 10;
-/* the filter select box (25-requests.css .selectmenu.reqmenu) — its WIDTH is
-   fixed but its height is content-derived, so 264 is the max-height cap, not
-   the box: the opener measures the rendered element and places it again */
-const REQ_MENU_W = 180;
-const REQ_MENU_H = 264;
 /* due-date popover box (node 415:54979) — used to decide flip-up and the
    horizontal clamp before the element exists to measure */
 const DUE_POP_W = 354;
@@ -140,9 +135,8 @@ const WARN_SHADOW_BLEED = { x: 12, top: 8, bottom: 16 };
    decide flip-up and the horizontal clamp before the element exists. The
    HEIGHT hugs its content (one wrapping list-item per missing field, plus the
    restored closing sentence — owl #43 item B: ~245px for one problem, ~390px
-   for all three), so this is the WORST case, the same way REQ_MENU_H is the
-   select's cap — showWarnPop measures the box that actually rendered and
-   places it a second time. Nothing in CSS pins it. */
+   for all three), so this is the WORST case — showWarnPop measures the box
+   that actually rendered and places it a second time. Nothing in CSS pins it. */
 const WARN_POP_W = 235;
 const WARN_POP_H = 390;
 /* The hover card's close DELAY. Not specified by the annotation — 150ms is

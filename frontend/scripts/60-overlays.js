@@ -34,8 +34,10 @@ app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ'), noteText
 /* The overlays, named ONCE. `anyMenuOpen`, `closeMenus` and `openOverlay`'s
    mutual exclusion all derive from this list — adding `warnPop` used to mean
    three hand-edits that had to agree, and a fourth list (the focus-held
-   selectors below) that nothing tied to them. A sixth overlay is one entry. */
-const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'reqMenu', 'warnPop', 'pipeSortMenu', 'pipeFilterMenu', 'chipPop'];
+   selectors below) that nothing tied to them. Another overlay is one entry:
+   the Requests sort and filter panels (owl #77 §1) replaced the four select
+   menus here in one edit each way. */
+const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'warnPop', 'pipeSortMenu', 'pipeFilterMenu', 'reqSortMenu', 'reqFilterMenu', 'chipPop'];
 const NO_OVERLAYS = Object.fromEntries(OVERLAY_KEYS.map((k) => [k, null]));
 /* WHAT MUST NOT DISMISS EACH OVERLAY — its own trigger and its own box, keyed
    by the state key so the two lists cannot drift apart. They already had:
@@ -49,10 +51,13 @@ const OVERLAY_SHIELDS = {
   urgencyMenu: '.ubadge-wrap, .selectmenu',
   diffMenu: '.ubadge-wrap, .selectmenu',
   duePopover: '.duewrap, .duepop',
-  reqMenu: '.selwrap, .selectmenu',
   warnPop: '.warnpop',
   pipeSortMenu: '.sfbtn, .pipemenu',
   pipeFilterMenu: '.sfbtn, .pipemenu',
+  /* the Requests panels are the same component under their own toolbar; the
+     scope says whose trigger and whose box each entry means, as the list asks */
+  reqSortMenu: '.reqtools .sfbtn, .reqtools .pipemenu',
+  reqFilterMenu: '.reqtools .sfbtn, .reqtools .pipemenu',
   /* the chip AND the panel it opens: the panel is a DOM child of the chip, so
      `.fchip` alone would cover it — naming both keeps the entry honest about
      what the reader can point at. */
@@ -62,15 +67,16 @@ const OVERLAY_SHIELDS = {
 const OVERLAY_SHIELD = [...new Set(OVERLAY_KEYS.flatMap((k) => OVERLAY_SHIELDS[k].split(',').map((x) => x.trim())))].join(', ');
 /* The SCROLL dismisser shields only the boxes that can scroll INSIDE
    themselves — a scroll an overlay answers itself must not dismiss it. The
-   filter panel is here because its STATUS group is a deliberate internal
-   scroller (R-pf-e), so a wheel over it would otherwise shut the panel. */
+   Pipeline filter panel is here because its STATUS group is a deliberate
+   internal scroller (R-pf-e), and the Requests one because it scrolls as a
+   whole (PLAN D3) — a wheel over either would otherwise shut the panel. */
 const OVERLAY_SELF_SCROLL = '.duepop, .selectmenu, .warnpop, .pipemenu';
 /* ANCHORED overlays move WITH the page — they hang off an element in the flow
    rather than being pinned to the viewport, so a scroll cannot detach them from
    their trigger and there is nothing for the scroll dismisser to protect
    against. Dismissing them anyway made their lower half unreachable on a short
    viewport: the only way to reach it is to scroll, and scrolling closed it. */
-const OVERLAY_ANCHORED = ['pipeSortMenu', 'pipeFilterMenu', 'chipPop'];
+const OVERLAY_ANCHORED = ['pipeSortMenu', 'pipeFilterMenu', 'reqSortMenu', 'reqFilterMenu', 'chipPop'];
 function anyMenuOpen() {
   return OVERLAY_KEYS.some((k) => app.get(k));
 }
@@ -150,8 +156,8 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('scroll', (e) => {
   // the popover scrolls INSIDE itself on a viewport shorter than it is —
-  // that must not dismiss the multi-step edit it exists to hold; a long
-  // Requests select scrolls itself for the same reason. The warning card
+  // that must not dismiss the multi-step edit it exists to hold; the
+  // Requests filter panel scrolls itself for the same reason (D3). The warning card
   // joined this list with Miles's last-resort ruling (owl #43 item D,
   // amending R-warn-h): it can now scroll itself in exactly one state — a
   // viewport its measured height cannot fit — and a scroll it answers
@@ -215,18 +221,18 @@ function placeBox(rect, opts) {
   return { left: Math.round(left), top: Math.round(top), up, over };
 }
 
-/* One opener for all five overlays. They differ only in state keys, box
-   height and gap, and whether the box is big enough to need clamping: the two
-   row select menus are fixed-length lists, the due popover is a 354×420
-   dialog and the warning popover a 235-wide one, both of which must stay fully
-   on screen. Mutual exclusion lives here — opening any one nulls the others —
+/* One opener for every overlay. They differ only in state keys, box height
+   and gap, and whether the box is big enough to need clamping: the two row
+   select menus are fixed-length lists, the due popover is a 354×420 dialog
+   and the warning popover a 235-wide one, both of which must stay fully on
+   screen; the four toolbar panels are anchored in CSS and carry no box at all. Mutual exclusion lives here — opening any one nulls the others —
    and so does the focus capture the shared close path restores from. */
 function openOverlay(ctx, cardId, opts) {
   // one door in: opening ANY overlay kills a pending hover-card close, or the
   // warning card's timer fires after the next overlay is already up and shuts it
   warnPopCancelClose();
-  // one write in flight per card (invariant 8); the read-only Requests
-  // selects have no write to guard, so they pass no `saving` key
+  // one write in flight per card (invariant 8); the read-only sort and filter
+  // panels have no write to guard, so they pass no `saving` key
   if (opts.saving && app.get(`${opts.saving}.${cardId}`)) return;
   if (app.get(opts.key) === cardId) {
     // toggling off with a second click: focus is already on the trigger, so
@@ -238,8 +244,8 @@ function openOverlay(ctx, cardId, opts) {
   overlayTrigger = ctx.node;
   /* `posKey` is OPTIONAL: an overlay anchored in CSS to its own trigger has no
      coordinates to carry, and asking placeBox for some would compute a position
-     nothing reads. The Pipeline's filter and sort panels are anchored that way
-     (JP, 2026-08-21); the three that float free of any wrapper still measure. */
+     nothing reads. The Pipeline and Requests filter and sort panels are anchored
+     that way (JP, 2026-08-21); the three that float free of any wrapper still measure. */
   app.set({
     ...NO_OVERLAYS,
     ...opts.extra,
@@ -248,17 +254,16 @@ function openOverlay(ctx, cardId, opts) {
   });
 }
 
-/* Two overlays have a DATA-derived height that no constant can state: the
-   Requests select (1..N options, capped by CSS) and the warning popover (one
-   list-item per missing field, each wrapping to as many lines as its rationale
-   needs — WARN_POP_H is the worst case, and a one-problem card measures far
-   under it). Their constants are therefore a pre-measure for the FIRST flip
-   decision only; this places the box a SECOND time against what actually
-   rendered. Without it a short select flips up to a spot 150px above its
-   trigger, and a tall popover runs off the bottom of the viewport with its
-   separator and `Open Card` unreachable. Same placeBox, no second positioner.
-   Returns false only if the element is not in the DOM yet, which is the
-   caller's cue to retry on the next frame. */
+/* The warning popover has a DATA-derived height that no constant can state:
+   one list-item per missing field, each wrapping to as many lines as its
+   rationale needs — WARN_POP_H is the worst case, and a one-problem card
+   measures far under it. Its constant is therefore a pre-measure for the FIRST
+   flip decision only; this places the box a SECOND time against what actually
+   rendered. Without it a tall popover runs off the bottom of the viewport with
+   its separator and `Open Card` unreachable. (The Requests select menus shared
+   this path until owl #77 §1 replaced them with anchored panels.) Same
+   placeBox, no second positioner. Returns false only if the element is not in
+   the DOM yet, which is the caller's cue to retry on the next frame. */
 function placeMeasured(trigger, id, opts) {
   if (app.get(opts.key) !== id) return true; // the click closed it — nothing to place
   const el = document.querySelector(opts.sel);
@@ -359,7 +364,7 @@ function showWarnPop(node, cardId) {
   if (restoringFocus) return;
   if (!openHoverOverlay('warnPop', cardId)) return;
   // the height is one list-item per missing field, each wrapping — measure the
-  // rendered box and place it again, exactly as the Requests select does. The
+  // rendered box and place it again, as the Requests select menus once did. The
   // second placement is also what settles the FLIP the bridge rides on.
   openMeasured({ node }, cardId, {
     key: 'warnPop', posKey: 'warnPopPos', sel: '.warnpop',

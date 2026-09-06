@@ -45,13 +45,16 @@
  * rule 5) — no Date is constructed anywhere in this file.
  */
 
-import { pipeRecipeDecls } from './gantt-render.ts';
+import { COMPUTED_CTX_JS, method, pipeRecipeDecls } from './gantt-render.ts';
 
 export type Sel = Record<string, (string | null)[]>;
 export interface Sort { key: string; group: string; label: string; dir: number; derived?: boolean; value: (r: unknown, sel?: Sel) => unknown }
 export interface Axis { key: string; col: string; label: string; pick?: (r: unknown) => unknown; work?: string; order?: string[]; none?: boolean; scroll?: boolean }
 export interface FacetValue { value: string | null; label: string; count: number; on: boolean }
 export interface Facet { key: string; label: string; scroll: boolean; values: FacetValue[] }
+/** A facet as the COMPUTED hands it to the template: the recipe's, plus its table (D10). */
+export interface StampedFacet extends Facet { table: string }
+export interface Chip { key: string; label: string; text: string; on: boolean; table?: string; scroll?: boolean; values?: FacetValue[] }
 interface WorkKeys { due: string | null; urgent: 0 | 1 | null; hard: number | null }
 
 /* The whole sort + filter recipe, sliced out of the shipped scripts by the
@@ -80,6 +83,35 @@ export const recipe = new Function(`
   pipeWorkKeys: (r: unknown, sel: Sel) => WorkKeys;
   pipeTiebreak: (a: unknown, b: unknown, keyless: boolean) => number;
 };
+
+/**
+ * The two TOOLBAR computeds, executed out of the shipped state block — the
+ * executed-computed idiom again (`pipeSearched` resolves through the same
+ * `get`, so the facets count the searched set, as the browser's do).
+ *
+ * The recipe's `pipeFacetList` knows nothing about tables: `table` is stamped
+ * by `pipeFacets`, and copied onto the OPEN chip by `pipeChips`, because the
+ * shared filter-group partial dispatches a tick on it (PLAN.md D10). Both
+ * stamps are therefore claims about the COMPUTEDS, not about the recipe, and
+ * only a harness that runs them can prove either.
+ */
+export interface ToolbarComputeds {
+  set(key: string, value: unknown): void;
+  facets(): StampedFacet[];
+  chips(): Chip[];
+}
+export const toolbarComputeds = (): ToolbarComputeds =>
+  new Function(`
+    ${pipeRecipeDecls()}
+    const computed = { ${['pipeSearched', 'pipeFacets', 'pipeChips'].map((n) => method(n)).join(', ')} };
+    const DATA = { rows: [], searchQ: '', pipeFilters: PIPE_FILTERS_EMPTY(), chipPop: null };
+    ${COMPUTED_CTX_JS}
+    return {
+      set: (k, v) => { DATA[k] = v; },
+      facets: () => computed.pipeFacets.call(ctx),
+      chips: () => computed.pipeChips.call(ctx),
+    };
+  `)() as ToolbarComputeds;
 
 /* A main row as `loadAll` stamps it: `work` is the row's own task cards
    (block 4 stamp, beside blob/warning), empty by default so a fixture that

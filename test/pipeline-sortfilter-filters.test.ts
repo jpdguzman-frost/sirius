@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { TEMPLATE } from './helpers/gantt-render.ts';
+import { APP_JS, TEMPLATE, decl } from './helpers/gantt-render.ts';
 import {
   type Facet,
   type FacetValue,
@@ -18,6 +18,7 @@ import {
   recipe,
   row,
   sel,
+  toolbarComputeds,
   wc,
 } from './helpers/pipeline-sortfilter.ts';
 
@@ -482,7 +483,29 @@ describe('absence is selectable on the axis that can lack a value', () => {
 
   it('draws the label and toggles the value — they differ for exactly this item', () => {
     expect(TEMPLATE).toContain('<span class="pmval">{{v.label}}</span>');
-    // one partial serves both panels now — the row is written once
-    expect(TEMPLATE).toContain("on-click=\"['togglePipeFilter', key, v.value]\"");
+    // one partial serves both panels — and, since block 5, both TABLES: the
+    // row is written once and says which table it belongs to (D10)
+    expect(TEMPLATE).toContain("on-click=\"['toggleFacet', table, key, v.value]\"");
+  });
+
+  it('stamps every facet with the TABLE the shared partial dispatches on (D10)', () => {
+    /* The recipe knows nothing about tables — `pipeFacets` stamps it — so this
+       runs the COMPUTED. Without the stamp the partial's first argument is
+       undefined and every tick in the Pipeline panel throws; with a stamp that
+       named no filter root it would throw just as surely, which is why the
+       value is joined against the dispatcher's own map rather than pinned as
+       a word. */
+    const h = toolbarComputeds();
+    h.set('rows', [row({ cardId: 'a', assetType: 'Icon' }), row({ cardId: 'b', currentList: 'Design' })]);
+    const facets = h.facets();
+    expect(facets.length, 'no facets built — the stamp assertion would be vacuous').toBeGreaterThan(0);
+    const roots = new Function(`${decl(APP_JS, 'FACET_FILTER_ROOT')} return FACET_FILTER_ROOT;`)() as Record<
+      string,
+      string
+    >;
+    for (const f of facets) {
+      expect(f.table, `the ${f.key} facet carries no table`).toBe('pipe');
+      expect(Object.keys(roots), 'the stamped table names no filter root').toContain(f.table);
+    }
   });
 });

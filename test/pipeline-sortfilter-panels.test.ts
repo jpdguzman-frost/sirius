@@ -34,7 +34,9 @@ describe('the panels can actually open, and stay open', () => {
        click closed it too, against the explicit "the panel STAYS OPEN" rule. */
     const shields = decl(APP_JS, 'OVERLAY_SHIELDS');
     const keys = decl(APP_JS, 'OVERLAY_KEYS');
-    for (const key of ['pipeSortMenu', 'pipeFilterMenu', 'warnPop', 'reqMenu', 'duePopover', 'urgencyMenu', 'diffMenu']) {
+    /* block 5 swapped the Requests select's `reqMenu` for that table's own
+       two panels — the same door, twice as many overlays through it. */
+    for (const key of ['pipeSortMenu', 'pipeFilterMenu', 'warnPop', 'reqSortMenu', 'reqFilterMenu', 'duePopover', 'urgencyMenu', 'diffMenu']) {
       expect(keys, `${key} is an overlay`).toContain(key);
       expect(shields, `${key} has no shield — its own click would dismiss it`).toContain(`${key}:`);
     }

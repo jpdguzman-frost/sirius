@@ -39,6 +39,12 @@ const app = new Ractive({
     pipeFilterMenu: null,
     /* which chip's panel is open on hover — an overlay key like the rest */
     chipPop: null,
+    /* WHICH CHIP, when the axis alone cannot say. A Requests chip is one VALUE
+       (PLAN.md D7), so an axis with two chips has two of them and the key above
+       names both; this holds the one the pointer is actually on. Pipeline's
+       chips are one per axis and never set it, and it is not an overlay key of
+       its own — `chipPop` alone still says whether anything is open. */
+    chipPopValue: null,
     /* the chip panel hangs off the chip's right edge instead, when its left
        edge would put it off screen (the chips row wraps) */
     chipPopFlip: false,
@@ -160,18 +166,19 @@ const app = new Ractive({
     adminEditing: null,
     adminEditSel: {},
     adminError: '',
-    requestFilter: 'all', // 'all' | key of REQUEST_SEGMENTS — the stat segments
+    /* owl #77 §1–2 — Requests sort + filter, in Pipeline's shape (PLAN D4,
+       D12). `reqSort` is a key from REQ_SORTS, or null for the unlisted
+       default (Recently requested); `reqFilters` is one array per axis
+       (multi-select) and is the ONLY status filter — the tiles read and write
+       its `status` slot (D4), so two controls over one field cannot disagree.
+       The two panels are overlays (60-overlays.js). */
     reqQ: '',
-    ...reqFiltersCleared(), // reqYear / reqMonth / reqType / reqRequestor, '' = All
-    reqMenu: null, // which select's overlay is open — shares the Pipeline recipe
-    reqMenuPos: { left: 0, top: 0 },
+    reqFilters: REQ_FILTERS_EMPTY(),
+    reqSort: null,
+    reqSortMenu: null,
+    reqFilterMenu: null,
     reqCols: REQ_COLS,
     pipeCols: PIPE_COLS,
-    /* owl #18: '' = the default newest-filed order, which is also where the
-       third click on a header lands. Two flat keys, not an object, so the
-       header expressions depend on exactly what they read. */
-    reqSortKey: '',
-    reqSortDir: '',
     reqPage: 1,
     reqThumb: { needed: false, left: 0, width: 100 },
     /* ---- Deadlines (owls #74/#75; PLAN.md block 3 B3, B7, B15) ----
@@ -289,7 +296,9 @@ const app = new Ractive({
        they depend on (12-constants-pipeline.js), so the panel and the table cannot disagree
        about what a value means. Rule and reasoning are documented there. */
     pipeFacets() {
-      return pipeFacetList(this.get('pipeSearched'), this.get('pipeFilters'));
+      // `table` is the filter-group partial's dispatch key (PLAN D10): one
+      // partial serves both tables and routes a tick by it
+      return pipeFacetList(this.get('pipeSearched'), this.get('pipeFilters')).map((f) => ({ table: 'pipe', ...f }));
     },
     /* The filter indicator's chips — one per filtered axis. Derived where the
        axes live (12-constants-pipeline.js) so the chip and the panel cannot disagree about
@@ -308,7 +317,7 @@ const app = new Ractive({
       const open = this.get('chipPop');
       if (!open) return chips;
       const facet = this.get('pipeFacets').find((f) => f.key === open);
-      return chips.map((c) => (c.key === open && facet ? { ...c, values: facet.values, scroll: facet.scroll } : c));
+      return chips.map((c) => (c.key === open && facet ? { ...c, table: facet.table, values: facet.values, scroll: facet.scroll } : c));
     },
     /** How many filter VALUES are applied, across every axis — the accessible name's number. */
     pipeFilterCount() {
@@ -446,46 +455,92 @@ const app = new Ractive({
     dlWeeks() {
       return dlBuild(this.get('sprintItems.rows'), this.get('dlMondays'), this.get('capacity.weekly'));
     },
-    /* ---- Requests §3: segment + search + four selects, AND-combined, all
-       client-side over the single unfiltered payload. The counts stay on
-       requestCounts, which the server derives from the same unfiltered set. */
-    reqFiltered() {
-      const seg = REQUEST_SEGMENTS[this.get('requestFilter')] || null;
+    /* ---- Requests (owl #77 §1–4; PLAN D2, D4, D5, D8, D12) ------------------
+       Pipeline's chain over the one unfiltered payload: search → axes → sort →
+       page, each computed ONE step from the last, so the facets, the chips,
+       the footer and the no-results verdict all read the same set and cannot
+       disagree about what "the table" is. The tiles' counts stay on
+       requestCounts, which the server derives from the same unfiltered set —
+       the tiles never rescope (owl #77 §3). */
+    /** Search alone — the base the facets count against and the axes narrow. */
+    reqSearched() {
+      // the searchable text is precomputed per row in loadAll (r.blob);
+      // trimmed so the filter and the highlighter agree
       const q = (this.get('reqQ') || '').trim().toLowerCase();
-      // '' = All. Every other value came out of the option list built from
-      // these same rows THROUGH THE SAME pick, so comparing string forms is
-      // the same test as comparing the raw values — it covers the numeric year
-      // and it is what makes a Month picked as 'Aug' match a row storing
-      // 'August' or 8.
-      const picks = REQ_FILTERS.map((f) => ({ pick: f.pick, want: this.get(f.key) })).filter((p) => p.want !== '');
-      return this.get('requests').filter(
-        (r) =>
-          (!seg || seg(r)) &&
-          (!q || (r.blob || '').includes(q)) &&
-          picks.every((p) => String(p.pick(r)) === String(p.want)),
-      );
+      const rows = this.get('requests');
+      if (!q) return rows;
+      return rows.filter((r) => (r.blob || '').includes(q));
+    },
+    /** Search AND every axis — OR within, AND across — the set the footer counts and the pager slices. */
+    reqFiltered() {
+      const sel = this.get('reqFilters');
+      return this.get('reqSearched').filter((r) => reqMatches(r, sel, null));
     },
     /* Sorting runs over the FULL filtered set, never the visible page: the
-       client already holds every row of the project from the one unfiltered
-       fetch, so a client-side sort here IS the annotation's "sort the whole
-       dataset" semantic — a server round-trip would return the same order.
-       filter → sort → paginate, in that order. reqFiltered's array is Ractive's
-       cached value, so it is copied before sorting, never sorted in place. */
+       client holds every row of the project from the one unfiltered fetch, so
+       sorting a page would order the page and not the table. filter → sort →
+       paginate, in that order. reqSortRows decorates into its own array, so
+       reqFiltered's — Ractive's cached value — is never sorted in place. */
     reqSorted() {
-      return this.get('reqFiltered').slice().sort(reqComparator(this.get('reqSortKey'), this.get('reqSortDir')));
+      return reqSortRows(this.get('reqFiltered'), this.get('reqSortDef'));
     },
-    // the four stat segments — one row each, so the a11y attributes and the
-    // click wiring live in ONE place in the template
+    /** THE ACTIVE SORT, as one derivation: the REQ_SORTS entry `reqSort`
+        names, or the natural order — for null and for a key the list no
+        longer carries alike (D12), so a stale key can never leave the table unordered. */
+    reqSortDef() {
+      return REQ_SORTS.find((s) => s.key === this.get('reqSort')) || REQ_SORT_DEFAULT;
+    },
+    /** `Group: Label` for the sort button (R-pf-f); '' at the default. */
+    reqSortLabelText() {
+      return reqSortLabel(this.get('reqSortDef'));
+    },
+    /* The facet counts live in reqFacetList beside the axes and the matcher
+       they depend on (20-requests-table.js), so the panel and the table cannot
+       disagree about what a value means. `table` is the filter-group partial's
+       dispatch key (D10): one partial serves both tables and routes a tick by it. */
+    reqFacets() {
+      return reqFacetList(this.get('reqSearched'), this.get('reqFilters')).map((f) => ({ table: 'req', ...f }));
+    },
+    /* The indicator's chips — one per VALUE (D7). Only the OPEN axis's group is
+       joined on, for the same reason pipeChips reads pipeFacets conditionally:
+       this computed is always live, and reading the facets unconditionally
+       would put the whole facet pass back on the search-keystroke path. */
+    reqChips() {
+      const open = this.get('chipPop');
+      const groups = open ? this.get('reqFacets').filter((f) => f.key === open) : [];
+      return reqChipList(this.get('reqFilters'), groups);
+    },
+    /** How many filter VALUES are applied, across every axis — the Filter button's accessible number. */
+    reqFilterCount() {
+      const sel = this.get('reqFilters');
+      return REQ_FILTERS.reduce((n, f) => n + (sel[f.key] || []).length, 0);
+    },
+    /* The no-results verdict, Pipeline's rule (owl #76; owl #77 §3): nothing
+       left AND the reader caused it — a non-blank term or a live filter, read
+       off reqChips so this and the indicator row cannot disagree about whether
+       something is filtering. Fresh-empty keeps the plain table; the footer
+       leaves with the table (D8), the tiles and the toolbar stay. */
+    reqNoResults() {
+      if (this.get('reqFiltered').length) return false;
+      return (this.get('reqQ') || '').trim() !== '' || this.get('reqChips').length > 0;
+    },
+    /* the four stat tiles — one row each, so the a11y attributes and the click
+       wiring live in ONE place in the template. Labels literal-uppercase like
+       the Pipeline metrics, and as ruled (frame notes ruling 21: TO FILE on
+       the tile, For Filing on the badge). REQUESTS takes .metric's default
+       colour, so it names no colourway: green/amber/red are the complete set.
+       `on` DERIVES from the STATUS axis (D4): a tile is pressed exactly when
+       the axis holds its one word and nothing else, REQUESTS when the axis is
+       empty — there is no second state to fall out of step with the panel. */
     reqStats() {
       const c = this.get('requestCounts');
-      // labels literal-uppercase like the Pipeline metrics — one shared recipe.
-      // REQUESTS takes .metric's default colour, so it names no colourway:
-      // green/amber/red are the complete set.
+      const status = this.get('reqFilters.status') || [];
+      const on = (key) => (key === 'all' ? status.length === 0 : status.length === 1 && status[0] === REQUEST_SEGMENT_STATUS[key]);
       return [
-        { key: 'all', cls: '', label: 'REQUESTS', value: c.requests },
-        { key: 'filed', cls: 'green', label: 'IN PIPELINE', value: c.inPipeline },
-        { key: 'filing', cls: 'amber', label: 'TO FILE', value: c.toFile },
-        { key: 'clarification', cls: 'red', label: 'FOR CLARIFICATION', value: c.forClarification },
+        { key: 'all', cls: '', label: 'REQUESTS', value: c.requests, on: on('all') },
+        { key: 'filed', cls: 'green', label: 'IN PIPELINE', value: c.inPipeline, on: on('filed') },
+        { key: 'filing', cls: 'amber', label: 'TO FILE', value: c.toFile, on: on('filing') },
+        { key: 'clarification', cls: 'red', label: 'FOR CLARIFICATION', value: c.forClarification, on: on('clarification') },
       ];
     },
     reqPageCount() {
@@ -495,6 +550,14 @@ const app = new Ractive({
       const page = Math.max(1, Math.min(this.get('reqPage'), this.get('reqPageCount')));
       const from = (page - 1) * REQ_PAGE_SIZE;
       return this.get('reqSorted').slice(from, from + REQ_PAGE_SIZE);
+    },
+    /** The footer's `Showing from–to of total` (node 809:85294): one-based, `to`
+        clamped to the set; all zeros over an empty set, which draws no footer (D8). */
+    reqPageRange() {
+      const total = this.get('reqFiltered').length;
+      const page = Math.max(1, Math.min(this.get('reqPage'), this.get('reqPageCount')));
+      const from = total ? (page - 1) * REQ_PAGE_SIZE + 1 : 0;
+      return { from, to: Math.min(page * REQ_PAGE_SIZE, total), total };
     },
     // first and last always, current ±1, an ellipsis marker for each gap
     reqPages() {
@@ -511,16 +574,38 @@ const app = new Ractive({
       });
       return out;
     },
-    reqFilterDefs() {
-      const rows = this.get('requests');
-      return REQ_FILTERS.map((f) => ({
-        key: f.key,
-        label: f.label,
-        value: this.get(f.key),
-        // pick canonicalises BEFORE the dedupe, so 'August', 'Aug' and 8
-        // collapse into the one option the comparison will match
-        options: [...new Set(rows.map((r) => f.pick(r)))].filter((v) => !unranked(v)).sort(f.sort),
-      }));
+    /* THE DIVERGENCE GUARD (D5). Recently requested reads the sheet's row
+       order; the sheet also carries Year and Month, and the two disagree when
+       rows were inserted out of sequence. Counted here, client-side, over the
+       WHOLE payload — the disagreement is the sheet's, not the filter's — as
+       the adjacent dated pairs, along ascending row number, whose (year,
+       month) go BACKWARDS. An undated row is skipped, never counted as a break:
+       the pair is the dated row before it and the dated row after. Above zero,
+       the sync strip says so in one sentence. */
+    reqOrderDivergence() {
+      const dated = this.get('requests')
+        .filter((r) => !unranked(r.year) && !unranked(r._monthIdx))
+        .sort((a, b) => cmpNullsLast(a.sheet_row, b.sheet_row, 1));
+      let n = 0;
+      for (let i = 1; i < dated.length; i++) {
+        const a = dated[i - 1];
+        const b = dated[i];
+        if (Number(b.year) < Number(a.year) || (Number(b.year) === Number(a.year) && b._monthIdx < a._monthIdx)) n++;
+      }
+      return n;
+    },
+    /* The sorts as their node groups, DERIVED from REQ_SORTS in its own order
+       (PIPE_SORT_GROUPS' rule) — never a second hand-written list, or the
+       panel and the comparator could disagree about what exists. Two today,
+       Dates and Identity (nodes 809:87722 / 809:87697). */
+    REQ_SORT_GROUPS() {
+      const out = [];
+      for (const s of REQ_SORTS) {
+        const last = out[out.length - 1];
+        if (last && last.group === s.group) last.items.push(s);
+        else out.push({ group: s.group, items: [s] });
+      }
+      return out;
     },
     /* R2 — the drawn window: WEEK_COUNT weeks from weekStart, labelled from the
        real dates. A week belongs to its MONDAY's month and wkN is that Monday's

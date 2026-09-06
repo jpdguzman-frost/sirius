@@ -5,6 +5,13 @@
  * harness below stays local because only these two describes use it. The
  * shared prelude — recipe harness and fixtures — is
  * test/helpers/pipeline-sortfilter.ts.
+ *
+ * BLOCK 5 (owl #77 §3, D9): the block itself is now SHARED with Requests —
+ * one `{{#partial noResults}}` both tables call, and its three recipes MOVED
+ * from 20-pipeline.css to 10-ui.css. What Pipeline owns is unchanged: the
+ * verdict, the swap, and the copy. Those are asserted here exactly as before;
+ * what changed is where each is read FROM, and that the move was a move
+ * rather than a copy.
  */
 
 import RactiveModule from 'ractive';
@@ -14,12 +21,15 @@ import {
   COMPUTED_CTX_JS,
   PIPELINE_CSS,
   TEMPLATE,
+  UI_CSS,
   type PipeRow,
   cssRule,
   divFragment,
   method,
+  partialBody,
   pipeRecipeDecls,
   pipeTableData,
+  tabView,
 } from './helpers/gantt-render.ts';
 import { recipe } from './helpers/pipeline-sortfilter.ts';
 
@@ -60,11 +70,16 @@ const noResultsHarness = (): NoResultsHarness =>
  * no chips, which is not what these assertions read anyway.
  */
 const RactiveCtor = RactiveModule as unknown as {
-  new (opts: { template: string; data: Record<string, unknown> }): { toHTML(): string };
+  new (opts: { template: string; data: Record<string, unknown>; partials?: Record<string, string> }): {
+    toHTML(): string;
+  };
 };
 const renderPipestack = (state: { pipeNoResults: boolean; pipelineRows?: PipeRow[] }): string =>
   new RactiveCtor({
     template: divFragment('<div class="pipestack">'),
+    // the state itself is a partial call now (D9) — registered from the
+    // SHIPPED partial, so this render proves the shared block, not a stand-in
+    partials: { noResults: partialBody('noResults') },
     data: {
       searchQ: '',
       pipeFilterCount: 0,
@@ -169,6 +184,19 @@ describe('the no-results state replaces the whole table block (owl #76)', () => 
     expect(TEMPLATE).toContain('<p class="pnores-sub">Try adjusting your search term or clearing active filters</p>');
   });
 
+  it('reaches the block through the SHARED partial, and holds no copy of it', () => {
+    /* D9: Requests draws the same two lines at the same offsets, so there is
+       ONE block. Pipeline's view may therefore hold the CALL and nothing else
+       — a second inline copy here is how the two wordings drifted apart the
+       first time. The partial's own body is what the strings above are pinned
+       on, and it is defined once. */
+    const view = tabView('pipeline');
+    expect(view).toContain('{{>noResults}}');
+    expect(view, 'the pipeline view still inlines the block').not.toContain('class="pnores"');
+    expect([...TEMPLATE.matchAll(/\{\{#partial noResults\}\}/g)], 'two definitions of one partial').toHaveLength(1);
+    expect([...TEMPLATE.matchAll(/class="pnores"/g)], 'the block is drawn in more than one place').toHaveLength(1);
+  });
+
   it('echoes NO term and interpolates NOTHING — one static state for every path', () => {
     /* the frame deliberately removed the term echo from the headline; a
        mustache anywhere inside the block would be it creeping back in */
@@ -178,7 +206,7 @@ describe('the no-results state replaces the whole table block (owl #76)', () => 
   });
 
   it('draws the state as the page body — no fill, no border, the frame’s asymmetric padding', () => {
-    const rule = cssRule('.pnores', PIPELINE_CSS);
+    const rule = cssRule('.pnores', UI_CSS);
     expect(rule).not.toMatch(/background|border/);
     expect(rule).toContain('padding: 64px 64px 180px'); // heavier below floats the message above centre
     expect(rule).toContain('gap: var(--space-12)');
@@ -189,7 +217,7 @@ describe('the no-results state replaces the whole table block (owl #76)', () => 
   it('sets the head at weight 700 — the frame’s own, ruled to stand over the house 600', () => {
     /* Miles flagged the weight as possible drift and ruled: build what the
        frame holds. This pin is what stops a well-meant normalisation. */
-    const head = cssRule('.pnores-head', PIPELINE_CSS);
+    const head = cssRule('.pnores-head', UI_CSS);
     expect(head).toContain('font-weight: 700');
     expect(head).toContain('font-size: var(--text-display)');
     expect(head).toContain('line-height: 1.2');
@@ -197,11 +225,21 @@ describe('the no-results state replaces the whole table block (owl #76)', () => 
   });
 
   it('sets the sub a step down and muted — single-weight, like the head', () => {
-    const sub = cssRule('.pnores-sub', PIPELINE_CSS);
+    const sub = cssRule('.pnores-sub', UI_CSS);
     expect(sub).toContain('font-weight: 400');
     expect(sub).toContain('font-size: var(--text-title)');
     expect(sub).toContain('line-height: 1.2');
     expect(sub).toContain('color: var(--slate-500)');
+  });
+
+  it('left 20-pipeline.css when it became shared — moved, never copied (D9)', () => {
+    /* The recipes are read from 10-ui.css above. If the old ones had stayed
+       behind, both sheets would declare the same three selectors and the
+       later one would win silently — which is a copy, and copies drift. */
+    const declared = PIPELINE_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    for (const gone of ['.pnores', '.pnores-head', '.pnores-sub']) {
+      expect(declared, `${gone} is still declared in the Pipeline sheet`).not.toContain(gone);
+    }
   });
 
   it('re-sweeps the slider when the verdict flips — the remount seam is never stale', () => {

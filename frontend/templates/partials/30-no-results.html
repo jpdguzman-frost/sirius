@@ -1,0 +1,23 @@
+{{! THE SEARCH-AND-FILTER EMPTY STATE, SHARED BY BOTH TABLES (owl #77 §3).
+    Pipeline had it first (frame 748:18444); the Requests node draws the same
+    two lines at the same offsets within half a pixel, so there is one block
+    and one copy of the wording rather than two that drift.
+
+    Rendered when the term or the ticked values match nothing — never when a
+    project simply has no rows: this message prescribes adjusting the term or
+    clearing filters, and that reader would have neither. Each tab decides
+    that for itself and calls this; the metrics, the search field with its
+    term and the toolbar stay above it in both.
+
+    ONE state for search-only, filter-only and both, with no echo of the term:
+    the frame deliberately removed it. Deliberately NOT the dashed-box empty
+    pattern either — this is a full-page empty, per the frame.
+
+    Defined at the top level, as Ractive requires of any partial used from
+    more than one place. }}
+{{#partial noResults}}
+  <div class="pnores">
+    <p class="pnores-head">No results found</p>
+    <p class="pnores-sub">Try adjusting your search term or clearing active filters</p>
+  </div>
+{{/partial}}

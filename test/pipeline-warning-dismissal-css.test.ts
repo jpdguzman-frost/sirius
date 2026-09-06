@@ -37,9 +37,14 @@ describe('the document dismissers name the TRIGGER, not the wrapper', () => {
     // the deleted message trigger must not linger as a dead selector
     expect(shields).not.toContain('.warnmsg');
     expect(jsCode).not.toContain('.warnwrap');
-    for (const sel of ['.ubadge-wrap', '.selectmenu', '.duewrap', '.duepop', '.selwrap']) {
+    /* `.selwrap` went with the Requests select bar it wrapped (owl #77 §1);
+       the panels that replaced it are shielded under their own toolbar's
+       scope, so the trigger and the box are named as the reader can point at
+       them rather than as the Pipeline's unscoped pair. */
+    for (const sel of ['.ubadge-wrap', '.selectmenu', '.duewrap', '.duepop', '.reqtools .sfbtn', '.reqtools .pipemenu']) {
       expect(shields, `${sel} left the ignore list`).toContain(sel);
     }
+    expect(shields, 'the retired select bar is still shielded').not.toContain('.selwrap');
   });
 
   it('shields the warning icon ONLY while its own card is open (R-warn-w)', () => {

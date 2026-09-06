@@ -17,8 +17,12 @@ import {
   handlerBody,
   method,
   observerCalls,
+  tabView,
 } from './helpers/gantt-render.ts';
-import { type Axis, recipe } from './helpers/pipeline-sortfilter.ts';
+import { type Axis, recipe, row, sel, toolbarComputeds } from './helpers/pipeline-sortfilter.ts';
+
+/* the Pipeline view's chips row onward — two tabs now carry `.fchips` */
+const pipeChipsView = () => { const v = tabView('pipeline'); return v.slice(v.indexOf('class="fchips"')); };
 
 /* ---------------------------------------------------------------------- */
 /* F3 — the filter indicator (node 593:79380)                               */
@@ -129,7 +133,10 @@ describe('the filter indicator says what is filtered, in words', () => {
        the scrollbar switched OFF and the box clipped to one group — so the
        panel wears `.pipemenu` for its chrome and renders a single heading and
        one item list, with no `.pmfoot`. */
-    const view = TEMPLATE.slice(TEMPLATE.indexOf('class="fchips"'));
+    /* the PIPELINE view, not the first chips row in the composed template — views
+       concatenate Requests before Pipeline, and Requests grew its own chips row
+       in block 5 (owl #77 §1), so a bare slice would read the other tab. */
+    const view = pipeChipsView();
     const chip = view.slice(0, view.indexOf('fclearall'));
     expect(chip).toContain('{{#if chipPop === c.key}}');
     expect(chip).toContain('class="pipemenu chipmenu {{#if chipPopFlip}}flip{{/if}}"');
@@ -208,7 +215,7 @@ describe('the filter indicator says what is filtered, in words', () => {
   it('opens on FOCUS as well as hover — the panel holds real controls', () => {
     // the warning card's own rule: a pointer-only overlay puts its contents out
     // of a keyboard user's reach
-    const view = TEMPLATE.slice(TEMPLATE.indexOf('class="fchips"'));
+    const view = pipeChipsView(); // the Pipeline tab's own chips row (see above)
     expect(view).toContain("on-focusin=\"['chipPopIn', c.key]\"");
     expect(view).toContain("on-focusout=\"['chipPopOut']\"");
   });
@@ -241,6 +248,25 @@ describe('the filter indicator says what is filtered, in words', () => {
     // both panels render the same partial, so there is one row and one handler
     expect(TEMPLATE).toContain('{{>filterGroup f}}');
     expect(TEMPLATE).toContain('{{>filterGroup c}}');
+  });
+
+  it('carries the TABLE onto the open chip too, or its own panel cannot tick', () => {
+    /* The partial dispatches on `table` (D10) and a chip is not a facet — the
+       computed copies the facet's stamp across for the one chip whose panel is
+       open. Miss it and the main panel ticks while the chip's panel throws on
+       every click, which no markup assertion would show. */
+    const h = toolbarComputeds();
+    h.set('rows', [row({ cardId: 'a', assetType: 'Icon' }), row({ cardId: 'b', assetType: 'UI' })]);
+    h.set('pipeFilters', sel({ type: ['Icon'] }));
+
+    const closed = h.chips();
+    expect(closed).toHaveLength(1);
+    expect(closed[0]!.values, 'a closed chip pays for no recount').toBeUndefined();
+
+    h.set('chipPop', 'type');
+    const [open] = h.chips();
+    expect(open!.values!.length, 'the open chip carries no values to draw').toBeGreaterThan(0);
+    expect(open!.table).toBe('pipe');
   });
 
   it('shares ONE hover-close scheduler with the warning card', () => {

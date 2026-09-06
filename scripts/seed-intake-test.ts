@@ -59,7 +59,9 @@ console.log(`[seed-intake] ${CODE}: joining ${filedMcs.length} existing MC group
    order a visible effect. One row leaves both blank, for the em-dash cell and
    the unranked-last rule. Invariant 16: this fixture is the only way any of
    that is exercisable. */
-const HEADER = ['MC #', 'Deliverable', 'Type', 'Use Case', 'Type', 'Requestor', 'Year', 'Month', 'Deadline', 'Brief', 'In Frost Prod'];
+// `Business Unit` is the sheet's current header for UNIT; the parser also
+// still accepts the older `Use Case` (PLAN D1).
+const HEADER = ['MC #', 'Deliverable', 'Type', 'Business Unit', 'Type', 'Requestor', 'Year', 'Month', 'Deadline', 'Brief', 'In Frost Prod'];
 const row = (
   mc: string, name: string, deadline: string, year: string, month: string,
   brief = 'Synthetic fixture brief — no client content',

@@ -29,7 +29,9 @@ const FRONTEND_SHARED = [
   'pipeWorkMatch', // 12-constants-pipeline.js → the pipeKids computed (block 4, owl #78 §4)
   'DL_MONTHS', 'DL_DAY_NAMES', 'dlMonthWeeks', 'dlRangeLabel', 'dlWeekRange', 'dlBuild', // block 3 (owls #74/#75): the Deadlines helpers in 11-constants-deadlines.js
   'NO_OVERLAYS', 'OVERLAY_KEYS', 'patchWorkCard', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
-  'REQ_MENU_H', 'REQ_MENU_W', 'REQ_PAGE_SIZE', 'reqComparator', 'reqFilterKeys', 'reqFiltersCleared',
+  'REQ_PAGE_SIZE', 'REQ_FILTERS_EMPTY', 'REQ_STATUS_VALUES', 'REQUEST_SEGMENT_STATUS', 'reqStatusOf', 'reqColLabel', // block 5 (owl #77 §1–4): the Requests filter/sort recipe in 20-requests-table.js
+  'reqMatches', 'reqFacetList', 'reqChipList', 'REQ_SORTS', 'REQ_SORT_DEFAULT', 'reqSortRows', 'reqSortLabel',
+  'cmpNullsLast', // 12-constants-pipeline.js → reqSortRows / reqOrderDivergence (block 5)
   'REQUEST_SEGMENTS', 'requestBlob', 'resetForProjectSwitch', 'rowWarning', 'scrollerOf',
   'selectTab', 'showWarnPop', 'sprintPayload', 'STATUS_FILED', 'thumbKeyOf',
   'unranked', 'updateThumb', 'WARN_CLOSE_MS', 'WARN_POP_H', 'WARN_POP_W', 'WARN_SHADOW_BLEED', 'warnPopCancelClose',

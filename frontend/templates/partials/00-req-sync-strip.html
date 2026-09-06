@@ -6,6 +6,13 @@
   <div class="syncstrip">
     <svg class="i18" aria-hidden="true"><use href="#i-trello" /></svg>
     <span class="sstext">Difficulty, list and Figma links are read from Trello and can't be edited here.</span>
+    {{! D5 — the default order is the sheet's own row order, which reads as
+        "most recently requested" only while the sheet is filled top to bottom.
+        Counted client-side over the loaded rows; the sentence appears only
+        when the two disagree, so a tidy sheet never sees it. }}
+    {{#if reqOrderDivergence}}
+      <span class="sstext">The sheet's row order and its Year/Month columns disagree on {{reqOrderDivergence}} rows, so Recently requested may be out of order.</span>
+    {{/if}}
     <span class="ssmeta">{{syncStripLabel}}</span>
   </div>
 {{/partial}}

@@ -1,74 +1,147 @@
 {{#if activeTab === 'requests'}}
   {{#if requests.length || rejects.length}}
   <div class="reqstack">
-    <!-- §3 breakdown stat bar — counts always from the UNFILTERED set; the
-         segments are the single-select status filter (click again clears).
-         Real buttons: Enter/Space activation is the platform's job -->
+    <!-- §3 breakdown stat bar — counts always from the UNFILTERED set. The
+         tiles are the STATUS axis's second door (D4): a click sets that axis
+         to exactly this value, a click on the pressed one clears it, and
+         REQUESTS clears it outright. Both the pressed state and the dimming
+         read the axis — `s.on` per tile, the axis's own length for "is any
+         status picked at all" — so the tiles and the filter panel can never
+         disagree about what is filtered. Real buttons: Enter/Space activation
+         is the platform's job -->
     <div class="metrics rstats" role="group" aria-label="Request breakdown">
       {{#each reqStats as s}}
-        <button type="button" class="metric rstat {{s.cls}} {{#if statOff(s.key)}}off{{/if}}" aria-pressed="{{requestFilter === s.key ? 'true' : 'false'}}" on-click="['setRequestFilter', s.key]"><span class="mlabel">{{s.label}}</span><span class="mvalue">{{s.value}}</span></button>
+        <button type="button" class="metric rstat {{s.cls}} {{#if reqFilters.status.length && !s.on}}off{{/if}}" aria-pressed="{{s.on ? 'true' : 'false'}}" on-click="['setRequestFilter', s.key]"><span class="mlabel">{{s.label}}</span><span class="mvalue">{{s.value}}</span></button>
       {{/each}}
     </div>
 
     {{>reqSyncStrip}}
 
-    <div class="searchbar reqsearch">{{{icon.search}}}<input name="requests-search" placeholder="Search cards or MC#" value="{{reqQ}}" lazy="250" aria-label="Search requests by card or MC number" /></div>
+    {{! owl #77, node 809:85709 — the search field and the two icon buttons
+        share one row, Filter then Sort, 8px apart and to the RIGHT of the
+        field. Pipeline's toolbar recipe verbatim: same classes, same panels,
+        same anchoring, only the state and the accessible names differ. }}
+    <div class="reqtools">
+      <div class="searchbar reqsearch">{{{icon.search}}}<input name="requests-search" placeholder="Search cards or MC#" value="{{reqQ}}" lazy="250" aria-label="Search requests by card or MC number" /></div>
+      <div class="sortfilter">
+        {{! FILTER — icon only, no count badge on the face (Pipeline's node
+            593:74881 considered one and DECLINED it; do not add one here "for
+            consistency"). The applied number lives ONLY in the accessible
+            name, which is the single route to it for someone who cannot see
+            the fill change. }}
+        <button class="sfbtn {{#if reqFilterCount}}on{{/if}}" on-click="['openReqFilter']"
+                aria-haspopup="dialog" aria-expanded="{{reqFilterMenu ? 'true' : 'false'}}"
+                title="Filter" aria-label="Filter{{#if reqFilterCount}}, {{reqFilterCount}} applied{{/if}}">{{{icon.filter}}}</button>
+        {{! SORT — expands and NAMES its one selection, `Group: Item` (R-pf-f).
+            The asymmetry with Filter is deliberate: a sort is always exactly
+            one thing and can be named; a filter is several and cannot. The
+            default order is unlisted (D12), so the face stays bare until a
+            listed option is picked. }}
+        <button class="sfbtn {{#if reqSort}}on{{/if}}" on-click="['openReqSort']"
+                aria-haspopup="dialog" aria-expanded="{{reqSortMenu ? 'true' : 'false'}}"
+                title="Sort" aria-label="Sort{{#if reqSort}}, {{reqSortLabelText}}{{/if}}">{{{icon.sort}}}{{#if reqSort}}<span class="sflabel">{{reqSortLabelText}}</span>{{/if}}</button>
 
-    <!-- filter bar: four selects (options derived from the loaded rows) plus
-         the pager; every control here filters CLIENT-SIDE, one fetch per load -->
-    <div class="filterbar">
-      {{#each reqFilterDefs as f}}
-        <div class="rfilter">
-          <span class="flabel">{{f.label}}</span>
-          <div class="selwrap">
-            <button class="seltrigger {{#if f.value !== ''}}on{{/if}}" on-click="['openReqMenu', f.key]" aria-haspopup="listbox" aria-expanded="{{reqMenu === f.key ? 'true' : 'false'}}" aria-label="{{f.label}} filter">
-              <span class="selval">{{f.value === '' ? 'All' : f.value}}</span><span class="bchev"><svg class="i16"><use href="#i-badgeChevron" /></svg></span>
-            </button>
-            {{#if reqMenu === f.key}}
-              <div class="selectmenu reqmenu" role="listbox" aria-label="{{f.label}}" style="left:{{reqMenuPos.left}}px;top:{{reqMenuPos.top}}px;">
-                <div class="selecthead">{{f.label}}</div>
-                <button class="selectitem {{#if f.value === ''}}on{{/if}}" role="option" aria-selected="{{f.value === '' ? 'true' : 'false'}}" on-click="['pickReqFilter', f.key, '']">All</button>
-                {{#each f.options as o}}
-                  <button class="selectitem {{#if f.value === o}}on{{/if}}" role="option" aria-selected="{{f.value === o ? 'true' : 'false'}}" on-click="['pickReqFilter', f.key, o]">{{o}}</button>
+        {{! ANCHORED TO THE CONTAINER, NOT TO EITHER BUTTON — the same ruling
+            Pipeline carries (JP, 2026-08-21). Both panels hang off
+            `.sortfilter` itself, so they open in ONE place whichever button
+            was pressed; the sort button grows when it names its selection and
+            would otherwise drag the filter panel sideways with it. }}
+        {{#if reqFilterMenu}}
+          <div class="pipemenu filtermenu" role="dialog" aria-label="Filter the requests">
+            {{#each reqFacets as f}}{{>filterGroup f}}{{/each}}
+            <div class="pmfoot">
+              <button class="pmclear" disabled="{{!reqFilterCount}}" on-click="['clearReqFilters']">Clear filter</button>
+            </div>
+          </div>
+        {{/if}}
+        {{#if reqSortMenu}}
+          <div class="pipemenu sortmenu" role="dialog" aria-label="Sort the requests">
+            {{#each REQ_SORT_GROUPS as g}}
+              {{! group headings are LABELS, not options — never focusable }}
+              <p class="pmhead" aria-hidden="true">{{g.group}}</p>
+              <div class="pmitems" role="group" aria-label="{{g.group}}">
+                {{#each g.items as it}}
+                  <button class="pmitem {{#if reqSort === it.key}}on{{/if}}" on-click="['pickReqSort', it.key]"
+                          aria-pressed="{{reqSort === it.key ? 'true' : 'false'}}"><span class="pmwrap">{{it.label}}</span></button>
                 {{/each}}
               </div>
-            {{/if}}
+            {{/each}}
+            <div class="pmfoot">
+              {{! disabled when there is nothing to clear — offering it invites
+                  a click that does nothing }}
+              <button class="pmclear" disabled="{{!reqSort}}" on-click="['clearReqSort']">Clear Sort</button>
+            </div>
           </div>
-        </div>
-      {{/each}}
-
-      {{#if reqPageCount > 1}}
-        <nav class="pager" aria-label="Requests pages">
-          <button class="pnav prev" disabled="{{reqPage <= 1}}" on-click="['reqPageStep', -1]" aria-label="Previous page"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
-          {{#each reqPages as p}}
-            {{#if p.gap}}<span class="pgap" aria-hidden="true">…</span>
-            {{else}}<button class="pbtn {{#if p.n === reqPage}}on{{/if}}" aria-current="{{p.n === reqPage ? 'page' : 'false'}}" on-click="['reqGoPage', p.n]">{{p.n}}</button>{{/if}}
-          {{/each}}
-          <button class="pnav" disabled="{{reqPage >= reqPageCount}}" on-click="['reqPageStep', 1]" aria-label="Next page"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
-        </nav>
-      {{/if}}
+        {{/if}}
+      </div>
     </div>
+
+    {{! THE FILTER INDICATOR (nodes 795:72905, 841:37792) — what is filtered,
+        stated in words between the toolbar and the table. ONE CHIP PER VALUE
+        here, not per axis (D7): the node draws `Type is Assets` and `Type is
+        Lottie File` as two chips, so a ✕ removes its own value and leaves the
+        rest of the axis standing. Pipeline stays one chip per axis; the chip
+        RECIPE is the same one, which is why the classes are shared.
+
+        A WRAPPING ROW: six axes can be filtered at once, several of them
+        multi-valued. Wrapping keeps every value separately removable, which
+        is what the ✕ is for. }}
+    {{#if reqChips.length}}
+      <div class="fchips" role="group" aria-label="Filters applied">
+        {{#each reqChips as c}}
+          {{! mouseenter/mouseleave do not fire again for moves BETWEEN
+              descendants — that is precisely why the panel is a DOM child of
+              the chip: the whole subtree is part of this element's hit region,
+              so travelling from the chip down into a checkbox never leaves it
+              and no close is ever armed. focusin/focusout are wired for the
+              same reason the pointer is: the panel holds real controls, and a
+              keyboard user tabbing to the ✕ should be able to reach them. }}
+          <span class="fchip" on-mouseenter="['reqChipPopIn', c.key, c.value]" on-mouseleave="['reqChipPopOut']"
+                on-focusin="['reqChipPopIn', c.key, c.value]" on-focusout="['reqChipPopOut']">
+            <span class="fchiplabel">
+              <span class="fcaxis">{{c.axis}} is</span>
+              <span class="fcvals" title="{{c.label}}">{{c.label}}</span>
+            </span>
+            <button class="fchipx" on-click="['removeReqChip', c.key, c.value]"
+                    aria-label="Remove {{c.label}} from the {{c.axis}} filter">{{{icon.close}}}</button>
+
+            {{! THE CHIP'S OWN PANEL — the same dropdown chrome as the Filter
+                button's, cut down to the ONE axis this chip belongs to and
+                with the footer switched off (R-pf-m). The chip carries a
+                single value; hovering it opens the whole axis, which is the
+                one place a neighbouring value can be ticked back on. The
+                facet is looked up by axis key because a chip is per value and
+                a facet is per axis.
+
+                THE OPEN CHIP IS THE AXIS AND THE VALUE TOGETHER: the axis
+                alone names every chip on that axis, so an axis with two of
+                them drew this panel twice, under each. }}
+            {{#if chipPop === c.key && chipPopValue === c.value}}
+              <div class="pipemenu chipmenu {{#if chipPopFlip}}flip{{/if}}" role="dialog" aria-label="{{c.axis}} filter">
+                {{#each reqFacets as f}}{{#if f.key === c.key}}{{>filterGroup f}}{{/if}}{{/each}}
+              </div>
+            {{/if}}
+          </span>
+        {{/each}}
+        {{! the same handler the panel's own Clear uses — one way to clear }}
+        <button class="pmclear fclearall" on-click="['clearReqFilters']">Clear all</button>
+      </div>
+    {{/if}}
 
     {{#if reqFiltered.length}}
     <div class="pscrollwrap reqwrap">
       <div class="pscroll" on-scroll="['reqScrolled']">
         <table class="ptable rtable">
-          <!-- owl #18: every column sorts except Brief and Frost Notes, which
-               carry no sort key in reqCols and so render as plain headers. The
-               sortable ones are real <button>s — Enter/Space activation is the
-               platform's job, as with the stat segments above. -->
+          <!-- D6: the sort panel is the one sort door, so the headers are
+               plain text. They carried buttons and arrows while four selects
+               were the filter door; two doors with different option sets
+               cannot agree on what "sorted" means. Node 809:85709 draws an
+               identical inactive chevron on all eleven columns — decoration
+               left from the old select design, not an affordance, so no
+               chevron is drawn here either. -->
           <thead><tr>
             {{#each reqCols as c}}
-              {{#if c.sort}}
-                <th class="{{c.cls}}" aria-sort="{{reqSortKey === c.sort ? (reqSortDir === 'desc' ? 'descending' : 'ascending') : 'none'}}">
-                  <button type="button" class="sortbtn" on-click="['reqSortBy', c.sort]" aria-label="Sort by {{c.label}}">
-                    <span>{{c.label}}</span>
-                    {{#if reqSortKey === c.sort}}<svg class="i16 sarrow {{reqSortDir}}" aria-hidden="true"><use href="#i-badgeChevron" /></svg>{{/if}}
-                  </button>
-                </th>
-              {{else}}
-                <th class="{{c.cls}}">{{c.label}}</th>
-              {{/if}}
+              <th class="{{c.cls}}">{{c.label}}</th>
             {{/each}}
           </tr></thead>
           <tbody>
@@ -91,7 +164,12 @@
               </div></td>
               <td class="col-rname"><span class="rtext">{{{hlr(r.name)}}}</span></td>
               <td class="col-rtype">{{#if r.asset_type}}<span class="rbadge">{{{hlr(r.asset_type)}}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
-              <td class="col-rcase"><span class="rtext">{{{hlr(r.use_case)}}}</span></td>
+              <!-- D1: the column is called Unit on screen and its class says
+                   so; the field behind it stays `use_case` everywhere — the
+                   sheet's own header is aliased in the parser, and the same
+                   field lives on Deliverable and the schedule duplicate flow.
+                   Renaming storage for a word would be a migration. -->
+              <td class="col-runit"><span class="rtext">{{{hlr(r.use_case)}}}</span></td>
               <td class="col-rwho">{{#if r.requestor}}<span class="rbadge">{{{hlr(r.requestor)}}}</span>{{else}}<span class="emdash">—</span>{{/if}}</td>
               <!-- invariant 14: the server resolves Trello due over sheet deadline; the tooltip names which -->
               <td class="col-rdue">{{#if r.deadline}}<span class="rtext nowrap" title="{{r.deadline_source === 'trello' ? 'From Trello due date' : 'From intake sheet'}}">{{fmtLong(r.deadline)}}</span>{{else}}<span class="nopill">none</span>{{/if}}</td>
@@ -151,13 +229,32 @@
       </div>
       {{/if}}
     </div>
-    <!-- the empty state REPLACES the table — a header-only table over its own
-         scroll slider is not an empty state — and names the real cause:
-         filters only when rows exist to hide, otherwise the sheet itself.
-         The outer gate owns the no-data case, so the last branch here can
-         only mean every parsed row landed in rejects. -->
-    {{elseif requests.length}}
-      <div class="rempty"><strong>No requests match</strong><span>Clear the search, the status card or a filter to see the other rows.</span></div>
+    <!-- The footer belongs to the TABLE, so it lives in the table's own branch
+         and leaves with it: the count and the pager describe rows, and neither
+         has anything to say when no row is drawn. It renders at one page too
+         (D8, node 809:85294) — "Showing 1-7 of 7 requests" is information, and
+         a footer that appears only past ten rows makes the table look like it
+         changed shape. -->
+    <div class="reqfoot">
+      <div class="reqfoot-range">Showing <b>{{reqPageRange.from}}-{{reqPageRange.to}}</b> of <b>{{reqPageRange.total}}</b> requests</div>
+      <nav class="pager" aria-label="Requests pages">
+        <button class="pnav prev" disabled="{{reqPage <= 1}}" on-click="['reqPageStep', -1]" aria-label="Previous page"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+        {{#each reqPages as p}}
+          {{#if p.gap}}<span class="pgap" aria-hidden="true">…</span>
+          {{else}}<button class="pbtn {{#if p.n === reqPage}}on{{/if}}" aria-current="{{p.n === reqPage ? 'page' : 'false'}}" on-click="['reqGoPage', p.n]">{{p.n}}</button>{{/if}}
+        {{/each}}
+        <button class="pnav" disabled="{{reqPage >= reqPageCount}}" on-click="['reqPageStep', 1]" aria-label="Next page"><svg class="i16"><use href="#i-rowChevron" /></svg></button>
+      </nav>
+    </div>
+    <!-- A search or a filter that matches nothing gives way to the SHARED
+         empty state (D9) — the same partial the Pipeline table renders, so the
+         two tabs cannot drift apart on the wording again. The tiles, the sync
+         strip and the toolbar stay: they sit above it and are how the reader
+         gets back. The last branch is the sheet's own fault rather than the
+         reader's — the outer gate owns the no-data case, so it can only mean
+         every parsed row landed in rejects, and it keeps its own dashed box. -->
+    {{elseif reqNoResults}}
+      {{>noResults}}
     {{else}}
       <div class="rempty"><strong>No usable requests</strong><span>Every row the sync read needs correction in the sheet — it corrects on the next sync.</span></div>
     {{/if}}

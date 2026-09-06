@@ -1,17 +1,25 @@
 {{! ONE filter group — heading, then its values as checkbox rows. Used by BOTH
-    the Filter button's panel (over `pipeFacets`) and a chip's hover panel (over
-    that chip's own facet), which is why it reads a CONTEXT rather than root
-    state: `{key, label, scroll, values}`, the shape a facet already has.
+    tables and, on each, by both doors: the Filter button's panel (over that
+    table's facet list) and a chip's hover panel (over the one facet the chip
+    belongs to). That is why it reads a CONTEXT rather than root state:
+    `{table, key, label, scroll, values}`, the shape a facet already has.
+
+    The row's click carries the facet's own `table` as its first argument, so
+    one partial serves two tables without a second copy and without a
+    dynamically named event: `toggleFacet` routes on that word (D10). A facet
+    that forgot to declare it would toggle nothing, which is why the value is
+    stamped on every facet at the source rather than passed in at each call.
 
     It was typed out twice before. The two had already drifted on the group's
     accessible name, and nothing in the suite pinned the row's markup — so an
     aria fix or a change to the box would have landed in one panel only. }}
 {{#partial filterGroup}}
   <p class="pmhead" aria-hidden="true">{{label}}</p>
-  {{! STATUS is the one open-ended axis — Trello list names, and the real board
-      carries many more than the frame's four. It scrolls WITHIN its own group
-      so the short axes keep their place; scrolling the whole panel would let
-      the longest push the others out of view (jp→miles #49). }}
+  {{! One axis per table is open-ended — Trello list names on the pipeline,
+      requestors on the intake sheet — and the real data carries many more
+      values than any frame draws. Whichever it is scrolls WITHIN its own
+      group so the short axes keep their place; scrolling the whole panel
+      would let the longest push the others out of view (jp→miles #49). }}
   <div class="pmitems {{#if scroll}}pmscroll{{/if}}" role="group" aria-label="{{label}}">
     {{#each values as v}}
       {{! No disabled state: a zero-count value is HIDDEN by the facet list, so
@@ -20,7 +28,7 @@
           back off it. `label` and `value` differ for exactly one item: absence
           is stored as null and DRAWN as None (owl #63), so a board value that
           really is the word None stays a separate checkbox. }}
-      <button class="pmitem pmcheck {{#if v.on}}on{{/if}}" on-click="['togglePipeFilter', key, v.value]"
+      <button class="pmitem pmcheck {{#if v.on}}on{{/if}}" on-click="['toggleFacet', table, key, v.value]"
               aria-pressed="{{v.on ? 'true' : 'false'}}"><span class="pmbox" aria-hidden="true"></span><span class="pmval">{{v.label}}</span><span class="pmcount">{{v.count}}</span></button>
     {{/each}}
   </div>

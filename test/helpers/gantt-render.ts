@@ -28,6 +28,13 @@
  * renders through `tabView` (the whole `{{#if activeTab === '…'}}` branch)
  * rather than through `divFragment`, and the tab guard itself is part of what
  * the render proves.
+ *
+ * BLOCK 5 (2026-09-06, owl #77, PLAN.md block 5): `renderRequests` joins them
+ * for the same reason — the Requests footer is a SIBLING of the table's
+ * scroller and the shared no-results state replaces the branch holding both,
+ * so `renderRequestsTable`'s own `<div>` can see neither. The two Requests
+ * renderers coexist: the table's for the row and note assertions, the tab's
+ * for everything drawn around it.
  */
 
 import fs from 'node:fs';
@@ -438,28 +445,37 @@ export interface DeadlinesState {
 }
 
 /**
- * The `dlCard` partial's BODY, sliced from the shipped template.
+ * One `{{#partial name}}` BODY, sliced from the shipped template.
  *
  * LAZY, unlike `DUE_CALENDAR_PARTIAL` above, and deliberately so: a throw at
  * module scope takes down every suite that imports this helper, not just the
  * one that wanted the partial (the reasoning drag-hittest states about
- * `weekAtX`). A missing partial should fail the deadlines render, and nothing
- * else.
+ * `weekAtX`). A missing partial should fail the render that wanted it, and
+ * nothing else.
+ *
+ * One slicer for every partial (block 5): the shared `noResults` block both
+ * tables now call is a THIRD caller, and a second copy of this eleven-line
+ * slice is how the memo bug below shipped the first time.
  */
-const dlCardPartialBySrc = new Map<string, string>();
-export function dlCardPartial(src: string = TEMPLATE): string {
+const partialBodyBySrc = new Map<string, Map<string, string>>();
+export function partialBody(name: string, src: string = TEMPLATE): string {
   // memoised PER SOURCE — a memo that ignored its argument let a source with
   // no partial pass on the first caller's slice (review finding R2-3)
-  const hit = dlCardPartialBySrc.get(src);
+  const bySrc = partialBodyBySrc.get(src) ?? new Map<string, string>();
+  partialBodyBySrc.set(src, bySrc);
+  const hit = bySrc.get(name);
   if (hit !== undefined) return hit;
-  const marker = '{{#partial dlCard}}';
+  const marker = `{{#partial ${name}}}`;
   const open = src.indexOf(marker);
   const close = src.indexOf('{{/partial}}', open);
-  if (open < 0 || close < 0) throw new Error('gantt-render: no dlCard partial in the shipped template');
+  if (open < 0 || close < 0) throw new Error(`gantt-render: no ${name} partial in the shipped template`);
   const slice = src.slice(open + marker.length, close);
-  dlCardPartialBySrc.set(src, slice);
+  bySrc.set(name, slice);
   return slice;
 }
+
+/** The `dlCard` partial's body — `partialBody`, under the name its callers know. */
+export const dlCardPartial = (src: string = TEMPLATE): string => partialBody('dlCard', src);
 
 /**
  * Renders the Deadlines tab for one view state.
@@ -835,6 +851,7 @@ export interface ReqRow {
   sheet_row?: number | null;
   name: string;
   asset_type?: string | null;
+  /** the UNIT column's field — the screen renamed, the wire did not (D1) */
   use_case?: string | null;
   requestor?: string | null;
   deadline?: string | null;
@@ -859,24 +876,82 @@ export interface RequestsTableState {
   noteEditing?: string | null;
 }
 
+/** One header column, by the three fields the table DRAWS. */
+export interface ReqColDef {
+  cls: string;
+  label: string;
+  sort: string;
+}
+
 /**
- * The header columns, by `cls`/`label`/`sort` only. REQ_COLS also carries the
- * sort accessors and comparators, which test/requests-sort coverage owns —
- * what the table needs to render is the three display fields.
+ * The header columns, DERIVED — the shipped `REQ_COLS` sliced out of the app
+ * scripts and executed, then reduced to the three display fields.
+ *
+ * It was a hand-typed second copy until block 5 (test/CLAUDE.md rule 2, "derive,
+ * don't copy"): the UNIT rename (`col-rcase`/`Use Case` → `col-runit`/`Unit`,
+ * D1) had to land in the shipped table AND in the copy, and a copy that lagged
+ * would have rendered the retired class under a green suite. Now a rename that
+ * misses one of them cannot be missed — this reads the one the browser runs.
+ *
+ * The comparators are PARAMETERS, not sliced: `REQ_COLS` names them at
+ * declaration, so they must resolve for the array to evaluate, but nothing
+ * here may run them — the sort recipe's own arithmetic is executed by the
+ * requests-sortfilter suites. An entry that grows a dependency this list does
+ * not carry fails loudly with the missing name rather than silently.
  */
-const REQ_COLS_STUB = [
-  { cls: 'col-ryear', label: 'Year', sort: 'year' },
-  { cls: 'col-rmonth', label: 'Month', sort: 'month' },
-  { cls: 'col-rmc', label: 'MC #', sort: 'mc' },
-  { cls: 'col-rname', label: 'Deliverable', sort: 'name' },
-  { cls: 'col-rtype', label: 'Type', sort: 'type' },
-  { cls: 'col-rcase', label: 'Use Case', sort: 'case' },
-  { cls: 'col-rwho', label: 'Requestor', sort: 'who' },
-  { cls: 'col-rdue', label: 'Deadline', sort: 'due' },
-  { cls: 'col-rbrief', label: 'Brief', sort: '' },
-  { cls: 'col-rstatus', label: 'Status', sort: 'status' },
-  { cls: 'col-rnote', label: 'Frost Notes', sort: '' },
-];
+const reqColsBySrc = new Map<string, ReqColDef[]>();
+export function reqCols(src: string = APP_JS): ReqColDef[] {
+  const hit = reqColsBySrc.get(src);
+  if (hit !== undefined) return hit;
+  const notCalled = () => {
+    throw new Error('gantt-render: a REQ_COLS comparator ran — this slice keeps the display fields only');
+  };
+  const shipped = new Function('numCmp', 'ciCmp', 'alphaSort', `${decl(src, 'REQ_COLS')}\nreturn REQ_COLS;`)(
+    notCalled,
+    notCalled,
+    notCalled,
+  ) as Array<{ cls: string; label: string; sort?: string }>;
+  const cols = shipped.map((c) => ({ cls: c.cls, label: c.label, sort: c.sort ?? '' }));
+  reqColsBySrc.set(src, cols);
+  return cols;
+}
+
+/**
+ * The three shipped client members the Requests view branches on, executed out
+ * of the app scripts: the ONE status literal, THE clarification predicate and
+ * the note resolver. Sliced rather than restated — the template asks
+ * `clarified(r)` and the segment filter asks `clarified(r)`, so a render proof
+ * that retyped either would prove a fiction (test/CLAUDE.md rule 2).
+ */
+export interface ReqClient {
+  STATUS_FILED: string;
+  clarified: (r: ReqRow) => boolean;
+  noteText: (n: ReqNote | null) => string;
+}
+const reqClientBySrc = new Map<string, ReqClient>();
+export function reqClient(src: string = APP_JS): ReqClient {
+  const hit = reqClientBySrc.get(src);
+  if (hit !== undefined) return hit;
+  const client = new Function(`
+    ${decl(src, 'STATUS_FILED')}
+    ${decl(src, 'clarified')}
+    ${decl(src, 'noteText')}
+    return { STATUS_FILED, clarified, noteText };
+  `)() as ReqClient;
+  reqClientBySrc.set(src, client);
+  return client;
+}
+
+/** The row-cell stubs both Requests renderers share (rule 6: no maths of their own). */
+const reqCellHelpers = (): Record<string, unknown> => ({
+  // no sheet URL is derivable in tests, so the row link renders as the
+  // plain-text branch — the note cell is what these suites read
+  sheetRowUrl: () => '',
+  hlr: (s: unknown) => String(s ?? ''),
+  fmtLong: (s: unknown) => String(s ?? ''),
+  monthShort: (s: unknown) => String(s ?? ''),
+  clip180: (s: unknown) => String(s ?? ''),
+});
 
 /** Renders the Requests table (`<div class="pscrollwrap reqwrap">`). */
 export function renderRequestsTable(state: RequestsTableState): string {
@@ -888,20 +963,108 @@ export function renderRequestsTable(state: RequestsTableState): string {
       clarified: state.clarified,
       noteText: state.noteText,
       noteEditing: state.noteEditing ?? null,
-      reqCols: REQ_COLS_STUB,
-      reqSortKey: '',
-      reqSortDir: 'desc',
+      reqCols: reqCols(),
       reqThumb: { needed: false },
       noteDraft: { remark: '', clarify: false },
       noteError: '',
       icon: {},
-      // no sheet URL is derivable in tests, so the row link renders as the
-      // plain-text branch — the note cell is what these suites read
-      sheetRowUrl: () => '',
-      hlr: (s: unknown) => String(s ?? ''),
-      fmtLong: (s: unknown) => String(s ?? ''),
-      monthShort: (s: unknown) => String(s ?? ''),
-      clip180: (s: unknown) => String(s ?? ''),
+      ...reqCellHelpers(),
+    },
+  });
+  return instance.toHTML();
+}
+
+/**
+ * The WHOLE Requests tab, for one view state — the tiles, the sync strip, the
+ * toolbar, the chips, the table, the footer and the empty states.
+ *
+ * `renderRequestsTable` above slices the table's own `<div>` and cannot see
+ * any of the things block 5 added AROUND it: the footer is a SIBLING of the
+ * scroller inside the rows branch, and the no-results state REPLACES that
+ * whole branch. Both are claims about what renders beside the table, so the
+ * renderer has to hold the branch that owns both — the same reasoning
+ * `renderDeadlines` states, and the same `tabView` mechanism.
+ *
+ * Every array the template iterates is stubbed (rule 6) — `reqStats`,
+ * `reqFacets`, `reqChips`, `reqFiltered`, `reqRows`, `reqPages`, `requests`,
+ * `rejects` — so a section that renders nothing renders nothing VISIBLY
+ * rather than passing vacuously. `extra` is the escape hatch for a key this
+ * helper does not know yet (a panel array a sibling suite drives), spread
+ * last so a caller can also override a default.
+ */
+export interface RequestsViewState {
+  /** the page slice the table draws; also the default for `reqFiltered` */
+  reqRows?: ReqRow[];
+  /** the filtered set — the gate on the table branch, so a fixture can empty it */
+  reqFiltered?: unknown[];
+  /** the outer gate: a project with nothing loaded at all */
+  requests?: unknown[];
+  rejects?: unknown[];
+  reqNoResults?: boolean;
+  reqStats?: Array<Record<string, unknown>>;
+  reqFilters?: Record<string, unknown[]>;
+  reqFacets?: Array<Record<string, unknown>>;
+  reqChips?: Array<Record<string, unknown>>;
+  reqFilterCount?: number;
+  reqSort?: string | null;
+  reqSortLabelText?: string;
+  reqFilterMenu?: string | null;
+  reqSortMenu?: string | null;
+  chipPop?: string | null;
+  reqPage?: number;
+  reqPages?: Array<Record<string, unknown>>;
+  reqPageCount?: number;
+  reqPageRange?: { from: number; to: number; total: number };
+  noteEditing?: string | null;
+  extra?: Record<string, unknown>;
+}
+export function renderRequests(state: RequestsViewState = {}): string {
+  const rows = state.reqRows ?? [];
+  const client = reqClient();
+  const instance = new Ractive({
+    template: tabView('requests'),
+    partials: {
+      reqSyncStrip: partialBody('reqSyncStrip'),
+      filterGroup: partialBody('filterGroup'),
+      noResults: partialBody('noResults'),
+    },
+    data: {
+      activeTab: 'requests',
+      requests: state.requests ?? rows,
+      rejects: state.rejects ?? [],
+      syncStripLabel: '',
+      reqStats: state.reqStats ?? [],
+      reqQ: '',
+      reqFilters: state.reqFilters ?? { year: [], month: [], type: [], unit: [], requestor: [], status: [] },
+      reqFacets: state.reqFacets ?? [],
+      reqChips: state.reqChips ?? [],
+      reqFilterCount: state.reqFilterCount ?? 0,
+      reqSort: state.reqSort ?? null,
+      reqSortLabelText: state.reqSortLabelText ?? '',
+      reqFilterMenu: state.reqFilterMenu ?? null,
+      reqSortMenu: state.reqSortMenu ?? null,
+      chipPop: state.chipPop ?? null,
+      chipPopFlip: false,
+      reqFiltered: state.reqFiltered ?? rows,
+      reqNoResults: state.reqNoResults ?? false,
+      reqRows: rows,
+      reqCols: reqCols(),
+      reqThumb: { needed: false },
+      reqPage: state.reqPage ?? 1,
+      reqPages: state.reqPages ?? [],
+      reqPageCount: state.reqPageCount ?? 1,
+      reqPageRange: state.reqPageRange ?? { from: 0, to: 0, total: 0 },
+      statusFiled: client.STATUS_FILED,
+      clarified: client.clarified,
+      noteText: client.noteText,
+      noteEditing: state.noteEditing ?? null,
+      noteDraft: { remark: '', clarify: false },
+      noteError: '',
+      /* MARKERS, not the shipped art — a render can then say WHICH element got
+         which icon, as renderDeadlines' own stubs do. */
+      icon: { search: '<svg data-icon="search"></svg>', filter: '<svg data-icon="filter"></svg>', sort: '<svg data-icon="sort"></svg>', close: '<svg data-icon="close"></svg>', extLink: '<svg data-icon="extLink"></svg>', sliderLeft: '<svg data-icon="sliderLeft"></svg>', sliderRight: '<svg data-icon="sliderRight"></svg>' },
+      ...reqCellHelpers(),
+      ...(state.extra ?? {}),
     },
   });
   return instance.toHTML();

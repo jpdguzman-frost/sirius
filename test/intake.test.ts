@@ -137,3 +137,46 @@ describe('fixture CSV (quickstart local path)', () => {
     expect(result.ok.map((r) => r.mc_number)).toEqual(['MC-655', 'MC-701', 'MC-702']);
   });
 });
+
+/*
+ * UNIT (block 5, PLAN D1) — the screen says Unit, storage and wire keep
+ * `use_case`; the parser is where the sheet's own header name lives. The
+ * sheet is being renamed Business Unit, so BOTH headers must map, and a
+ * multi-value cell is raised as a data problem — never split by us.
+ */
+describe('UNIT column (D1): header alias + multi-value warning', () => {
+  const BU_HEADER = HEADER.map((h) => (h === 'Use Case' ? 'Business Unit' : h));
+  const unitRow = (mc: string, unit: string) => [
+    mc, `Deliverable ${mc}`, 'Static', unit, 'Web', 'r@c.example', '2026-08-28', 'brief', 'TRUE',
+  ];
+
+  it('maps Business Unit onto use_case — and Use Case, the older header, still maps', () => {
+    expect(mapHeader(BU_HEADER).use_case).toBe(3);
+    expect(mapHeader(HEADER).use_case).toBe(3);
+    expect(parseIntake([BU_HEADER, unitRow('MC-1', 'Campaign')]).ok[0]?.use_case).toBe('Campaign');
+    expect(parseIntake([HEADER, unitRow('MC-1', 'Campaign')]).ok[0]?.use_case).toBe('Campaign');
+  });
+
+  it('a comma-separated unit is stored WHOLE and raised as exactly one warning', () => {
+    const result = parseIntake([BU_HEADER, unitRow('MC-1', ' Campaign, Product '), unitRow('MC-2', 'Campaign')]);
+    expect(result.ok.map((r) => r.use_case)).toEqual(['Campaign, Product', 'Campaign']); // never split, only outer-trimmed
+    expect(result.warnings).toEqual([{ sheet_row: 2, field: 'use_case', reason: 'multi-value' }]);
+  });
+
+  it('rejected, duplicate and skipped rows never warn', () => {
+    const result = parseIntake([
+      BU_HEADER,
+      ['MC-1', 'No brief', 'Static', 'Campaign, Product', 'Web', 'r@c.example', '2026-08-28', '', 'TRUE'], // reject
+      unitRow('MC-2', 'Campaign, Product'), // ok → the only warning
+      unitRow('MC-2', 'Campaign, Product'), // duplicate MC → reject
+      ['', '', '', 'Campaign, Product', '', '', '', '', ''], // blank id+name → skipped
+    ]);
+    expect(result.rejects.map((r) => r.sheet_row)).toEqual([2, 4]);
+    expect(result.skipped).toBe(1);
+    expect(result.warnings).toEqual([{ sheet_row: 3, field: 'use_case', reason: 'multi-value' }]);
+  });
+
+  it('an empty sheet still answers the full shape', () => {
+    expect(parseIntake([])).toEqual({ ok: [], rejects: [], warnings: [], reserved: 0, skipped: 0 });
+  });
+});

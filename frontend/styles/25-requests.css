@@ -2,9 +2,11 @@
    value binds to a token (05-tokens.css); the legacy .grid/.scroll/.chk
    recipes in 10-ui.css stay untouched because the unmigrated tabs still use
    them — the .tiles/.notecell/.callout set THIS tab replaced is deleted, not
-   kept. Shared chrome (.searchbar, .pscrollwrap, .hslider, .selectmenu, and
-   .ptable's th/td geometry) is reused from 20-pipeline.css — only the deltas
-   live here. */
+   kept. Shared chrome (the search field, the scroll wrapper, the sort and
+   filter buttons, the dropdown panels with their headings, rows, boxes and
+   counts, the filter chips, and the table's th/td geometry) is reused from
+   20-pipeline.css — only the deltas live here; the no-results block is shared
+   as well and lives in 10-ui.css. */
 
 .reqstack { display: flex; flex-direction: column; gap: var(--space-16); }
 
@@ -44,55 +46,93 @@
   color: var(--slate-400); white-space: nowrap;
 }
 
-/* ---- C/D. search + filter bar ---- */
-.reqsearch { padding-top: 0; }
+/* ---- C/D. the toolbar row (node 809:85709) — the search field, then the
+   filter and sort buttons at the right end. It is PIPELINE'S ROW, rule for
+   rule: the field flexes, the two buttons hug, eight pixels apart, and the
+   hairline runs under both. `.searchbar`, `.sortfilter` and `.sfbtn` are the
+   shared recipes in 20-pipeline.css and are not restated — only the row
+   wrapper is, because a selector list cannot span two stylesheets. (One
+   recipe with two wrapper names is the seam to close if these ever move into
+   one shared sheet.)
 
-.filterbar { display: flex; align-items: center; gap: var(--space-24); flex-wrap: wrap; }
-.rfilter { display: flex; align-items: center; gap: var(--space-8); }
-.rfilter .flabel {
-  font-size: var(--text-label); font-weight: 600; line-height: 1;
-  text-transform: uppercase; letter-spacing: 0.02em; color: var(--surface-muted-foreground);
-}
-.selwrap { position: relative; display: inline-block; }
-.seltrigger {
-  display: inline-flex; align-items: center; justify-content: space-between; gap: var(--space-4);
-  width: 120px; height: 32px; box-sizing: border-box; padding: 0 var(--space-8);
-  background: var(--slate-50); border: 1px solid var(--slate-100); border-radius: var(--radius-sm);
-  cursor: pointer; font-family: var(--font-sans);
-  font-size: var(--text-label); font-weight: 400; line-height: 1; color: var(--surface-foreground);
-}
-.seltrigger:hover { border-color: var(--slate-300); }
-.seltrigger:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
-.seltrigger .selval { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.seltrigger .bchev { display: inline-flex; flex: none; color: var(--slate-400); }
-.seltrigger .bchev svg { display: block; }
-/* a non-All selection tints the trigger so the active filter is obvious */
-.seltrigger.on {
-  background: var(--blue-50); border-color: var(--blue-200); color: var(--blue-700); font-weight: 600;
-}
-.seltrigger.on .bchev { color: var(--blue-700); }
-/* the shared overlay recipe, widened for names and capped so a long list scrolls */
-.selectmenu.reqmenu { width: 180px; max-height: 264px; overflow-y: auto; overscroll-behavior: contain; }
-.selectmenu.reqmenu .selectitem { width: 100%; }
+   The four select boxes this row replaced — the bar, its labels, the trigger
+   and its menu — went with them: the panel is the one filter door now, and a
+   second control over the same axes cannot be kept in agreement with it.
+   The search field also stops zeroing its own top padding, which it did when
+   it sat alone under the tiles: that padding is what gives the frame's
+   fifty-four-tall field, and the buttons ride the same line. ---- */
+.reqtools { display: flex; align-items: center; gap: var(--space-8); border-bottom: 1px solid var(--slate-100); }
+.reqtools .searchbar { flex: 1; border-bottom: none; min-width: 0; }
 
-/* ---- E. pagination ---- */
-.pager { display: flex; align-items: center; gap: var(--space-4); margin-left: auto; }
-.pager .pbtn, .pager .pnav {
-  min-width: 28px; height: 32px; box-sizing: border-box; padding: 0 var(--space-8);
+/* THE FILTER PANEL'S VIEWPORT CAP. Six axes draw a panel the frame measures
+   at nine hundred and twelve tall — more than the room under the toolbar on
+   any laptop — so the panel takes the smaller of that height and what is
+   actually left below the row, and scrolls itself instead of running off the
+   bottom of the window. The number subtracted is this page's own stack,
+   measured from the top of the window: the shell, the view inset, the tiles,
+   the sync strip and the search row put the panel's top edge a little over
+   four hundred down, and the view's own bottom inset is the rest.
+   The one open-ended axis keeps its in-group scroll on top of this (#49):
+   the cap here stops the box leaving the screen, the in-group cap stops one
+   long axis pushing the other five out of sight. `overscroll-behavior` keeps
+   the panel's scroll from chaining to the page, which would drag the toolbar
+   the panel is anchored to. */
+.reqtools .filtermenu {
+  max-height: min(912px, calc(100vh - 464px));
+  overflow-y: auto; overscroll-behavior: contain;
+}
+
+/* ---- E. the table footer (nodes 809:85294 / 809:85301) — the range on the
+   left, the pager on the right, thirty-two tall, no fill, no rule of its own.
+   The frame's sixteen pixels above it are the content stack's gap, so nothing
+   here states that distance a second time. It draws whenever there are rows,
+   a single page included. ---- */
+.reqfoot { display: flex; align-items: center; justify-content: space-between; min-height: 32px; }
+/* the frame sets the words four pixels apart as separate boxes, so the line
+   is a flex row and the markup's own spaces collapse into the gap */
+.reqfoot-range {
+  display: flex; align-items: baseline; gap: var(--space-4);
+  font-size: var(--text-body); font-weight: 400; line-height: 1.5; color: var(--slate-500); /* #64748b */
+}
+/* the counts are the loud half of the sentence, the words around them the
+   quiet one — the same split the filter chips are built on */
+.reqfoot-range b { font-weight: 600; color: var(--slate-900); } /* #0f172a */
+
+/* THE PAGER (node 809:85301). Buttons are transparent and twenty-eight wide
+   on a thirty-two line, and they ABUT — the frame gives the row no spacing at
+   all, which is what makes the numbers read as one control rather than as a
+   row of separate ones. `min-width` rather than `width`: the frame draws two
+   digits, and a project deep enough to page into three would otherwise clip
+   its own last page. */
+.pager { display: flex; align-items: center; gap: 0; }
+.pager .pbtn, .pager .pnav, .pager .pgap {
+  min-width: 28px; height: 32px; box-sizing: border-box;
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--white); border: 1px solid transparent; border-radius: var(--radius-sm);
-  cursor: pointer; font-family: var(--font-sans); font-size: var(--text-label); font-weight: 400;
-  line-height: 1; color: var(--surface-muted-foreground);
+  border-radius: var(--radius-sm); font-family: var(--font-sans);
+  font-size: var(--text-label); font-weight: 400; line-height: 1;
+  color: var(--slate-900); /* #0f172a — every part of the pager, the chevrons included */
 }
-.pager .pbtn { min-width: 34px; }
-.pager .pbtn:hover:not(.on), .pager .pnav:hover:not(:disabled) { background: var(--slate-50); color: var(--surface-foreground); }
-.pager .pbtn.on { background: var(--slate-100); border-color: var(--border-border); color: var(--surface-foreground); font-weight: 600; }
-.pager .pnav { color: var(--slate-400); }
+.pager .pbtn, .pager .pnav {
+  padding: var(--space-8) 6px; background: none; border: 1px solid transparent; cursor: pointer;
+}
+/* THE CURRENT PAGE is a boxed thirty-two square: a pale fill and a hairline,
+   and the label STAYS Regular. Bold is the obvious way to mark it and is not
+   what the frame does — the box is the mark. */
+.pager .pbtn.on {
+  min-width: 32px; background: var(--slate-100); /* #f1f5f9 */
+  border-color: var(--slate-300); /* #cbd5e1 */
+}
+/* neither hover nor focus is drawn in the frame; both are the house
+   affordances every other control on this tab carries, and a pointer target
+   with no feedback reads as decoration */
+.pager .pbtn:hover:not(.on), .pager .pnav:hover:not(:disabled) { background: var(--slate-50); }
+.pager .pbtn:focus-visible, .pager .pnav:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
 .pager .pnav svg { display: block; }
 .pager .pnav.prev svg { transform: rotate(180deg); } /* one chevron, both directions */
 .pager .pnav:disabled { opacity: 0.35; cursor: not-allowed; }
-.pager .pgap { padding: 0 var(--space-4); color: var(--slate-400); font-size: var(--text-label); }
-.pager .pbtn:focus-visible, .pager .pnav:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 1px; }
+/* the ellipsis is a step up in size and weight from the numbers it stands in
+   for — the frame's own contrast, and what keeps it from reading as a page */
+.pager .pgap { font-size: var(--text-subtitle); font-weight: 500; }
 
 /* ---- F. table — the element is class="ptable rtable", so the 44px header
    height and top cell alignment come from .ptable; only the deltas here ---- */
@@ -101,37 +141,29 @@
    (row 432:18601: 1px --slate-100 bottom, no vertical rules — JP 2026-08-14);
    only the requests-frame cell padding is a delta here */
 .rtable td { padding: 20px var(--space-16); background: var(--white); }
-/* YEAR/MONTH 80 and USE CASE 160 are the frame's THREE narrowed columns
+/* YEAR/MONTH 80 and UNIT 160 are the frame's THREE narrowed columns
    (731:101106/101107/101111, applied 2026-08-27 — they were specced in a
    revision and never landed). Every other width here already matched the
-   frame exactly, which is how the miss was spotted. */
+   frame exactly, which is how the miss was spotted. The sixth column is the
+   sheet's Business Unit read under the name the screen gives it (node
+   809:85251); only the label and the class changed, never the measure. */
 .rtable .col-ryear { width: 80px; }
 .rtable .col-rmonth { width: 80px; }
 .rtable .col-rmc { width: 120px; }
 .rtable .col-rname { width: 200px; }
 .rtable .col-rtype { width: 120px; }
-.rtable .col-rcase { width: 160px; }
+.rtable .col-runit { width: 160px; }
 .rtable .col-rwho { width: 120px; }
 .rtable .col-rdue { width: 128px; }
 .rtable .col-rbrief { width: 320px; }
 .rtable .col-rstatus { width: 136px; }
 .rtable .col-rnote { width: 320px; }
 
-/* ---- sortable headers (owl #18). The shared .ptable th recipe still owns the
-   44px height, the fill, the padding and the type — the button inherits ALL of
-   it rather than restating any of it, so a header that sorts and one that does
-   not are pixel-identical until the arrow appears ---- */
-.rtable th .sortbtn {
-  display: inline-flex; align-items: center; gap: var(--space-4);
-  padding: 0; margin: 0; border: 0; background: none; cursor: pointer;
-  font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; white-space: nowrap;
-}
-.rtable th .sortbtn:hover { color: var(--surface-foreground); }
-.rtable th .sortbtn:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; border-radius: var(--radius-xs); }
-/* ONE chevron for both directions, as the pager does — the sprite's badge
-   chevron points DOWN, which is descending; ascending flips it */
-.rtable th .sarrow { flex: none; }
-.rtable th .sarrow.asc { transform: rotate(180deg); }
+/* The clickable headers owl #18 asked for are RETIRED (block 5): the sort
+   panel is the one sort door, the headers are plain cells again, and their
+   button and arrow recipes left with them. The frame draws the same inactive
+   chevron on all eleven columns — decoration carried in from the old select
+   design, not an affordance — so nothing replaces them. */
 
 .rtable .rtext { font-size: var(--text-body); line-height: 1.5; color: var(--surface-foreground); overflow-wrap: anywhere; }
 .rtable .emdash { font-size: var(--text-body); line-height: 1.5; color: var(--slate-400); }

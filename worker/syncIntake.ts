@@ -28,6 +28,13 @@ export async function syncIntakeRows(
   const parsed: ParseResult = parseIntake(rows);
   const now = new Date();
 
+  // Data problems the mirror keeps as-is (PLAN D1): logged for a human, never
+  // stored, never split, never a reject.
+  for (const w of parsed.warnings) {
+    // Today the parser raises one kind: a UNIT cell holding more than one unit.
+    console.warn(`[syncIntake] intake: multi-value unit at row ${w.sheet_row} (project ${String(projectId)})`);
+  }
+
   const seen = new Set<string>();
   for (const r of parsed.ok) {
     seen.add(r.mc_number);

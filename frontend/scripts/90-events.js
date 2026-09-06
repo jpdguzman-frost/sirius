@@ -17,10 +17,10 @@ function selectTab(id) {
    so back/forward across a project boundary (popstate) behaves identically to
    using the switcher — same clears, same reload. */
 async function resetForProjectSwitch() {
-  // Requests view state is per-project. A Type/Requestor value from the old
-  // project may not exist in the new one, leaving an unclearable empty
+  // Requests view state is per-project. A Type or Requestor value from the
+  // old project may not exist in the new one, leaving an unclearable empty
   // table. The sort resets with them so the new project opens on its own
-  // newest-filed default rather than inheriting a column the reader chose
+  // newest-requested default rather than inheriting an order the reader chose
   // while looking at other data — and an open note editor is keyed on
   // mc_number ALONE, which is
   // unique per project and NOT globally (invariant 3), so leaving it open
@@ -36,11 +36,14 @@ async function resetForProjectSwitch() {
   // per-project. `leftCollapsed` deliberately does NOT reset — it is a
   // reader preference about the pane, not project data.
   app.set({
-    ...reqFiltersCleared(),
-    requestFilter: 'all',
+    /* the six axes, the sort, the search and the page — the whole narrowing,
+       cleared through the recipe's own empty rather than a list of axis names
+       written out a second time here (owl #77 §1). The tiles come with them:
+       their pressed state IS the status axis now, so there is nothing else to
+       clear. */
+    reqFilters: REQ_FILTERS_EMPTY(),
+    reqSort: null,
     reqQ: '',
-    reqSortKey: '',
-    reqSortDir: '',
     reqPage: 1,
     /* every overlay closes, by the DERIVED list — a hand-written one here was a
        fourth place that had to agree with OVERLAY_KEYS, which is the exact
@@ -86,9 +89,47 @@ async function resetForProjectSwitch() {
   await loadAll();
 }
 
-/* clicking the active segment clears it; REQUESTS is always the show-all */
-function applyRequestFilter(f) {
-  app.set('requestFilter', f === app.get('requestFilter') && f !== 'all' ? 'all' : f);
+/* THE TILES AND THE STATUS AXIS ARE ONE STATE (PLAN.md D4, owl #77 §2). The
+   tiles used to own a filter of their own, so a reader could tick a status in
+   the panel, press a tile that disagreed with it, and neither control would
+   describe what the table was actually showing. A tile now WRITES the status
+   axis: pressing one narrows to exactly its value, pressing the pressed one
+   clears the axis, and the show-all tile — which names no status at all —
+   clears it too. Pressed state is read back OFF the axis, so there is no
+   second copy to keep in step.
+
+   The value a tile stands for comes from the one predicate table's own map: a
+   literal spelled here would be a second vocabulary for the same three words,
+   and the two would drift the first time one of them was reworded. */
+function applyRequestFilter(segKey) {
+  const value = REQUEST_SEGMENT_STATUS[segKey] || null;
+  const cur = app.get('reqFilters.status') || [];
+  const sole = Boolean(value) && cur.length === 1 && cur[0] === value;
+  app.set('reqFilters.status', value && !sole ? [value] : []);
+}
+
+/* ONE TICK, BOTH TABLES (PLAN.md D10). The filter-group partial is a single
+   copy serving the Pipeline and the Requests panels — and each table's chip
+   panel as well — because it was typed out twice before and the copies
+   drifted. A row it draws therefore carries the table it belongs to, and the
+   write is chosen HERE rather than by a handler name the partial would have to
+   compose out of a value in its own context.
+
+   MULTI-select, and the panel STAYS OPEN: a filter is built from several
+   values, and closing on each tick would hide the counts at the moment they
+   matter most. An unknown table is a wiring mistake — it throws, because a
+   silent no-op reads to the reader as a filter that simply does nothing. */
+const FACET_FILTER_ROOT = { pipe: 'pipeFilters', req: 'reqFilters' };
+function toggleFacetValue(table, key, value) {
+  // `typeof`, not truthiness: `constructor` and `toString` are names every
+  // object literal answers to, and neither is a filter table
+  const root = FACET_FILTER_ROOT[table];
+  if (typeof root !== 'string') throw new Error(`toggleFacet: no filter table named ${String(table)}`);
+  const cur = (app.get(`${root}.${key}`) || []).slice();
+  const at = cur.indexOf(value);
+  if (at > -1) cur.splice(at, 1);
+  else cur.push(value);
+  app.set(`${root}.${key}`, cur);
 }
 
 /* owl #62 asks that any of search/filter/sort changing "reset pagination to
@@ -171,21 +212,112 @@ app.on({
     await resetForProjectSwitch();
   },
   signOut() { api.send('POST', '/auth/logout').then(() => window.location.reload()); },
-  /* ---- Requests §3: stat segments, selects, pager — no round-trip ---- */
+  /* ---- Requests §3: stat tiles, sort + filter, pager — no round-trip ------
+     Owl #77 §1: the select boxes and the sortable column headers are gone,
+     replaced by the Pipeline's own pair of panels. Nothing here talks to the
+     server — every request row is already loaded, so a narrowing is a read of
+     what the client already holds. */
   setRequestFilter(_ctx, f) { applyRequestFilter(f); },
-  openReqMenu(ctx, key) {
-    openMeasured(ctx, key, { key: 'reqMenu', posKey: 'reqMenuPos', sel: '.selectmenu.reqmenu', h: REQ_MENU_H, gap: 4, clampW: REQ_MENU_W });
+  /* Both panels ride openOverlay, so mutual exclusion, the outside click, the
+     scroll dismisser and Escape-with-focus-return come from the one door every
+     other overlay uses, and neither panel restates them. They are anchored in
+     CSS to the toolbar row (R-pf-j) and so carry NO coordinates: the sort
+     button grows when it names its selection, which drags anything anchored to
+     a button sideways with it. */
+  openReqSort(ctx) {
+    openOverlay(ctx, 'sort', { key: 'reqSortMenu' });
   },
-  pickReqFilter(_ctx, key, value) {
+  openReqFilter(ctx) {
+    openOverlay(ctx, 'filter', { key: 'reqFilterMenu' });
+  },
+  /* the one door the shared filter-group partial knocks on, for either table,
+     from either panel; the per-table doors below and on the Pipeline side are
+     the same write under the name each table's own code uses */
+  toggleFacet(_ctx, table, key, value) { toggleFacetValue(table, key, value); },
+  toggleReqFilter(_ctx, key, value) { toggleFacetValue('req', key, value); },
+  /* SINGLE-select: choosing replaces, never stacks, and choosing the applied
+     sort again returns the table to rest — the same "click it off" the
+     Pipeline sort and the urgency menu use, so the panel can always undo
+     itself. Rest is not "no order": it is the newest-requested order the table
+     opens on, which the listed option of the same name also produces. */
+  pickReqSort(_ctx, key) {
+    app.set('reqSort', app.get('reqSort') === key ? null : key);
     closeMenus({ restoreFocus: true });
-    app.set(key, value); // '' = All, which clears that filter
   },
-  /* owl #18: asc → desc → clear on the same column; a different column starts
-     that cycle over at asc. Clearing is not "no sort" — it is the newest-filed
-     default the table opens on. The pager reset is the observer's job. */
-  reqSortBy(_ctx, key) {
-    const dir = app.get('reqSortKey') !== key ? 'asc' : app.get('reqSortDir') === 'asc' ? 'desc' : '';
-    app.set({ reqSortKey: dir ? key : '', reqSortDir: dir });
+  clearReqSort() {
+    app.set('reqSort', null);
+    closeMenus({ restoreFocus: true });
+  },
+  /* HERE A CHIP IS ONE VALUE, not one axis (owl #77 §1) — so its ✕ removes the
+     value it names and leaves the rest of that axis standing. The Pipeline's ✕
+     clears a whole axis because its chip names a whole axis; same recipe, two
+     compositions, and each ✕ removes exactly what the reader can see it
+     naming. */
+  removeReqChip(_ctx, key, value) {
+    app.set(`reqFilters.${key}`, (app.get(`reqFilters.${key}`) || []).filter((v) => v !== value));
+  },
+  /* the panel's own Clear and the chips row's Clear all are the SAME door, so
+     there is one way to clear rather than two that can disagree */
+  clearReqFilters() {
+    app.set('reqFilters', REQ_FILTERS_EMPTY());
+    closeMenus({ restoreFocus: true });
+  },
+  /* THE CHIP'S HOVER PANEL — the Pipeline pair's twin. What differs is which
+     facets the panel under the chip is drawn from, and that is read in the
+     template, not here; the policy is shared. Opening goes through the one
+     hover-open door (refuse over another overlay, cancel a pending close,
+     re-entry is not a toggle) and leaving through the one close scheduler, so
+     no second timer exists to fire against state it was not scheduled for.
+     `chipPop` itself is one key for both tables: only one tab is mounted at a
+     time, so two chip panels can never be open at once.
+
+     THE VALUE TRAVELS WITH THE AXIS (PLAN.md §Fix amendment 1). A Requests
+     chip is one VALUE, so the axis alone names every chip on that axis: the
+     panel would be drawn under all of them, and the ✕ on the hovered one would
+     leave the axis naming a chip that had gone. `chipPopValue` is what tells
+     them apart, and `null` — the absence value — is a real answer, so it is
+     written on every open rather than only when there is something to write. */
+  reqChipPopIn(ctx, key, value) {
+    /* A REFUSAL FROM THE SHARED DOOR MEANS TWO THINGS HERE, and only one of
+       them is a no. The door is keyed on the axis, and a Requests chip is one
+       value: crossing from a chip to its SIBLING re-enters an axis that is
+       already open, so the door calls it re-entry and refuses — right for
+       everyone else, and half an answer for this row. The panel is a DOM child
+       of whichever chip the template matches, so leaving the pair as it stands
+       leaves it hanging under the chip the pointer has left. On re-entry the
+       anchor still moves; on a refusal over anything ELSE nothing does, and the
+       door stays exactly as it is — this is the one caller that can tell the
+       two apart. */
+    const refused = !openHoverOverlay('chipPop', key);
+    if (refused && app.get('chipPop') !== key) return;
+    /* the chips row WRAPS, so a chip can sit anywhere along it, and the panel
+       is a known width hanging off the chip's LEFT edge. Far enough right and
+       it runs past the viewport, where its rows are unreachable and the page
+       grows a horizontal scrollbar; flip it onto the right edge instead. The
+       width is a constant, so this reads the chip's own box and needs nothing
+       measured after render. Computed HERE, once, for both journeys in: the
+       sibling arrives at a different place along the row than the chip before
+       it, so a flip settled only on the first entry would describe the wrong
+       chip for the rest of the hover. */
+    const box = ctx.node.getBoundingClientRect();
+    app.set('chipPopFlip', box.left + PIPE_MENU_W > document.documentElement.clientWidth - OVERLAY_EDGE);
+    /* set in the same breath as the flip above, which is what keeps the pair
+       describing one chip; the leave path leaves it alone, because a value with
+       nothing open is inert and the next open overwrites it. */
+    app.set('chipPopValue', value);
+    // the axis was already open, so the pair above is the whole move — going
+    // through the door again would TOGGLE the panel shut under the pointer
+    if (refused) return;
+    openOverlay(ctx, key, { key: 'chipPop' });
+  },
+  reqChipPopOut(ctx) {
+    if (!leaveHoverOverlay('chipPop')) return;
+    /* where the pointer (or focus) actually went; still inside this chip means
+       nothing left. The panel is a DOM child of the chip, so this covers the
+       whole journey down into it — including tabbing from the ✕ into a row. */
+    const to = ctx.event.relatedTarget;
+    if (to && ctx.node.contains(to)) return;
+    scheduleHoverClose(() => closeMenus());
   },
   reqGoPage(_ctx, n) { app.set('reqPage', n); },
   reqPageStep(_ctx, dir) {
@@ -298,16 +430,11 @@ app.on({
     app.set('pipeSort', null);
     closeMenus({ restoreFocus: true });
   },
-  /* MULTI-select: OR within a category, AND across (owl #62). The panel STAYS
-     OPEN — a filter is built from several values, and closing on each toggle
-     would make the counts unreadable at the moment they matter most. */
-  togglePipeFilter(_ctx, axis, value) {
-    const cur = (app.get(`pipeFilters.${axis}`) || []).slice();
-    const at = cur.indexOf(value);
-    if (at > -1) cur.splice(at, 1);
-    else cur.push(value);
-    app.set(`pipeFilters.${axis}`, cur);
-  },
+  /* MULTI-select: OR within a category, AND across (owl #62). The tick itself
+     — and the panel staying open through it — is the shared facet write, which
+     the Requests table now ticks through as well; this is the Pipeline's own
+     name for it. */
+  togglePipeFilter(_ctx, axis, value) { toggleFacetValue('pipe', axis, value); },
   /* THE CHIP'S HOVER PANEL (node 593:80073) — the chip's own filter group,
      opened under it so a reader can see and change what the chip names without
      going back to the Filter button.

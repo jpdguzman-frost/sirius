@@ -166,10 +166,7 @@
       reader would have neither. Deliberately NOT the dashed-box empty-state
       pattern — this is a full-page empty, per the frame. }}
   {{#if pipeNoResults}}
-  <div class="pnores">
-    <p class="pnores-head">No results found</p>
-    <p class="pnores-sub">Try adjusting your search term or clearing active filters</p>
-  </div>
+  {{>noResults}}
   {{else}}
   <div class="pscrollwrap">
     <div class="pscroll" on-scroll="['pipeScrolled']">

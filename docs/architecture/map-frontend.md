@@ -12,7 +12,7 @@ _last-verified: 2026-08-18_
 - `frontend/scripts/10-constants-core.js` — capacity fallbacks, planner geometry (WEEK_COUNT/WEEK_PX), Requests constants, STATUS_FILED/clarified/REQUEST_SEGMENTS/noteText, WARN_*/rowWarning, isoOf/todayIso, fmtLongIso.
 - `frontend/scripts/11-constants-deadlines.js` — Deadlines month/week tables and helpers: DL_MONTHS/DL_DAY_NAMES through dlBuild, monthShort/monthOrder.
 - `frontend/scripts/12-constants-pipeline.js` — Pipeline sort/filter: DIFF_RANK/PIPE_* machinery (mcRank is consumed from 20-requests-table.js) and the add-work search helpers addLabel/addTokens/addMatches.
-- `frontend/scripts/20-requests-table.js` — Requests sort/filter machinery: shared comparators, REQ_FILTERS, mcRank, REQ_COLS/REQ_SORT_COLS, reqComparator.
+- `frontend/scripts/20-requests-table.js` — Requests filter/sort recipe (owl #77 §1–4, block 5): REQ_FILTERS (six axes, per-value facets via reqFacetList/reqMatches), REQ_SORTS + REQ_SORT_DEFAULT (Recently requested = sheet row desc) with reqSortRows, REQ_COLS/reqColLabel (the header-label guard's source), reqChipList (one chip per value), reqStatusOf; mcRank is consumed by 12-constants-pipeline.js.
 - `frontend/scripts/30-dates.js` — Manila clock (MANILA_DAY/TIME, manilaToday, fmtInstant), ISO calendar arithmetic (isoAddDays…mondayIso), sprint week helpers (sprintPayload, fridayIso, workingDaysBetween, mondaysBetween).
 - `frontend/scripts/40-app-state.js` — initialRoute capture + THE `app = new Ractive({...})` — every data key and computed (tabLabel…sprintDirty); one statement, indivisible.
 - `frontend/scripts/50-gantt-geometry.js` — workday x-axis: TOTAL_UNITS, dayIndex, clampUnits, pctOf/unitPct, weekAtX, phaseRun + app.set of phaseRun/deadlineTick/ghostBar/sprintLength.
@@ -25,7 +25,7 @@ _last-verified: 2026-08-18_
 - `frontend/styles/05-tokens.css` — Figma tokens (raw hex = defect).
 - `frontend/styles/10-ui.css` — legacy recipes for unmigrated tabs.
 - `frontend/styles/20-pipeline.css` — shell nav + Pipeline.
-- `frontend/styles/25-requests.css` — Requests v2.
+- `frontend/styles/25-requests.css` — Requests: the .reqtools toolbar row, the viewport-capped filter panel, the .reqfoot footer + pager recipe (28×32 buttons, 32×32 bordered active page), column widths incl. col-runit.
 - `frontend/styles/30-planner.css` — schedules toolbar.
 - `frontend/styles/35-gantt.css` — planner body (pinned left block, --gw columns).
 - `frontend/styles/40-deadlines.css` — Deadlines on the work-card unit (owls #74/#75): the month navigator, the week lanes (collapsed / expanded with five day columns) and the one horizontal scroller, the fixed 308×180 card with the badge recipe, the SVG quote bar and the done-card opacity, the dashed empty card. No table recipes — this tab has no column table.
@@ -34,7 +34,8 @@ _last-verified: 2026-08-18_
 - `frontend/templates/partials/10-due-calendar.html` — dueCalendar: month nav, day-of-week strip, day grid, shortcuts; shared by both due popovers (root state only).
 - `frontend/templates/partials/20-deadline-card.html` — the Deadlines card partial (owl #74, node 810:122333): urgent quote bar as the frame's path, the four badge kinds, the three-line title, the links row; registered top-level like dueCalendar.
 - `frontend/templates/partials/20-filter-group.html` — ONE filter group (heading + its checkbox rows), read as a context so BOTH the Filter button's panel and a chip's hover panel render the same row. It was typed twice and had already drifted on the group's accessible name.
-- `frontend/templates/views/20-requests.html` — Requests tab: filters, table, pager, rejects.
+- `frontend/templates/partials/30-no-results.html` — noResults: the ONE no-results block (headline + subline) both Pipeline and Requests render when a search or filter empties the table (owl #77 §3) — one partial, so the copy cannot drift between tabs.
+- `frontend/templates/views/20-requests.html` — Requests tab: stat tiles (they drive the STATUS axis), the .reqtools toolbar (search + Pipeline's filter/sort buttons and panels), per-value chips, plain-header table, the .reqfoot pagination footer, the shared noResults partial, rejects.
 - `frontend/templates/views/30-pipeline.html` — Pipeline tab: KPI metrics, search, the MC table and its expanded row.
 - `frontend/templates/views/40-schedules.html` — Schedules tab: planner toolbar, the gantt, and the modals (the biggest view).
 - `frontend/templates/views/50-deadlines.html` — Deadlines tab: the month navigator and the week lanes over the schedule's own rows; read-only, nothing writes from here.
