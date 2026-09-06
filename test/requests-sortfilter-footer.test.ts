@@ -13,8 +13,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   APP_JS_CODE,
+  PIPELINE_CSS,
   REQUESTS_CSS,
   TEMPLATE,
+  TOKENS_CSS,
   cssRule,
   fnBody,
   handlerBody,
@@ -136,6 +138,57 @@ describe('the footer is a row of its own under the table', () => {
     expect(on).toMatch(/var\(--slate-300\)|#cbd5e1/i); // the 1px hairline
     expect(on).toMatch(/var\(--slate-100\)|#f1f5f9/i); // the pale fill
     expect(on, 'the active page is bolded — the node grows it instead').not.toContain('font-weight: 600');
+  });
+
+  it('draws the CHEVRONS 28 wide too — padding plus border plus the icon, not a declared number', () => {
+    /* the numbered buttons reach 28 on the floor alone: a digit is narrower
+       than 28, so their side padding never shows. A chevron cannot — a 16px
+       icon plus two sides of padding plus the row's 1px border is already
+       WIDER than the floor, and `border-box` makes that sum the whole button.
+       So the chevron's width is arithmetic over the shipped parts, and this
+       computes it rather than pinning a number the sheet does not state: 6px
+       sides shipped a 30px chevron beside 28px numbers (block 5 live pass). */
+    const token = (name: string): number =>
+      Number(TOKENS_CSS.match(new RegExp(`${name}:\\s*(\\d+)px`))![1]);
+    const px = (v: string): number => {
+      const t = v.trim().match(/^var\((--[a-z0-9-]+)\)$/);
+      return t ? token(t[1]!) : Number(v.trim().replace('px', ''));
+    };
+
+    /* every rule a plain chevron matches — a selector part ending in `.pnav`,
+       which drops the hover/focus/disabled states and the icon's own rule */
+    const bodies = [...REQUESTS_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ').matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .filter((m) => m[1]!.split(',').some((part) => part.trim().endsWith('.pnav')))
+      .map((m) => m[2]!);
+    expect(bodies.length, 'no chevron recipe in the sheet at all').toBeGreaterThan(0);
+
+    /* the cascade, in source order: later declarations win, which is how a
+       chevron-only override is allowed to correct the row's shared padding */
+    const box = { padL: 0, padR: 0, border: 0, floor: 0 };
+    let sizing = '';
+    for (const body of bodies) {
+      for (const [, prop, value] of body.matchAll(/([a-z-]+)\s*:\s*([^;]+)/g)) {
+        const v = value!.trim();
+        const sides = v.split(/\s+/);
+        if (prop === 'padding') { box.padL = px(sides[1] ?? sides[0]!); box.padR = box.padL; }
+        else if (prop === 'padding-inline') { box.padL = px(sides[0]!); box.padR = px(sides[sides.length - 1]!); }
+        else if (prop === 'padding-left') box.padL = px(v);
+        else if (prop === 'padding-right') box.padR = px(v);
+        else if (prop === 'border') box.border = px(sides[0]!);
+        else if (prop === 'min-width') box.floor = px(v);
+        else if (prop === 'box-sizing') sizing = v;
+      }
+    }
+    expect(sizing, 'the border stopped counting inside the width').toBe('border-box');
+    expect(box.floor, 'the pager floor moved off 28').toBe(28);
+
+    /* the icon measure is READ from the class the button actually wears */
+    const chevron = TEMPLATE.match(/<button class="pnav[^>]*>([\s\S]*?)<\/button>/)![1]!;
+    expect(chevron, 'the chevron is no longer the icon this sum is built on').toContain('class="i16"');
+    const icon = px(cssRule('.i16', PIPELINE_CSS).match(/width:\s*([^;]+);/)![1]!);
+
+    const drawn = box.padL + box.padR + 2 * box.border + icon;
+    expect(drawn, `the chevron draws ${drawn} wide in a 28px pager`).toBe(28);
   });
 
   it('drops the inline-bar recipe with the bar — no auto margin pushing it right', () => {

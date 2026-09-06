@@ -233,6 +233,30 @@ describe('the panels are ANCHORED, never measured (R-pf-j, JP 2026-08-21)', () =
     expect(cap, 'a capped panel with no scrollbar simply hides its last axes').toContain('overflow-y: auto');
     expect(recipe.REQ_FILTERS.filter((f) => f.scroll).map((f) => f.key)).toEqual(['requestor']);
   });
+
+  it('keeps the REQUESTOR scroller its height inside the capped panel (D3, #49)', () => {
+    /* THE CAP'S OWN BILL. The panel is a flex COLUMN — the shared
+       `.selectmenu, .duepop, .warnpop, .pipemenu` recipe — and the rule above
+       gives it a ceiling. A flex child that scrolls has an automatic minimum
+       size of ZERO, so when six axes overflow that ceiling the only child able
+       to give way is the one open-ended axis: it flattened to a strip while
+       the panel scrolled around it, and its values could be neither read nor
+       clicked. Pipeline's panel has no ceiling, so nothing there ever asks a
+       child to shrink — which is why this belongs in the Requests sheet beside
+       the cap and nowhere else.
+       Both scrolls have to be true at once (#49): the panel scrolls as a
+       whole, AND the open-ended axis scrolls inside its group. */
+    const scroller = cssRule('.reqtools .filtermenu .pmitems.pmscroll', REQUESTS_CSS);
+    expect(scroller, 'the open-ended axis can still be squeezed to nothing under the cap')
+      .toMatch(/flex:\s*none|flex-shrink:\s*0/);
+    /* the in-group ceiling it is protecting stays Pipeline's ONE declaration:
+       a child that refuses to shrink is already held to it, and a second copy
+       here is a number that cannot be kept in agreement with the first */
+    const inGroup = cssRule('.pipemenu .pmscroll', PIPELINE_CSS);
+    expect(inGroup).toMatch(/max-height:\s*168px/);
+    expect(inGroup).toContain('overflow-y: auto');
+    expect(scroller, 'a second in-group cap').not.toContain('max-height');
+  });
 });
 
 /* ---------------------------------------------------------------------- */

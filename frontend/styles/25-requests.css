@@ -90,6 +90,20 @@
   max-height: clamp(280px, calc(100vh - 464px), 912px);
   overflow-y: auto; overscroll-behavior: contain;
 }
+/* AND THE CAP'S OWN BILL. The panel is a flex column — the shared overlay
+   recipe two sheets up — so once it has a ceiling, something inside has to
+   give when six axes overflow it. A child that scrolls has an automatic
+   minimum size of zero, which makes the one open-ended axis the only child
+   able to give: it flattened to a strip nobody could read or click while the
+   panel scrolled around it. Pipeline's panel has no ceiling, so nothing there
+   ever asks a child to shrink; this is the cap's bill and it is paid here.
+   Refusing to shrink, and NOT a floor of its own: the child's flex base size
+   is its content held to the in-group ceiling the shared sheet already
+   declares, so keeping it out of the shrink pass keeps that ceiling too and
+   nothing here states a second measure. Both scrolls are then true at once
+   (#49) — the panel scrolls as a whole, the open-ended axis scrolls inside its
+   group. */
+.reqtools .filtermenu .pmitems.pmscroll { flex: none; }
 
 /* ---- E. the table footer (nodes 809:85294 / 809:85301) — the range on the
    left, the pager on the right, thirty-two tall, no fill, no rule of its own.
@@ -124,6 +138,14 @@
 .pager .pbtn, .pager .pnav {
   padding: var(--space-8) 6px; background: none; border: 1px solid transparent; cursor: pointer;
 }
+/* THE CHEVRONS are the one button in the row whose side padding shows. The
+   numbers reach the row's width on the floor above — a digit is narrower than
+   it, so their padding never decides anything. A sixteen-wide icon does not:
+   with the border counted inside the box, six a side plus the hairline sums
+   past the floor and the chevron drew two pixels wider than the numbers it
+   sits between. Five a side is what lands the sum back on the node's measure;
+   the numbers keep six, where the floor still decides. */
+.pager .pnav { padding-left: 5px; padding-right: 5px; }
 /* THE CURRENT PAGE is a boxed thirty-two square: a pale fill and a hairline,
    and the label STAYS Regular. Bold is the obvious way to mark it and is not
    what the frame does — the box is the mark. */

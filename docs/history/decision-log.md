@@ -34,6 +34,7 @@ _last-verified: 2026-08-18_
 ## Answered — operational
 
 - **2026-08-18 — Agent browser-verification runs against the deployed site, not a local dev server.** Asked this session; the practical answer today is NO local target: there is no headless dev auth path and the four auth checks are real everywhere. Passes run against the deployed site on `rt-test` / `tx8gDsTH`, synthetic fixtures only. Discipline is `test/CLAUDE.md` rule 4 — record every row's `slottedWeek` before touching anything and restore it after, zero net change. Building a dev login is JP's call and was not asked for.
+- **2026-09-06 — Block 5 gate passed (JP "go").** Requests filter + sort panels, UNIT, Recently requested, the pagination footer and the shared no-results (owl #77 §1–4): 47-row drift table, PLAN D1–D12, eight Figma nodes read through Rex before any build. Refuter verdicts, fix amendments 1–3 and the simplify pass are in `docs/history/state-log/2026-09-06.md`; the Requests frame-notes Batch 6 carries what superseded what. Deploy remains JP's word.
 
 ## Deviations proposed by the agent, approved by JP
 
