@@ -49,20 +49,21 @@
 /* ---- C/D. the toolbar row (node 809:85709) — the search field, then the
    filter and sort buttons at the right end. It is PIPELINE'S ROW, rule for
    rule: the field flexes, the two buttons hug, eight pixels apart, and the
-   hairline runs under both. `.searchbar`, `.sortfilter` and `.sfbtn` are the
-   shared recipes in 20-pipeline.css and are not restated — only the row
-   wrapper is, because a selector list cannot span two stylesheets. (One
-   recipe with two wrapper names is the seam to close if these ever move into
-   one shared sheet.)
+   hairline runs under both. NOTHING of it is restated here. The whole recipe
+   — the wrapper, the field, the button pair's box and the buttons — is
+   declared once in 20-pipeline.css, which names this row's wrapper class
+   alongside its own; the seam that block-five simplification closed was the
+   wrapper, the last two lines this sheet had copied by hand.
 
    The four select boxes this row replaced — the bar, its labels, the trigger
    and its menu — went with them: the panel is the one filter door now, and a
    second control over the same axes cannot be kept in agreement with it.
    The search field also stops zeroing its own top padding, which it did when
    it sat alone under the tiles: that padding is what gives the frame's
-   fifty-four-tall field, and the buttons ride the same line. ---- */
-.reqtools { display: flex; align-items: center; gap: var(--space-8); border-bottom: 1px solid var(--slate-100); }
-.reqtools .searchbar { flex: 1; border-bottom: none; min-width: 0; }
+   fifty-four-tall field, and the buttons ride the same line.
+
+   What IS this sheet's own is below: the panel's viewport cap, which the
+   Pipeline's five-axis panel does not need. ---- */
 
 /* THE FILTER PANEL'S VIEWPORT CAP. Six axes draw a panel the frame measures
    at nine hundred and twelve tall — more than the room under the toolbar on

@@ -354,10 +354,12 @@ async function loadAll() {
   }
 }
 
-/* §3 search text for one request row — MC#, name, use case, requestor, type,
+/* §3 search text for one request row — MC#, name, unit, requestor, type,
    brief and the frost note's ONE resolved text, so the filter and the
    highlighter agree on what counts as a match. Anything that changes a row's
-   note rebuilds this, or the two stop agreeing. */
+   note rebuilds this, or the two stop agreeing. The unit reads the wire field,
+   which keeps the sheet's older name: D1 renamed the word on screen, never the
+   storage. */
 const requestBlob = (r) =>
   `${r.mc_number || ''} ${r.name || ''} ${r.use_case || ''} ${r.requestor || ''} ${r.asset_type || ''} ${r.brief || ''} ${noteText(r.note)}`.toLowerCase();
 /* One pass per load: the search blob plus the two sort keys whose derivation

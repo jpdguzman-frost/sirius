@@ -92,6 +92,33 @@ and the feature is Sirius-owned and audit-logged — read-only applies to the
 source systems, not to this column. The editor is kept. **Asked of Miles: if
 the cell is genuinely read-only, where should the edit affordance live?**
 
+## Batch 6 — Filter + Sort panels, UNIT, Recently requested, the footer, one no-results (owl #77 §1–4, block 5, 2026-09-06)
+
+Nodes read through Rex, geometry from the nodes never the prose: `809:85709`
+(default), `795:71554` / `795:67981` (filter panel checked / resting),
+`809:87722` / `809:87697` (sort panel), `795:72905` / `841:37792` (indicator),
+`809:111116` (no-results). Full drift table and node findings in
+`docs/history/state-log/2026-09-06.md`. Decisions D1–D12 + fix amendments 1–3
+in the same log (the day's PLAN.md rotated there).
+
+**What supersedes what.**
+
+| ID | Ruling | Shipped |
+|---|---|---|
+| **R-rq-a** | **The four inline selects are GONE; six filter axes live in Pipeline's panel** (`.sortfilter` / `.pipemenu` / one `filterGroup` partial, dispatching by table — D10): YEAR · MONTH · TYPE · UNIT · REQUESTOR · STATUS in the node's order, per-value counts under R-pf-c/d, `None` derived on every axis but STATUS (D11). Supersedes rulings **8** and **18**'s "the dropdowns key on them" — the axes do. REQUESTOR keeps the in-group scroll (#49); the PANEL is viewport-capped with its own scroll and a 280px floor (D3, L1) because six axes cannot fit one viewport. | Yes — `test/requests-sortfilter-filters` / `-panels` |
+| **R-rq-b** | **STATUS is a three-valued FILTER axis over a two-valued BADGE** (D2): `In Pipeline` · `For Filing` · `For Clarification`, derived from the one segment table, a clarified unfiled row belonging to both unfiled values (owl #14's subset rule). Batch 5's badge and vocabulary rulings 21–23 are UNCHANGED; `Filed` never appears (owl #77 §2). The counts therefore sum past the row count on this axis, by design. | Yes — D2 membership pinned |
+| **R-rq-c** | **The Breakdown tiles DRIVE the STATUS axis** (D4, F10): a tile click ticks exactly that value (its chip appears), clicking the pressed tile clears, REQUESTS clears; a tile is pressed when its value is IN the selection, so two ticked values press two tiles (H2). `requestFilter` state is retired. Amends ruling **2** — still one state, now shared with the panel. | Yes — executed door + rendered tiles |
+| **R-rq-d** | **Header-click sorting is RETIRED; the sort panel is the one sort door** (D6, "sort replaces"). Eight options in two groups from node `809:87722` — DATES: Deadline closest to now · Deadline farthest from now · Recently requested · Oldest request first; IDENTITY: MC Number: Low to High · MC Number: High to Low · Deliverable Name: A–Z · Deliverable Name: Z–A — single-select, re-pick clears, Clear Sort disabled at rest, the button names its selection (R-pf-f). The node's hidden PRIORITY group is NOT built. Headers render plain: the frame's identical inactive chevrons on all eleven columns are decoration. Supersedes ruling **19** (owl #18) in full and closes ruling **6** the other way. | Yes — `test/requests-sortfilter-sorts` |
+| **R-rq-e** | **The default order is the SHEET ROW, descending — `Recently requested`** (owl #77 §2, D12), an unlisted order the listed `recent` reproduces; Clear Sort returns to it. NEVER year + month (the pre-block-5 `reqDefaultOrder`, which tied every row of a month). `sheet_row` is the live row position rewritten each sync — Miles's stated convention, no immutable filing field invented. Ties → sheet row ascending; missing values last both ways. | Yes — the first test written this block |
+| **R-rq-f** | **The divergence guard** (owl #77 §2, D5): `reqOrderDivergence` counts adjacent pairs along ascending sheet row whose (year, month) go backwards; when > 0 the sync strip carries one sentence — "…disagree in N place(s), so Recently requested may be out of order." Placement asked of Miles. | Yes |
+| **R-rq-g** | **USE CASE → UNIT is a LABEL** (D1): storage and wire keep `use_case`; the parser aliases BOTH `Business Unit` (the ruled name — it wins by NAME when a tab carries both, never by column position, R3) and the older `Use Case`; the class is `col-runit` (160px, the node's width). A comma-separated value is stored WHOLE and logged as one worker warning built from the warning's own fields (U3, R6) — never split, never a reject. Whether the live column is single-valued stays unverifiable until the Sheets credential (U5). | Yes — header-label guard now covers Requests (owl #77 §4.3) |
+| **R-rq-h** | **Chips: ONE PER VALUE on Requests** (owl #77 §1, D7) — Pipeline stays per axis (R-pf-l); one `.fchip` recipe, two list builders; a ✕ removes its one value; the row wraps and `Clear all` wraps with it (JP 2026-08-21). A chip's hover panel is keyed on axis AND value (`chipPopValue`, fix amendment 1) and follows the pointer between sibling chips (fix amendment 2); it draws the axis group from `reqFacets`. | Yes |
+| **R-rq-i** | **Pagination is a FOOTER inside the rows branch** (node `809:85294`): full table width × 32, no border, "Showing 1-10 of N requests" (14px, counts SemiBold slate-900), page buttons 28×32 unboxed, the active page 32×32 with a slate-300 hairline on slate-100, weight unchanged; drawn whenever rows exist, one page included (D8). Page size stays 10 (ruling **4**). The footer leaves with the table in the no-results state (§3). | Yes — `test/requests-sortfilter-footer` |
+| **R-rq-j** | **One no-results block for both tabs** (owl #77 §3, D9): `{{>noResults}}` from `frontend/templates/partials/30-no-results.html`, `.pnores*` recipes in 10-ui.css; shown only when the READER emptied the table (a query or a chip) and never for a project the sheet emptied (L2); tiles and toolbar stay. | Yes — the two tabs' blocks compared byte-for-byte |
+| **R-rq-k** | **Clear strings are Pipeline's shipped ones** — `Clear filter` · `Clear Sort` · `Clear all`; the Requests node writes `Clear Filter` and Pipeline's reference node `Clear sort`. Flagged to Miles; one recipe ships. Escape / pick / Clear from inside any panel returns focus to its button (H1, both tabs). | Yes |
+
+**Node findings recorded, not built**: MONTH's stray placeholder row; the greyed `Clear Filter` in the checked state; the detached multi-chip frame with an inconsistent `Clear all` gap; the footer's mock page numbers; the unlabeled sort button (built identical to Pipeline); the no-results search field pre-filled with sample text.
+
 ## Data reality
 
 Production intake is empty (`GOOGLE_SHEETS_CREDENTIALS` deferred), so both live

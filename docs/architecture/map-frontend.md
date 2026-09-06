@@ -24,8 +24,8 @@ _last-verified: 2026-08-18_
 - `frontend/styles/00-base.css` — legacy aliases onto tokens.
 - `frontend/styles/05-tokens.css` — Figma tokens (raw hex = defect).
 - `frontend/styles/10-ui.css` — shared UI recipes: the noResults block both Pipeline and Requests render (moved here in block 5, owl #77 §3), plus the legacy recipes the unmigrated tabs still use.
-- `frontend/styles/20-pipeline.css` — shell nav + Pipeline.
-- `frontend/styles/25-requests.css` — Requests: the .reqtools toolbar row, the viewport-capped filter panel, the .reqfoot footer + pager recipe (28×32 buttons, 32×32 bordered active page), column widths incl. col-runit.
+- `frontend/styles/20-pipeline.css` — shell nav + Pipeline; also the toolbar recipe both tabs wear (.pipetools/.reqtools, .searchbar, .sortfilter, .sfbtn, .pipemenu, .fchip).
+- `frontend/styles/25-requests.css` — Requests: the viewport-capped filter panel, the .reqfoot footer + pager recipe (28×32 buttons, 32×32 bordered active page), column widths incl. col-runit.
 - `frontend/styles/30-planner.css` — schedules toolbar.
 - `frontend/styles/35-gantt.css` — planner body (pinned left block, --gw columns).
 - `frontend/styles/40-deadlines.css` — Deadlines on the work-card unit (owls #74/#75): the month navigator, the week lanes (collapsed / expanded with five day columns) and the one horizontal scroller, the fixed 308×180 card with the badge recipe, the SVG quote bar and the done-card opacity, the dashed empty card. No table recipes — this tab has no column table.

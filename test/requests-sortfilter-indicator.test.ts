@@ -238,12 +238,19 @@ describe('a Requests column and everything that names it use the SAME word', () 
     }
   });
 
-  it('keeps the SORT keys on the column table, and the UNIT one renamed with it', () => {
-    /* the axis key, the class and the sort key are one word in three places;
-       `case` surviving anywhere is the rename half-done */
-    expect(COLS.find((c) => c.cls === 'col-runit')!.sort).toBe('unit');
-    expect(COLS.map((c) => c.sort).filter(Boolean)).not.toContain('case');
-    expect(recipe.REQ_FILTERS.map((f) => f.key)).toContain('unit');
+  it('renames the UNIT axis, its column and its word together — no `case` left', () => {
+    /* the axis key, the column class and the word are ONE rename in three
+       places; `case` surviving in any of them is the rename half-done. The
+       per-column sort key is not a fourth place any more: it went with the
+       header click (D6, simplification 2026-09-06), so the axis key is the
+       only sort word a Requests column still answers to. */
+    const unit = recipe.REQ_FILTERS.find((f) => f.key === 'unit');
+    expect(unit, 'no `unit` axis on the filter table').toBeTruthy();
+    expect(unit!.col).toBe('col-runit');
+    expect(unit!.label).toBe('Unit');
+    expect(COLS.map((c) => c.cls)).toContain('col-runit');
+    expect(JSON.stringify(COLS), 'the old `case` spelling survives on a column').not.toContain('case');
+    expect(recipe.REQ_FILTERS.map((f) => f.key)).not.toContain('case');
   });
 
   it('keeps the UNIT word off the wire — the rename is a LABEL (D1)', () => {

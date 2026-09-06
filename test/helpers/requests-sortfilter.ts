@@ -21,13 +21,14 @@ import {
   APP_JS,
   APP_JS_CODE,
   COMPUTED_CTX_JS,
-  TEMPLATE,
+  type RequestsViewState,
   decl,
   divFragment,
   handlerBody,
   method,
+  partialBody,
   pipeTableData,
-  tabView,
+  renderRequests as ganttRenderRequests,
 } from './gantt-render.ts';
 
 interface RactiveCtor {
@@ -55,7 +56,7 @@ export interface ReqSortDef { key: string | null; group?: string; label?: string
 export interface ReqFacetValue { value: string | number | null; label: string; count: number; on: boolean }
 export interface ReqFacet { table: string; key: string; label: string; scroll?: boolean; values: ReqFacetValue[] }
 export interface ReqChip { key: string; axis: string; value: string | number | null; label: string }
-export interface ReqCol { cls: string; label: string; sort?: string }
+export interface ReqCol { cls: string; label: string }
 export type ReqFixture = Record<string, unknown> & { sheet_row: number };
 
 /**
@@ -69,8 +70,7 @@ export type ReqFixture = Record<string, unknown> & { sheet_row: number };
 const REQ_SUPPORT_NAMES = [
   'MONTHS_SHORT', 'MONTHS_LONG', 'monthShort', 'monthOrder',
   'STATUS_FILED', 'clarified', 'REQUEST_SEGMENTS', 'noteText', 'REQ_PAGE_SIZE',
-  'alphaSort', 'numCmp', 'ciCmp', 'unranked', 'monthRank', 'mcRank', 'sheetRowAsc',
-  'cmpNullsLast', 'pipeValueLabel',
+  'alphaSort', 'unranked', 'mcRank', 'cmpNullsLast',
   'requestBlob', 'blobRequests',
 ];
 /**
@@ -344,78 +344,27 @@ export const reqHarness = (init: Record<string, unknown> = {}): ReqHarness => {
 
 /* ---- the render harness ------------------------------------------------ */
 
-/** One `{{#partial name}}…{{/partial}}` body out of the shipped template. */
-export const partialBody = (name: string, src: string = TEMPLATE): string => {
-  const marker = `{{#partial ${name}}}`;
-  const open = src.indexOf(marker);
-  const close = src.indexOf('{{/partial}}', open);
-  if (open < 0 || close < 0) throw new Error(`requests-sortfilter: no \`${name}\` partial in the shipped template`);
-  return src.slice(open + marker.length, close);
-};
-
-const partials = (): Record<string, string> => ({
-  reqSyncStrip: partialBody('reqSyncStrip'),
-  filterGroup: partialBody('filterGroup'),
-  noResults: partialBody('noResults'),
-});
-
 /**
- * The Ractive data the Requests TAB reads. Every array the template iterates
- * is stubbed (rule 6) — a section that renders empty must do so visibly, not
- * because its list was never supplied — and the helpers the cells call are
- * the shipped ones where a suite executes their maths elsewhere.
+ * The whole Requests tab, rendered from the shipped template — ONE renderer,
+ * `gantt-render`'s, with the one default these suites need on top: rows
+ * LOADED, so the outer `{{#if requests.length || rejects.length}}` gate is
+ * open and each state below can decide for itself what the reader can still
+ * SEE (`reqFiltered` / `reqRows`).
+ *
+ * This file kept a second copy of that forty-key data block until the block-5
+ * simplification (review R5). The copies drifted the moment `chipPopValue`
+ * landed in only one of them, which is the whole argument against a second
+ * one (test/CLAUDE.md rule 2, applied to the harness rather than the values).
  */
-const reqRenderData = (): Record<string, unknown> => ({
-  activeTab: 'requests',
-  // the OUTER gate: the tab has rows loaded. What the reader can see is
-  // `reqFiltered`/`reqRows`, which each state below sets for itself.
-  requests: [row()],
-  rejects: [],
-  reqStats: [],
-  reqFilters: recipe.REQ_FILTERS_EMPTY(),
-  reqQ: '',
-  reqFacets: [],
-  reqChips: [],
-  reqFilterCount: 0,
-  reqFilterMenu: null,
-  reqSortMenu: null,
-  reqSort: null,
-  reqSortLabelText: '',
-  REQ_SORT_GROUPS: [],
-  chipPop: null,
-  chipPopFlip: false,
-  reqCols: recipe.REQ_COLS,
-  reqRows: [],
-  reqFiltered: [],
-  reqNoResults: false,
-  reqPage: 1,
-  reqPageCount: 1,
-  reqPages: [],
-  reqPageRange: { from: 0, to: 0, total: 0 },
-  reqOrderDivergence: 0,
-  reqThumb: { needed: false, left: 0, width: 100 },
-  syncStripLabel: 'synced 9:00 AM',
-  statusFiled: recipe.STATUS_FILED,
-  clarified: recipe.clarified,
-  noteText: (n: unknown) => (n ? String((n as { remark?: string }).remark ?? '') : ''),
-  noteEditing: null,
-  noteDraft: { remark: '', clarify: false },
-  noteError: '',
-  icon: {},
-  sheetRowUrl: () => '',
-  hlr: (s: unknown) => String(s ?? ''),
-  fmtLong: (s: unknown) => String(s ?? ''),
-  monthShort: recipe.monthShort,
-  clip180: (s: unknown) => String(s ?? ''),
-});
-
-/** The whole Requests tab, rendered from the shipped template for one view state. */
-export const renderRequests = (state: Record<string, unknown> = {}): string =>
-  new Ractive({
-    template: tabView('requests'),
-    partials: partials(),
-    data: { ...reqRenderData(), ...state },
-  }).toHTML();
+export type ReqViewState = Omit<RequestsViewState, 'reqRows' | 'reqStats' | 'reqFacets' | 'reqChips'> & {
+  /** the fixtures this file builds, and the computeds it reads back — both untyped on purpose */
+  reqRows?: unknown[];
+  reqStats?: unknown;
+  reqFacets?: unknown;
+  reqChips?: unknown;
+};
+export const renderRequests = (state: ReqViewState = {}): string =>
+  ganttRenderRequests({ requests: [row()], ...state } as RequestsViewState);
 
 /**
  * Pipeline's own no-results render, for the ONE assertion that needs both
@@ -425,7 +374,7 @@ export const renderRequests = (state: Record<string, unknown> = {}): string =>
 export const renderPipeNoResults = (): string =>
   new Ractive({
     template: divFragment('<div class="pipestack">'),
-    partials: partials(),
+    partials: { filterGroup: partialBody('filterGroup'), noResults: partialBody('noResults') },
     data: {
       searchQ: '',
       pipeFilterCount: 0,

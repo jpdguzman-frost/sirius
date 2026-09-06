@@ -876,16 +876,15 @@ export interface RequestsTableState {
   noteEditing?: string | null;
 }
 
-/** One header column, by the three fields the table DRAWS. */
+/** One header column, by the two fields the table DRAWS. */
 export interface ReqColDef {
   cls: string;
   label: string;
-  sort: string;
 }
 
 /**
  * The header columns, DERIVED — the shipped `REQ_COLS` sliced out of the app
- * scripts and executed, then reduced to the three display fields.
+ * scripts and executed.
  *
  * It was a hand-typed second copy until block 5 (test/CLAUDE.md rule 2, "derive,
  * don't copy"): the UNIT rename (`col-rcase`/`Use Case` → `col-runit`/`Unit`,
@@ -893,40 +892,35 @@ export interface ReqColDef {
  * would have rendered the retired class under a green suite. Now a rename that
  * misses one of them cannot be missed — this reads the one the browser runs.
  *
- * The comparators are PARAMETERS, not sliced: `REQ_COLS` names them at
- * declaration, so they must resolve for the array to evaluate, but nothing
- * here may run them — the sort recipe's own arithmetic is executed by the
- * requests-sortfilter suites. An entry that grows a dependency this list does
- * not carry fails loudly with the missing name rather than silently.
+ * The slice takes no parameters: since D6 retired the header click, an entry is
+ * a class and a word, and it names nothing outside its own literal. An entry
+ * that grows a dependency fails loudly here with the missing name.
  */
 const reqColsBySrc = new Map<string, ReqColDef[]>();
 export function reqCols(src: string = APP_JS): ReqColDef[] {
   const hit = reqColsBySrc.get(src);
   if (hit !== undefined) return hit;
-  const notCalled = () => {
-    throw new Error('gantt-render: a REQ_COLS comparator ran — this slice keeps the display fields only');
-  };
-  const shipped = new Function('numCmp', 'ciCmp', 'alphaSort', `${decl(src, 'REQ_COLS')}\nreturn REQ_COLS;`)(
-    notCalled,
-    notCalled,
-    notCalled,
-  ) as Array<{ cls: string; label: string; sort?: string }>;
-  const cols = shipped.map((c) => ({ cls: c.cls, label: c.label, sort: c.sort ?? '' }));
+  const shipped = new Function(`${decl(src, 'REQ_COLS')}\nreturn REQ_COLS;`)() as ReqColDef[];
+  const cols = shipped.map((c) => ({ cls: c.cls, label: c.label }));
   reqColsBySrc.set(src, cols);
   return cols;
 }
 
 /**
- * The three shipped client members the Requests view branches on, executed out
- * of the app scripts: the ONE status literal, THE clarification predicate and
- * the note resolver. Sliced rather than restated — the template asks
- * `clarified(r)` and the segment filter asks `clarified(r)`, so a render proof
- * that retyped either would prove a fiction (test/CLAUDE.md rule 2).
+ * The shipped client members the Requests view branches on, executed out of
+ * the app scripts: the ONE status literal, THE clarification predicate, the
+ * note resolver and the month normaliser. Sliced rather than restated — the
+ * template asks `clarified(r)` and the segment filter asks `clarified(r)`, so a
+ * render proof that retyped either would prove a fiction (test/CLAUDE.md
+ * rule 2). `monthShort` is here for the same reason: the MONTH column and the
+ * MONTH filter axis are meant to draw one word for 'August', 'Aug' and the
+ * number eight, and a stub that echoed the raw cell would hide a split.
  */
 export interface ReqClient {
   STATUS_FILED: string;
   clarified: (r: ReqRow) => boolean;
   noteText: (n: ReqNote | null) => string;
+  monthShort: (raw: unknown) => string;
 }
 const reqClientBySrc = new Map<string, ReqClient>();
 export function reqClient(src: string = APP_JS): ReqClient {
@@ -936,7 +930,10 @@ export function reqClient(src: string = APP_JS): ReqClient {
     ${decl(src, 'STATUS_FILED')}
     ${decl(src, 'clarified')}
     ${decl(src, 'noteText')}
-    return { STATUS_FILED, clarified, noteText };
+    ${decl(src, 'MONTHS_SHORT')}
+    ${decl(src, 'MONTHS_LONG')}
+    ${decl(src, 'monthShort')}
+    return { STATUS_FILED, clarified, noteText, monthShort };
   `)() as ReqClient;
   reqClientBySrc.set(src, client);
   return client;
@@ -949,7 +946,7 @@ const reqCellHelpers = (): Record<string, unknown> => ({
   sheetRowUrl: () => '',
   hlr: (s: unknown) => String(s ?? ''),
   fmtLong: (s: unknown) => String(s ?? ''),
-  monthShort: (s: unknown) => String(s ?? ''),
+  monthShort: reqClient().monthShort,
   clip180: (s: unknown) => String(s ?? ''),
 });
 
@@ -987,10 +984,14 @@ export function renderRequestsTable(state: RequestsTableState): string {
  *
  * Every array the template iterates is stubbed (rule 6) — `reqStats`,
  * `reqFacets`, `reqChips`, `reqFiltered`, `reqRows`, `reqPages`, `requests`,
- * `rejects` — so a section that renders nothing renders nothing VISIBLY
- * rather than passing vacuously. `extra` is the escape hatch for a key this
- * helper does not know yet (a panel array a sibling suite drives), spread
- * last so a caller can also override a default.
+ * `rejects`, `REQ_SORT_GROUPS` — so a section that renders nothing renders
+ * nothing VISIBLY rather than passing vacuously. `extra` is the escape hatch
+ * for a key this helper does not know yet (a panel array a sibling suite
+ * drives), spread last so a caller can also override a default.
+ *
+ * ONE renderer for the whole tab: the sort/filter suites kept a second copy of
+ * this data block until the block-5 simplification (review R5), and the two
+ * drifted the moment `chipPopValue` landed in only one of them.
  */
 export interface RequestsViewState {
   /** the page slice the table draws; also the default for `reqFiltered` */
@@ -1006,15 +1007,21 @@ export interface RequestsViewState {
   reqFacets?: Array<Record<string, unknown>>;
   reqChips?: Array<Record<string, unknown>>;
   reqFilterCount?: number;
+  reqQ?: string;
   reqSort?: string | null;
   reqSortLabelText?: string;
   reqFilterMenu?: string | null;
   reqSortMenu?: string | null;
+  /** the sort panel's groups — a computed on the app, an array here */
+  REQ_SORT_GROUPS?: Array<Record<string, unknown>>;
+  /** the hovered chip's axis, and (Requests only) the one value under it */
   chipPop?: string | null;
+  chipPopValue?: unknown;
   reqPage?: number;
   reqPages?: Array<Record<string, unknown>>;
   reqPageCount?: number;
   reqPageRange?: { from: number; to: number; total: number };
+  reqOrderDivergence?: number;
   noteEditing?: string | null;
   extra?: Record<string, unknown>;
 }
@@ -1034,7 +1041,7 @@ export function renderRequests(state: RequestsViewState = {}): string {
       rejects: state.rejects ?? [],
       syncStripLabel: '',
       reqStats: state.reqStats ?? [],
-      reqQ: '',
+      reqQ: state.reqQ ?? '',
       reqFilters: state.reqFilters ?? { year: [], month: [], type: [], unit: [], requestor: [], status: [] },
       reqFacets: state.reqFacets ?? [],
       reqChips: state.reqChips ?? [],
@@ -1043,17 +1050,20 @@ export function renderRequests(state: RequestsViewState = {}): string {
       reqSortLabelText: state.reqSortLabelText ?? '',
       reqFilterMenu: state.reqFilterMenu ?? null,
       reqSortMenu: state.reqSortMenu ?? null,
+      REQ_SORT_GROUPS: state.REQ_SORT_GROUPS ?? [],
       chipPop: state.chipPop ?? null,
+      chipPopValue: state.chipPopValue ?? null,
       chipPopFlip: false,
       reqFiltered: state.reqFiltered ?? rows,
       reqNoResults: state.reqNoResults ?? false,
       reqRows: rows,
       reqCols: reqCols(),
-      reqThumb: { needed: false },
+      reqThumb: { needed: false, left: 0, width: 100 },
       reqPage: state.reqPage ?? 1,
       reqPages: state.reqPages ?? [],
       reqPageCount: state.reqPageCount ?? 1,
       reqPageRange: state.reqPageRange ?? { from: 0, to: 0, total: 0 },
+      reqOrderDivergence: state.reqOrderDivergence ?? 0,
       statusFiled: client.STATUS_FILED,
       clarified: client.clarified,
       noteText: client.noteText,

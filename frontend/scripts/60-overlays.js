@@ -54,8 +54,12 @@ const OVERLAY_SHIELDS = {
   warnPop: '.warnpop',
   pipeSortMenu: '.sfbtn, .pipemenu',
   pipeFilterMenu: '.sfbtn, .pipemenu',
-  /* the Requests panels are the same component under their own toolbar; the
-     scope says whose trigger and whose box each entry means, as the list asks */
+  /* the Requests panels are the same component under their own toolbar, so the
+     scope only says WHICH toolbar each entry means. It narrows nothing today:
+     the one consumer is the union below, where the Pipeline pair's unscoped
+     pair already covers these two — a scope is documentation until something
+     reads an entry on its own. Kept because it is the honest answer to "whose
+     trigger and whose box", which is what this map is a record of. */
   reqSortMenu: '.reqtools .sfbtn, .reqtools .pipemenu',
   reqFilterMenu: '.reqtools .sfbtn, .reqtools .pipemenu',
   /* the chip AND the panel it opens: the panel is a DOM child of the chip, so
@@ -63,7 +67,10 @@ const OVERLAY_SHIELDS = {
      what the reader can point at. */
   chipPop: '.fchip, .pipemenu',
 };
-/** One selector string, derived — the click dismisser's ignore list. */
+/** One selector string, derived — the click dismisser's ignore list, and the
+    ONLY reader of the map above: every entry's selectors are unioned, so a
+    broader entry covers a narrower one and no entry can shield less than the
+    whole set. */
 const OVERLAY_SHIELD = [...new Set(OVERLAY_KEYS.flatMap((k) => OVERLAY_SHIELDS[k].split(',').map((x) => x.trim())))].join(', ');
 /* The SCROLL dismisser shields only the boxes that can scroll INSIDE
    themselves — a scroll an overlay answers itself must not dismiss it. The

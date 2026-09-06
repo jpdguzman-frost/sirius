@@ -220,11 +220,12 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
 });
 
 describe('the search field keeps its own recipe', () => {
-  it('declares the SHARED .searchbar base — three tabs wear it', () => {
+  it('declares the SHARED .searchbar base — every tab with a field wears it', () => {
     /* THE DEFECT: owl #62 wrapped the field in `.pipetools` and deleted this
        block in the same hunk. Without `display: flex` the icon and the input
-       stacked vertically on Pipeline, Requests AND Deadlines, and the two
-       modifier rules (`.reqsearch`, `.dlsearch`) were left modifying nothing. */
+       stacked vertically on every tab that had a search field, and the two
+       per-tab classes that were supposed to modify this rule matched nothing
+       at all — they were dropped in the block-five simplification. */
     const base = cssRule('.searchbar', PIPELINE_CSS);
     expect(base).toContain('display: flex');
     expect(base).toContain('align-items: center');

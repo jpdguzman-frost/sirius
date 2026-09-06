@@ -164,8 +164,8 @@
 .fchip:hover .fchipx { color: var(--white); border-left-color: var(--slate-700); }
 .fchip:hover .fchipx:hover { background: var(--slate-700); }
 /* Clear all IS the panel's Clear — same Figma Button-Small/Blue, same handler.
-   It wears `.pmclear` and adds only what differs, the way `.reqsearch` and
-   `.dlsearch` modify `.searchbar` rather than restating it. */
+   It wears `.pmclear` and adds only the one thing that differs, rather than
+   restating the whole recipe under a second name. */
 .fclearall { flex: none; }
 
 /* THE CHIP'S HOVER PANEL (node 593:80073). Same dropdown chrome as the Filter
@@ -202,12 +202,13 @@
 
 
 /* ---- search + callout (annotations 17:2057, 70:1211) ---- */
-/* THE SEARCH FIELD'S OWN RECIPE — shared by Pipeline, Requests and Deadlines.
-   Owl #62 wrapped it in `.pipetools` and, in doing so, deleted this block: the
-   field lost `display: flex`, so its icon and input stacked vertically on every
-   tab, and Requests and Deadlines lost the padding and the hairline underneath
-   as well. `.reqsearch` and `.dlsearch` are MODIFIERS of this rule and were
-   left modifying nothing. */
+/* THE SEARCH FIELD'S OWN RECIPE — one rule, worn unmodified by both tabs that
+   have a search field. Owl #62 wrapped it in `.pipetools` and, in doing so,
+   deleted this block: the field lost `display: flex`, so its icon and input
+   stacked vertically on every tab, and the other tabs lost the padding and the
+   hairline underneath as well. Nothing overrides it per tab — the two
+   per-tab modifier classes that once claimed to were empty, and were dropped
+   with the block-five simplification. */
 .searchbar {
   display: flex; align-items: center; gap: var(--space-8);
   padding: 16px 0 17px; border-bottom: 1px solid var(--slate-100);
@@ -215,9 +216,17 @@
 /* owl #62, node 592:56850 — the search field and the two buttons are ONE row.
    The rule below keeps the field's own padding/border so the row reads exactly
    as it did before the buttons arrived; the border moves to the wrapper so it
-   runs under both. */
-.pipetools { display: flex; align-items: center; gap: var(--space-8); border-bottom: 1px solid var(--slate-100); }
-.pipetools .searchbar { flex: 1; border-bottom: none; min-width: 0; }
+   runs under both.
+
+   ONE RECIPE, TWO WRAPPER NAMES. Requests wears the same row and wore a
+   hand-copy of these two lines in its own sheet until the block-five
+   simplification; the copy is what drifts. The rest of the row — the field,
+   the button pair's box and the panels — is already declared once, just below
+   and just above, so the wrapper is the only part that needs both names. Both
+   sheets concatenate into one stylesheet, and this one loads first: a per-tab
+   rule that must win still can, on a longer selector rather than on order. */
+.pipetools, .reqtools { display: flex; align-items: center; gap: var(--space-8); border-bottom: 1px solid var(--slate-100); }
+.pipetools .searchbar, .reqtools .searchbar { flex: 1; border-bottom: none; min-width: 0; }
 /* THE PANELS' ANCHOR. Both hang off this row, not off either button — see the
    template note: the sort button's growth would otherwise drag the filter panel
    up to 196px sideways. This row's right edge is the page inset, so it does not
@@ -241,10 +250,12 @@
 /* ACTIVE — fill AND stroke slate-900, white icon. Both buttons take it; only
    the sort one also takes a label. */
 .sfbtn.on { background: var(--slate-900); border-color: var(--slate-900); color: var(--white); }
-/* The cap that keeps the row stable (node 592:56966). At 12px the longest of
-   the eight labels measures ~235px, so nothing truncates today — the cap is
-   here so a FUTURE label cannot push the search field around. Nothing is lost:
-   the applied sort is also marked inside the popup. */
+/* The cap that keeps the row stable (node 592:56966). Both tabs wear this
+   button and their sort lists are different lengths, so no count belongs in
+   here: at the label size the longest option on either tab still measures
+   under the cap and nothing truncates today. The cap is here so a FUTURE label
+   cannot push the search field around. Nothing is lost: the applied sort is
+   also marked inside the popup. */
 .sfbtn .sflabel {
   max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: var(--text-label); line-height: 1; color: var(--white);

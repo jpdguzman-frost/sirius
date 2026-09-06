@@ -17,6 +17,7 @@ import {
   handlerBody,
   method,
   observerCalls,
+  reqCols,
   tabView,
 } from './helpers/gantt-render.ts';
 import { type Axis, recipe, row, sel, toolbarComputeds } from './helpers/pipeline-sortfilter.ts';
@@ -486,14 +487,9 @@ describe('a column and the filter that narrows it use the SAME word', () => {
     expect(COLS.map((c) => c.label)).not.toContain('Client');
 
     /* Requests is where it went, and #66's spelling still binds there. The
-       shipped `REQ_COLS` is EXECUTED, not grepped — the comparators it names
-       are passed in as parameters because only the LABELS are under test and a
-       sort function is a different suite's business. */
-    const reqCols = new Function(
-      'numCmp', 'ciCmp', 'alphaSort',
-      `${decl(APP_JS, 'REQ_COLS')} return REQ_COLS;`,
-    )(null, null, null) as Array<{ label: string }>;
-    expect(reqCols.map((c) => c.label)).toContain('Requestor');
-    expect(reqCols.map((c) => c.label)).not.toContain('Client');
+       shipped `REQ_COLS` is EXECUTED, not grepped — through the one slicer the
+       Requests render suites already read it with. */
+    expect(reqCols().map((c) => c.label)).toContain('Requestor');
+    expect(reqCols().map((c) => c.label)).not.toContain('Client');
   });
 });

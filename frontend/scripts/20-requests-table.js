@@ -1,10 +1,9 @@
 /* ---- the comparators every Requests list shares ------------------------- */
 const alphaSort = (a, b) => String(a).localeCompare(String(b));
-const numCmp = (a, b) => a - b;
-const ciCmp = (a, b) => String(a).toLowerCase().localeCompare(String(b).toLowerCase());
 /* A missing value is not "small" — it is UNRANKED, so it lands last whichever
-   way a sort's direction points. Every comparator below routes its nulls here
-   rather than inventing a sentinel that would flip with the direction. */
+   way a sort's direction points. The two reading passes below (the matcher and
+   the facet count) route a blank through here so it becomes the one None value
+   rather than a sentinel that would flip with the direction. */
 const unranked = (v) => v === null || v === undefined || v === '';
 
 /* MC # sorts NATURALLY — on the number inside the label, so MC-9 precedes
@@ -27,30 +26,30 @@ const mcRank = (mc) => {
    below reads each axis's `label` from here through reqColLabel, so the word
    above a column and the word on that column's filter heading and chip are one
    string, not two strings a guard compares — the Client/Requestor drift that
-   PIPE_COLS closed for the Pipeline (2026-08-25). The `sort` keys stay on the
-   entries, because the header-label guard reads them; no header click reads
-   them any more — the sort panel is the ONE sort door (D6) and the headers
-   render as plain cells. Widths live in 25-requests.css keyed on the same class.
+   PIPE_COLS closed for the Pipeline (2026-08-25). A column is now a CLASS and a
+   WORD and nothing else: the per-column sort key, accessor and comparator went
+   with the header click (D6 — the sort panel is the ONE sort door, and it keeps
+   its own value functions in REQ_SORTS). Widths live in 25-requests.css keyed
+   on the same class.
 
    UNIT is a LABEL (D1). The sheet's own column reads "Business Unit", and the
-   parser aliases that name, with "Use Case", onto the one stored field — so
-   the entry keeps `use_case` as its accessor and changes only what the reader
-   sees. The word (`Unit`), the class (`col-runit`) and the sort key (`unit`)
-   moved together, so the header, the body cells and the width rule cannot
-   drift apart over a rename only half of them received. */
+   parser aliases that name, with "Use Case", onto the one stored field — so the
+   axis keeps `use_case` as its accessor and only what the reader sees changed.
+   The word (`Unit`) and the class (`col-runit`) moved together, so the header,
+   the body cells and the width rule cannot drift apart over a rename only half
+   of them received. */
 const REQ_COLS = [
-  { cls: 'col-ryear', label: 'Year', sort: 'year', val: (r) => r.year, cmp: numCmp },
-  { cls: 'col-rmonth', label: 'Month', sort: 'month', val: (r) => r._monthIdx, cmp: numCmp },
-  { cls: 'col-rmc', label: 'MC #', sort: 'mc', val: (r) => r._mcRank, cmp: numCmp },
-  { cls: 'col-rname', label: 'Deliverable', sort: 'name', val: (r) => r.name, cmp: ciCmp },
-  { cls: 'col-rtype', label: 'Type', sort: 'type', val: (r) => r.asset_type, cmp: ciCmp },
-  { cls: 'col-runit', label: 'Unit', sort: 'unit', val: (r) => r.use_case, cmp: ciCmp },
-  { cls: 'col-rwho', label: 'Requestor', sort: 'who', val: (r) => r.requestor, cmp: ciCmp },
-  // ISO 'YYYY-MM-DD' compares chronologically as a plain string
-  { cls: 'col-rdue', label: 'Deadline', sort: 'due', val: (r) => r.deadline, cmp: alphaSort },
-  { cls: 'col-rbrief', label: 'Brief', sort: '' },
-  { cls: 'col-rstatus', label: 'Status', sort: 'status', val: (r) => r.status, cmp: ciCmp },
-  { cls: 'col-rnote', label: 'Frost Notes', sort: '' },
+  { cls: 'col-ryear', label: 'Year' },
+  { cls: 'col-rmonth', label: 'Month' },
+  { cls: 'col-rmc', label: 'MC #' },
+  { cls: 'col-rname', label: 'Deliverable' },
+  { cls: 'col-rtype', label: 'Type' },
+  { cls: 'col-runit', label: 'Unit' },
+  { cls: 'col-rwho', label: 'Requestor' },
+  { cls: 'col-rdue', label: 'Deadline' },
+  { cls: 'col-rbrief', label: 'Brief' },
+  { cls: 'col-rstatus', label: 'Status' },
+  { cls: 'col-rnote', label: 'Frost Notes' },
 ];
 /** A column's human label, by class. Throws nothing: an axis naming a column
     that does not exist yields undefined, which the Requests header-label

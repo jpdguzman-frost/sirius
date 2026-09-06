@@ -555,7 +555,9 @@ describe('the toolbar replaced the four selects (node 809:85709)', () => {
   it('renders one search field and the two icon buttons in a .reqtools row', () => {
     const html = view();
     expect(html).toContain('class="reqtools"');
-    expect(html).toContain('class="searchbar reqsearch"');
+    /* the SHARED recipe, worn unmodified: the per-tab class this field used to
+       carry matched no rule anywhere (simplification 2026-09-06, L4) */
+    expect(html).toContain('class="searchbar"');
     expect([...html.matchAll(/class="sfbtn[^"]*"/g)]).toHaveLength(2);
     expect(html).toContain('title="Filter"');
     expect(html).toContain('title="Sort"');
