@@ -24,7 +24,7 @@ import {
   tabView,
   tabViewCode,
 } from './helpers/gantt-render.ts';
-import { recipe, reqHarness, row } from './helpers/requests-sortfilter.ts';
+import { facetTickRig, recipe, reqHarness, row } from './helpers/requests-sortfilter.ts';
 
 const REQ_VIEW = tabView('requests');
 
@@ -63,6 +63,77 @@ describe('the two panels behave like every other overlay (R-pf-g)', () => {
        scrollbar; without the self-scroll shield a wheel over six axes would
        shut the panel the reader is using. */
     expect(decl(APP_JS, 'OVERLAY_SELF_SCROLL')).toContain('.pipemenu');
+  });
+
+  /**
+   * The shipped `closeMenus`, SLICED AND EXECUTED against a stand-in document
+   * (test/CLAUDE.md rules 1+2). The rule is that a dismissal from INSIDE a
+   * panel hands focus back to the button that opened it; the implementation is
+   * a selector list, and reading that list for its text cannot say whether the
+   * element a reader is actually standing on matches it.
+   *
+   * Only `closest`, `isConnected` and `focus` are exercised, so the stand-in
+   * is three fields deep — the same rig the review's repro used.
+   */
+  interface FakeEl { cls: string[]; parent: FakeEl | null; isConnected: boolean; focused: number; focus(): void; closest(sel: string): FakeEl | null }
+  const el = (classes: string, parent: FakeEl | null = null): FakeEl => ({
+    cls: classes.split(/\s+/),
+    parent,
+    isConnected: true,
+    focused: 0,
+    focus() { this.focused++; },
+    closest(sel: string): FakeEl | null {
+      const wanted = sel.split(',').map((s) => s.trim().replace(/^\./, ''));
+      for (let n: FakeEl | null = this; n; n = n.parent) if (n.cls.some((c) => wanted.includes(c))) return n;
+      return null;
+    },
+  });
+  /** run the shipped closeMenus with `activeElement` where it is, and report whether the trigger got focus back */
+  const dismiss = (activeElement: FakeEl | null, trigger: FakeEl, opts: Record<string, unknown> = {}): boolean => {
+    const state: Record<string, unknown> = { reqFilterMenu: 'filter' };
+    const app = { get: (k: string) => state[k], set: (o: Record<string, unknown>) => Object.assign(state, o) };
+    const run = new Function(
+      'app', 'document', 'NO_OVERLAYS', '__trigger',
+      `let overlayTrigger = __trigger;
+       let restoringFocus = false;
+       function warnPopCancelClose() {}
+       ${decl(APP_JS_CODE, 'closeMenus')}
+       return closeMenus;`,
+    )(app, { activeElement }, { reqFilterMenu: null, reqSortMenu: null, chipPop: null }, trigger) as (o?: Record<string, unknown>) => void;
+    run(opts);
+    return trigger.focused > 0;
+  };
+
+  it('hands focus back to the trigger when the dismissal came from INSIDE the panel', () => {
+    /* PLAN.md §Fix amendment 3, H1. Escape, a sort pick and either Clear all
+       run `closeMenus({ restoreFocus: true })`, and the panel that is being
+       unmounted is where the keyboard user is standing. The held-focus list
+       named `.selectmenu, .duepop, .warnpop` — every overlay that existed
+       before these panels — so a reader who dismissed from inside one was
+       dropped at <body> and restarted the next Tab from the top of the page.
+       Both new panels and the chip's own panel are `.pipemenu`. */
+    const filterBtn = el('sfbtn');
+    const filterPanel = el('pipemenu filtermenu', el('sortfilter', el('reqtools')));
+    expect(dismiss(el('pmitem pmcheck', el('pmitems', filterPanel)), filterBtn, { restoreFocus: true }), 'filter panel').toBe(true);
+
+    const sortBtn = el('sfbtn');
+    const sortPanel = el('pipemenu sortmenu', el('sortfilter', el('reqtools')));
+    expect(dismiss(el('pmitem', el('pmitems', sortPanel)), sortBtn, { restoreFocus: true }), 'sort panel').toBe(true);
+
+    // the chip's panel is the same component under a chip, reached by focusin
+    const chip = el('fchip');
+    expect(dismiss(el('pmitem pmcheck', el('pmitems', el('pipemenu chipmenu', chip))), chip, {}), 'chip panel').toBe(true);
+
+    // the case the list already covered stays covered
+    expect(dismiss(el('selitem', el('selectmenu')), el('sfbtn'), { restoreFocus: true }), 'the urgency menu').toBe(true);
+  });
+
+  it('still RETURNS focus rather than stealing it — a reader typing elsewhere is left alone', () => {
+    /* the rule the selector list is half of: restore only when focus is on the
+       trigger, inside the overlay being closed, or nowhere. A scroll dismissal
+       while the caret sits in the search field must not drag it onto a button. */
+    const search = el('rsearchinput', el('searchbar', el('reqtools')));
+    expect(dismiss(search, el('sfbtn'), { restoreFocus: true }), 'focus was stolen out of the search field').toBe(false);
   });
 
   it('opens both through the SHARED opener, asking for no placement (R-pf-j)', () => {
@@ -148,8 +219,18 @@ describe('the panels are ANCHORED, never measured (R-pf-j, JP 2026-08-21)', () =
        Pipeline's four do. The one open-ended axis keeps its in-group scroll on
        top of that, so the short axes stay reachable. */
     const cap = cssRule('.reqtools .filtermenu', REQUESTS_CSS);
-    expect(cap).toMatch(/max-height:/);
-    expect(cap).toContain('overflow-y: auto');
+    /* THE SHAPE, not the property name: `max-height: none` declares a
+       max-height and caps nothing, and a bare `/max-height:/` was satisfied by
+       it (block 5 proof 36a). The rule is what is left of the window below the
+       toolbar, held between a FLOOR and a ceiling — three parts, or the panel
+       runs off the bottom on one machine, off a short frame on another, or
+       (PLAN.md §Fix amendment 3, L1) collapses to nothing at high zoom, where
+       the fixed offset alone can exceed the whole viewport. The three numbers
+       are the frame's and this page's own stack, so none is pinned here. */
+    expect(cap, 'the panel is no longer held between a floor, the viewport and a ceiling')
+      .toMatch(/max-height:\s*clamp\(\s*\d+px\s*,\s*calc\(\s*100vh\s*-\s*\d+px\s*\)\s*,\s*\d+px\s*\)/);
+    expect(cap, 'a cap that caps nothing').not.toMatch(/max-height:\s*none/);
+    expect(cap, 'a capped panel with no scrollbar simply hides its last axes').toContain('overflow-y: auto');
     expect(recipe.REQ_FILTERS.filter((f) => f.scroll).map((f) => f.key)).toEqual(['requestor']);
   });
 });
@@ -159,20 +240,48 @@ describe('the panels are ANCHORED, never measured (R-pf-j, JP 2026-08-21)', () =
 /* ---------------------------------------------------------------------- */
 
 describe('both tabs draw their axes through the ONE filter-group partial (D10)', () => {
-  it('dispatches the checkbox click by TABLE, so the partial stays one copy', () => {
+  it('dispatches the checkbox click by TABLE — a Requests tick never reaches the Pipeline filters', () => {
     /* the partial was typed out twice before and drifted; it reads a CONTEXT
        rather than root state for exactly that reason. What lets Requests reuse
        it without a dynamic proxy-event name is that the click names its TABLE
-       and one dispatcher reads it — so the assertion is that the table
-       argument is carried and acted on, not which private helper does it. */
+       and one dispatcher reads it.
+
+       EXECUTED, not read (test/CLAUDE.md rule 1): the routing table spells
+       both `req:` and `pipe:` whichever way round it is wired, so a transposed
+       entry reads correct on the page and sends every Requests tick into the
+       Pipeline's selection. The rig runs the shipped door and reads BOTH roots
+       back. */
     expect(TEMPLATE).toContain("on-click=\"['toggleFacet', table, key, v.value]\"");
     expect(TEMPLATE, 'the partial still calls one tab’s handler directly').not.toContain("['togglePipeFilter', key, v.value]");
-    const params = /toggleFacet\(([^)]*)\)/.exec(APP_JS_CODE)?.[1] ?? '';
-    for (const arg of ['table', 'key', 'value']) expect(params, `toggleFacet drops ${arg}`).toContain(arg);
-    expect(handlerBody('toggleFacet'), 'the dispatcher ignores which table asked').toContain('table');
+
+    const req = facetTickRig();
+    req.toggleFacet('req', 'unit', 'Brand');
+    expect(req.state.reqFilters, 'a Requests tick did not land on the Requests selection').toEqual({ unit: ['Brand'] });
+    expect(req.state.pipeFilters, 'a Requests tick wrote the Pipeline selection').toEqual({});
+
+    const pipe = facetTickRig();
+    pipe.toggleFacet('pipe', 'list', 'Design');
+    expect(pipe.state.pipeFilters).toEqual({ list: ['Design'] });
+    expect(pipe.state.reqFilters, 'a Pipeline tick wrote the Requests selection').toEqual({});
+
+    // MULTI-select on the axis it chose, and a second tick takes that value
+    // off again — the panel stays open, so the toggle is the only way back
+    req.toggleFacet('req', 'unit', 'Growth');
+    expect(req.state.reqFilters.unit).toEqual(['Brand', 'Growth']);
+    req.toggleFacet('req', 'unit', 'Brand');
+    expect(req.state.reqFilters.unit).toEqual(['Growth']);
+    expect(req.state.pipeFilters, 'the other table moved while this one was toggled').toEqual({});
+
+    // an unknown table is a wiring mistake and says so: a silent no-op reads
+    // to the reader as a filter that simply does nothing
+    expect(() => req.toggleFacet('nosuchtable', 'unit', 'Brand')).toThrow(/nosuchtable/);
+
     // and each tab keeps its own named door onto the same write
-    expect(() => handlerBody('toggleReqFilter')).not.toThrow();
-    expect(() => handlerBody('togglePipeFilter')).not.toThrow();
+    const named = facetTickRig();
+    named.toggleReqFilter('type', 'Icon');
+    named.togglePipeFilter('list', 'Design');
+    expect(named.state.reqFilters).toEqual({ type: ['Icon'] });
+    expect(named.state.pipeFilters).toEqual({ list: ['Design'] });
   });
 
   it('stamps every facet with the table it belongs to', () => {
@@ -181,6 +290,13 @@ describe('both tabs draw their axes through the ONE filter-group partial (D10)',
     expect(facets.length).toBeGreaterThan(0);
     for (const f of facets) expect(f.table, f.key).toBe('req');
     expect(APP_JS, 'the Pipeline facets carry no table either').toContain("table: 'pipe'");
+    /* the stamp is only worth anything if the dispatcher answers to it: the
+       partial passes this very value straight back as `table`, so the two are
+       joined here rather than each asserted alone */
+    const rig = facetTickRig();
+    rig.toggleFacet(facets[0]!.table, facets[0]!.key, 'Icon');
+    expect(rig.state.reqFilters).toEqual({ [facets[0]!.key]: ['Icon'] });
+    expect(rig.state.pipeFilters).toEqual({});
   });
 
   it('renders each axis through the partial, and never a hand-typed group', () => {

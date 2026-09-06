@@ -12,8 +12,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { APP_JS, TEMPLATE, tabViewCode } from './helpers/gantt-render.ts';
-import { ids, recipe, reqHarness, row, sortBy } from './helpers/requests-sortfilter.ts';
+import { APP_JS, TEMPLATE, handlerBody, tabViewCode } from './helpers/gantt-render.ts';
+import { ids, recipe, reqHarness, row, sel, sortBy } from './helpers/requests-sortfilter.ts';
 
 /** the node spells both Identity name sorts with an EN DASH, U+2013 */
 const AZ = 'Deliverable Name: A–Z';
@@ -124,6 +124,51 @@ describe('the table opens on the sheet’s own row order, newest first', () => {
   it('disables Clear Sort while there is nothing to clear', () => {
     expect(TEMPLATE).toContain('disabled="{{!reqSort}}"');
   });
+
+  /**
+   * The shipped pick handler, EXECUTED against a stand-in app (test/CLAUDE.md
+   * rule 1). The rule is what a SECOND pick of the applied option does, and
+   * that is a comparison inside the write — invisible to any reading of the
+   * source that is not the source itself.
+   */
+  const sortRig = (start: string | null = null) => {
+    const state: Record<string, unknown> = { reqSort: start };
+    const closed: unknown[] = [];
+    const pick = new Function(
+      'app',
+      'closeMenus',
+      `return function pickReqSort(_ctx, key) ${handlerBody('pickReqSort')};`,
+    )(
+      { get: (k: string) => state[k], set: (k: string, v: unknown) => { state[k] = v; } },
+      (opts: unknown) => closed.push(opts),
+    ) as (ctx: unknown, key: string) => void;
+    return { state, closed, pick: (key: string) => pick(null, key) };
+  };
+
+  it('CLEARS the applied sort when the same option is picked again — the panel undoes itself', () => {
+    /* SINGLE-select, and rest is reachable from the option list itself: with
+       no re-pick branch the only way back to the sheet's own order is Clear
+       Sort, and a reader who cannot find it is stuck in an order they picked
+       by accident. Rest is not "unordered" — `reqSortDef` falls back to the
+       default, which is the order the table opened on. */
+    const rig = sortRig();
+    rig.pick('oldest');
+    expect(rig.state.reqSort).toBe('oldest');
+    rig.pick('oldest');
+    expect(rig.state.reqSort, 'picking the applied option again did not return the table to rest').toBe(null);
+
+    // …and rest really is the default order, not an absence of one
+    expect(reqHarness({ reqSort: rig.state.reqSort }).get('reqSortDef')).toMatchObject({ key: null });
+
+    // choosing REPLACES, never stacks — and every commit closes through the
+    // one path, focus and all (the roll-call is in pipeline-warning-wiring)
+    const other = sortRig('oldest');
+    other.pick('name');
+    expect(other.state.reqSort).toBe('name');
+    other.pick('name-desc');
+    expect(other.state.reqSort).toBe('name-desc');
+    expect(other.closed).toEqual([{ restoreFocus: true }, { restoreFocus: true }]);
+  });
 });
 
 /* ---------------------------------------------------------------------- */
@@ -223,12 +268,42 @@ describe('an absent value never displaces a real one', () => {
   });
 
   it('sorts the WHOLE filtered set, never the visible page', () => {
-    /* the client holds every row of the project, so sorting a page would
-       order the page and not the table. `reqSorted` reads `reqFiltered`, and
-       `reqRows` slices AFTER it. */
-    const rows = Array.from({ length: 25 }, (_, i) => row({ sheet_row: i + 1, name: `Row ${i + 1}` }));
-    const h = reqHarness({ requests: rows, reqSort: 'oldest', reqPage: 3 });
-    expect(ids(h.get('reqSorted') as unknown[])[0]).toBe(1);
-    expect(ids(h.get('reqRows') as unknown[])).toEqual([21, 22, 23, 24, 25]);
+    /* filter → sort → paginate, in that order: the client holds every row of
+       the project, so a page sliced BEFORE the sort orders the page and not
+       the table — page one keeps the first ten rows of the sheet and merely
+       rearranges them.
+
+       THE FIXTURE IS THE ASSERTION HERE. The sorted order has to DISAGREE
+       with the filtered one or the mutation is invisible: five rows of
+       another Type make the filtered set twenty-five of thirty and leave it
+       in sheet order, and `mc-desc` reverses that. Seeded in sheet order and
+       sorted by the sheet's own order, this test passed with the slice taken
+       off `reqFiltered` (block 5 proof 42). */
+    const OTHER_TYPE = [6, 12, 18, 24, 30];
+    const rows = Array.from({ length: 30 }, (_, i) =>
+      row({
+        sheet_row: i + 1,
+        mc_number: `MC-${i + 1}`,
+        asset_type: OTHER_TYPE.includes(i + 1) ? 'Icon' : 'Assets',
+      }));
+    const at = (page: number) => reqHarness({
+      requests: rows, reqFilters: sel({ type: ['Assets'] }), reqSort: 'mc-desc', reqPage: page,
+    });
+    const h = at(1);
+
+    const filtered = ids(h.get('reqFiltered') as unknown[]);
+    const sorted = ids(h.get('reqSorted') as unknown[]);
+    expect(filtered, 'the Type axis narrowed nothing').toHaveLength(25);
+    expect(filtered.slice(0, 5), 'the filtered set is not in the sheet’s own order').toEqual([1, 2, 3, 4, 5]);
+    expect(sorted.slice(0, 5), 'the sort did not disagree with the sheet — this test would prove nothing')
+      .toEqual([29, 28, 27, 26, 25]);
+
+    // PAGE ONE IS THE SORTED HEAD, not the sheet's
+    expect(ids(h.get('reqRows') as unknown[]))
+      .toEqual([29, 28, 27, 26, 25, 23, 22, 21, 20, 19]);
+    expect(ids(h.get('reqRows') as unknown[]), 'the page is not a slice of the sorted set').toEqual(sorted.slice(0, 10));
+    // …and the last page is the sorted TAIL, five rows of the twenty-five
+    expect(ids(at(3).get('reqRows') as unknown[])).toEqual([5, 4, 3, 2, 1]);
+    expect(ids(at(3).get('reqRows') as unknown[])).toEqual(sorted.slice(20));
   });
 });

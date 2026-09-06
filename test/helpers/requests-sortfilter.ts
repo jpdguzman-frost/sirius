@@ -19,10 +19,12 @@
 import RactiveModule from 'ractive';
 import {
   APP_JS,
+  APP_JS_CODE,
   COMPUTED_CTX_JS,
   TEMPLATE,
   decl,
   divFragment,
+  handlerBody,
   method,
   pipeTableData,
   tabView,
@@ -121,7 +123,9 @@ export const recipe = new Function(`
   reqMatches: (r: unknown, sel: ReqSel, exceptKey?: string | null) => boolean;
   reqFacetList: (rows: unknown[], sel: ReqSel) => ReqFacet[];
   reqSortRows: (rows: unknown[], def: ReqSortDef) => unknown[];
-  reqChipList: (sel: ReqSel, facets?: ReqFacet[]) => ReqChip[];
+  // ONE parameter (PLAN.md §Fix amendment 3, S3): the chip's hover panel reads
+  // `reqFacets` in the template, so the builder joins no group onto a chip
+  reqChipList: (sel: ReqSel) => ReqChip[];
   reqSortLabel: (def: ReqSortDef | string | null) => string;
   STATUS_FILED: string;
   clarified: (r: unknown) => boolean;
@@ -172,6 +176,136 @@ export const facet = (rows: ReqFixture[], key: string, live: ReqSel = recipe.REQ
 /** The shipped sort path — decorate/sort/undecorate and all, never the bare comparator. */
 export const sortBy = (key: string | null, rows: ReqFixture[]): ReqFixture[] =>
   recipe.reqSortRows(rows, key ? recipe.REQ_SORTS.find((s) => s.key === key)! : recipe.REQ_SORT_DEFAULT) as ReqFixture[];
+
+/* ---- the two Requests-only selection doors, executed ------------------- */
+
+/** A stand-in app store holding only the Requests selection, and the doors that write it. */
+export interface ReqSelRig {
+  /** what the doors have written — the assertion reads this, never a return value */
+  state: { reqFilters: Record<string, unknown> };
+  /** a stat tile's click: `['setRequestFilter', s.key]` (D4) */
+  setRequestFilter(segKey: unknown): void;
+  /** a chip's ✕: `['removeReqChip', c.key, c.value]` (D7) */
+  removeReqChip(key: string, value: unknown): void;
+}
+
+/**
+ * The SHIPPED tile door (`setRequestFilter` plus the `applyRequestFilter`
+ * mapping it delegates to) and the SHIPPED chip ✕ (`removeReqChip`), EXECUTED
+ * against a stand-in app store (test/CLAUDE.md rules 1+2).
+ *
+ * Reading either for its text proves nothing that matters: the tile door's
+ * rule is WHICH values the axis ends up holding after a press, and the ✕'s is
+ * that it removes its own value and leaves its siblings standing — both are
+ * outcomes of a write, and both were guarded by a regex over the body until
+ * REVIEW round 1 (PLAN.md §Fix amendment 3, items H5 and R2).
+ */
+export const reqSelRig = (start: Record<string, unknown> = {}): ReqSelRig => {
+  const state = { reqFilters: { ...start } };
+  const app = {
+    get: (k: string): unknown =>
+      k.split('.').reduce<unknown>(
+        (o, p) => (o == null ? o : (o as Record<string, unknown>)[p]),
+        state as unknown as Record<string, unknown>,
+      ),
+    set: (k: string, v: unknown): void => {
+      const parts = k.split('.');
+      const last = parts.pop()!;
+      const holder = parts.reduce<Record<string, unknown>>(
+        (o, p) => (o[p] ??= {}) as Record<string, unknown>,
+        state as unknown as Record<string, unknown>,
+      );
+      holder[last] = v;
+    },
+  };
+  const doors = new Function(
+    'app',
+    `${decl(APP_JS_CODE, 'STATUS_FILED')}
+     ${decl(APP_JS_CODE, 'REQUEST_SEGMENT_STATUS')}
+     ${decl(APP_JS_CODE, 'applyRequestFilter')}
+     return {
+       setRequestFilter(_ctx, f) ${handlerBody('setRequestFilter')},
+       removeReqChip(_ctx, key, value) ${handlerBody('removeReqChip')},
+     };`,
+  )(app) as {
+    setRequestFilter(ctx: unknown, segKey: unknown): void;
+    removeReqChip(ctx: unknown, key: string, value: unknown): void;
+  };
+  return {
+    state,
+    setRequestFilter: (segKey) => doors.setRequestFilter(null, segKey),
+    removeReqChip: (key, value) => doors.removeReqChip(null, key, value),
+  };
+};
+
+/* ---- the shared facet-tick door, executed ------------------------------ */
+
+/** The two filter roots the one dispatcher can write, as a stand-in app store. */
+export interface FacetRoots {
+  reqFilters: Record<string, unknown>;
+  pipeFilters: Record<string, unknown>;
+}
+export interface FacetTickRig {
+  /** what the write left behind, both roots — the assertion reads this */
+  state: FacetRoots;
+  /** the shared partial's own click: `['toggleFacet', table, key, v.value]` */
+  toggleFacet(table: unknown, key: string, value: unknown): void;
+  /** each table's own named door onto the same write */
+  toggleReqFilter(key: string, value: unknown): void;
+  togglePipeFilter(key: string, value: unknown): void;
+}
+
+/**
+ * The SHIPPED tick door — the `toggleFacet` handler, the per-table handlers
+ * beside it and the `toggleFacetValue` write they all go through — EXECUTED
+ * against a stand-in app store, keypaths and all (test/CLAUDE.md rules 1+2).
+ *
+ * The rule this exists for is D10: ONE filter-group partial serves both
+ * tables, and which table a tick lands on is decided by the word the partial
+ * carries. No reading of the source can tell a correct routing table from a
+ * transposed one — both spell `req:` and `pipe:` — so the routing is run and
+ * the two roots are read back.
+ */
+export const facetTickRig = (start: Partial<FacetRoots> = {}): FacetTickRig => {
+  const state: FacetRoots = { reqFilters: { ...start.reqFilters }, pipeFilters: { ...start.pipeFilters } };
+  const walk = (parts: string[]): Record<string, unknown> =>
+    parts.reduce<Record<string, unknown>>(
+      (o, p) => (o[p] ??= {}) as Record<string, unknown>,
+      state as unknown as Record<string, unknown>,
+    );
+  const app = {
+    get: (k: string): unknown =>
+      k.split('.').reduce<unknown>(
+        (o, p) => (o == null ? o : (o as Record<string, unknown>)[p]),
+        state as unknown as Record<string, unknown>,
+      ),
+    set: (k: string, v: unknown): void => {
+      const parts = k.split('.');
+      const last = parts.pop()!;
+      walk(parts)[last] = v;
+    },
+  };
+  const doors = new Function(
+    'app',
+    `${decl(APP_JS_CODE, 'FACET_FILTER_ROOT')}
+     ${decl(APP_JS_CODE, 'toggleFacetValue')}
+     return {
+       toggleFacet(_ctx, table, key, value) ${handlerBody('toggleFacet')},
+       toggleReqFilter(_ctx, key, value) ${handlerBody('toggleReqFilter')},
+       togglePipeFilter(_ctx, axis, value) ${handlerBody('togglePipeFilter')},
+     };`,
+  )(app) as {
+    toggleFacet(ctx: unknown, table: unknown, key: string, value: unknown): void;
+    toggleReqFilter(ctx: unknown, key: string, value: unknown): void;
+    togglePipeFilter(ctx: unknown, axis: string, value: unknown): void;
+  };
+  return {
+    state,
+    toggleFacet: (table, key, value) => doors.toggleFacet(null, table, key, value),
+    toggleReqFilter: (key, value) => doors.toggleReqFilter(null, key, value),
+    togglePipeFilter: (key, value) => doors.togglePipeFilter(null, key, value),
+  };
+};
 
 /* ---- the executed computeds ------------------------------------------- */
 

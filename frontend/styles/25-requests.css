@@ -66,19 +66,27 @@
 
 /* THE FILTER PANEL'S VIEWPORT CAP. Six axes draw a panel the frame measures
    at nine hundred and twelve tall — more than the room under the toolbar on
-   any laptop — so the panel takes the smaller of that height and what is
-   actually left below the row, and scrolls itself instead of running off the
-   bottom of the window. The number subtracted is this page's own stack,
-   measured from the top of the window: the shell, the view inset, the tiles,
-   the sync strip and the search row put the panel's top edge a little over
-   four hundred down, and the view's own bottom inset is the rest.
+   any laptop — so the panel takes what is actually left below the row and
+   scrolls itself instead of running off the bottom of the window, held
+   between a floor and that measured ceiling. The number subtracted is this
+   page's own stack, measured from the top of the window: the shell, the view
+   inset, the tiles, the sync strip and the search row put the panel's top
+   edge a little over four hundred down, and the view's own bottom inset is
+   the rest.
+   THE FLOOR is why this is a three-part clamp rather than a smaller-of-two:
+   the subtracted stack is a fixed number, so on a short window — or at high
+   browser zoom, where the viewport shrinks in CSS pixels while the stack does
+   not — the middle term goes to zero or negative and the panel collapses to
+   an invisible strip the reader cannot scroll. Two hundred and eighty is
+   roughly two axis groups: small, but a panel.
+   [review L1/H3; PLAN.md §Fix amendment 3]
    The one open-ended axis keeps its in-group scroll on top of this (#49):
    the cap here stops the box leaving the screen, the in-group cap stops one
    long axis pushing the other five out of sight. `overscroll-behavior` keeps
    the panel's scroll from chaining to the page, which would drag the toolbar
    the panel is anchored to. */
 .reqtools .filtermenu {
-  max-height: min(912px, calc(100vh - 464px));
+  max-height: clamp(280px, calc(100vh - 464px), 912px);
   overflow-y: auto; overscroll-behavior: contain;
 }
 

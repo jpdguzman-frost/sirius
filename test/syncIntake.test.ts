@@ -9,6 +9,7 @@ import request from 'supertest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { getRequests, mcsOf } from './helpers/requests.ts';
 import { runIntakeSync, syncIntakeRows } from '../worker/syncIntake.ts';
+import { parseIntake } from '../src/services/intake-parser.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { Deliverable, IntakeReject, IntakeRequest, Project, SyncRun, User, UserProject } from '../src/models/index.ts';
@@ -94,25 +95,46 @@ describe('mirror + join', () => {
     expect(empty.month ?? null).toBeNull();
   });
 
-  it('a multi-value unit is mirrored WHOLE and warned about once — nothing is split, nothing else is stored', async () => {
+  it('a multi-value unit reaches the mirror AND the joined deliverable WHOLE, is never a reject, and logs one line naming the field and reason the parser raised', async () => {
     const p = await makeProject();
+    await Deliverable.create({
+      project_id: p._id, mc_number: 'MC-655', display_id: 'MC-655',
+      trello_card_id: 'c1', name: 'Filed two-unit',
+    });
+    const rows = [HEADER, ROW('MC-655', 'Two units', '2026-08-28', 'Campaign, Product'), ROW('MC-702', 'One unit')];
+    // The warning the parser ACTUALLY raises — the log line is asserted
+    // against these fields, never against a literal that a second warning
+    // kind would make a lie.
+    const raised = parseIntake(rows).warnings;
+    expect(raised).toHaveLength(1);
+    const w = raised[0]!;
+
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     let lines: string[] = [];
+    let joinedCount = -1;
     try {
-      await syncIntakeRows(p._id, [HEADER, ROW('MC-655', 'Two units', '2026-08-28', 'Campaign, Product'), ROW('MC-702', 'One unit')]);
+      joinedCount = (await syncIntakeRows(p._id, rows)).joined;
       // read the calls BEFORE restoring — mockRestore also resets them
-      lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('multi-value unit'));
+      lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('[syncIntake]'));
     } finally {
       warn.mockRestore();
     }
+
     const multi = await IntakeRequest.findOne({ mc_number: 'MC-655' }).orFail();
     expect(multi.use_case).toBe('Campaign, Product');
     const single = await IntakeRequest.findOne({ mc_number: 'MC-702' }).orFail();
     expect(single.use_case).toBe('Campaign');
     expect(await IntakeReject.countDocuments({ project_id: p._id })).toBe(0); // a warning is not a reject
 
+    // the join carries the same whole value onto the card — no split there either
+    expect(joinedCount).toBe(1);
+    const joined = await Deliverable.findOne({ trello_card_id: 'c1' }).orFail();
+    expect(joined.use_case).toBe('Campaign, Product');
+
     expect(lines).toHaveLength(1); // one line per warning, the single-unit row silent
-    expect(lines[0]).toContain('intake: multi-value unit at row 2');
+    expect(lines[0]).toContain(w.reason);
+    expect(lines[0]).toContain(w.field);
+    expect(lines[0]).toContain(`row ${w.sheet_row}`);
     expect(lines[0]).toContain(String(p._id));
   });
 

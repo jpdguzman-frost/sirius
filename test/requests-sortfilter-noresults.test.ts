@@ -73,6 +73,25 @@ describe('the no-results verdict — empty AND caused by the reader', () => {
     expect(h.get('reqNoResults'), 'whitespace-only search read as a caused empty').toBe(false);
   });
 
+  it('stays FALSE for a project the SHEET emptied — a term the reader typed cannot clear that', () => {
+    /* PLAN.md §Fix amendment 3, L2. The outer gate lets a rejects-only project
+       through on `rejects.length`, so `requests` is empty while the tab is
+       drawn: every path below it then reads "nothing to show", and the moment
+       the reader touches the search field or a filter the shared state offered
+       them a remedy — "clear your filters" — that cannot possibly bring a row
+       back. The rejected-rows box is the honest answer whatever is typed. */
+    const typed = reqHarness({ requests: [], reqQ: 'zzz-nothing-carries-this' });
+    expect(typed.get('reqNoResults'), 'a search term over a rejects-only project').toBe(false);
+    const filtered = reqHarness({
+      requests: [],
+      reqFilters: { ...recipe.REQ_FILTERS_EMPTY(), type: ['Lottie File'] },
+    });
+    expect(filtered.get('reqNoResults'), 'a live filter over a rejects-only project').toBe(false);
+    // …and the rule is the ROWS, not the term: one usable row and the same
+    // term is the reader's own doing again
+    expect(reqHarness({ requests: [noHit], reqQ: 'zzz-nothing-carries-this' }).get('reqNoResults')).toBe(true);
+  });
+
   it('reads "a filter is live" off the CHIPS’ own derivation, never a second spelling', () => {
     /* the chips row and its Clear all render from `reqChips`; a re-sum over
        the raw selection here would be a second answer to "is something
@@ -181,9 +200,16 @@ describe('the state replaces the table, the footer goes with it, the tiles stay'
 
   it('keeps the sheet’s own empty state apart from the reader’s', () => {
     /* every parsed row landing in rejects is not a filter the reader can
-       clear, so it keeps its own dashed box rather than borrowing this one */
-    const html = renderRequests({ requests: [], rejects: [{}], reqFiltered: [], reqRows: [], reqNoResults: false, reqStats: TILES });
+       clear, so it keeps its own dashed box rather than borrowing this one —
+       and it keeps it WITH a term in the field (L2): the verdict comes from
+       the executed computed rather than being hand-set here, so the two
+       derivations cannot disagree about a project the sheet emptied. */
+    const verdict = reqHarness({ requests: [], reqQ: 'zzz' }).get('reqNoResults') as boolean;
+    const html = renderRequests({
+      requests: [], rejects: [{}], reqFiltered: [], reqRows: [], reqNoResults: verdict, reqQ: 'zzz', reqStats: TILES,
+    });
     expect(html).toContain('rempty');
-    expect(html).not.toContain('pnores');
+    expect(html).toContain('No usable requests');
+    expect(html, 'a remedy the reader cannot act on').not.toContain('pnores');
   });
 });

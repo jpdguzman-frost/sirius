@@ -20,11 +20,22 @@ import {
   cssRule,
   decl,
   handlerBody,
+  method,
   observerCalls,
   tabView,
   tabViewCode,
 } from './helpers/gantt-render.ts';
-import { type ReqChip, type ReqSel, recipe, renderRequests, reqHarness, row, sel } from './helpers/requests-sortfilter.ts';
+import {
+  type ReqChip,
+  type ReqSel,
+  facetTickRig,
+  recipe,
+  renderRequests,
+  reqHarness,
+  reqSelRig,
+  row,
+  sel,
+} from './helpers/requests-sortfilter.ts';
 
 const REQ_VIEW = tabView('requests');
 
@@ -94,11 +105,32 @@ describe('the indicator says what is filtered, one chip per VALUE (D7)', () => {
 
   it('removes ITS value on ✕, leaving the rest of the axis standing', () => {
     /* the whole point of a per-value chip: a ✕ that emptied the axis would
-       make the second chip a lie about what it removes */
+       make the second chip a lie about what it removes.
+
+       EXECUTED, not read (test/CLAUDE.md rule 1; PLAN.md §Fix amendment 3,
+       R2). The two regexes here before — "it calls filter(" and "it never
+       writes an empty array" — were satisfied by a handler that filtered on
+       the wrong axis, or on the axis's own key rather than the value, and
+       said nothing at all about the absence chip, whose value IS null. */
     expect(REQ_VIEW).toContain("['removeReqChip', c.key, c.value]");
-    const body = handlerBody('removeReqChip');
-    expect(body, 'the ✕ does not filter the axis — it replaces it').toMatch(/filter\(/);
-    expect(body, 'the ✕ empties the whole axis').not.toMatch(/,\s*\[\]\s*\)/);
+
+    const rig = reqSelRig({ status: ['For Filing', recipe.STATUS_FILED], type: ['Assets', 'Lottie File'] });
+    rig.removeReqChip('type', 'Assets');
+    expect(rig.state.reqFilters, 'the ✕ took more than its own value').toEqual({
+      status: ['For Filing', recipe.STATUS_FILED],
+      type: ['Lottie File'],
+    });
+    // a value that is not there is a no-op, not an emptying
+    rig.removeReqChip('type', 'Icon');
+    expect(rig.state.reqFilters.type).toEqual(['Lottie File']);
+    // …and the last one leaves the axis empty rather than undefined
+    rig.removeReqChip('type', 'Lottie File');
+    expect(rig.state.reqFilters.type).toEqual([]);
+
+    // the absence chip is removable: `None` is drawn, `null` is stored (D11)
+    const none = reqSelRig({ unit: [null, 'Brand'] });
+    none.removeReqChip('unit', null);
+    expect(none.state.reqFilters.unit, 'the None chip cannot be taken off').toEqual(['Brand']);
   });
 
   it('clears everything through the panel’s OWN clear handler — one way to clear', () => {
@@ -268,6 +300,61 @@ describe('the chip’s hover panel is keyed on the VALUE, not on the axis', () =
   };
   /** the rendered chips, one chunk each, in the order the row draws them */
   const chipChunks = (html: string): string[] => html.split('<span class="fchip"').slice(1);
+
+  it('draws the open chip’s panel from the FACETS, and its ticks land on the Requests selection (D10/R-pf-m)', () => {
+    /* Hovering a chip opens its WHOLE axis (R-pf-m) — the one place a
+       neighbouring value can be ticked back on. The axis group comes from the
+       template's own lookup in `reqFacets`, and the chip carries no copy of
+       it: a copy was a second join that could only ever agree with the first,
+       and `reqChips` paid for it by pulling the whole facet pass onto the
+       search-keystroke path (PLAN.md §Fix amendment 3, S3).
+
+       Ractive's `toHTML()` drops `on-*` directives, so the routing word cannot
+       be read off the rendered panel. It is proven where it lives instead: the
+       partial's click passes the GROUP's own `table`, the group the panel
+       draws is the facet, and that word is run through the shipped dispatcher
+       (test/CLAUDE.md rule 2). */
+    const h = reqHarness({ requests: ROWS, reqFilters: sel(TWO) });
+    const group = (h.get('reqFacets') as Array<{ key: string; table: string; values: Array<{ label: string; count: number }> }>)
+      .find((f) => f.key === 'type')!;
+
+    const panel = (() => {
+      const chunk = chipChunks(openOn('Assets'))[0]!;
+      return chunk.slice(chunk.indexOf('chipmenu'));
+    })();
+    expect(panel, 'the hovered chip drew no panel at all').toContain('pmitem pmcheck');
+    for (const v of group.values) {
+      expect(panel, `the chip’s panel is missing the ${v.label} checkbox`).toContain(`<span class="pmval">${v.label}</span>`);
+    }
+    expect(panel, 'the chip’s panel drew a neighbouring axis too').not.toContain('<span class="pmval">Ana</span>');
+
+    // the partial's checkbox routes by the group's own word …
+    expect(TEMPLATE).toContain("['toggleFacet', table, key, v.value]");
+    // … and that word really does land on the REQUESTS selection
+    const rig = facetTickRig();
+    rig.toggleFacet(group.table, 'type', 'Icon');
+    expect(rig.state.reqFilters, 'a tick from the chip’s own panel went nowhere').toEqual({ type: ['Icon'] });
+    expect(rig.state.pipeFilters, 'a tick from the Requests chip panel wrote the Pipeline').toEqual({});
+  });
+
+  it('builds the chips from the SELECTION alone — open or closed, the same list', () => {
+    /* the dead join, stated as a rule: `reqChips` reads the selection and
+       nothing else, so a keystroke costs a walk of six arrays rather than a
+       recount of every axis, and the chip carries no fields the template can
+       read a second, disagreeing answer out of. */
+    const body = method('reqChips');
+    expect(body, 'the chips still read the open key').not.toContain('chipPop');
+    expect(body, 'the chips still read the facet pass').not.toContain('reqFacets');
+
+    const shape = [
+      { key: 'type', axis: 'Type', value: 'Assets', label: 'Assets' },
+      { key: 'type', axis: 'Type', value: 'Lottie File', label: 'Lottie File' },
+    ];
+    for (const open of ['type', null]) {
+      const chips = reqHarness({ requests: ROWS, reqFilters: sel(TWO), chipPop: open }).get('reqChips') as ReqChip[];
+      expect(chips, `chipPop = ${String(open)}`).toEqual(shape);
+    }
+  });
 
   it('draws ONE panel, under the chip the pointer is on', () => {
     const chunks = chipChunks(openOn('Assets'));

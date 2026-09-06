@@ -100,9 +100,16 @@ async function resetForProjectSwitch() {
 
    The value a tile stands for comes from the one predicate table's own map: a
    literal spelled here would be a second vocabulary for the same three words,
-   and the two would drift the first time one of them was reworded. */
+   and the two would drift the first time one of them was reworded.
+
+   `Object.hasOwn`, not truthiness — the guard `toggleFacetValue` already
+   carries, for the same reason: the map is an object literal, so `toString`
+   and `constructor` answer a bare lookup with a function nobody can un-tick.
+   A key the vocabulary does not carry is a wiring mistake, and the axis it
+   would write must not become a filter over one.
+   [review H5; PLAN.md §Fix amendment 3] */
 function applyRequestFilter(segKey) {
-  const value = REQUEST_SEGMENT_STATUS[segKey] || null;
+  const value = Object.hasOwn(REQUEST_SEGMENT_STATUS, segKey) ? REQUEST_SEGMENT_STATUS[segKey] : null;
   const cur = app.get('reqFilters.status') || [];
   const sole = Boolean(value) && cur.length === 1 && cur[0] === value;
   app.set('reqFilters.status', value && !sole ? [value] : []);

@@ -215,19 +215,17 @@ const reqFacetList = (rows, sel) => {
    inside an axis, the order the values were ticked in — the order the reader
    built them.
 
-   `facets`, when given, are the axis groups a chip's HOVER panel draws (D7 /
-   R-pf-m: hovering a chip opens its WHOLE axis, not its one value). A chip
-   whose axis has a group here carries that group's `table`, `scroll` and
-   `values`; the computed passes only the open axis's group, so a closed row
-   costs no recount. The group's heading is the axis word — on a chip that is
-   `axis`, never `label`. */
-const reqChipList = (sel, facets) =>
-  REQ_FILTERS.flatMap((f) => {
-    const picked = (sel && sel[f.key]) || [];
-    const group = (facets || []).find((x) => x.key === f.key);
-    const extra = group ? { table: group.table, scroll: group.scroll, values: group.values } : {};
-    return picked.map((v) => ({ key: f.key, axis: f.label, value: v, label: v === null ? 'None' : v, ...extra }));
-  });
+   ONE ARGUMENT — the selection, and nothing about what is open. Hovering a
+   chip still opens its WHOLE axis (D7 / R-pf-m), but the group that panel
+   draws is looked up in `reqFacets` by the template, at the one place it is
+   drawn. This builder used to carry a copy of that group on every chip of the
+   open axis: a second join to the same facet, which could only ever agree with
+   the template's, and which pulled the whole facet pass onto the
+   search-keystroke path because the chips row is always live.
+   [review S3/L3/H4; PLAN.md §Fix amendment 3] */
+const reqChipList = (sel) =>
+  REQ_FILTERS.flatMap((f) =>
+    ((sel && sel[f.key]) || []).map((v) => ({ key: f.key, axis: f.label, value: v, label: v === null ? 'None' : v })));
 
 /* ---- Requests sort (owl #77 §2; nodes 809:87722 / 809:87697; PLAN D6, D12)
    THE EIGHT SORTS, in the node's order and grouping: Dates, Identity.

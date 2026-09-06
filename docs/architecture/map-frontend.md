@@ -16,14 +16,14 @@ _last-verified: 2026-08-18_
 - `frontend/scripts/30-dates.js` — Manila clock (MANILA_DAY/TIME, manilaToday, fmtInstant), ISO calendar arithmetic (isoAddDays…mondayIso), sprint week helpers (sprintPayload, fridayIso, workingDaysBetween, mondaysBetween).
 - `frontend/scripts/40-app-state.js` — initialRoute capture + THE `app = new Ractive({...})` — every data key and computed (tabLabel…sprintDirty); one statement, indivisible.
 - `frontend/scripts/50-gantt-geometry.js` — workday x-axis: TOTAL_UNITS, dayIndex, clampUnits, pctOf/unitPct, weekAtX, phaseRun + app.set of phaseRun/deadlineTick/ghostBar/sprintLength.
-- `frontend/scripts/60-overlays.js` — search highlighter; the five-overlay system: OVERLAY_KEYS/NO_OVERLAYS, closeMenus, the four document dismissers, placeBox/openOverlay/placeMeasured, showWarnPop (the warning hover card).
+- `frontend/scripts/60-overlays.js` — search highlighter; the overlay system: OVERLAY_KEYS/NO_OVERLAYS, closeMenus, the four document dismissers, placeBox/openOverlay/placeMeasured, showWarnPop (the warning hover card).
 - `frontend/scripts/70-measure.js` — patchRow + banner chrome (errText, flashBanner), scroll-thumb machinery, refreshClips sweep, the shared `remeasure` rAF seam, capacity footer (weekTotal/footText/footCls).
 - `frontend/scripts/80-loaders.js` — data loading + writes: loadShell/loadAdmin/loadAll, writeDeadline, serialized writeCapacity queue, requestBlob/blobRequests, pager observers; the Deadlines month day (dlToday) is refreshed here.
 - `frontend/scripts/90-events.js` — interaction layer: selectTab, resetForProjectSwitch, applyRequestFilter, ONE indivisible `app.on({...})` handler map (tabs, filters, notes, admin, menus, the due popover, sprints modal, the Deadlines month + lane expand), patchUrl/bumpWeek/moveRows, announceArrival (the arrival affordance).
 - `frontend/scripts/95-routing.js` — IMPURE routing half: withRouterSuppressed, normalizeUrl, pushState observer, popstate listener, the file-final loadShell() boot call (must stay last in load order).
 - `frontend/styles/00-base.css` — legacy aliases onto tokens.
 - `frontend/styles/05-tokens.css` — Figma tokens (raw hex = defect).
-- `frontend/styles/10-ui.css` — legacy recipes for unmigrated tabs.
+- `frontend/styles/10-ui.css` — shared UI recipes: the noResults block both Pipeline and Requests render (moved here in block 5, owl #77 §3), plus the legacy recipes the unmigrated tabs still use.
 - `frontend/styles/20-pipeline.css` — shell nav + Pipeline.
 - `frontend/styles/25-requests.css` — Requests: the .reqtools toolbar row, the viewport-capped filter panel, the .reqfoot footer + pager recipe (28×32 buttons, 32×32 bordered active page), column widths incl. col-runit.
 - `frontend/styles/30-planner.css` — schedules toolbar.

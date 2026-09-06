@@ -108,7 +108,14 @@ function closeMenus({ restoreFocus = false } = {}) {
   warnPopCancelClose(); // one door out: no pending close survives a close
   const t = overlayTrigger;
   const ae = document.activeElement;
-  const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .warnpop'));
+  /* The dropdown panel class is here for the panels the toolbars open (the
+     Requests pair, the Pipeline pair, and the chip's own panel, which are one
+     component). They hold real controls, so Escape, a pick and either Clear
+     can all fire while the reader is standing INSIDE the box about to unmount
+     — and a list naming only the three older overlays dropped them at <body>,
+     restarting the next Tab from the top of the document.
+     [review H1; PLAN.md §Fix amendment 3] */
+  const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .warnpop, .pipemenu'));
   /* RETURNING focus, never STEALING it. Every overlay before this batch opened
      on a CLICK of its own <button>, so the captured trigger was also what the
      browser had just focused and the restore was a no-op or a step back inside

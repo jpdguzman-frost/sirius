@@ -9,9 +9,15 @@
     {{! D5 — the default order is the sheet's own row order, which reads as
         "most recently requested" only while the sheet is filled top to bottom.
         Counted client-side over the loaded rows; the sentence appears only
-        when the two disagree, so a tidy sheet never sees it. }}
+        when the two disagree, so a tidy sheet never sees it.
+
+        The number counts PLACES, not rows: each one is an adjacent PAIR that
+        steps backwards, so two rows are involved in every one of them and
+        naming rows overstates what was found. The singular is spelt because
+        one place is the commonest count there is.
+        [review S2/H6; PLAN.md §Fix amendment 3] }}
     {{#if reqOrderDivergence}}
-      <span class="sstext">The sheet's row order and its Year/Month columns disagree on {{reqOrderDivergence}} rows, so Recently requested may be out of order.</span>
+      <span class="sstext">The sheet's row order and its Year/Month columns disagree in {{reqOrderDivergence}} place{{#if reqOrderDivergence !== 1}}s{{/if}}, so Recently requested may be out of order.</span>
     {{/if}}
     <span class="ssmeta">{{syncStripLabel}}</span>
   </div>

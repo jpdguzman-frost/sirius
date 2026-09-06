@@ -67,7 +67,8 @@ const HEADER_ALIASES: Record<string, string> = {
   requestor: 'requestor',
   'primary requestor': 'requestor',
   // UNIT on screen; `use_case` in storage and on the wire (PLAN D1). Both
-  // sheet headers map — the tab was renamed, older tabs were not.
+  // sheet headers map — the tab was renamed, older tabs were not. Which one
+  // wins when a tab carries both is ruled by ALIAS_RANK below, not position.
   'use case': 'use_case',
   'business unit': 'use_case',
   brief: 'brief',
@@ -78,6 +79,31 @@ const HEADER_ALIASES: Record<string, string> = {
   'in frost prod': 'in_frost_prod',
   'in frost prod?': 'in_frost_prod',
 };
+
+/**
+ * Alias precedence, for the ONE field whose sheet header is mid-rename: when
+ * a tab carries both `Business Unit` (the ruled name, PLAN D1) and `Use Case`
+ * (the older one), the ruled name wins wherever it sits.
+ *
+ * WHY a rank and not position: a rename adds the new column beside the stale
+ * one, and nothing says on which side. First-wins-by-position would read the
+ * stale column whenever it happens to sit left; last-wins would read it
+ * whenever it happens to sit right. Either way the value a row shows would be
+ * decided by sheet layout — so a rename could silently keep serving the old
+ * column and nobody would see it. The alias NAME decides instead.
+ *
+ * This is the opposite of the two `Type` columns (gotcha 3): there both
+ * headers are legitimately the same word and position is the only thing that
+ * CAN tell card type from asset type. Nothing here changes that.
+ *
+ * Lower rank wins. An unranked alias ranks last, so every other field keeps
+ * the historical first-alias-wins behaviour (equal ranks never displace).
+ */
+const ALIAS_RANK: Record<string, number> = {
+  'business unit': 0,
+  'use case': 1,
+};
+const UNRANKED = Number.POSITIVE_INFINITY;
 
 /** Gotcha 1: every row padded to header width before positional access. */
 export function padRagged(rows: string[][], width: number): string[][] {
@@ -130,16 +156,23 @@ interface HeaderMap {
  */
 export function mapHeader(header: string[]): HeaderMap {
   const map: HeaderMap = {};
+  // The rank of the alias each mapped field was claimed by (see ALIAS_RANK).
+  const claimedBy = new Map<keyof HeaderMap, number>();
   header.forEach((cell, i) => {
     const n = norm(cell);
     if (n === 'type') {
-      map.asset_type = i; // last wins
+      map.asset_type = i; // last wins — position IS the rule here (gotcha 3)
       return;
     }
-    const field = HEADER_ALIASES[n];
-    if (field && map[field as keyof HeaderMap] === undefined) {
-      map[field as keyof HeaderMap] = i as never;
-    }
+    const field = HEADER_ALIASES[n] as keyof HeaderMap | undefined;
+    if (!field) return;
+    const rank = ALIAS_RANK[n] ?? UNRANKED;
+    const held = claimedBy.get(field);
+    // Strictly better rank only: equal ranks (every unranked alias) keep the
+    // first column, exactly as before.
+    if (held !== undefined && rank >= held) return;
+    map[field] = i as never;
+    claimedBy.set(field, rank);
   });
   return map;
 }

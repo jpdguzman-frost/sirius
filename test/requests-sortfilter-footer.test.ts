@@ -21,7 +21,7 @@ import {
   observerCalls,
   tabViewCode,
 } from './helpers/gantt-render.ts';
-import { recipe, renderRequests, reqHarness, row } from './helpers/requests-sortfilter.ts';
+import { recipe, renderRequests, reqHarness, reqSelRig, row } from './helpers/requests-sortfilter.ts';
 
 /** every rule in the sheet whose selector names this, comments stripped */
 const rulesFor = (needle: string, css: string = REQUESTS_CSS): string =>
@@ -200,6 +200,20 @@ describe('the tiles and the STATUS axis are ONE state (D4)', () => {
     expect(stats([]).filter((s) => s.on).map((s) => s.key)).toEqual(['all']);
   });
 
+  it('presses EVERY tile the axis holds when the panel ticks two or three (H2)', () => {
+    /* PLAN.md §Fix amendment 3, H2. The STATUS group is multi-select like
+       every other axis, and the tiles are its second door: with two values
+       ticked, membership is what a tile stands for, not sole occupancy. The
+       old `length === 1` read left every tile unpressed the moment the panel
+       held two — including the two the reader had just ticked. */
+    const on = (status: string[]) => stats(status).filter((s) => s.on).map((s) => s.key);
+    expect(on(['For Filing', 'For Clarification'])).toEqual(['filing', 'clarification']);
+    expect(on([recipe.STATUS_FILED, 'For Filing', 'For Clarification'])).toEqual(['filed', 'filing', 'clarification']);
+    // REQUESTS is the show-all and nothing else: it is pressed only over an
+    // empty axis, never alongside a value
+    expect(on(['For Filing', 'For Clarification'])).not.toContain('all');
+  });
+
   it('renders the pressed state off that flag, and dims the rest', () => {
     const html = renderRequests({
       requests: [row({ sheet_row: 1 })], reqFiltered: [row({ sheet_row: 1 })], reqRows: [row({ sheet_row: 1 })],
@@ -208,6 +222,61 @@ describe('the tiles and the STATUS axis are ONE state (D4)', () => {
       reqPages: [{ n: 1 }], reqPageRange: { from: 1, to: 1, total: 1 },
     });
     expect(html).toContain('aria-pressed="true"');
+  });
+
+  it('dims only the tiles the two-value selection leaves out (H2)', () => {
+    /* the two halves fed to each other: the shipped `reqStats` decides which
+       tiles are on and the shipped markup decides which recede, so `.off` and
+       `aria-pressed` cannot describe different selections. `.rstat.off` means
+       "an unpicked segment" — on every tile at once it means nothing. */
+    const status = ['For Filing', 'For Clarification'];
+    const r = row({ sheet_row: 1 });
+    const html = renderRequests({
+      requests: [r], reqFiltered: [r], reqRows: [r],
+      reqStats: reqHarness({ requestCounts: counts, reqFilters: { ...recipe.REQ_FILTERS_EMPTY(), status } }).get('reqStats'),
+      reqFilters: { ...recipe.REQ_FILTERS_EMPTY(), status },
+      reqPages: [{ n: 1 }], reqPageRange: { from: 1, to: 1, total: 1 },
+    });
+    const tiles = [...html.matchAll(/class="metric rstat([^"]*)"[^>]*aria-pressed="([a-z]+)"[\s\S]*?<span class="mlabel">([^<]*)</g)]
+      .map((m) => ({ label: m[3]!, off: /\boff\b/.test(m[1]!), pressed: m[2] === 'true' }));
+    expect(tiles.map((t) => t.label)).toEqual(['REQUESTS', 'IN PIPELINE', 'TO FILE', 'FOR CLARIFICATION']);
+    expect(tiles.filter((t) => t.pressed).map((t) => t.label)).toEqual(['TO FILE', 'FOR CLARIFICATION']);
+    expect(tiles.filter((t) => t.off).map((t) => t.label)).toEqual(['REQUESTS', 'IN PIPELINE']);
+  });
+
+  it('leaves the CLICK rules exactly as they were — sole re-click clears, otherwise narrow (D4)', () => {
+    /* the pressed state widened; the write did not. Executed rather than read
+       (test/CLAUDE.md rule 1): the door's rule is which values the axis ends
+       up holding, and a regex over its body cannot tell a narrowing from a
+       toggle. */
+    const rig = reqSelRig();
+    rig.setRequestFilter('filing');
+    expect(rig.state.reqFilters.status, 'a first press narrows to exactly its value').toEqual(['For Filing']);
+    rig.setRequestFilter('filing');
+    expect(rig.state.reqFilters.status, 'the sole value re-clicked does not clear').toEqual([]);
+
+    // a PRESSED tile among several is not the sole value: it narrows to itself
+    const many = reqSelRig({ status: ['For Filing', 'For Clarification'] });
+    many.setRequestFilter('filing');
+    expect(many.state.reqFilters.status).toEqual(['For Filing']);
+
+    // and the show-all clears whatever is there
+    const all = reqSelRig({ status: [recipe.STATUS_FILED, 'For Filing'] });
+    all.setRequestFilter('all');
+    expect(all.state.reqFilters.status).toEqual([]);
+  });
+
+  it('CLEARS on a segment key the vocabulary does not carry (H5)', () => {
+    /* `REQUEST_SEGMENT_STATUS` is an object literal, so `toString`,
+       `constructor` and `valueOf` all answer to a bare lookup and none of them
+       is a status. The same `Object.hasOwn` guard `toggleFacetValue` already
+       carries: an unknown key is a wiring mistake, and the axis it writes must
+       not become a filter over a function. */
+    for (const foreign of ['toString', 'constructor', 'valueOf', 'nope']) {
+      const rig = reqSelRig({ status: ['For Filing'] });
+      rig.setRequestFilter(foreign);
+      expect(rig.state.reqFilters.status, foreign).toEqual([]);
+    }
   });
 });
 
@@ -259,12 +328,25 @@ describe('the sync strip warns when the sheet disagrees with itself (D5)', () =>
 
   it('adds ONE sentence to the sync strip, and only while the count is above zero', () => {
     expect(TEMPLATE).toContain('{{#if reqOrderDivergence}}');
-    expect(TEMPLATE).toContain('disagree on {{reqOrderDivergence}} rows, so Recently requested may be out of order.');
     const warned = renderRequests({ reqOrderDivergence: 2, reqStats: TILES });
-    expect(warned).toContain('disagree on 2 rows');
+    expect(warned).toContain('disagree in 2 places');
     const quiet = renderRequests({ reqOrderDivergence: 0, reqStats: TILES });
-    expect(quiet, 'the warning showed over a sheet that agrees with itself').not.toContain('disagree on');
+    expect(quiet, 'the warning showed over a sheet that agrees with itself').not.toContain('disagree in');
     // it rides the strip that is already there, rather than a banner of its own
     expect(warned).toContain('syncstrip');
+  });
+
+  it('counts PLACES, and says so in the singular at one (S2)', () => {
+    /* PLAN.md §Fix amendment 3, S2. The number is the count of adjacent pairs
+       that step backwards — the places where the two orders part company —
+       and it was worded as a count of rows, which it is not: two rows are
+       involved in each. "1 places" is also the tell that nobody rendered it
+       at one. */
+    const one = renderRequests({ reqOrderDivergence: 1, reqStats: TILES });
+    expect(one).toContain('disagree in 1 place,');
+    expect(one, 'a plural over a single place').not.toContain('1 places');
+    expect(renderRequests({ reqOrderDivergence: 2, reqStats: TILES })).toContain('disagree in 2 places,');
+    // the noun is the disagreement, never the rows it spans
+    expect(one, 'the sentence still counts rows').not.toContain(' rows,');
   });
 });

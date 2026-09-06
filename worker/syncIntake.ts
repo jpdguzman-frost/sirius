@@ -31,8 +31,9 @@ export async function syncIntakeRows(
   // Data problems the mirror keeps as-is (PLAN D1): logged for a human, never
   // stored, never split, never a reject.
   for (const w of parsed.warnings) {
-    // Today the parser raises one kind: a UNIT cell holding more than one unit.
-    console.warn(`[syncIntake] intake: multi-value unit at row ${w.sheet_row} (project ${String(projectId)})`);
+    // The line is BUILT from the warning — the parser names the reason and the
+    // field, so a second kind reads correctly here without touching this code.
+    console.warn(`[syncIntake] intake: ${w.reason} ${w.field} at row ${w.sheet_row} (project ${String(projectId)})`);
   }
 
   const seen = new Set<string>();

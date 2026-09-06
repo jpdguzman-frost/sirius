@@ -501,14 +501,15 @@ const app = new Ractive({
     reqFacets() {
       return reqFacetList(this.get('reqSearched'), this.get('reqFilters')).map((f) => ({ table: 'req', ...f }));
     },
-    /* The indicator's chips — one per VALUE (D7). Only the OPEN axis's group is
-       joined on, for the same reason pipeChips reads pipeFacets conditionally:
-       this computed is always live, and reading the facets unconditionally
-       would put the whole facet pass back on the search-keystroke path. */
+    /* The indicator's chips — one per VALUE (D7), and a walk of the SELECTION
+       and nothing else. The open chip's own panel is drawn by the template
+       looking its axis up in `reqFacets`, so joining that group onto the chip
+       here was a second answer to the same question, free to disagree with the
+       first and paid for on every search keystroke (this computed is always
+       live). Pipeline's chip IS its axis, so pipeChips keeps its join.
+       [review S3; PLAN.md §Fix amendment 3] */
     reqChips() {
-      const open = this.get('chipPop');
-      const groups = open ? this.get('reqFacets').filter((f) => f.key === open) : [];
-      return reqChipList(this.get('reqFilters'), groups);
+      return reqChipList(this.get('reqFilters'));
     },
     /** How many filter VALUES are applied, across every axis — the Filter button's accessible number. */
     reqFilterCount() {
@@ -522,6 +523,13 @@ const app = new Ractive({
        leaves with the table (D8), the tiles and the toolbar stay. */
     reqNoResults() {
       if (this.get('reqFiltered').length) return false;
+      /* …and the table had something to empty. The outer gate lets a project
+         through on its REJECTED rows alone, so `requests` can be empty while
+         the tab is drawn: a term typed there would otherwise be offered the
+         shared remedy — clear your filters — which cannot bring back a row the
+         sheet never parsed. That project keeps its own dashed box whatever is
+         typed. [review L2; PLAN.md §Fix amendment 3] */
+      if (!this.get('requests').length) return false;
       return (this.get('reqQ') || '').trim() !== '' || this.get('reqChips').length > 0;
     },
     /* the four stat tiles — one row each, so the a11y attributes and the click
@@ -530,12 +538,17 @@ const app = new Ractive({
        the tile, For Filing on the badge). REQUESTS takes .metric's default
        colour, so it names no colourway: green/amber/red are the complete set.
        `on` DERIVES from the STATUS axis (D4): a tile is pressed exactly when
-       the axis holds its one word and nothing else, REQUESTS when the axis is
-       empty — there is no second state to fall out of step with the panel. */
+       the axis HOLDS its word, REQUESTS when the axis is empty — there is no
+       second state to fall out of step with the panel. Membership, not sole
+       occupancy: the STATUS group is multi-select like every other axis, and
+       reading it as "the axis holds this and nothing else" left every tile
+       unpressed the moment the reader ticked two — the two just ticked
+       included, receding as though nobody had picked them.
+       [review H2; PLAN.md §Fix amendment 3] */
     reqStats() {
       const c = this.get('requestCounts');
       const status = this.get('reqFilters.status') || [];
-      const on = (key) => (key === 'all' ? status.length === 0 : status.length === 1 && status[0] === REQUEST_SEGMENT_STATUS[key]);
+      const on = (key) => (key === 'all' ? status.length === 0 : status.indexOf(REQUEST_SEGMENT_STATUS[key]) > -1);
       return [
         { key: 'all', cls: '', label: 'REQUESTS', value: c.requests, on: on('all') },
         { key: 'filed', cls: 'green', label: 'IN PIPELINE', value: c.inPipeline, on: on('filed') },

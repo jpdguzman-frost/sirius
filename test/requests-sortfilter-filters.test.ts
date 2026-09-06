@@ -12,6 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { tabViewCode } from './helpers/gantt-render.ts';
 import { type ReqFacetValue, facet, matching, recipe, row, sel } from './helpers/requests-sortfilter.ts';
 
 const AXIS_KEYS = ['year', 'month', 'type', 'unit', 'requestor', 'status'];
@@ -55,6 +56,65 @@ describe('the filter panel carries the node’s six axes', () => {
     expect(Object.values(empty)).toEqual([[], [], [], [], [], []]);
     // a fresh object each call: two readers must not share one array
     expect(recipe.REQ_FILTERS_EMPTY()).not.toBe(empty);
+  });
+
+  it('reads `August`, `Aug` and 8 as ONE month, spelt the way the column draws it', () => {
+    /* The intake sheet's MONTH encoding is not known until the credential
+       lands, and Sheets hands numbers back as floats. Unnormalised, one
+       client's three spellings of August are three checkboxes, each over a
+       third of the rows, and no single tick can ever show the month — the
+       axis is worse than useless because it looks right.
+
+       The axis PICK therefore runs the same canonical helper the cell draws
+       with, so the panel, the chip and the row all say one word. The word
+       itself is read out of that helper rather than typed here (rule 2). */
+    const rows = [
+      row({ sheet_row: 1, month: 'August' }),
+      row({ sheet_row: 2, month: 'Aug' }),
+      row({ sheet_row: 3, month: 8 }),
+      row({ sheet_row: 4, month: 'March' }),
+    ];
+    const AUG = recipe.monthShort('August');
+    expect([recipe.monthShort('Aug'), recipe.monthShort(8)], 'the shipped normaliser disagrees with itself')
+      .toEqual([AUG, AUG]);
+
+    const month = facet(rows, 'month');
+    expect(counts(month?.values), 'the three spellings are not one option')
+      .toEqual([[recipe.monthShort('March'), 1], [AUG, 3]]);
+    // …and the one tick selects all three encodings
+    expect(matching(rows, sel({ month: [AUG] }))).toEqual([1, 2, 3]);
+    // the cell draws the same normalised word, so the chip and the row agree
+    expect(tabViewCode('requests')).toContain('{{monthShort(r.month)}}');
+  });
+
+  it('reads the MONTH axis in CALENDAR order, whatever order the sheet is in', () => {
+    /* PLAN.md §Fix amendment 3, R4. `order: MONTHS_SHORT` on the axis is what
+       makes the group readable: alphabetically the months come out Aug · Dec ·
+       Feb · Jan · Mar, which nobody can scan and which looks like a bug in the
+       data rather than in the panel. Nothing pinned it — with the
+       closed-vocabulary rank neutralised the whole suite stayed green — so the
+       fixture is deliberately UNSORTED and rows carry the short spelling
+       alongside the long, and the calendar order is asserted over the shipped
+       facet pass rather than over the constant. */
+    const rows = ['March', 'January', 'December', 'February', 'August', 'Aug']
+      .map((m, i) => row({ sheet_row: i + 1, month: m }));
+    expect(values(facet(rows, 'month')?.values)).toEqual(['Jan', 'Feb', 'Mar', 'Aug', 'Dec']);
+    // the duplicate encoding joined its own checkbox rather than adding one
+    expect(counts(facet(rows, 'month')?.values)).toEqual([['Jan', 1], ['Feb', 1], ['Mar', 1], ['Aug', 2], ['Dec', 1]]);
+  });
+
+  it('ranks a month the calendar does not know AFTER December, never in the middle', () => {
+    /* the sheet is free text: a typo or a quarter name survives `monthShort`
+       unchanged, and a value the vocabulary cannot place must not sort into
+       the middle of the year as though it belonged there. */
+    const rows = [
+      row({ sheet_row: 1, month: 'Smarch' }),
+      row({ sheet_row: 2, month: 'January' }),
+      row({ sheet_row: 3, month: 'December' }),
+      row({ sheet_row: 4, month: null }),
+    ];
+    // …and None stays behind even that: it is the residue, not a value (D11)
+    expect(values(facet(rows, 'month')?.values)).toEqual(['Jan', 'Dec', 'Smarch', 'None']);
   });
 
   it('scrolls REQUESTOR inside its own group — the one open-ended axis (D3)', () => {

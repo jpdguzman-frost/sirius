@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { APP_JS, fnBody, handlerBody } from './helpers/gantt-render.ts';
+import { APP_JS, APP_JS_CODE, decl, fnBody, handlerBody } from './helpers/gantt-render.ts';
 import { jsCode, tag, tplCode } from './helpers/pipeline-warning.ts';
 
 /**
@@ -73,7 +73,13 @@ describe('every overlay closes through ONE path — commit as well as dismiss', 
 
   it('names the overlays once and derives the three lists from that name', () => {
     expect(APP_JS).toContain('const OVERLAY_KEYS = ');
-    for (const key of OVERLAYS) expect(APP_JS, key).toContain(`'${key}'`);
+    /* read out of the DECLARATION, not out of the bundle: every one of these
+       words also appears in its own handler, its template guard and its shield
+       entry, so a key dropped from the list still matched a whole-bundle
+       search — and dropping one is exactly the defect the next test's rule
+       exists for (block 5 proof 17). */
+    const named = decl(APP_JS_CODE, 'OVERLAY_KEYS');
+    for (const key of OVERLAYS) expect(named, `${key} is not in OVERLAY_KEYS`).toContain(`'${key}'`);
     // the object literal that used to be written out in both closeMenus and
     // openOverlay, and had to be edited in step
     expect(APP_JS).toContain('const NO_OVERLAYS = ');

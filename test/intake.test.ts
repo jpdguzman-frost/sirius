@@ -157,6 +157,33 @@ describe('UNIT column (D1): header alias + multi-value warning', () => {
     expect(parseIntake([HEADER, unitRow('MC-1', 'Campaign')]).ok[0]?.use_case).toBe('Campaign');
   });
 
+  /*
+   * A tab caught mid-rename carries BOTH headers — the ruled name added
+   * beside the stale one, on either side of it. The ruled name wins wherever
+   * it sits: if position decided, a rename would silently keep reading the
+   * stale column on half the tabs. (Contrast the two `Type` columns, where
+   * BOTH headers are legitimately named `Type` and position is the only
+   * thing that CAN distinguish them.)
+   */
+  it('a tab carrying BOTH headers takes use_case from Business Unit — the ruled name wins whichever column comes first', () => {
+    const staleFirst = ['MC #', 'Deliverable', 'Use Case', 'Business Unit', 'Requestor', 'Brief'];
+    const ruledFirst = ['MC #', 'Deliverable', 'Business Unit', 'Use Case', 'Requestor', 'Brief'];
+    expect(mapHeader(staleFirst).use_case).toBe(3);
+    expect(mapHeader(ruledFirst).use_case).toBe(2);
+    // and the VALUE follows the ruled column, neither the leftmost nor the rightmost
+    expect(parseIntake([staleFirst, ['MC-1', 'Thing', 'Stale', 'Campaign', 'r@c.example', 'brief']]).ok[0]?.use_case)
+      .toBe('Campaign');
+    expect(parseIntake([ruledFirst, ['MC-1', 'Thing', 'Campaign', 'Stale', 'r@c.example', 'brief']]).ok[0]?.use_case)
+      .toBe('Campaign');
+  });
+
+  it('only the UNIT column is ruled by name — every other duplicated alias keeps first-wins', () => {
+    const map = mapHeader(['MC #', 'Id', 'Deliverable', 'Deliverable Name', 'Brief', 'Description']);
+    expect(map.mc).toBe(0);
+    expect(map.name).toBe(2);
+    expect(map.brief).toBe(4);
+  });
+
   it('a comma-separated unit is stored WHOLE and raised as exactly one warning', () => {
     const result = parseIntake([BU_HEADER, unitRow('MC-1', ' Campaign, Product '), unitRow('MC-2', 'Campaign')]);
     expect(result.ok.map((r) => r.use_case)).toEqual(['Campaign, Product', 'Campaign']); // never split, only outer-trimmed
