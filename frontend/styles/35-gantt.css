@@ -189,7 +189,7 @@
 .gantt .gdetails .c-scope { width: 262px; }
 .gantt .gdetails .c-dl { width: 163px; }
 .gantt .gdetails .c-fc { width: 142px; }
-.gantt .gdetails .c-gstatus { width: 263px; display: flex; align-items: flex-start; gap: var(--space-8); }
+.gantt .gdetails .c-gstatus { width: 263px; display: flex; align-items: flex-start; gap: var(--space-8); padding-right: var(--space-16); } /* right inset widened from the shared cell's — JP fine-tune, 2026-09-08 */
 /* the two date columns are plain values, not badges — the frame prints them
    muted (731:98682 '31 Aug 2026' → #64748b). Scoped to .growr, NOT .gdetails:
    the header cells share the column classes (that sharing is what keeps the
