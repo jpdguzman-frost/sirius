@@ -245,10 +245,10 @@
 
 /* the urgency chip (frame 731:98682) — a read-only span, NOT the Pipeline
    select pill, which is why it does not join that selector list: interaction
-   chrome there (cursor, fixed 111px, chevron slot) would be a lie here. The
-   colourways are the family's, restated at the row's 19px size: urgent is the
-   frame's solid fill, Non-Urgent keeps the DASHED stroke the Pipeline and
-   Deadlines chips wear — the dash IS the "no flag set" grammar. */
+   chrome there (cursor, fixed 111px, chevron slot) would be a lie here. One
+   colourway only, the family's, restated at the row's 19px size: the frame's
+   solid fill on an urgent row. A row that is not urgent draws no chip at all
+   (JP 2026-09-08), so there is no second variant to dress. */
 .gantt .gub {
   display: inline-flex; align-items: center; flex: none;
   height: 19px; padding: 4px 6px 3px;
@@ -256,7 +256,7 @@
   border: 1px solid transparent; border-radius: var(--radius-xs); white-space: nowrap;
 }
 .gantt .gub.urgent { background: var(--red-500); border-color: var(--red-500); color: var(--red-50); }
-.gantt .gub.nonurgent { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
+/* JP 2026-09-08: a row that is not urgent draws no chip, so the dashed recipe that dressed that state is deleted rather than parked. */
 
 /* badges: the SHARED .pbadge recipes (20-pipeline.css) at the frame's row
    sizes. No second status map, no second difficulty map (contract §3.10) —

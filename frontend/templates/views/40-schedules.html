@@ -159,11 +159,14 @@
                     {{! badges, then the FULL card name: the value is never
                         clamped in data — the mock's ellipsis is a display
                         clamp, so the name wraps and clips in CSS (#73).
-                        Non-Urgent keeps the frame's DASHED stroke
-                        (731:98513). }}
+                        The urgency chip is drawn ONLY on an urgent row: JP
+                        withdrew the second variant on 2026-09-08, so a row
+                        that is not urgent carries no urgency chip at all
+                        (it used to wear the frame's dashed one, 731:98513).
+                        The difficulty chip beside it is unchanged. }}
                     <div class="gcell c-scope">
                       <div class="gchips">
-                        <span class="gub {{row.urgent ? 'urgent' : 'nonurgent'}}">{{row.urgent ? '⚡Urgent' : 'Non-Urgent'}}</span>
+                        {{#if row.urgent}}<span class="gub urgent">⚡Urgent</span>{{/if}}
                         {{#if row.difficulty}}<span class="pbadge gsm d-{{row.difficulty}}">{{row.difficulty}}</span>{{else}}<span class="gdim">—</span>{{/if}}
                       </div>
                       <span class="gname">{{row.name}}</span>

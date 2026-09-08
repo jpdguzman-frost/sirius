@@ -160,14 +160,20 @@ describe('the selection checkbox — a row highlight; placement no longer starts
 });
 
 describe('the scope cell — badges above the FULL name', () => {
-  it('spells urgency as a coloured chip: urgent vs nonurgent, and the dashed Non-Urgent stroke survives', () => {
+  it('spells urgency as a chip on an URGENT row only — the other state draws none (JP 2026-09-08)', () => {
+    /* The row used to state both states, the second one dashed (frame
+       731:98513). JP withdrew it as display noise: a row that is not urgent
+       now carries no urgency chip at all, and the recipe that dressed one
+       goes with it — a live rule with no markup is what a later edit
+       mistakes for a supported state. */
     const urgent = renderSprintSchedule({ sprintGroups: groupsOf(PLOTTED) });
     const non = renderSprintSchedule({ sprintGroups: groupsOf(UNPLOTTED) });
     expect(urgent).toMatch(/class="gub urgent"/);
-    expect(non).toMatch(/class="gub nonurgent"/);
-    expect(non).toContain('Non-Urgent');
-    // the DASHED stroke is the Non-Urgent identity (frame 731:98513)
-    expect(`${GANTT_CSS}\n${PLANNER_CSS}`).toMatch(/nonurgent[^{]*\{[^}]*dashed/);
+    expect(urgent).toContain('⚡Urgent');
+    expect(non).not.toMatch(/class="gub/);
+    expect(non).not.toContain('Non-Urgent');
+    expect(GANTT_CSS, 'the withdrawn chip outlived its markup').not.toContain('nonurgent');
+    expect(PLANNER_CSS, 'the withdrawn chip outlived its markup').not.toContain('nonurgent');
   });
 
   it('shows difficulty as the pbadge family, or an em-dash when the card carries none', () => {

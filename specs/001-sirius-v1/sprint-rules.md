@@ -114,6 +114,11 @@ one home instead of two.
     therefore declares no colourway of its own; it inherits the rule the
     other content chip uses, so the family cannot drift by copying. A guard
     fails if any `.gnote` rule declares a background. [owl #49]
+    **The urgency chip is drawn ONLY where the row is urgent** (JP
+    2026-09-08): the second variant said nothing a reader needed and is
+    withdrawn from the row and from the stylesheet, so a row that is not
+    urgent carries no urgency chip at all. Difficulty is unaffected — it
+    still prints its dimmed dash when the label is missing (rule 61).
 58. **A content chip shows its value, never a word standing in for it.** The
     note chip renders the note; the fixed word it shipped with told the
     reader a note existed but not what it said, so the note had to be opened

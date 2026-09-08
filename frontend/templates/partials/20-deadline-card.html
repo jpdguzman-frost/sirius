@@ -3,8 +3,9 @@
     bar), #75 §1/§3 (the three counts are independent; a finished card is the
     whole card faded, nothing else restyled) and #78 §2 (a deadline belongs to
     a work card). Nodes read through Rex: I731:100872;724:50210;810:122333
-    (Urgent), the same instance ending 810:122334 (Non-Urgent) and 810:122394
-    (Inactive).
+    (Urgent), the same instance ending 810:122334 (the not-urgent variant —
+    WITHDRAWN, JP 2026-09-08: that state now draws no chip on this card at
+    all) and 810:122394 (Inactive).
 
     WHY THIS FILE EXISTS AT ALL: a partial registers template-wide ONLY at the
     top level of a template piece. Nested inside an element it goes local,
@@ -30,15 +31,18 @@
       inset on an urgent card is the stylesheet's job, not a second element
       here. }}
   {{#if c.urgent}}<svg class="dlquote" viewBox="2 1 8 180" aria-hidden="true"><path d="M10 181 C3.37 181, -2 175.6, -2 169 V13 C-2 6.37, 3.37 1, 10 1 C7.79 1, 6 4.58, 6 9 V173 C6 177.4, 7.79 181, 10 181 Z"/></svg>{{/if}}
-  {{! Badges, in the frame's order and wrapping: urgency ALWAYS (Trello has an
-      Urgent label and no label meaning not urgent, so the absence is a value
-      and is stated), then difficulty when the card is labelled, then the MC
-      group's asset type when its deliverable rows agree on one, then the raw
-      lane name. The lane text is the Trello list verbatim — it is never
-      rewritten to the classified state, which is what the colourway carries
-      elsewhere. }}
+  {{! Badges, in the frame's order and wrapping: urgency ONLY WHERE THE CARD IS
+      URGENT, then difficulty when the card is labelled, then the MC group's
+      asset type when its deliverable rows agree on one, then the raw lane
+      name. The card used to state urgency on every card, on the reading that
+      an absent Trello label is itself a value worth printing; JP withdrew that
+      on 2026-09-08 — the not-urgent state is display noise here and now draws
+      NOTHING, so the urgent chip is the only one this line can emit. The
+      remaining badges keep their order. The lane text is the Trello list
+      verbatim — it is never rewritten to the classified state, which is what
+      the colourway carries elsewhere. }}
   <div class="dlbadges">
-    <span class="dlbadge {{c.urgent ? 'b-urgent' : 'b-nonurgent'}}">{{c.urgent ? 'Urgent' : 'Non-Urgent'}}</span>
+    {{#if c.urgent}}<span class="dlbadge b-urgent">Urgent</span>{{/if}}
     {{#if c.difficulty}}<span class="dlbadge b-{{c.difficulty}}">{{c.difficulty}}</span>{{/if}}
     {{#if c.assetType}}<span class="dlbadge b-asset">Asset: {{c.assetType}}</span>{{/if}}
     {{#if c.lane}}<span class="dlbadge b-lane">{{c.lane}}</span>{{/if}}

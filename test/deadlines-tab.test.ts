@@ -695,13 +695,21 @@ describe('an EXPANDED lane is five day columns (node 810:121954)', () => {
 });
 
 describe('the card is the frame’s card (nodes …810:122333 / 122334 / 122394)', () => {
-  it('always states urgency, and states it as one of two words', () => {
+  it('states urgency ONLY on an urgent card — the other state draws no chip (JP 2026-09-08)', () => {
+    /* The card used to print urgency on every card, on the reading that an
+       absent Trello label is itself a value. JP withdrew that: the chip is
+       display noise unless it says Urgent, so the second state now renders
+       nothing at all — not a paler chip, not an empty one. */
     const urgent = cards(renderDeadlines({ dlWeeks: [week({ cards: [card({ urgent: true })] })] }))[0]!;
     const not = cards(renderDeadlines({ dlWeeks: [week({ cards: [card({ urgent: false })] })] }))[0]!;
     expect(urgent).toMatch(/class="dlbadge b-urgent"/);
     expect(urgent).toContain('>Urgent<');
-    expect(not).toMatch(/class="dlbadge b-nonurgent"/);
-    expect(not).toContain('Non-Urgent');
+    // no badge of the family carries the word, and the retired class is gone
+    expect(not).not.toMatch(/class="dlbadge[^"]*"[^>]*>[^<]*Urgent/);
+    expect(not).not.toContain('b-nonurgent');
+    // …while the badges that are not urgency are untouched by the withdrawal
+    expect(not).toMatch(/class="dlbadge b-Hard"/);
+    expect(not).toMatch(/class="dlbadge b-lane"/);
   });
 
   it('shows difficulty, asset type and lane ONLY when the card carries them', () => {
@@ -722,8 +730,12 @@ describe('the card is the frame’s card (nodes …810:122333 / 122334 / 122394)
     // would have passed on the title while the badge was missing
     expect(bare).not.toContain('b-asset');
     expect(bare).not.toContain('b-lane');
-    // …and the urgency badge is still there: it is the one that never drops
-    expect(bare).toContain('b-nonurgent');
+    // …and since 2026-09-08 a bare NON-URGENT card has no badge row content at
+    // all: urgency is the one that used to never drop, and it drops now
+    expect(bare).not.toContain('b-nonurgent');
+    // the badges ROW survives and renders empty — read as `dlbadge` followed
+    // by a boundary, or the container's own class satisfies the search
+    expect(bare).not.toMatch(/class="dlbadge[ "]/);
   });
 
   it('shows the label and NO date — the column the card sits in IS the date', () => {
@@ -756,8 +768,11 @@ describe('the card is the frame’s card (nodes …810:122333 / 122334 / 122394)
   it('marks a finished card `done`, and marks nothing else about it (#75 §3)', () => {
     const done = cards(renderDeadlines({ dlWeeks: [week({ cards: [card({ done: true })] })] }))[0]!;
     expect(done).toMatch(/class="dlcard[^"]*\bdone\b/);
-    // the frame restyles NOTHING else — same badges, same links, same title
-    expect(done).toContain('b-nonurgent');
+    // the frame restyles NOTHING else — same badges, same links, same title.
+    // The urgency chip is not among them on THIS fixture: since 2026-09-08 it
+    // is drawn only where the card is urgent, and this one is not.
+    expect(done).toContain('b-Hard');
+    expect(done).not.toContain('b-nonurgent');
     expect(done).toContain('MC-655');
   });
 });
@@ -872,9 +887,13 @@ describe('the deadlines stylesheet keeps the rules the frame is made of', () => 
     expect(DEADLINES_CSS).not.toContain('.dlcard::before');
   });
 
-  it('keeps the DASH on the non-urgent badge — it is that badge’s identity (#74 §3)', () => {
-    expect(bodyOf('b-nonurgent')).toContain('dashed');
-    // and the urgent badge does NOT wear it: the two must stay tellable apart
+  it('has NO rule left for the withdrawn urgency variant — one urgency chip, not two (JP 2026-09-08)', () => {
+    /* The dash was that variant's whole identity (#74 §3). With the variant
+       withdrawn the recipe is dead CSS, and dead CSS is exactly what a later
+       edit lands on by mistake. Read through the flattener, which strips
+       comments first, so the dated note left in the sheet cannot mask this. */
+    expect(rulesFor('b-nonurgent')).toHaveLength(0);
+    // the one that survives is still declared, and still not dashed
     expect(bodyOf('b-urgent')).not.toContain('dashed');
   });
 

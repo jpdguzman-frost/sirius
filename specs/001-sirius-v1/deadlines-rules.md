@@ -114,9 +114,11 @@ treatment, the empty cards, the navigator and rollover are as they were.
   A done card does not roll. [#75 §3; node opacity 0.4; guard]
 - **R-d2-m Badges are 19px, radius 2, 10px/600, padding 4×8.** Urgent is
   amber-600 with amber-50 ink (the NODE; #74's prose said red — #79 rules
-  "URGENT is amber-600 everywhere"); Non-Urgent keeps the DASH (slate-50 fill,
-  1px dashed slate-400, slate-500 ink) because Trello has no label meaning
-  not-urgent; Hard/Medium/Easy as Pipeline's set; asset slate-100/300/500;
+  "URGENT is amber-600 everywhere"). **The non-urgent state draws NO chip at
+  all** (JP 2026-09-08) — it was display noise, so the card is silent about
+  urgency unless it is urgent; the dashed slate variant this rule used to
+  carry, and its stylesheet recipe, are withdrawn. Hard/Medium/Easy as
+  Pipeline's set; asset slate-100/300/500;
   lane blue-50/blue-500. [#74 §3 table; nodes 724:50684 · 724:50654 ·
   724:50604 · 724:50605]
 - **R-d2-n Empty states come from the NODES**: `None slated today` (a day) and

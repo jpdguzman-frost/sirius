@@ -1,7 +1,8 @@
 /* Deadlines tab, rebuilt on the WORK-CARD unit — owls miles→jp #74 and #75,
    Rex nodes: container 731:100853, range navigator 731:100859, collapsed lane
    731:100872, expanded lane 810:121954, cards 810:122333 (Urgent) /
-   810:122334 (Non-Urgent) / 810:122394 (Inactive), empty cards 810:121571.
+   810:122334 (the not-urgent variant, withdrawn 2026-09-08) / 810:122394
+   (Inactive), empty cards 810:121571.
 
    This sheet REPLACES the v1 tab (owl #64, node 630:51389) whole. The stats
    strip, the notice banners and their detail rows, the acknowledge and restore
@@ -204,14 +205,10 @@
 }
 /* Urgent is amber everywhere on the board since owls #78/#79 — the same fill
    and ink the Pipeline pill wears, so a reader who learned urgency there reads
-   it here without relearning. The stroke matches the fill, which keeps this
-   box the same size as the dashed one beside it. */
+   it here without relearning. The stroke matches the fill, so the chip is the
+   width of its own label and of nothing else. */
 .dlbadge.b-urgent { background: var(--amber-600); border-color: var(--amber-600); color: var(--amber-50); }
-/* Non-Urgent draws an ABSENCE: Trello has an Urgent label and nothing meaning
-   not-urgent, so a solid stroke would assert a value the data does not hold.
-   The dash is kept (#74 §3); a plain dashed stroke is as close as CSS comes to
-   the node's own dash pattern, the same call the Pipeline pill made. */
-.dlbadge.b-nonurgent { background: var(--slate-50); border-style: dashed; border-color: var(--slate-400); color: var(--slate-500); }
+/* JP 2026-09-08: the not-urgent state draws no chip on this card, so the dashed recipe that dressed it is deleted rather than parked. */
 /* difficulty — the node's trio, fill one step above the card and label one
    step darker than the stroke, the reading owls #78/#79 settled */
 .dlbadge.b-Hard { background: var(--red-50); border-color: var(--red-600); color: var(--red-600); }
