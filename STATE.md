@@ -1,6 +1,6 @@
 # STATE.md — Sirius Build State
 
-_Last updated: 2026-09-08 · Update at the end of every working session._
+_Last updated: 2026-09-09 · Update at the end of every working session._
 
 **Layer 1 — current state only.** Anything settled or narrated moves to an
 archive the session it closes, never loaded on resume:
@@ -15,10 +15,10 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 |---|---|---|---|
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12**; T073/T091 ⏸, T075 pending | write-enable on rt-837 = next JP gate |
-| 18i | **Lane-state table (§7a/#82) · start-day Deadlines (§6.2) · plain DEADLINE cell, amber bar, §4.4 withdrawn (#81/#86) · acknowledgement half deleted, archived by migration 011 (#87)** | **DEPLOYED 2026-09-08** (`28b6080`…`13159b9`, JP's word; evening: pane insets, urgency chip only when urgent): VALIDATE ×4, 47 proofs, review 24 → 14 fixed, E2E green; live healthz 200 ×3, migration 011 applied (archive 0 rows), withdrawn routes 404, worker up, urgency smoke green | Miles's #66/#67 answers |
+| 18j | **Plotting guardrails on Sprint Schedules** (JP's four rulings 2026-09-08): `plotIssue` — `OUT_OF_SPRINT` / `PAST_DEADLINE` / `NOT_A_WORKDAY` (422, rollover exempt), the strict bare sprint move, day-grain placement (`dayAtX`), the pointer bar drag (`barDrag*`, `dragGrab`, `barLeftAt`), rulebooks re-aligned, `weekAtX` retired | **BUILT 2026-09-09, deploy HELD for JP** (`98aaff4`…`dd1ec29`): VALIDATE ×2 (43 proofs, none vacuous), review 20 → 13 fixed / 2 refuted, E2E 12/13 real-pointer (Escape-mid-drag unit-proven only), cleanup proven | JP: deploy · owl #69 to Miles (the three product-rule changes) |
 | 19 | **The ARES-sourced, tag-classified cycle-time model** (T179–T183, ~3–4d) — replaces the inter-event dwell derivation that produced `Medium/design = 0.13d`. Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
 
-**Build health (2026-09-08):** 1493 tests, 0 `it.todo`, 78 files — green
+**Build health (2026-09-09):** 1566 tests, 0 `it.todo`, 78 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations defined through **011** (archives `conflict_acknowledgements`; runs at
 the next deploy). The
@@ -54,7 +54,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
   before building on one. **Thread**: miles→jp acked through **#71** + #76–#79;
   **#72/#73 UNACKED** (screens pending), **#80** §2 processed, §1/§3 (W4) asked back in #66; **#81–#87 ACKED** (block 6 deployed);
-  jp→miles sent through **#66** (2026-09-08, JP's yes: OPEN WORK, W4, §6.2 day capacity asked; #80 §4/#83/#86 answered); **#67 + #68 sent** 2026-09-08 on JP's word (block 6 report; the chip + inset rulings); #62–#65 = blocks 2–5 (state-log 09-05/09-06). Product is fixing frame defects; **until they
+  jp→miles sent through **#66** (2026-09-08, JP's yes: OPEN WORK, W4, §6.2 day capacity asked; #80 §4/#83/#86 answered); **#67 + #68 sent** 2026-09-08 on JP's word (block 6 report; the chip + inset rulings); **#69 (block 7: day grain on Sprint Schedules, a start after the deadline refused, a start outside the sprint refused, rollover unchanged) DRAFT — waits for JP's word;** #62–#65 = blocks 2–5 (state-log 09-05/09-06). Product is fixing frame defects; **until they
   confirm, this build is authoritative over those frames** — including the
   past-deadline legend reworded 2026-08-27. **Awaiting Miles**: #66's three answers, a ruling on the reworded legend. Build spec **v1.3 is the held copy** (`docs/product/build-spec-v1.3.md`; banner names #86/#87).
   Closed threads → `docs/history/state-log/`.
@@ -90,14 +90,10 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Product (Miles)**: #66 (OPEN WORK meaning, W4, §6.2 day capacity) · the 51 lane names §7a counts but never writes — pinned from ARES; `Generation`/`Refinement` + five `Backlog: …` sub-lanes by rule; `For Archive`, `For Client Approval`, `Hard Deadline: Monday Mar. 23`, `NOTE`, `On Hold: Ryse, NBG` unknown on purpose (logged per sync) · the row-controls design pass + Smoke pass ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
+- **Block 7 residuals** (`docs/history/state-log/2026-09-09.md`): **sprint-shrink** — editing a sprint's dates so plotted rows fall outside it is not guarded (pre-existing; JP to rule: refuse, re-file like the roll, or leave) · visual calls: the 18.4px `+` reads as a dot, a refused preview on a late bar differs only by wash, the `+` covers the deadline tick on the deadline day, no START column on the tab · Escape held mid-drag is unit-proven only (no tool holds a mouse button) · batch placement never existed (D1).
 - **Block 6 residuals**: `warn*` names on the shared hover scheduler (pinned by three suites + eslint; one-commit rename) · sprint membership follows the START day after a roll (supersedes #75 §2; Miles to confirm) · the model refresh re-runs nightly after the classifier swap (model stays frozen) · one vacuous ordering guard in `status-rules.test.ts` (recorded) · a new lane is invisible until a card sits in it (ARES #11).
 - **Block 5 residuals**: see `docs/history/state-log/2026-09-06.md` (panel cap offset · units unflagged · chips per axis vs value · `.sfbtn` 40 vs 38 · rejects-only state unseen live).
-- **Agent backlog**: next split candidates (files >50KB read whole by agents): `test/helpers/gantt-render.ts` 147KB · `frontend/styles/20-pipeline.css` 54KB · `90-events.js` 47KB · `40-app-state.js` 44KB · the single add's own sprint-gone window (same shape as the batch's S1, narrower) · Enter as Add All (suggestion to Miles) · arrow keys through the Pipeline popovers (owl #62, never built) · Trello list order for STATUS needs an ARES list position (own slice, R-pf-e) · the setter's popover dismisses on a sideways gantt scroll (parity with Pipeline, review R4-2) · focus drops to body after the setter's reload (the badge-write class) · a rot alarm for FRONTEND_SHARED (ALT-6) · the rollover's `skipped` counts rows nobody looked at (ALT-7) · Pipeline's work-row DEADLINE keeps the datefield box look (ask Miles) · the local rig carries a fixture `ares` sync row · `pipeWorkLive` → PIPE_WORK_FILTERS once eslint lists it · badge writes drop keyboard focus after the reload · W1 has no
-  server no-op guard (contract rule 4, pre-existing) · T075 AC sweep · non-member 403 check · `Last Synced`
-  browser-TZ + col-done width · schedules-tab tokenization beyond the planner ·
-  per-tab URL sub-state (raised to Miles in #40) · `worker/CLAUDE.md` unwritten
-  (highest-consequence path) · pipeline/requests rulebook extraction from their
-  frame-notes (Layer-2 law until extracted — `docs/README.md`).
+- **Agent backlog**: the split candidates + the long tail rotated to `docs/history/state-log/2026-09-09.md` §"Agent backlog" (unchanged by block 7).
 
 ## Session log
 
@@ -106,5 +102,5 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
+- 2026-09-09 — **Block 7 built, deploy held** (JP's four rulings; `98aaff4`…`dd1ec29`): the three plot guards + the strict sprint move, day-grain placement, the pointer bar drag with grab offset, rulebooks re-aligned, `weekAtX` retired. Review 20 → 13 fixed; VALIDATE ×2; E2E green (12/13 real pointer). ≈4.0M subagent tokens, 82 agents. Narrative: `docs/history/state-log/2026-09-09.md`; plan+drift: `2026-09-09-plan-block7.md`.
 - 2026-09-08 — **Block 6 built** (spec v1.3 §7a/§6.2, owls #81/#82/#86/#87; JP yes ×3 + five rulings): lane-state table with `excluded` (names from ARES), start-day Deadlines, plain DEADLINE cell + amber bar + §4.4 withdrawn, acknowledgement half deleted (migration 011, invariant 13), spec v1.3 held. Review 24 → 14 fixed; E2E green. `28b6080` · `547effd` · `81000d0` · `fe1089f`. Narrative: `docs/history/state-log/2026-09-08.md`.
-- 2026-09-06 — **Block 5 built + deployed** (owl #77 §1–4; `f6eb941`…`f1db33b`). Narrative: `docs/history/state-log/2026-09-06.md`.
