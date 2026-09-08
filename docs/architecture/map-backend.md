@@ -44,7 +44,7 @@ _last-verified: 2026-08-18_
 - `src/routes/deliverables.ts` — read-only pipeline/model/deadline payloads.
 - `src/routes/projects.ts` — project list/switcher; the scoping pattern.
 - `src/routes/requests.ts` — intake mirror + frost notes; status derived from Trello join, never stored.
-- `src/routes/schedule.ts` — ONLY write surface for Sirius-owned planning (week/pin/confidence/SLA/note/capacity) + sprints + suggest.
+- `src/routes/schedule.ts` — ONLY write surface for Sirius-owned planning (week/pin/confidence/SLA/note/capacity) + sprints + suggest; the three sprint-item write routes (single/batch add, PATCH plot-or-move) run `plotIssue` before any write whenever a person supplies `starts_on` (block 7).
 - `src/routes/webhooks.ts` — ARES push receiver, HMAC-signed, stores pending events; verifySignature.
 - `src/routes/writes.ts` — registry writes W1 urgency/W2 due/W3 difficulty; Trello-first, rollback structural.
 - `src/routing/paths.ts` — shell whitelist + returnTo validator + base-path stamp; ROUTE_TABS mirrored in 00-router.js; isShellPath/safeReturnTo.
@@ -57,8 +57,8 @@ _last-verified: 2026-08-18_
 - `src/services/model-grid.ts` — per-project EmpiricalModel with fallback provenance; loadProjectModel.
 - `src/services/model-refresh.ts` — pure BR-2 derivation: card_events → samples → grids + delta; deriveSamples/computeModelGrid.
 - `src/services/pipeline.ts` — db rows → tab payload (deliverables_v + forecast + BR-10); loadPipeline/toMilestones.
-- `src/services/rollover.ts` — the rollover job: late plotted rows walk to today one working day at a time, the sprint follows the finish day (owl #75 §2); gated on a fresh successful read, conditional updates, audit-or-revert, one sync_runs row per project; nextFinishDay/sprintFor/rollUnfinished.
-- `src/services/sprint-items.ts` — hand-placed work-card schedule rows (owl #72); loadSprintItems/finishOf.
+- `src/services/rollover.ts` — the rollover job: late plotted rows walk to today one working day at a time, sprint membership follows the NEW start day (spec v1.3 §6.2, supersedes owl #75 §2's finish-day reading); gated on a fresh successful read, conditional updates, audit-or-revert, one sync_runs row per project; nextFinishDay/sprintFor/rollUnfinished; never calls `plotIssue` — exempt from the plot guards by design (block 7).
+- `src/services/sprint-items.ts` — hand-placed work-card schedule rows (owl #72); loadSprintItems/finishOf/deadlineFor; `plotIssue` — the OUT_OF_SPRINT/PAST_DEADLINE/NOT_A_WORKDAY placement guard shared by every write route that takes a day from a person (block 7, JP 2026-09-08).
 - `src/services/status-rules.ts` — BR-10 list name → pending/ongoing/done; classifyList.
 - `src/services/sync-status.ts` — the ONE sync_runs latest-read query: READ_SOURCES (ares + ares_push) for the rollover gate, `ares` alone for the FR-8.6 freshness chip (its push-healthy wording is JP's call); latestRead.
 - `src/types/express-session.d.ts` — session returnTo typing.

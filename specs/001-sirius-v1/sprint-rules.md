@@ -5,12 +5,12 @@ membership, the sprints modal, Suggest, the row action cluster, the chip
 grammar and the search-based add row. Split out of `gantt-rules.md` on
 2026-09-05 at the 20KB rulebook cap; rule numbers are GLOBAL across the two
 files (26–39, 53–62 and R8-* live here; 1–25 and 40–52 stay there), so every
-existing citation still names exactly one rule. The drag contract (`gantt-rules.md`
-§1), geometry (§2) and verification law (§5) bind every row this file
-describes. Narratives: `gantt-frame-notes.md`. Where a rulebook and a
+existing citation still names exactly one rule. The pointer-drag contract
+(`gantt-rules.md` §1), geometry (§2) and verification law (§5) bind every row
+this file describes. Narratives: `gantt-frame-notes.md`. Where a rulebook and a
 narrative disagree, the rulebook wins — fix the narrative.
 
-_last-verified: 2026-09-05_
+_last-verified: 2026-09-09_
 
 ## 3. Planner behaviours
 
@@ -34,10 +34,17 @@ _last-verified: 2026-09-05_
     `hardIdeal`/`hardCeiling` ride the `capacity` block from `HARD_MIX`
     (`lib/planner.constants.ts`) on GET and the PATCH echo; "13%" is
     `Math.round(hardCeiling * 100)`, never retyped. [R9]
-30. **Sprint membership is DERIVED**: slotted week ∈ sprint range; a drag
-    into another sprint's range IS the sprint move; no row carries a sprint
-    reference on the wire. Group order: sprints by `position` → Outside any
-    sprint → Unscheduled, empty groups dropped. [R5; invariant 12]
+30. **Sprint membership is STORED, not derived**: `sprint_id` rides the row on
+    the wire (build-spec-v1.3 §5.3). Placing or dragging a row onto a day
+    inside a DIFFERENT sprint's range IS the sprint move — the write carries
+    the target sprint's id and the plot guards (§10 below) are checked
+    against that target sprint, not the row's old one. Group order: sprints
+    by `position` → Outside any sprint → Unscheduled, empty groups dropped.
+    Rollover is the one write path that changes `sprint_id` without a PM
+    click, by re-deriving it from the row's new `starts_on` against every
+    sprint's range (R9-d) — the plot guards never run on that path (§10).
+    [R5; invariant 12; corrects the DERIVED wording superseded by §5.3;
+    block 7, JP 2026-09-08]
 31. **Sprints modal — blocking (red) classes, both sides, byte-identical
     copy where both speak**: duplicate names (trimmed/case-insensitive, 422
     `SPRINT_CONFLICT`), blank/whitespace-only names (one banner per blank
@@ -203,4 +210,71 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
   backlog).
 - **R9-d** Rollover (deadlines-rules.md §4) moves `starts_on` server-side; the
   bar translates whole and the FORECASTED cell moves with it by construction;
-  sprint membership follows the card's finish day. No marker on the row.
+  sprint membership follows the card's new START day — the day rollover just
+  wrote, matched against every sprint's `[starts_on, ends_on]` range — not the
+  finish day (corrects the prior wording; the finish can sit in a later sprint
+  than the start, or in none). No marker on the row. [§6.2, 2026-09-08]
+
+## 10. The plot guards — placing and dragging a bar (block 7, JP 2026-09-08)
+
+- **R10-a** A row is placed or dragged at DAY grain, not week grain: the
+  violet `+` tracks the pointer across workdays and a click sets `starts_on`
+  to the exact day under it; a placed row's coloured run is itself the drag
+  source and can be picked up and dropped on another workday. This is a
+  deliberate extension of §5.1b/§5.2 — Sprint Schedules now owns the day for
+  this one gesture, not only the week — decided by JP 2026-09-08 over the
+  §6.2 two-owner reading. `docs/product/build-spec-v1.3.md` §5.1b/§5.2's
+  week-grain prose is superseded to that extent; everything else in §5.1b/
+  §5.2 (click-to-place with no picker, the user sets the start and the finish
+  is computed, Escape/outside-drop cancel, no HTML5 drag-and-drop) still
+  holds. [`dayAtX`, `plusLeft` — `frontend/scripts/50-gantt-geometry.js`;
+  `plotHover`/`plotPlace`/`barDragStart`/`barDragMove`/`barDragEnd`/
+  `barDragCancel` — `frontend/scripts/90-events.js`]
+- **R10-b** A manual placement or drag is refused, 422, before any write and
+  before any audit row, in this order — the PM is told the first thing wrong
+  with the day in the order they would fix it:
+  1. `OUT_OF_SPRINT` — the day is outside the TARGET sprint's own dates, both
+     ends INCLUDED (the sprint's first and last day are both legal starts);
+  2. `PAST_DEADLINE` — the card carries a deadline (R9-b) and the day is
+     AFTER it. The deadline day itself is a legal start. Only the START is
+     guarded — a row may still FINISH past its deadline and paint the bar's
+     lateness signal (§5.1, R9-c); that stays true and is not this rule;
+  3. `NOT_A_WORKDAY` — the day is a Saturday, a Sunday, or a holiday on the
+     ACTIVE calendar `lib/calendar.ts` loads from the ARES sync (invariant
+     11) — never a second holiday source.
+  Body is `{ code, message }`; the messages are frozen copy carrying the
+  sprint's dates or the deadline date in the codebase's existing long-date
+  form ("14 Aug 2026"). One validator (`plotIssue()`,
+  `src/services/sprint-items.ts`) backs all three write paths that take a
+  day from a person — `PATCH /sprint-items/:itemId`, the single
+  `POST /sprint-items` — so the same day gets the same answer everywhere it
+  can be offered. [`specs/001-sirius-v1/contracts/http-api.md`]
+- **R10-c** `POST /sprint-items/batch` never carries a day — its body is
+  `.strict()` with no `starts_on` field, so a batch add always lands
+  UNPLOTTED and no skip entry in that route ever carries a plot code. A
+  batch is the two-act add (rule in §6 above); placing a row is always a
+  separate, later act through R10-a's single-row paths.
+- **R10-d** The guards bind ONLY a person's own click or drag. Rollover
+  (deadlines-rules.md §4; R9-d) never calls `plotIssue()` and is exempt by
+  construction: a card that never completes moves indefinitely, landing
+  outside its sprint and past its deadline, with no cap and nothing on
+  screen recording it (§6.2) — that is rollover's whole point, and a guard
+  that also ran on the day-advance job would stop it exactly when a card
+  runs late.
+- **R10-e** The affordance guard mirrors the server on the client so a
+  refusal is rare, never load-bearing: `placeable(row, day)` — inside the
+  row's own sprint's dates, not after `row.deadline`, Mon–Fri by
+  construction (`dayAtX` names no other day) — gates the `+` and the hover
+  tint; a day that fails it draws neither, and a click there is a no-op. The
+  server is the backstop for every case the client cannot know (a holiday:
+  deliberately NOT checked client-side, since the ARES calendar is
+  canonical) — its 422 message reaches the PM through the existing error
+  banner and the row's optimistic change is rolled back.
+- **R10-f** A bare `sprint_id` move with no `starts_on` in the same write is
+  NOT judged by the guards — only a write that supplies a day is. This
+  leaves a row free to be re-filed into a sprint whose range does not cover
+  its existing bar, which is what lets a PM re-home a row rollover has
+  already carried out of range; a write that DOES carry a day is judged
+  against the sprint that write targets. Un-plotting (`starts_on: null`) and
+  re-sending the day a row already sits on are both no-ops that return before
+  the guard runs.

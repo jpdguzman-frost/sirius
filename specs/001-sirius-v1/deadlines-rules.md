@@ -147,8 +147,12 @@ treatment, the empty cards, the navigator and rollover are as they were.
   advances one WORKING day (`workday(d, 1)`, weekends and the ARES calendar's
   holidays skipped) and the finish is recomputed by the engine. The bar
   translates WHOLE — never stretched to cover the delay. A Friday finish
-  lands on Monday at Saturday's first tick. [#75 §2; `src/services/rollover.ts`;
-  `test/rollover.test.ts`]
+  lands on Monday at Saturday's first tick. **This move is exempt from the
+  plotting guards** (sprint-rules.md §10, R10-d): `rollUnfinished` never
+  calls `plotIssue`, so a roll can and does carry a row outside its sprint's
+  range and past its own deadline — the whole point of "no cap and nothing
+  on screen recording it." [#75 §2; `src/services/rollover.ts`;
+  `test/rollover.test.ts`; block 7, JP 2026-09-08]
 - **R-d2-q Sprint membership follows the card's day, which is its START.** The
   sprint holding the NEW `starts_on` becomes the row's `sprint_id` (tail
   position, the PATCH route's rule); when no sprint covers it the row stays

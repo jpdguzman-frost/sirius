@@ -13,153 +13,184 @@ Pipeline-tab and Requests-tab rules (R-warn-*, the two-valued Requests STATUS,
 the requestor clip) are out of scope — see `pipeline-frame-notes.md` and
 `requests-frame-notes.md`.
 
-_last-verified: 2026-09-05_
+_last-verified: 2026-09-09_
 
-## 1. The drag contract
+## 1. The drag contract (pointer-drag, block 7, JP 2026-09-08 — supersedes the
+   HTML5 drag-and-drop contract this section held through 2026-08-28)
 
-1. **A drag source must stay hit-testable in every state.** Chrome starts a
-   drag from the draggable ancestor and hit-tests it; `pointer-events: none`,
-   `visibility: hidden` or `display: none` on it or an ancestor — at rest or
-   mid-drag — cancels the drag in the same tick it starts. Hit-testable at
-   mousedown only is not enough. [R-g-1, batch 7]
-2. **The drag source is `.grun`** — the coloured run's own box:
-   `.gtrack > .gbar > .grun > .gseg × N` (`.gdl`/`.gghost` stay direct
-   children of `.gtrack`). `.grun` carries all five directives (`draggable` +
-   dragstart/dragend/dragover/drop) plus its inline `left`/`width`; `.gbar`
-   carries none. Never the row, never the bar wrapper. [JP 2026-08-18,
-   batch 8; state-log 2026-08-18]
-3. **`.gantt .gbar` is `pointer-events: none`; `.gantt .grun` is
-   `pointer-events: auto`, written out explicitly — the two rules ship
-   together or not at all.** The transparent wrapper hands outside-the-run
-   drops to the `.gweek` cells. [batch 8 §supersession; drag-hittest]
-4. **One box over the whole coloured run**, never one handle per phase
-   segment. [JP 2026-08-18, batch 8]
-5. **Minimum grab width is 24px, done as arithmetic in `phaseRun`, never as
-   CSS.** A CSS minimum widens the rendered box after the arithmetic and
-   stretches every short bar; `sprint-schedule-bars-footer` (was `gantt-run-geometry`, retired 2026-08-28) bans the width properties
-   by name. [batch 8 §minimum-grab]
-6. **The box anchors left and grows its invisible part right; in the final
-   column it extends LEFT** — `L = max(0, min(R0, TOTAL_UNITS − W))`, one
-   expression, no branch — so the handle never leaves the track.
-   [batch 8 §direction]
-7. **Vertical extent is the 26px bar band**: `.grun` is `top: 50%;
-   transform: translateY(-50%); height: var(--gbar-h)`; `.gseg` fills it
-   (`top: 0; bottom: 0`). [JP 2026-08-18, batch 9]
-8. **The drag ghost is the source's box.** Blink snapshots the source's
-   bounds, painting what sits behind a transparent source — keep the source
-   tight to what should be pictured. Chrome owns the ghost's translucency,
-   shadow and grab offset. [JP 2026-08-18, batch 9]
-9. **The invisible extension paints nothing and does not lie about the
-   cursor**: `.grun` shows `cursor: default`; only `.gseg` shows `grab`
-   (`grabbing` pressed). [batch 8 §invisible; T157]
-10. **Drop mapping**: `weekAtX(clientX, rect, weeks)` — named, pure — maps
-    the pointer to a week from the track's MEASURED width (equal columns,
-    pinned by test), half-open, clamped; the handler measures
-    `ctx.node.closest('.gtrack')`, never `ctx.event.target`. [batch 7]
-11. **One write path**: `dropOnBar` runs the SAME `moveRows` as `dropOnWeek` —
-    exactly two `POST …/replot` call sites in `90-events.js`, one audit path. The
-    card id comes off `dataTransfer.getData('text/plain')`, never off the
-    landing row. [batch 7 §one-write]
-12. **`moveRows` refuses a non-change**: it declines only when EVERY member is
-    a no-op, so a mixed multi-select still goes (invariant 10).
-    [review sweep #2, state-log 2026-08-18]
-13. **Pinned rows are fully frozen** (`draggable="false"`, `not-allowed` on
-    the segments, keyboard path flashes *Pinned — unpin to move* with no
-    POST, Calendar Remove disabled) — but the bar KEEPS its drop handlers:
-    the pin freezes the row, not the column. One carve-out: a pinned row
-    inside a keyboard multi-select neither flashes nor blocks — the POST
-    goes and `/replot` skips the pinned member server-side, so only the
-    unpinned members move. [JP ruling B 2026-08-17; batch 7; `rowKey` in
-    90-events.js, FR-5.9]
-14. **Unscheduled rows keep row-drag** (no bar): the gutter grip renders only
-    there; targets are their week cells, another row's bar, and the
-    Unscheduled block header (unslot). [R-drag-a, R-drag-b]
-15. **Affordance = target**: grab cursor over the colour only, plain arrow
-    over empty track, `not-allowed` over a pinned row's colour (resting AND
-    `:active` clauses, segment-scoped). The bar carries no `title`; the drag
-    instruction is standing `.fnnote` text, and the pinned message lives on
-    `.growr`'s `title` (inherited) plus each segment's phase title.
-    [JP 2026-08-18, T157]
-16. **`ganttDragging` survives**: its `.gantt.gdragging .gdl` clause is
-    load-bearing — the deadline tick paints above the bar and would swallow
-    the drop at its own column — and `moveRows` clears the flag defensively.
-    [batch 7]
-17. **The `.gweek` cells are swept as drop targets in their own right** —
-    `pointer-events: none` on their chain (e.g. `.gtrack`) is banned even
-    when every source still drags, because drops outside the run land through
-    them. [batch 8 fix pass; drag-hittest]
-18. **The drag-source count is pinned at 3** — `entry`, `growr`, `grun`: a
-    fourth joins the guard automatically; one-handle-per-segment fails
-    loudly. [batch 8 §guard; drag-hittest]
+The HTML5 `draggable`/dragstart/dragover/drop contract rules 2–18 once
+described here (`.grun`, `.growr`, `dropOnBar`/`dropOnWeek`, `ganttDragging`,
+the phase-segment run box) died with the phase-segment gantt on 2026-08-28 —
+`test/sprint-schedule-bars-footer.test.ts` and `test/drag-hittest.test.ts`
+assert every one of those names GONE from the shipped source. Between
+2026-08-28 and block 7 (2026-09-08) Sprint Schedules had click-to-place only
+and no drag at all. Block 7 rebuilds dragging as pointer events on the single
+urgency-coloured bar (`.gitem`) that replaced the phase-segment run. The
+numbering below keeps rule 1's principle — that survived every rebuild — and
+replaces the rest with what is actually wired in `frontend/scripts/90-events.js`
+and `frontend/scripts/50-gantt-geometry.js`.
+
+1. **A drag source must stay hit-testable in every state.** The source is
+   picked up and driven by `mousedown`/`mousemove`/`mouseup` handlers, not by
+   the browser's own HTML5 drag machinery, but the principle is unchanged:
+   `pointer-events: none`, `visibility: hidden` or `display: none` on the
+   source or an ancestor — at rest, hovered, dragging, refused, late or
+   saving — must never make it unclickable. `test/drag-hittest.test.ts`
+   enumerates `.gitem`, `.gitem.late`, `.gitem.dragging`, `.gitem.refused`,
+   `.gitem.dragging.refused`, `.gitem.work` and the `:hover`/`:active`
+   states and proves each stays hit-testable. [R-g-1, batch 7; rebuilt block
+   7, `test/drag-hittest.test.ts`]
+2. **The drag source is `.gitem`** — the row's one coloured bar
+   (`frontend/templates/views/40-schedules.html`), the same element `itemBar`
+   draws and the PM already reads as the row's placement. There is no
+   separate run/segment box: a work card shows one phase class (`work`,
+   `sketch` or `render`, colour only — `itemPhase`) plus `late` when it
+   qualifies, and `dragging`/`refused` are added only for the gesture's
+   duration. No `.grun`, no per-segment handle — never built for the single-
+   bar model. [`on-mousedown="['barDragStart', ...]"` on `.gitem`; block 7]
+3. **No HTML5 drag-and-drop, anywhere in this contract.** `draggable` stays
+   absent from the shipped source — `test/drag-hittest.test.ts` sweeps it as
+   a set that must stay EMPTY, separately from the pointer sources. Pointer
+   events were chosen because HTML5 DnD fails inside sticky and scrolling
+   containers, which this layout has (build-spec-v1.3 §5.2). [block 7]
+4. **Day-grain snap, not week-grain.** `barDragMove` reads the day under the
+   pointer through `dayAtX(clientX, rect, weeks)` — the same workday-indexed
+   axis `dayAtX` gives the click-to-place `+` (sprint-rules.md R10-a) — and
+   stores it as `dragDay`; the bar's preview position comes from `plusLeft`
+   at that day. Snapping to a week column, and the mid-drag chip showing a
+   week and a delta, described the retired contract and are not built.
+5. **The bar previews at the dragged day with its OWN width unchanged** —
+   `dragLeft` repositions the same box `itemBar` already sized; nothing
+   stretches or shrinks it mid-drag. A day the row may not have (outside its
+   sprint, past its deadline, not a working day — sprint-rules.md R10-b/e)
+   still previews, wearing `refused`, and does not commit on release.
+6. **Commit is `mouseup`**, and only when the day changed and is placeable:
+   `barDragEnd` PATCHes `starts_on` to `dragDay`, optimistic — the bar stays
+   at the dropped day until the row reloads — and rolls back with the
+   server's message shown in the existing error banner on a 422
+   (sprint-rules.md R10-b). Releasing on the day the row already sits on, or
+   on a refused day, writes nothing.
+7. **Escape cancels** — `barDragCancel` snaps the bar back to its last saved
+   position and sends no write, matching build-spec-v1.3 §5.2's Escape rule
+   for the retired multi-row shift.
+8. **No ghost element.** The bar itself is the only thing that moves; there
+   is nothing behind it to snapshot and nothing painted in a `.gghost`
+   layer — that class does not exist in the shipped template.
+9. **`mousemove` and the release/cancel handlers bind only while a drag is
+   live** — attached in `barDragStart`, removed in `finally` — so an idle
+   pointer never carries drag listeners and a stray `mouseup` elsewhere on
+   the page cannot commit a drag that never started.
+10. **Multi-row relative-shift drag (build-spec-v1.3 §5.2) is not built.**
+    One row drags at a time; dragging several rows a week apart and
+    preserving that spacing is out of this pilot (PLAN.md "Not built").
+11. **Cross-sprint drag by dropping on another sprint's rows is not built.**
+    A row moves sprints only by landing on a day inside a different sprint's
+    own range (sprint-rules.md rule 30, R10-a); there is no drop target that
+    reassigns a sprint independent of the day.
 
 ## 2. Geometry
 
-19. **`phaseRun(row)` is the ONE geometry helper**: it returns the run box
-    plus its segments already re-based; the template does no arithmetic and
-    no `{{#if}}` on geometry — every value arrives as a 2dp string.
-    `phaseBars` does not exist and must not return. [batch 8 §geometry]
-20. **Anything that re-wraps the segments re-bases every one.** Positions are
-    percentages of the 60-workday window (`TOTAL_UNITS`); W cancels in the
-    composition, so the minimum-grab extension is visually free. One rounding
-    rule: `unitPct(u) = pctOf(u, TOTAL_UNITS)`. [batch 8 §geometry]
-21. **A row with no visible phases has no handle**: `phaseRun` returns `[]`
-    → `<div class="gbar"></div>` — no box, no `draggable`, no branch.
-    [batch 8 §no-phases]
-22. **One phase→colour map**: `.gseg.sketch` amber / `.review` blue-200 /
-    `.render` blue-600 / `.renderOverdue` red-600, each declared exactly
-    once; the legend swatches reuse the classes from outside `.gtrack`.
-    [R4; batch 9 §legend]
+19. **`itemBar(row)` is the ONE geometry helper for the bar** — a work card
+    draws exactly one box (start to computed finish, finish day inclusive),
+    never a run of phase segments: `phaseRun`/`phaseBars`/`.gseg` belong to
+    the phase-segment gantt retired 2026-08-28 and do not exist in the
+    shipped source. The template does no arithmetic and no `{{#if}}` on
+    geometry — `left`/`width` arrive as 2dp strings, `cls` names one phase
+    class for colour only (`itemPhase`, below). [supersedes batch 8
+    §geometry; `frontend/scripts/50-gantt-geometry.js`]
+20. **Minimum grab width is 24px (`MIN_GRAB_PX`/`MIN_GRAB_UNITS`), done as
+    arithmetic in `itemBar`, never as CSS.** A CSS minimum would widen the
+    rendered box after the arithmetic and visibly stretch every short bar;
+    `test/sprint-schedule-bars-footer.test.ts` bans the width properties by
+    name. The box anchors left and, in the final column, extends LEFT so the
+    widened box never leaves the track — `left = max(0, min(l, TOTAL_UNITS −
+    width))`, carried over unchanged from the retired `phaseRun`'s rule
+    [batch 8 §minimum-grab, §direction].
+21. **A row with no `startsOn`/`finish` (unplotted, unforecastable, or fully
+    clipped by the window) draws no bar at all** — `itemBar` returns `[]` and
+    the template emits nothing; the violet `+` (or the row's own drag, if
+    already placed) is what a PM acts on instead. [`itemBar`]
+22. **Colour is `itemPhase(row)` only — the row's OWN task-title prefix,
+    never a second source of truth**: `sketch`/`render` by prefix match,
+    `work` for everything else and for an unrecognised prefix (a wrong guess
+    costs a swatch, not a forecast — the 2026-08-27 lane-by-title defect was
+    this exact match promoted into arithmetic elsewhere). There is no
+    `.review`/`renderOverdue` class and no per-segment colour map: one bar,
+    one phase class, plus `late` layered on top when the row qualifies
+    (R9-c). The legend swatches reuse these same classes. [supersedes R4,
+    batch 9 §legend; corrects the retired `.gseg.review`/`renderOverdue` map]
 23. **Month and wk labels derive from real week dates**: a week belongs to
     its Monday's month, wkN is its ordinal within it, and week keys are the
     local Monday (invariant 5, v4.2.0). [R2]
 24. **Bar span = empirical forecast phases** from `lib/forecast.ts` via
-    `lib/calendar.ts` — no new forecast math, no edits to `lib/**`; segments
-    built server-side in `toRow`, half-open, zero widths dropped. [R3]
+    `lib/calendar.ts` — no new forecast math, no edits to `lib/**`; the row
+    carries `startsOn`/`finish` off the server, so the bar and the
+    FORECASTED column are one field and cannot disagree. [R3]
 25. **Which tests guard what**: `test/drag-hittest.test.ts` — hit-testability
-    of every enumerated source, ancestor/week-cell/`.gdragging` sweeps, source
-    count; `test/sprint-schedule-bars-footer.test.ts` (which absorbed the retired gantt-run-geometry suite, 2026-08-28) — both axes against a frozen
-    oracle (horizontal within the 0.02 pp bound, vertical by exact equality)
-    plus the `.grun` CSS bans; `test/gantt-legend.test.ts` — each phase
-    colour declared once. Guards assert the RULE, never a snapshot.
-    [batch 8–9; review sweep]
+    of every enumerated `.gitem` source and state, the empty `draggable` set,
+    ancestor sweeps; `test/sprint-schedule-bars-footer.test.ts` — bar and
+    deadline-tick geometry on both axes against a frozen oracle (horizontal
+    within the 0.02 pp bound, vertical by exact equality), the dead-class
+    bans (`.grun`, `.gbar`, `.gseg.review`, `.gdragging`, …), footer capacity;
+    `test/gantt-legend.test.ts` — each phase colour declared once. Guards
+    assert the RULE, never a snapshot. [supersedes batch 8–9; review sweep]
 
 ## 4. Standing decisions — deliberately not done
 
-40. **The four shared `.grun`/`.gghost` CSS declarations stay duplicated**:
-    `sprint-schedule-bars-footer` and `drag-hittest` look those selectors up by name (the former absorbed gantt-run-geometry, 2026-08-28).
-    [review sweep 2026-08-18, T162]
-41. **The 26px vertical grab band is deliberate** — affordance and target
-    agree on both axes; nothing widens it back. [JP 2026-08-18, batch 9]
-42. **No `title` on the bar or the run box** — the standing hint is the home
-    for the instruction (rule 15). [T157]
-43. **`setDragImage()` stays unpulled** unless a live check shows an
-    unwanted ghost artefact; hairlines at the rounded corners and the
-    invisible extension are accepted. [batch 9 §honest-line]
+40. **`.gitem`'s CSS carries the bar's whole visual contract alone** — there
+    is no second `.grun`/`.gghost` declaration to keep in step with it; those
+    selectors are swept by name in `test/sprint-schedule-bars-footer.test.ts`
+    and `test/drag-hittest.test.ts` as classes that must NOT appear.
+    [supersedes review sweep 2026-08-18, T162]
+41. **The bar's vertical band is deliberate and unchanged by block 7** —
+    affordance and target agree on both axes; nothing widens it back. [JP
+    2026-08-18, batch 9]
+42. **The bar DOES carry a `title`** — `` `${startsOn} → ${finish}` ``, plus
+    "· past the client deadline" when `late` — this is the resting state;
+    block 7 blanks it to an empty attribute only for the duration of a drag
+    so the native tooltip cannot fight the gesture, and restores it after.
+    [supersedes the retired no-title rule that named `.grun`/rule 15 — that
+    rule and its numbering no longer exist; `itemBar`]
+43. **No ghost, no `setDragImage()`** — there is no HTML5 drag to snapshot a
+    ghost from (§1 rule 3); the bar's own box is the only thing that moves.
+    [supersedes batch 9 §honest-line]
 44. **Not built, by product**: the sprint-header checkbox; a click-to-open
-    range picker on the bar. Accept keeps the label "Accept". Cards carrying
-    a suggest note but absent from `plan` surface nowhere — flagged, stands.
-    [R6; batch 3]
-45. **`.gseg` does not restate `--gbar-h` or a translate** — a second copy
-    can be re-tuned alone. [batch 9]
+    range picker on the bar; the multi-row relative-shift drag and
+    cross-sprint drag of build-spec-v1.3 §5.2 (§1 rules 10–11); dimming
+    out-of-range weeks; hiding holiday days client-side (the server refuses
+    them — sprint-rules.md R10-e); keyboard nudging of a bar. Accept keeps
+    the label "Accept". Cards carrying a suggest note but absent from `plan`
+    surface nowhere — flagged, stands. [R6; batch 3; PLAN.md block 7 "Not
+    built"]
+45. **`.gitem` does not restate `--gbar-h` or a translate anywhere else** — a
+    second copy can be re-tuned alone. [supersedes batch 9, which said the
+    same of the retired `.gseg`]
 
 ## 5. Verification law
 
 46. **A drag interaction ships only after a real-pointer pass.** There is no
     jsdom and no browser runner in this repo; every planner test is Ractive
     `toHTML()` or a read/execution of shipped source — none of it proves a
-    drag can start. [batch 7 §why-no-test; state-log 2026-08-18]
-47. **No synthetic `DragEvent`s, ever.** A synthetic event calls the app's
-    handlers directly and never enters Chrome's drag machinery — it proves
-    wiring, not draggability. Say so in test names and file headers.
-    [batch 7–9; state-log 2026-08-18]
+    pointer gesture can start and drive `.gitem`. [batch 7 §why-no-test;
+    state-log 2026-08-18]
+47. **No synthetic mouse events, ever, for a drag test.** Calling
+    `barDragStart`/`barDragMove`/`barDragEnd` directly proves wiring, not
+    that a real pointer down-move-up sequence drives them — say so in test
+    names and file headers. (The retired contract said this of synthetic
+    `DragEvent`s; block 7 has no HTML5 drag left to avoid, but the same gap
+    exists for MouseEvents and the same rule applies.) [supersedes batch
+    7–9; state-log 2026-08-18]
 48. **Real-pointer procedure**: chrome-devtools MCP — `take_snapshot` for
-    uids, then `drag(from_uid, to_uid)`. Attach event listeners BEFORE
-    dragging; read back only summarised counts. [batch 7 root-cause pass;
-    test/CLAUDE.md rule 4]
+    uids, then a real down/move/up sequence over the `.gitem` source and the
+    target day (`drag(from_uid, to_uid)` where the tool's drag maps to that,
+    else discrete pointer calls covering the same path). Attach event
+    listeners BEFORE dragging; read back only summarised counts. [supersedes
+    batch 7 root-cause pass; test/CLAUDE.md rule 4]
 49. **Live verification writes are real**: passes run against the deployed
-    site on rt-test (`tx8gDsTH`, synthetic fixtures only). Record every row's
-    `slottedWeek` before touching anything and restore it after — zero net
-    change. [JP 2026-08-18; STATE.md §Still open]
+    site on rt-test (`tx8gDsTH`, synthetic fixtures only). Record every
+    touched row's `starts_on` before touching anything and restore it after —
+    zero net change. [supersedes JP 2026-08-18 ("slottedWeek"); STATE.md
+    §Still open]
 50. **Comments can trip source-regex guards**: a drift guard counting
     occurrences in raw source counts comments too. When a guard fires on
     prose, reword the prose — the guard is right. [batch 8 §defect; batch 9
