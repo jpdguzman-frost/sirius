@@ -36,7 +36,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 - golden: test/golden/original.mjs — VERBATIM oracle, DO NOT EDIT; calendar/forecast/planner.test.ts pin port-trio parity — highest-value tests; forecast.legacy/.workbook.test.ts (40 sanitized workbook rows) pin BR-1/AC-10.
 - test/helpers/gantt-render.ts — renders the shipped schedules template with real Ractive — the template-proof harness.
 - test/helpers/ — db.ts in-memory mongod + migrations; fixtures.ts project/member/agent preamble; requests.ts shared payload shape.
-- test/drag-hittest.test.ts — the inline-style law + week-cell hit-testability (placement clicks); drag sweeps retired 2026-08-28.
+- test/drag-hittest.test.ts — the inline-style law, week-cell hit-testability (placement clicks and the `.gtrack` bar-drag mousemove, block 7), and the `.gitem` pointer-drag source sweep rebuilt in block 7 (2026-09-08) after the HTML5 drag it originally guarded was retired 2026-08-28.
 - test/sprint-schedule-groups.test.ts, -deadline, -add-search, -add-handlers, -bars-footer — the rebuilt Sprint Schedules tab (owls #72/#73): groups, add flow, itemBar geometry, withdrawal guards.
 - test/gantt-legend.test.ts — one phase→colour map only; deadline tick reuses .gdl (1px red).
 - test/planner-weeks.test.ts — week/month labels + bar geometry from shipped planner text.

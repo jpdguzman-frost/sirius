@@ -36,15 +36,22 @@ _last-verified: 2026-09-09_
     `Math.round(hardCeiling * 100)`, never retyped. [R9]
 30. **Sprint membership is STORED, not derived**: `sprint_id` rides the row on
     the wire (build-spec-v1.3 §5.3). Placing or dragging a row onto a day
-    inside a DIFFERENT sprint's range IS the sprint move — the write carries
-    the target sprint's id and the plot guards (§10 below) are checked
-    against that target sprint, not the row's old one. Group order: sprints
-    by `position` → Outside any sprint → Unscheduled, empty groups dropped.
-    Rollover is the one write path that changes `sprint_id` without a PM
-    click, by re-deriving it from the row's new `starts_on` against every
-    sprint's range (R9-d) — the plot guards never run on that path (§10).
-    [R5; invariant 12; corrects the DERIVED wording superseded by §5.3;
-    block 7, JP 2026-09-08]
+    inside a DIFFERENT sprint's range would BE the sprint move — the write
+    carrying the target sprint's id and the plot guards (§10 below) checked
+    against that target, not the row's old one — but no client gesture can
+    reach it: `placeable(row, day)` (R10-e) refuses every day outside the
+    row's OWN sprint, so the pointer can never name a day in another
+    sprint's range, and `plotPlace`/`barDragEnd` PATCH `{ starts_on }` alone
+    — neither ever sends `sprint_id`. The target-sprint judging IS wired at
+    the route (R10-b, tested directly) and answers correctly if a
+    hand-written request carries both keys, but nothing on screen composes
+    that request — cross-sprint place/drag is API-surface only (gantt-rules
+    §1 rule 11). Group order: sprints by `position` → Outside any sprint →
+    Unscheduled, empty groups dropped. Rollover is the one write path that
+    changes `sprint_id` without a PM click, by re-deriving it from the row's
+    new `starts_on` against every sprint's range (R9-d) — the plot guards
+    never run on that path (§10). [R5; invariant 12; corrects the DERIVED
+    wording superseded by §5.3; block 7, JP 2026-09-08]
 31. **Sprints modal — blocking (red) classes, both sides, byte-identical
     copy where both speak**: duplicate names (trimmed/case-insensitive, 422
     `SPRINT_CONFLICT`), blank/whitespace-only names (one banner per blank
@@ -106,7 +113,7 @@ one home instead of two.
     pulse + `scrollIntoView`. [13j]
 55. **The row action cluster is Copy · Pin · Calendar Remove** — 13px
     sprites, aria-labelled and keyboard-operable; Calendar Remove is
-    disabled on pinned and on unslotted rows (rules 13, 38).
+    disabled on pinned and on unslotted rows (rules 26, 38).
     [13j]
 56. **The status-note affordance is the note chip** (ghost pencil when
     empty). Placement in the scope cell is CONFIRMED (owl #48); the chip's
@@ -242,13 +249,16 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
   3. `NOT_A_WORKDAY` — the day is a Saturday, a Sunday, or a holiday on the
      ACTIVE calendar `lib/calendar.ts` loads from the ARES sync (invariant
      11) — never a second holiday source.
-  Body is `{ code, message }`; the messages are frozen copy carrying the
-  sprint's dates or the deadline date in the codebase's existing long-date
-  form ("14 Aug 2026"). One validator (`plotIssue()`,
-  `src/services/sprint-items.ts`) backs all three write paths that take a
-  day from a person — `PATCH /sprint-items/:itemId`, the single
-  `POST /sprint-items` — so the same day gets the same answer everywhere it
-  can be offered. [`specs/001-sirius-v1/contracts/http-api.md`]
+  Body is `{ ok: false, error: { code, message } }` — the house envelope
+  every route answers with, not a bare `{ code, message }` — and the
+  messages are frozen copy carrying the sprint's dates or the deadline date
+  in the codebase's existing long-date form ("14 Aug 2026"). One validator
+  (`plotIssue()`, `src/services/sprint-items.ts`) backs BOTH write paths
+  that take a day from a person — `PATCH /sprint-items/:itemId` and the
+  single `POST /sprint-items` — so the same day gets the same answer
+  everywhere it can be offered; `POST /sprint-items/batch` is the third
+  write path and never takes a day at all (R10-c). [`specs/001-sirius-v1/
+  contracts/http-api.md`]
 - **R10-c** `POST /sprint-items/batch` never carries a day — its body is
   `.strict()` with no `starts_on` field, so a batch add always lands
   UNPLOTTED and no skip entry in that route ever carries a plot code. A
@@ -270,11 +280,23 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
   deliberately NOT checked client-side, since the ARES calendar is
   canonical) — its 422 message reaches the PM through the existing error
   banner and the row's optimistic change is rolled back.
-- **R10-f** A bare `sprint_id` move with no `starts_on` in the same write is
-  NOT judged by the guards — only a write that supplies a day is. This
-  leaves a row free to be re-filed into a sprint whose range does not cover
-  its existing bar, which is what lets a PM re-home a row rollover has
-  already carried out of range; a write that DOES carry a day is judged
-  against the sprint that write targets. Un-plotting (`starts_on: null`) and
-  re-sending the day a row already sits on are both no-ops that return before
-  the guard runs.
+- **R10-f** A bare `sprint_id` move — `starts_on` absent from the same write
+  — still moves a bar for a PLOTTED row (its existing `starts_on` rides
+  across into the new list), so it is judged against the TARGET sprint's
+  RANGE alone (`sprintRangeIssue()`, the range half of `plotIssue()`,
+  factored out for this exact caller) — 422 `OUT_OF_SPRINT` on a miss, same
+  envelope, same frozen message, naming the target's dates. Neither
+  `PAST_DEADLINE` nor `NOT_A_WORKDAY` is asked: that day was already
+  accepted once when the row was placed, and re-filing it into another list
+  is not re-placing it — refusing on a question the request never raised
+  would be a 422 for a day nobody sent (D5 resolved STRICT, main thread,
+  2026-09-09, over the block's earlier permissive reading). An UNPLOTTED row
+  (`starts_on` null) has no bar to misplace and moves freely — this is what
+  still lets a PM re-file a row rollover left with no covering sprint
+  (deadlines-rules.md R-d2-q) once one exists. A write that DOES carry a
+  `starts_on` is judged by the full `plotIssue()` against the sprint that
+  write targets (R10-b), never by this narrower rule. Un-plotting
+  (`starts_on: null`) and re-sending the day a row already sits on are both
+  no-ops that return before either guard runs. Rollover itself
+  (`src/services/rollover.ts`) writes through Mongo directly and never
+  reaches this route — R10-d is unaffected.
