@@ -27,7 +27,7 @@
  */
 
 import { Types } from 'mongoose';
-import { localIso } from '../../lib/calendar.ts';
+import { isHoliday, localIso, parseDate } from '../../lib/calendar.ts';
 import { forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { SprintItem } from '../models/index.ts';
@@ -209,8 +209,109 @@ export function finishOf(
  * to the GROUP, never to one of them (invariant 4). "Earliest" was the
  * judgement that papered over that, and it went with the rule.
  */
-function deadlineFor(card: { trello_due?: string | null } | undefined): string | null {
+export function deadlineFor(card: { trello_due?: string | null } | undefined): string | null {
   return card?.trello_due ?? null;
+}
+
+/* ---------------------------------------------------------------------- */
+/* THE PLOT GUARDS (JP 2026-09-08)                                         */
+/* ---------------------------------------------------------------------- */
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * '2026-08-17' → '17 Aug 2026', for the refusal copy below.
+ *
+ * A SECOND COPY OF `longDate`, deliberately. The first lives in
+ * src/routes/schedule.ts and cannot move: test/sprints-modal.test.ts slices it
+ * out of that file's RAW SOURCE and runs it against the client's `fmtLongIso`,
+ * so it must stay a self-contained declaration there — and a service importing
+ * a route module would invert the layering (src/CLAUDE.md §2) for a date
+ * helper. The two are executed against each other in test/schedule.test.ts
+ * rather than trusted to stay in step (test/CLAUDE.md rule 2).
+ *
+ * Pure string math: no `Date` (no TZ shift, invariant 11) and no locale (en-GB
+ * says 'Sept'). An out-of-range month falls back to the raw digits rather than
+ * rendering the word `undefined` into copy the PM reads.
+ */
+export function longDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  const month = MONTHS_SHORT[Number(m) - 1] ?? m;
+  return `${Number(d)} ${month} ${y}`;
+}
+
+/** The three refusals a manual placement can earn. Frozen copy — see below. */
+export type PlotIssueCode = 'OUT_OF_SPRINT' | 'PAST_DEADLINE' | 'NOT_A_WORKDAY';
+
+/** A refusal as the routes answer it: 422, body `{ code, message }`. */
+export interface PlotIssue {
+  code: PlotIssueCode;
+  message: string;
+}
+
+/** The working-day calendar the guard asks. `lib/calendar.ts` is the default. */
+export interface WorkingCalendar {
+  isHoliday(day: Date): boolean;
+}
+
+/**
+ * CAN THE PM PLACE A BAR ON THIS DAY? `null` if yes, the refusal if not.
+ *
+ * ONE validator for every route that takes a `starts_on` from a person — the
+ * single add and the plot/move PATCH — so the three answers cannot drift apart
+ * per route. JP's rules (2026-09-08):
+ *
+ *  1. the day must be inside the sprint's own dates, both ends included;
+ *  2. the day must not be AFTER the card's deadline. The START is what is
+ *     guarded — a FINISH past the deadline stays legal and paints the bar red
+ *     (§5.1, R9-b). The deadline day itself is a legal start;
+ *  3. the day must be a working day: Mon–Fri, and not a holiday on the ACTIVE
+ *     calendar — the ARES working-day set `calendar-sync.ts` loads into
+ *     lib/calendar (invariant 11, amendment 2026-08-15). There is no second
+ *     holiday source here; injecting `calendar` only redirects the question.
+ *
+ * The order is contractual: a day can fail all three, and the PM is told the
+ * first thing wrong with it in the order they would fix it.
+ *
+ * ROLLOVER (src/services/rollover.ts) NEVER CALLS plotIssue: §6.2 lets a roll
+ * leave its sprint and outrun the deadline. That freedom is the whole point of
+ * rollover — a card that never completes "moves indefinitely … with no cap" —
+ * so this guard is on the PM's own click and on nothing else. Adding it to the
+ * day-advance job would stop rollover exactly when a card runs late.
+ *
+ * Dates compare as strings: every one of them is a `YYYY-MM-DD` calendar day
+ * (`DATE_ONLY` at the boundary, `DATE_ONLY` in the schema), so lexicographic
+ * order IS chronological order — and no `Date` is built for the comparison,
+ * which is what keeps the answer the same in Manila and in UTC.
+ */
+export function plotIssue(input: {
+  sprint: { starts_on: string; ends_on: string };
+  startsOn: string;
+  deadline?: string | null;
+  calendar?: WorkingCalendar;
+}): PlotIssue | null {
+  const { sprint, startsOn, deadline = null, calendar } = input;
+
+  if (startsOn < sprint.starts_on || startsOn > sprint.ends_on) {
+    return {
+      code: 'OUT_OF_SPRINT',
+      message: `That day is outside the sprint's dates (${longDate(sprint.starts_on)} – ${longDate(sprint.ends_on)}).`,
+    };
+  }
+  if (deadline && startsOn > deadline) {
+    return { code: 'PAST_DEADLINE', message: `That day is after the card's deadline (${longDate(deadline)}).` };
+  }
+  /* `parseDate` (local midnight), never `new Date(string)` (UTC midnight):
+     west of UTC the latter reads the PREVIOUS calendar day, which would refuse
+     a Monday as a Sunday. The same rule `finishOf` above documents. */
+  const day = parseDate(startsOn);
+  const dow = day.getDay();
+  // `calendar.isHoliday(day)`, never an unbound reference to it: an injected
+  // calendar is free to be an object whose method reads `this`.
+  if (dow === 0 || dow === 6 || (calendar ? calendar.isHoliday(day) : isHoliday(day))) {
+    return { code: 'NOT_A_WORKDAY', message: 'That day is not a working day.' };
+  }
+  return null;
 }
 
 /**

@@ -17,6 +17,7 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import request from 'supertest';
 import type { Types } from 'mongoose';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
@@ -24,10 +25,10 @@ import { mkWorkCard, otherProject } from './helpers/schedule-fixture.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { loadPipeline } from '../src/services/pipeline.ts';
-import { finishOf } from '../src/services/sprint-items.ts';
+import { finishOf, plotIssue } from '../src/services/sprint-items.ts';
 import { EMPIRICAL } from '../lib/model.ts';
 import { forecast } from '../lib/forecast.ts';
-import { localIso } from '../lib/calendar.ts';
+import { getHolidays, localIso, setHolidays } from '../lib/calendar.ts';
 import {
   AuditLog,
   Deliverable,
@@ -668,7 +669,7 @@ describe('the routes are Sirius-owned planning writes', () => {
      no UI writes it yet and no test sent it — which is a write path nobody has
      ever run. The Schedules rebuild needs it (a row moves when the PM drags it
      to another sprint's list), so it is covered rather than deleted. */
-  it('moves a row to another sprint, keeping its bar', async () => {
+  it('moves a row to another sprint, keeping its bar — a LIST move is not a placement', async () => {
     const { project, sprint, agent } = await setup();
     const later = await Sprint.create({
       project_id: project._id, name: 'Sprint 13', starts_on: '2026-08-17', ends_on: '2026-08-28', position: 1,
@@ -677,9 +678,41 @@ describe('the routes are Sirius-owned planning writes', () => {
     const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
     await agent.patch(itemUrl(project._id, id)).send({ sprint_id: String(later._id) }).expect(200);
 
+    /* THE PLOT GUARD JUDGES THE DAY THE PM SUPPLIES, and this request supplies
+       none (JP 2026-09-08; drift row 1). Refusing a bare list move on the
+       strength of a day the PM is not touching would strand exactly the rows
+       that most need moving: rollover walks a row past its sprint's end and
+       past its deadline BY DESIGN (§6.2), and the PM must still be able to
+       re-file it. The day is judged the moment one is sent — the case below. */
     const { rows } = await load(project._id);
     expect(rows[0]!.sprintId).toBe(String(later._id));
     expect(rows[0]!.startsOn).toBe('2026-08-03'); // the list moved, the bar did not
+  });
+
+  it('judges a day sent WITH a move against the TARGET sprint, not the old one', async () => {
+    const { project, sprint, agent } = await setup();
+    const later = await Sprint.create({
+      project_id: project._id, name: 'Sprint 13', starts_on: '2026-08-17', ends_on: '2026-08-28', position: 1,
+    });
+    await mkWorkCard(project._id, 'w1');
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+
+    // 3 Aug is inside the row's CURRENT sprint and outside the one it is moving to
+    const res = await agent.patch(itemUrl(project._id, id))
+      .send({ sprint_id: String(later._id), starts_on: '2026-08-03' }).expect(422);
+    expect(res.body.error.code).toBe('OUT_OF_SPRINT');
+    expect(res.body.error.message).toBe("That day is outside the sprint's dates (17 Aug 2026 – 28 Aug 2026).");
+    // refused whole: neither the list nor the bar moved, and nothing was audited
+    const row = (await load(project._id)).rows[0]!;
+    expect(row.sprintId).toBe(String(sprint._id));
+    expect(row.startsOn).toBe('2026-08-03');
+
+    // and the same move with a day the target sprint covers goes through
+    await agent.patch(itemUrl(project._id, id))
+      .send({ sprint_id: String(later._id), starts_on: '2026-08-17' }).expect(200);
+    const moved = (await load(project._id)).rows[0]!;
+    expect(moved.sprintId).toBe(String(later._id));
+    expect(moved.startsOn).toBe('2026-08-17');
   });
 
   it('refuses a move into another project’s sprint', async () => {
@@ -1031,5 +1064,208 @@ describe('Add All is one request that answers per card', () => {
       // the client prints the server's own message; a bare code reached the banner before
       expect(res.body.error.message).toMatch(/no longer exists/);
     }
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* G — the plot guards: the day the PM picks must be a day work can start  */
+/*     (JP 2026-09-08; drift.md rows 1, 2 and 5)                           */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * ONE validator behind every route that takes a `starts_on` from the PM, and
+ * three refusals in one order. JP's rules (2026-09-08): a row cannot be placed
+ * outside its sprint's dates, and cannot START after the card's deadline — a
+ * FINISH past the deadline stays legal and red (R9-b, and the `late` cases in
+ * section E above, which is why the guard is on the START alone). The third is
+ * invariant 11: the grid is Mon–Fri and the ARES working-day calendar is
+ * canonical, so a holiday is not a day work can begin.
+ *
+ * ROLLOVER IS EXEMPT, and the last test here is what keeps it that way: §6.2
+ * lets a roll leave its sprint and outrun the deadline "with no cap", so the
+ * guard belongs to the manual write paths alone.
+ */
+describe('plotIssue — one validator, three refusals, one order', () => {
+  const sprint = { starts_on: '2026-08-03', ends_on: '2026-08-14' }; // Mon .. Fri
+
+  it('allows every working day inside the sprint, both boundaries included', () => {
+    for (const day of ['2026-08-03', '2026-08-07', '2026-08-10', '2026-08-14']) {
+      expect(plotIssue({ sprint, startsOn: day, deadline: null }), day).toBeNull();
+    }
+  });
+
+  it('refuses a day outside the sprint, naming the range in the PM’s own words', () => {
+    for (const day of ['2026-07-31', '2026-08-17']) {
+      expect(plotIssue({ sprint, startsOn: day, deadline: null }), day).toEqual({
+        code: 'OUT_OF_SPRINT',
+        message: "That day is outside the sprint's dates (3 Aug 2026 – 14 Aug 2026).",
+      });
+    }
+  });
+
+  it('allows the DEADLINE DAY itself and refuses the day after it', () => {
+    expect(plotIssue({ sprint, startsOn: '2026-08-05', deadline: '2026-08-05' })).toBeNull();
+    expect(plotIssue({ sprint, startsOn: '2026-08-06', deadline: '2026-08-05' })).toEqual({
+      code: 'PAST_DEADLINE',
+      message: "That day is after the card's deadline (5 Aug 2026).",
+    });
+  });
+
+  it('invents no deadline — a card without one is judged on the sprint alone (BR-9)', () => {
+    expect(plotIssue({ sprint, startsOn: '2026-08-13' })).toBeNull();
+    expect(plotIssue({ sprint, startsOn: '2026-08-13', deadline: null })).toBeNull();
+  });
+
+  it('refuses the weekend — the grid is Mon–Fri', () => {
+    expect(plotIssue({ sprint, startsOn: '2026-08-08' })).toEqual({
+      code: 'NOT_A_WORKDAY',
+      message: 'That day is not a working day.',
+    });
+    expect(plotIssue({ sprint, startsOn: '2026-08-09' })!.code).toBe('NOT_A_WORKDAY'); // Sunday
+  });
+
+  it('refuses a holiday from the ACTIVE (ARES) calendar rather than a list of its own', () => {
+    const restore = getHolidays();
+    try {
+      /* The one holiday source: whatever `setHolidays` last loaded — the ARES
+         working-day calendar in production (calendar-sync.ts), the seed until
+         it lands. A second list here would drift from the forecast's. */
+      setHolidays([...restore, '2026-08-05']);
+      expect(plotIssue({ sprint, startsOn: '2026-08-05' })!.code).toBe('NOT_A_WORKDAY');
+      setHolidays(restore);
+      expect(plotIssue({ sprint, startsOn: '2026-08-05' })).toBeNull();
+    } finally {
+      setHolidays(restore);
+    }
+  });
+
+  it('takes an injected calendar, so a caller can ask against a set of its own', () => {
+    const calendar = { isHoliday: (d: Date) => localIso(d) === '2026-08-12' };
+    expect(plotIssue({ sprint, startsOn: '2026-08-12', calendar })!.code).toBe('NOT_A_WORKDAY');
+    expect(plotIssue({ sprint, startsOn: '2026-08-11', calendar })).toBeNull();
+  });
+
+  it('checks in ONE order: the sprint, then the deadline, then the calendar', () => {
+    // a Saturday BEFORE the sprint and after a deadline — the sprint answers first
+    expect(plotIssue({ sprint, startsOn: '2026-08-01', deadline: '2026-07-01' })!.code).toBe('OUT_OF_SPRINT');
+    // inside the sprint, past the deadline AND a Saturday — the deadline answers
+    expect(plotIssue({ sprint, startsOn: '2026-08-08', deadline: '2026-08-05' })!.code).toBe('PAST_DEADLINE');
+  });
+
+  it('is never called by rollover — §6.2 lets a roll leave its sprint and outrun the deadline', () => {
+    /* The guard is on the PM's own click, never on the day-advance job. A roll
+       that had to satisfy it would stop moving a card the moment the card ran
+       late, which is the one case rollover exists for ("moves indefinitely …
+       with no cap. That is intended", spec v1.3 §6.2). */
+    const src = readFileSync(new URL('../src/services/rollover.ts', import.meta.url), 'utf8');
+    expect(src).not.toContain('plotIssue');
+  });
+});
+
+describe('the write routes refuse a day that cannot be plotted on', () => {
+  /** The three refusals as the routes answer them: 422 { code, message }. */
+  const CASES: Array<[string, string]> = [
+    ['2026-08-17', 'OUT_OF_SPRINT'], // a Monday, past the sprint's last day
+    ['2026-08-13', 'PAST_DEADLINE'], // a Thursday, the day after the card's due date
+    /* A Saturday INSIDE the sprint and BEFORE the deadline — so the first two
+       checks pass it and the calendar is the one that answers. A Saturday past
+       the due date would earn PAST_DEADLINE instead, which is the documented
+       order, not a bug: the PM is told the first thing wrong with the day. */
+    ['2026-08-08', 'NOT_A_WORKDAY'],
+  ];
+
+  it('PATCH answers 422 with the code and the words, and writes NOTHING', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkWorkCard(project._id, 'w1', { trello_due: '2026-08-12' });
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+    const audits = await AuditLog.countDocuments({ project_id: project._id });
+
+    for (const [day, code] of CASES) {
+      const res = await agent.patch(itemUrl(project._id, id)).send({ starts_on: day }).expect(422);
+      expect(res.body, day).toMatchObject({ ok: false, error: { code } });
+      expect(String(res.body.error.message), day).toMatch(/^That day is /);
+    }
+    /* A REFUSED WRITE AUDITS NOTHING (invariant 10 logs changes, not attempts)
+       and leaves the bar exactly where it was — the client restores the row
+       from this answer, so a half-applied state here would be a state Trello
+       and Sirius disagree about. */
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(audits);
+    expect((await SprintItem.findOne({ _id: id, project_id: project._id }).lean())!.starts_on).toBe('2026-08-03');
+  });
+
+  it('the single ADD holds the same rule — no row, no audit, then the good day lands', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkWorkCard(project._id, 'w1', { trello_due: '2026-08-12' });
+
+    for (const [day, code] of CASES) {
+      const res = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1', starts_on: day }).expect(422);
+      expect(res.body.error.code, day).toBe(code);
+    }
+    expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(0);
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
+
+    // the day that IS plottable still lands already plotted, in the one act
+    const ok = await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'w1', starts_on: '2026-08-05' }).expect(201);
+    expect((await SprintItem.findOne({ _id: ok.body.id, project_id: project._id }).lean())!.starts_on).toBe('2026-08-05');
+  });
+
+  it('allows the boundary days — the sprint’s first and last, and the deadline day itself', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkWorkCard(project._id, 'w1', { trello_due: '2026-08-14' });
+    // the sprint's FIRST day (a plot through the PATCH route)
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+    // the sprint's LAST day, which is also the deadline day
+    await agent.patch(itemUrl(project._id, id)).send({ starts_on: '2026-08-14' }).expect(200);
+    expect((await load(project._id)).rows[0]!.startsOn).toBe('2026-08-14');
+  });
+
+  it('never judges an UN-plot — null clears a row wherever it happens to sit', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkWorkCard(project._id, 'w1');
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-05');
+    const restore = getHolidays();
+    try {
+      /* The day the row sits on becomes a holiday AFTER the plot — exactly what
+         an ARES calendar refresh can do. Clearing the bar must still work: the
+         guard judges a placement, and null is the absence of one. */
+      setHolidays([...restore, '2026-08-05']);
+      await agent.patch(itemUrl(project._id, id)).send({ starts_on: null }).expect(200);
+    } finally {
+      setHolidays(restore);
+    }
+    expect((await SprintItem.findOne({ _id: id, project_id: project._id }).lean())!.starts_on ?? null).toBeNull();
+  });
+
+  it('answers a RE-SEND of the day a row already sits on as the no-op it is', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkWorkCard(project._id, 'w1');
+    const id = await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-05');
+    const audits = await AuditLog.countDocuments({ project_id: project._id });
+    const restore = getHolidays();
+    try {
+      /* The calendar turns the row's own day into a holiday after the fact.
+         The client's reload window can re-send the day it already sent, and
+         that is not a placement — before == after, so it never reaches the
+         guard, writes nothing and audits nothing (the no-op rule, review
+         finding 2). A refusal here would be a 422 for a change nobody made. */
+      setHolidays([...restore, '2026-08-05']);
+      const res = await agent.patch(itemUrl(project._id, id)).send({ starts_on: '2026-08-05' }).expect(200);
+      expect(res.body.noop).toBe(true);
+    } finally {
+      setHolidays(restore);
+    }
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(audits);
+    expect((await SprintItem.findOne({ _id: id, project_id: project._id }).lean())!.starts_on).toBe('2026-08-05');
+  });
+
+  it('the batch add carries no day at all, so no placement can be smuggled past the guard', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkWorkCard(project._id, 'w1');
+    /* Rows land unplotted by construction (#72 §6) — `.strict()` refuses the
+       key, which is a REFUSAL OF THE BODY (400), stricter than the 422 a bad
+       day earns on the routes that do take one. So the three plot codes cannot
+       arise here, and a batch can never write a placement nobody validated. */
+    await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['w1'], starts_on: '2026-08-08' }).expect(400);
+    expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(0);
   });
 });

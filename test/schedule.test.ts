@@ -10,9 +10,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request, { type Agent } from 'supertest';
 import mongoose, { Types } from 'mongoose';
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { createApp } from '../src/app.ts';
 import { NOT_ADDABLE_STATES } from '../src/routes/schedule.ts';
+import { longDate } from '../src/services/sprint-items.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { AuditLog, Deliverable, Project, Sprint, SprintItem, SyncRun, User, UserProject, WorkCard } from '../src/models/index.ts';
 import { getHolidays, setHolidays } from '../lib/calendar.ts';
@@ -435,13 +437,88 @@ describe('the add can arrive already PLOTTED — the draft row\u2019s + (PLAN 20
         .send({ sprint_id: String(sprint._id), card_id: 'wc-3', starts_on: bad }).expect(400);
       expect(res.body.error.code).toBe('INVALID_BODY');
     }
-    // the leap day itself is REAL and passes the same gate
-    const ok = await agent.post(`/api/projects/${project._id}/sprint-items`)
-      .send({ sprint_id: String(sprint._id), card_id: 'wc-3', starts_on: '2028-02-29' }).expect(201);
+    /* The leap day itself is REAL and passes the same gate \u2014 and now meets the
+       PLOT guard on the far side of it (JP 2026-09-08): 2028 is nowhere near
+       this sprint's fortnight, so the answer is 422 with a placement code, not
+       the 400 the malformed dates above earn. That difference is what still
+       proves the shape gate let a real date through. */
+    const leap = await agent.post(`/api/projects/${project._id}/sprint-items`)
+      .send({ sprint_id: String(sprint._id), card_id: 'wc-3', starts_on: '2028-02-29' }).expect(422);
+    expect(leap.body.error.code).toBe('OUT_OF_SPRINT');
+    expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(0);
+
     // and PATCH shares the one definition \u2014 no second, laxer spelling
+    const ok = await agent.post(`/api/projects/${project._id}/sprint-items`)
+      .send({ sprint_id: String(sprint._id), card_id: 'wc-3', starts_on: '2026-08-10' }).expect(201);
     await agent.patch(`/api/projects/${project._id}/sprint-items/${ok.body.id}`)
       .send({ starts_on: '2026-02-30' }).expect(400);
     expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(1);
+  });
+});
+
+/**
+ * The placement guards where they meet the CALENDAR (JP 2026-09-08, drift row
+ * 5). The sprint-range and deadline halves are exercised in
+ * test/sprint-items.test.ts; what belongs here is the one thing only a route
+ * can show — that the guard reads the ACTIVE working-day calendar, the set
+ * calendar-sync.ts loads from ARES, rather than a weekday rule of its own.
+ */
+describe('the plot guard reads the active ARES working-day calendar (invariant 11)', () => {
+  it('refuses a holiday inside the sprint, and takes the same day once the calendar clears it', async () => {
+    const { project, agent } = await setup();
+    const sprint = await Sprint.create({ project_id: project._id, name: 'S', starts_on: '2026-08-03', ends_on: '2026-08-14', position: 1 });
+    await WorkCard.create({
+      project_id: project._id, trello_card_id: 'wc-9', mc_number: 'MC-704',
+      name: 'Sketch Asset: pose', current_list: 'Design', active: true,
+    });
+    const plot = (day: string) => agent.post(`/api/projects/${project._id}/sprint-items`)
+      .send({ sprint_id: String(sprint._id), card_id: 'wc-9', starts_on: day });
+
+    const restore = getHolidays();
+    try {
+      setHolidays(['2026-08-05']); // a WEDNESDAY inside the sprint — a workday but for the calendar
+      const res = await plot('2026-08-05').expect(422);
+      expect(res.body.error.code).toBe('NOT_A_WORKDAY');
+      expect(res.body.error.message).toBe('That day is not a working day.');
+      expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(0);
+
+      // the SAME day, with the calendar no longer calling it a holiday
+      setHolidays([]);
+      await plot('2026-08-05').expect(201);
+    } finally {
+      setHolidays(restore);
+    }
+    expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(1);
+  });
+});
+
+/**
+ * The refusal copy carries a date, and there are now two pure-string-math
+ * formatters on the server: the route's (pinned in place by
+ * test/sprints-modal.test.ts, which slices it out of this file's raw source
+ * and runs it against the client's) and the validator's, which the service
+ * needs because it cannot import a private helper out of a route module.
+ * Two copies stay honest only if they are RUN against each other (test/CLAUDE.md
+ * rule 2) — comparing them as source text would pass on a table that spelled
+ * 'Sept'.
+ */
+describe('the route’s long date and the validator’s render the same words', () => {
+  const ROUTE = readFileSync(new URL('../src/routes/schedule.ts', import.meta.url), 'utf8');
+  const routeLongDate = new Function(`
+    ${ROUTE.slice(ROUTE.indexOf('const MONTHS_SHORT'), ROUTE.indexOf('\n', ROUTE.indexOf('const MONTHS_SHORT')))}
+    ${ROUTE.slice(ROUTE.indexOf('function longDate('), ROUTE.indexOf('\n}', ROUTE.indexOf('function longDate(')) + 2)
+      .replace('(iso: string): string', '(iso)')}
+    return longDate;
+  `)() as (iso: string) => string;
+
+  it('agrees on every month, the year’s edges and a leap day', () => {
+    const days = ['2026-01-01', '2026-12-31', '2024-02-29', '2026-08-09'];
+    for (let m = 1; m <= 12; m++) days.push(`2026-${String(m).padStart(2, '0')}-17`);
+    for (const iso of days) expect(longDate(iso), iso).toBe(routeLongDate(iso));
+  });
+
+  it('says "Sep", never the en-GB locale’s "Sept"', () => {
+    expect(longDate('2026-09-01')).toBe('1 Sep 2026');
   });
 });
 

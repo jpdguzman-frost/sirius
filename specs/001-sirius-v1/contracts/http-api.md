@@ -21,6 +21,34 @@ Route groups are fixed by the repository layout (plan.md, ARES conventions). Exa
 | `src/routes/urgency.js` | THE write path — see `trello-write.md` | Session + membership | `deliverables.urgency` + Trello label + audit |
 | worker-internal sync | Sync is triggered inside the worker process, not via public HTTP (plan.md) | No public surface | Source-mirror fields + `sync_runs` |
 
+## Sprint items — the placement guards (JP 2026-09-08)
+
+A `starts_on` is the PM's own click: the day a bar begins. Every route that
+accepts one judges it on the SAME validator — `plotIssue()` in
+`src/services/sprint-items.ts` — so the three answers cannot drift per route.
+Refusals are **422** with body `{ ok: false, error: { code, message } }`, the
+envelope the sprint-save conflict (`SPRINT_CONFLICT`) already uses; the client
+prints the server's `message` verbatim.
+
+| Code | Refused when | Message |
+|---|---|---|
+| `OUT_OF_SPRINT` | the day falls outside the sprint's own `starts_on`..`ends_on` — the range is INCLUSIVE, so both boundary days are legal | `That day is outside the sprint's dates (3 Aug 2026 – 14 Aug 2026).` |
+| `PAST_DEADLINE` | the card carries a Trello due date and the day is AFTER it. The deadline day itself is a legal start; a FINISH past the deadline stays legal and paints the bar red (R9-b) | `That day is after the card's deadline (5 Aug 2026).` |
+| `NOT_A_WORKDAY` | the day is a weekend, or a holiday on the ACTIVE working-day calendar — the ARES set loaded into `lib/calendar.ts` (invariant 11) | `That day is not a working day.` |
+
+Checked in that order: a day can fail all three, and the PM is told the first
+thing wrong with it.
+
+| Route | Guarded when |
+|---|---|
+| `PATCH /api/projects/:projectId/sprint-items/:itemId` | the body carries a non-null `starts_on`. Judged against the TARGET sprint when the same request moves the row, so a move that carries a day is measured against where the row lands. `starts_on: null` un-plots and is never judged; a bare `sprint_id` move supplies no day and is never judged either — rollover legitimately walks a row past its sprint's end (§6.2) and the PM must still be able to re-file it |
+| `POST /api/projects/:projectId/sprint-items` | the optional `starts_on` is present. The card-state refusals (409 `CARD_COMPLETE` / `CARD_EXCLUDED`) answer first — a card that cannot be scheduled at all is not a question about a day |
+| `POST /api/projects/:projectId/sprint-items/batch` | **never** — the batch body has no `starts_on` and `.strict()` refuses one (400 `INVALID_BODY`), so its rows land unplotted by construction (#72 §6) and its skip list (`NOT_FOUND`, `CARD_COMPLETE`, `CARD_EXCLUDED`, `ALREADY_SCHEDULED`) carries no placement code |
+
+A refused write **creates nothing and audits nothing** — invariant 10 logs
+changes, not attempts. `src/services/rollover.ts` never calls the validator:
+§6.2 lets a roll leave its sprint and outrun the deadline, with no cap.
+
 ## Withdrawn routes — deleted, not disabled
 
 Removed 2026-09-08 (owl #87, JP; spec v1.3 §6.3/§6.5). They answer **404** and are not to be reintroduced; `test/schedule.test.ts` holds the standing guard.

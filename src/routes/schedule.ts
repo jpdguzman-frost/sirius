@@ -15,7 +15,7 @@ import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
 import { classifyList } from '../services/status-rules.ts';
 import { loadPipeline, manilaToday } from '../services/pipeline.ts';
-import { nextTailPosition, tailPosition } from '../services/sprint-items.ts';
+import { deadlineFor, nextTailPosition, plotIssue, tailPosition } from '../services/sprint-items.ts';
 import { Deliverable, MilestoneDayPlan, Sprint, SprintItem, WorkCard } from '../models/index.ts';
 import { sprintIssues, suggestPlan, type PlannerCard } from '../../lib/planner.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
@@ -498,9 +498,14 @@ export function scheduleRouter(): Router {
          sprint document, so it belongs in the same round trip rather than
          after it. */
       const [sprint, card, last] = await Promise.all([
-        Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId }).select({ _id: 1 }).lean(),
+        /* The sprint's DATES come back too — an add may carry the placement
+           (PLAN.md B13), and a placement is judged against the sprint it lands
+           in (`plotIssue`). One read either way. */
+        Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId })
+          .select({ _id: 1, starts_on: 1, ends_on: 1 })
+          .lean(),
         WorkCard.findOne({ project_id: projectId, trello_card_id: body.data.card_id, active: true })
-          .select({ trello_card_id: 1, mc_number: 1, current_list: 1 })
+          .select({ trello_card_id: 1, mc_number: 1, current_list: 1, trello_due: 1 })
           .lean(),
         SprintItem.findOne({ project_id: projectId, sprint_id: body.data.sprint_id })
           .sort({ position: -1 })
@@ -520,6 +525,18 @@ export function scheduleRouter(): Router {
       const refusal = NOT_ADDABLE_REFUSAL[classifyList(card.current_list as string | undefined)];
       if (refusal) {
         res.status(409).json({ ok: false, error: refusal });
+        return;
+      }
+      /* AND THE PLACEMENT, when the add carries one (JP 2026-09-08). The card's
+         own state is answered first — a complete card cannot be scheduled at
+         all, whatever day was clicked — then the day itself, on the ONE
+         validator the PATCH route shares. A refused add creates nothing and
+         audits nothing. */
+      const placement = body.data.starts_on
+        ? plotIssue({ sprint, startsOn: body.data.starts_on, deadline: deadlineFor(card) })
+        : null;
+      if (placement) {
+        res.status(422).json({ ok: false, error: placement });
         return;
       }
 
@@ -566,9 +583,14 @@ export function scheduleRouter(): Router {
 
      Rows land UNPLOTTED. The two-act rule (#72 §6) holds for a batch as for
      a single add, so this body has no `starts_on` and `.strict()` refuses
-     one. Every created row is its own audit row (invariant 10 logs the act,
-     and here the act is N rows) in the SAME `after` shape as the single add,
-     so the log reads alike whichever route wrote it. */
+     one. That is also why the three placement codes (`plotIssue`, JP
+     2026-09-08) cannot appear in the skip list below: a batch carries no day
+     to judge, and a body that tries to smuggle one is refused whole (400)
+     rather than skipped per card.
+
+     Every created row is its own audit row (invariant 10 logs the act, and
+     here the act is N rows) in the SAME `after` shape as the single add, so
+     the log reads alike whichever route wrote it. */
   router.post(
     '/api/projects/:projectId/sprint-items/batch',
     ensureAuthenticated,
@@ -754,13 +776,15 @@ export function scheduleRouter(): Router {
         return;
       }
       /* Independent lookups, one round trip. The item stays hydrated because
-         it is saved below; only the sprint's EXISTENCE is in question, and its
-         id is the one already validated. */
+         it is saved below; the target sprint is read for its DATES, which the
+         placement guard needs, and its existence is the 404 below. */
       const [item, sprint] = await Promise.all([
         SprintItem.findOne({ _id: itemId, project_id: projectId }),
         body.data.sprint_id === undefined
           ? Promise.resolve(null)
-          : Sprint.exists({ _id: body.data.sprint_id, project_id: projectId }),
+          : Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId })
+              .select({ _id: 1, starts_on: 1, ends_on: 1 })
+              .lean(),
       ]);
       if (!item) {
         res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
@@ -781,6 +805,44 @@ export function scheduleRouter(): Router {
       if (nextStarts === before.starts_on && nextSprint === before.sprint_id) {
         res.json({ ok: true, noop: true });
         return;
+      }
+      /* THE PLACEMENT GUARD (JP 2026-09-08), on the day the PM SUPPLIES and on
+         nothing else. Clearing the bar (`null`) is the absence of a placement
+         and is never judged; a bare list move supplies no day either, and
+         refusing one would strand the rows that most need moving — rollover
+         walks a row past its sprint's end and past its deadline by design
+         (§6.2), and the PM must still be able to re-file it. When a day IS
+         sent it is judged against the sprint the row will BE in, so a move
+         that carries a day is measured against the target, never the origin. */
+      if (body.data.starts_on != null) {
+        const [target, card] = await Promise.all([
+          sprint ?? Sprint.findOne({ _id: item.sprint_id, project_id: projectId })
+            .select({ _id: 1, starts_on: 1, ends_on: 1 })
+            .lean(),
+          /* The row's deadline is the card's OWN Trello due date and nothing
+             inherited (`deadlineFor`, owl #78 §2) — the same date the row
+             draws its tick from, so the guard and the tick cannot disagree. */
+          WorkCard.findOne({ project_id: projectId, trello_card_id: item.trello_card_id, active: true })
+            .select({ trello_due: 1 })
+            .lean(),
+        ]);
+        /* The sprint holding a row cannot normally vanish — removing one
+           cascades its rows — so this is a row that outlived its list. It has
+           no range to be judged against, and answering ok would write the one
+           placement nobody validated. */
+        if (!target) {
+          res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
+          return;
+        }
+        const placement = plotIssue({
+          sprint: target,
+          startsOn: body.data.starts_on,
+          deadline: deadlineFor(card ?? undefined),
+        });
+        if (placement) {
+          res.status(422).json({ ok: false, error: placement });
+          return;
+        }
       }
       if (body.data.sprint_id !== undefined && body.data.sprint_id !== String(item.sprint_id)) {
         /* A move takes the TARGET list's tail position. Carrying the old
