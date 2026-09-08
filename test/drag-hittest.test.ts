@@ -36,12 +36,11 @@
  *    guard cannot see an inline write, so the cheapest way to keep inline
  *    writes visible is to have none (minus the one documented exemption).
  *
- * 4. THE weekAtX SUITE, and its day-grain sibling `dayAtX` (block 7). The week
- *    mapper survived the rebuild unchanged (50-gantt-geometry.js); `dayAtX`
- *    beside it is the same half-open, clamped arithmetic at WORKDAY grain, and
- *    it is what both the placement hover and the bar drag now feed the pointer
- *    to. One is not the other's replacement — they are two grains of one axis,
- *    and both are executed here out of the shipped file.
+ * 4. THE dayAtX SUITE (block 7): half-open, clamped arithmetic at WORKDAY
+ *    grain, executed here out of the shipped file — it is what both the
+ *    placement hover and the bar drag feed the pointer to. It replaces the
+ *    week-column mapper `weekAtX`, which the day grain left without a caller
+ *    and which was deleted with this suite's copy of it (review 2026-09-09).
  *
  * Gone with the retired drags: the `.grun`/`.gbar` source sweeps and their
  * `auto` dependency pair, the `.gdragging` sweep (that class is withdrawn — the
@@ -797,27 +796,12 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
 });
 
 /* ====================================================================== *
- * SUITE 2 — the pointer-X → week-column mapping. The consumer changed
- * (2026-08-28): `plotHover` feeds it the pointer now, so the arithmetic
- * that used to place a DROP places a CLICK. The recipe itself is the
- * shipped, unchanged `weekAtX`.
+ * SUITE 2 — the pointer-X → WORKDAY mapping (block 7, JP 2026-09-08).
+ * `plotHover` and `barDragMove` both feed the pointer to this one, so a
+ * placement click and a bar drop land on the same day for the same X. The
+ * recipe is the shipped `dayAtX`; its week-column ancestor `weekAtX` was
+ * deleted with its last caller (review 2026-09-09).
  * ====================================================================== */
-
-type WeekAtX = (clientX: number, rect: { left: number; width: number }, weeks?: { key: string }[]) => string | null;
-
-/**
- * The SHIPPED recipe, sliced out of the app scripts and executed — never retyped.
- *
- * Sliced LAZILY on purpose: `decl()` throws when the function is absent, and a
- * throw at module scope takes the whole file down with it — including the
- * hit-test guard above, which has nothing to do with this function. Failing
- * one suite is a report; failing the file is a blindfold.
- */
-let weekAtXSrc: string | undefined;
-const WEEK_AT_X_SRC = (): string => (weekAtXSrc ??= decl(APP_JS, 'weekAtX'));
-let weekAtXFn: WeekAtX | undefined;
-const weekAtX: WeekAtX = (...args) =>
-  (weekAtXFn ??= new Function(`${WEEK_AT_X_SRC()}\nreturn weekAtX;`)() as WeekAtX)(...args);
 
 /** 12 consecutive Mondays — `plannerWeeks` is always WEEK_COUNT long. */
 const WEEK_KEYS = [
@@ -829,80 +813,12 @@ const WEEKS = WEEK_KEYS.map((key) => ({ key }));
 /** 12 × 92px, the shipped `--gw`, offset so a bare `clientX` cannot pass by luck. */
 const RECT = { left: 1000, width: 1104 };
 
-describe('placement maps a pointer’s X to a week column (arithmetic only — it cannot prove a real click lands)', () => {
-  it('answers the first column at its exact left edge and at its middle', () => {
-    expect(weekAtX(1000, RECT, WEEKS)).toBe('2026-08-03');
-    expect(weekAtX(1045, RECT, WEEKS)).toBe('2026-08-03');
-  });
-
-  it('answers the last column at its last subpixel and at its middle', () => {
-    expect(weekAtX(2103.9, RECT, WEEKS)).toBe('2026-10-19');
-    expect(weekAtX(2050, RECT, WEEKS)).toBe('2026-10-19');
-  });
-
-  it('treats a column as half-open [start, end) — a pointer ON the boundary belongs to the RIGHT column', () => {
-    expect(weekAtX(1091.99, RECT, WEEKS)).toBe('2026-08-03');
-    expect(weekAtX(1092, RECT, WEEKS)).toBe('2026-08-10');
-  });
-
-  it('clamps a pointer LEFT of the track to the first column', () => {
-    expect(weekAtX(500, RECT, WEEKS)).toBe('2026-08-03');
-    expect(weekAtX(-5000, RECT, WEEKS)).toBe('2026-08-03');
-  });
-
-  it('clamps a pointer RIGHT of the track to the last column', () => {
-    expect(weekAtX(5000, RECT, WEEKS)).toBe('2026-10-19');
-  });
-
-  it('walks every column in order, so no off-by-one hides in the middle', () => {
-    const mids = WEEK_KEYS.map((_, i) => weekAtX(RECT.left + i * 92 + 46, RECT, WEEKS));
-    expect(mids).toEqual(WEEK_KEYS);
-  });
-
-  it('divides the MEASURED width, not a hard-coded 92 — the same twelve keys come back at 2× zoom', () => {
-    const zoom = { left: 0, width: 2208 };
-    expect(WEEK_KEYS.map((_, i) => weekAtX(i * 184 + 92, zoom, WEEKS))).toEqual(WEEK_KEYS);
-    expect(weekAtX(0, zoom, WEEKS)).toBe('2026-08-03');
-    expect(weekAtX(183.99, zoom, WEEKS)).toBe('2026-08-03');
-    expect(weekAtX(184, zoom, WEEKS)).toBe('2026-08-10');
-    expect(weekAtX(2207.9, zoom, WEEKS)).toBe('2026-10-19');
-    expect(weekAtX(-1, zoom, WEEKS)).toBe('2026-08-03');
-    expect(weekAtX(99999, zoom, WEEKS)).toBe('2026-10-19');
-  });
-
-  it('returns null rather than a wrong week when it cannot measure', () => {
-    // a detached or display:none track, and an empty/absent week list — the
-    // handler bails without moving anything rather than guessing column 0
-    expect(weekAtX(1500, { left: 1000, width: 0 }, WEEKS)).toBeNull();
-    expect(weekAtX(1500, RECT, [])).toBeNull();
-    expect(weekAtX(1500, RECT, undefined)).toBeNull();
-  });
-
-  it('is PURE — no document, no window, no app.get, no shared week constants', () => {
-    // purity is what lets a test execute this exact source out of the shipped
-    // file at all; the caller passes the measured rect and the week list in
-    for (const forbidden of ['document', 'window', 'app.get', 'WEEK_PX', 'WEEK_COUNT']) {
-      expect(WEEK_AT_X_SRC()).not.toContain(forbidden);
-    }
-  });
-
-  it('is a named top-level function, not an expression buried in the handler', () => {
-    expect(APP_JS).toMatch(/\nconst weekAtX = /);
-    expect(WEEK_AT_X_SRC().startsWith('\nconst weekAtX =')).toBe(true);
-  });
-});
-
-/* ====================================================================== *
- * SUITE 2b — the pointer-X → WORKDAY mapping (block 7, JP 2026-09-08).
- * The same axis at the other grain: `plotHover` and `barDragMove` both
- * feed the pointer to this one, so a placement click and a bar drop land
- * on the same day for the same X. The recipe is the shipped `dayAtX`.
- * ====================================================================== */
-
 type DayAtX = (clientX: number, rect: { left: number; width: number }, weeks?: { key: string }[]) => string | null;
 
-/** Sliced LAZILY, for the reason `weekAtX` is: a throw at module scope would
-    take the hit-test guard above down with it. `isoAddDays` and `isoOf` come
+/** Sliced LAZILY on purpose: `decl()` throws when the function is absent, and
+    a throw at module scope takes the hit-test guard above down with it —
+    failing one suite is a report, failing the file is a blindfold.
+    `isoAddDays` and `isoOf` come
     along because the recipe derives its date through them — string calendar
     arithmetic, not a millisecond difference (invariant 11). */
 let dayAtXSrc: string | undefined;
@@ -923,6 +839,10 @@ const UNIT = 1104 / 60;
 
 describe('placement and the drag map a pointer’s X to a WORKDAY (arithmetic only — a real pointer is E2E’s)', () => {
   it('walks all sixty units in order, so no off-by-one hides in the middle of a week', () => {
+    /* `WORKDAYS` is built five days at a time from the week KEYS, so this also
+       carries the week-seating property the retired `weekAtX` used to be
+       checked against: unit i lands in week floor(i / 5), or the hover tint
+       and the column it sits in would drift apart at some boundary. */
     const mids = WORKDAYS.map((_, i) => dayAtX(RECT.left + i * UNIT + UNIT / 2, RECT, WEEKS));
     expect(mids).toEqual(WORKDAYS);
     expect(WORKDAYS).toHaveLength(60);
@@ -983,16 +903,6 @@ describe('placement and the drag map a pointer’s X to a WORKDAY (arithmetic on
     expect(dayAtX(1500, RECT, undefined)).toBeNull();
   });
 
-  it('agrees with weekAtX at every X — two grains of ONE axis, never two axes', () => {
-    /* the property that matters: whatever day the pointer names, its WEEK is
-       the week the older mapper names for the same X. If these two could ever
-       disagree, the hover tint and the column it sits in would drift apart. */
-    for (let i = 0; i < 60; i++) {
-      const x = RECT.left + i * UNIT + UNIT / 2;
-      expect(WEEK_KEYS.indexOf(weekAtX(x, RECT, WEEKS)!), `unit ${i}`).toBe(Math.floor(i / 5));
-    }
-  });
-
   it('derives the date by STRING calendar arithmetic, never a millisecond difference', () => {
     // invariant 11: `new Date(iso) - base` divided by a day is a day early
     // west of UTC across a DST edge; `isoAddDays` moves the calendar fields
@@ -1008,12 +918,18 @@ describe('placement and the drag map a pointer’s X to a WORKDAY (arithmetic on
     }
   });
 
-  it('is a named top-level function, and it did NOT replace weekAtX', () => {
+  it('is a named top-level function, and the week mapper it retired is GONE', () => {
     expect(APP_JS).toMatch(/\nconst dayAtX = /);
     expect(DAY_AT_X_SRC().startsWith('\nconst dayAtX =')).toBe(true);
-    // the week mapper still ships: `weekAtX` has other callers, and a rewrite
-    // in place would have moved them all to a grain they never asked for
-    expect(APP_JS).toMatch(/\nconst weekAtX = /);
+    /* `weekAtX` mapped an X to a week COLUMN and lost its last caller when the
+       grain moved to the day (review 2026-09-09). Dead code that still parses
+       is the thing a later reader reaches for by mistake, so it went rather
+       than staying as a second, coarser answer to the same question. */
+    expect(APP_JS, 'the retired week mapper came back').not.toMatch(/const weekAtX\b/);
+    // and nothing CALLS it either — the geometry file names it once, in the
+    // comment that records why it went, and comments are not callers
+    expect(APP_JS.replace(/\/\*[\s\S]*?\*\//g, ' '), 'a caller of the retired week mapper came back')
+      .not.toContain('weekAtX');
   });
 });
 

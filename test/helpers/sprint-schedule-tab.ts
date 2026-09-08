@@ -96,6 +96,30 @@
  *  21. the drag's window listeners come down on EVERY exit, and Escape alone
  *      cancels (revert: remove the `barDragStop()` from barDragCancel, from
  *      the finally-free early return, or from `resetForProjectSwitch`)
+ *
+ * REVIEW 2026-09-09 adds five, one per confirmed or split-to-fix finding:
+ *  22. the drag preview is the RESTING box at another day — `barLeftAt`, not
+ *      `plusLeft` (revert: set `dragLeft` from `plusLeft` again, or drop
+ *      `barWidthUnits` and re-derive the width in either caller; the bar then
+ *      jumps on mousedown in the final column and previews off the track).
+ *      Simplified 2026-09-09: `itemBar` draws the RESTING bar through
+ *      `barLeftAt` too, so the clamp has one owner as the width does — the
+ *      identity is structural now, and the source pin in
+ *      test/sprint-schedule-bars-footer.test.ts is what holds it (revert:
+ *      inline the clamp back into `itemBar`)
+ *  23. the gesture carries a GRAB OFFSET — a bar taken by its third day moves
+ *      one day per day (revert: drop `dragGrab` from barDragStart, or stop
+ *      applying it in barDragMove; the bar's left edge teleports under the
+ *      pointer)
+ *  24. a BUTTON-LESS pointer cancels the drag (revert: drop the
+ *      `ctx.event.buttons === 0` branch; a lost mouseup leaves the bar armed
+ *      and the next stray release commits)
+ *  25. Escape mid-drag is the DRAG's key — capture-bound and stopped, so the
+ *      focused sprint search keeps its query (revert: bind or remove the
+ *      keydown listener without the capture flag, or drop `stopPropagation`)
+ *  26. placement stands down mid-drag (revert: drop the `app.get('dragRow')`
+ *      clause from plotHover's guard; a neighbouring row lights a + inside
+ *      someone else's gesture)
  */
 
 import { expect } from 'vitest';

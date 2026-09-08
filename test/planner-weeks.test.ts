@@ -243,11 +243,13 @@ describe('dayAtX is dayIndex read backwards — one axis, two directions', () =>
 
   it('is asymmetric at the window’s edges, exactly as the deadline tick is', () => {
     /* A day BEFORE the window pins LEFT — which is where `itemBar` has already
-       clipped that row's bar to, so a dragged bar's preview opens where the
-       bar visibly sits rather than jumping off the track. A day BEYOND it is
-       null: nothing is drawn out there to point at, and a row starting past
-       the window draws no bar to grab in the first place. Same shape as
-       `deadlineTick`'s left-pin ruling (JP 2026-08-28). */
+       clipped that row's bar to. A day BEYOND it is null: nothing is drawn
+       out there to point at, and a row starting past the window draws no bar
+       to grab in the first place. Same shape as `deadlineTick`'s left-pin
+       ruling (JP 2026-08-28).
+       This is the + and the tint only. A dragged BAR is wider than a column
+       and carries its own clamp — `barLeftAt`, executed against `itemBar` in
+       test/sprint-schedule-bars-footer.test.ts (review 2026-09-09). */
     harness.setWeek('2026-08-03');
     expect(harness.plusLeft('2026-07-31')).toBe('0.00'); // the Friday before, pinned
     expect(harness.plusLeft('2026-06-15')).toBe('0.00'); // and one far outside

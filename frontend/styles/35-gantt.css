@@ -317,7 +317,7 @@
    dump's row-weeks and footer Cells), so it runs continuously past the header
    boundary instead of visibly lightening below it. The cells stay bare of
    pointer rules ON PURPOSE: a placement CLICK lands on the track and maps to
-   a week by arithmetic (weekAtX, 50-gantt-geometry.js), and the hit-test law
+   a WORKDAY by arithmetic (dayAtX, 50-gantt-geometry.js), and the hit-test law
    in test/drag-hittest.test.ts now guards them for that consumer. */
 .gantt .gweek { width: var(--gw); flex: none; border-left: 1px solid var(--slate-200); }
 
@@ -362,9 +362,13 @@
 .gantt .gdl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--red-500); }
 
 /* the placement + — rides HOVER over any UNPLOTTED row's track, on whichever
-   WORKDAY the pointer is over. plusLeft hands over that day's left edge; the
-   margin centres the 24px circle on the one-unit column, so the CSS half
-   never repeats the geometry maths. `pointer-events: none` is load-bearing:
+   WORKDAY the pointer is over. plusLeft hands over that day's left edge and
+   the circle IS the column — one unit wide, like the tint under it, so the
+   CSS half never repeats the geometry maths and nothing hangs off either end
+   of the track. It was a fixed 24px circle centred by a negative margin until
+   review 2026-09-09: on the 18.4px day column that margin overhung the unit
+   by 2.8px each side, and at unit 0 the overhang went under the opaque sticky
+   left pane, which paints over it. `pointer-events: none` is load-bearing:
    the TRACK owns the click (#72 §6), and a solid button under the pointer
    would swallow the very click it advertises.
    ONE rule since owl #77 §0: the indigo circle used to be shared with the add
@@ -373,11 +377,10 @@
    halves to drift apart. */
 .gantt .gplus {
   position: absolute; top: 50%;
-  margin-left: calc((var(--gu) - 24px) / 2);
   transform: translateY(-50%);
   pointer-events: none;
   display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; flex: none; padding: 0; border: none;
+  width: var(--gu); height: var(--gu); flex: none; padding: 0; border: none;
   border-radius: var(--radius-full);
   background: var(--indigo-500); color: var(--white);
 }

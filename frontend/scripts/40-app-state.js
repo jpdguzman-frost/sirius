@@ -107,14 +107,20 @@ const app = new Ractive({
     plotDay: null,
     /* the bar drag (block seven, JP 2026-09-08): `dragRow` is the PLACED row
        whose coloured run is under the button, `dragDay` the workday the
-       pointer currently names, and `dragLeft` that day's left edge as a track
-       percentage — the preview offset the bar renders at while the gesture
-       runs, its width unchanged. All three null at rest, and cleared together
-       on release, on cancel and on a refusal, which is what makes the bar
-       snap back to the start the server still holds. */
+       pointer currently names, and `dragLeft` the preview offset the bar
+       renders at while the gesture runs (`barLeftAt` — the resting bar's own
+       left at that day, slide and all), its width unchanged.
+       `dragGrab` is WHERE INSIDE THE BAR the pointer took hold, in whole
+       units, signed: the bar's left column minus the pointer's (review
+       2026-09-09). Applied on every move, it is what makes the bar travel
+       WITH the pointer instead of snapping its left edge underneath it.
+       All four null at rest, and cleared together on release, on cancel and
+       on a refusal, which is what makes the bar snap back to the start the
+       server still holds. */
     dragRow: null,
     dragDay: null,
     dragLeft: null,
+    dragGrab: null,
     /* owl #77 §0 (PLAN.md B10): sprintId → the text in that sprint's search
        field, two-way bound. A MAP, not one string: every sprint has its own
        always-visible field and several may hold text at once. Survives a

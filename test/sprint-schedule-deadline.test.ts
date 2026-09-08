@@ -472,8 +472,16 @@ describe('the violet + rides the hovered DAY of any unplotted row — the checkb
     // --gu is what makes the tint, the + and the bar agree at any zoom
     expect(GANTT_CSS).toMatch(/\.gantt \{[^}]*--gu: calc\(var\(--gw\) \/ 5\)/);
     expect([...GANTT_CSS.matchAll(/--gu:/g)], '--gu is declared more than once').toHaveLength(1);
-    // and the + is centred on the DAY column, not the week's
-    expect(cssRule('.gantt .gplus')).toContain('margin-left: calc((var(--gu) - 24px) / 2)');
+    /* and the + FITS the day column it names (review 2026-09-09, confirmed
+       finding 3): a fixed 24px circle centred on an 18.4px column overhangs
+       it by 2.8px each side, and at unit 0 that overhang lands under the
+       opaque sticky left pane, which paints over it. The circle is the column
+       now, so nothing hangs off either end of the track. */
+    const plus = cssRule('.gantt .gplus');
+    expect(plus).toContain('width: var(--gu)');
+    expect(plus).toContain('height: var(--gu)');
+    expect(plus, 'a fixed pixel size cannot fit a column derived from --gw').not.toMatch(/(width|height): \d+px/);
+    expect(plus, 'a centring margin is what pushed the circle outside its column').not.toContain('margin-left');
   });
 
   it('shows a pointer cursor only where a day is actually on offer', () => {
@@ -517,7 +525,7 @@ describe('the violet + rides the hovered DAY of any unplotted row — the checkb
 
   it('a project switch clears the whole placement, drag and add state (source)', () => {
     const body = fnBody('resetForProjectSwitch');
-    for (const key of ['sprintSel', 'plotRow', 'plotDay', 'dragRow', 'dragDay', 'dragLeft', 'addBusy']) {
+    for (const key of ['sprintSel', 'plotRow', 'plotDay', 'dragRow', 'dragDay', 'dragLeft', 'dragGrab', 'addBusy']) {
       expect(body, `${key} survives a project switch`).toMatch(new RegExp(`${key}: null`));
     }
     // and the drag's window listeners come down with it — state cleared while
@@ -537,10 +545,13 @@ describe('the violet + rides the hovered DAY of any unplotted row — the checkb
    disciplines that close them. */
 describe('the hover pair cannot strand, and a click places only its OWN hover (review 2026-08-28b)', () => {
   it('plotHover refuses to re-arm during a placement flight (finding 1)', () => {
+    /* stated as the RULE (test/CLAUDE.md rule 1): the flight lock returns
+       EARLY out of plotHover. What it is now joined by — the drag gate below
+       — is that guard's business, not this one's. */
     expect(
       handlerBody('plotHover'),
       'a hover during the awaited reload re-arms plotRow on the row being placed — the fresh render strips its mouseleave and the ghost + never clears',
-    ).toContain('if (sprintItemSaving) return;');
+    ).toMatch(/if \(sprintItemSaving\b[^\n]*\) return;/);
   });
 
   /* The draft row's half of finding 7 retired with the pending row (owl #77
@@ -549,6 +560,78 @@ describe('the hover pair cannot strand, and a click places only its OWN hover (r
   it('plotPlace demands the hover is ITS OWN before writing (finding 7)', () => {
     expect(handlerBody('plotPlace'), 'plotPlace would place this row at a day hovered on another track')
       .toContain("app.get('plotRow') !== itemId");
+  });
+});
+
+/* ====================================================================== *
+ * The placement offer stands down mid-DRAG (review 2026-09-09, split
+ * finding — main thread: fix).
+ *
+ * The tracks are stacked one per row, so a bar drag that wanders vertically
+ * crosses an UNPLOTTED row's track and fires its `plotHover`. That row then
+ * lights a violet +, a slate-50 day tint and a pointer cursor — a second
+ * placement offered while the user is mid-gesture on another row. Executed,
+ * because the defect is what the handler DOES, not which door calls it.
+ * ====================================================================== */
+
+interface HoverHarness {
+  set(patch: Record<string, unknown>): void;
+  hover(rowId: string, clientX: number): void;
+  state: Record<string, unknown>;
+}
+const hoverHarness = (): HoverHarness =>
+  new Function('WEEKS', 'RECT', `
+    "use strict";
+    const state = {
+      weekStart: '2026-08-03', plannerWeeks: WEEKS,
+      sprints: [{ id: 's1', start: '2026-08-03', end: '2026-10-23' }],
+      sprintItems: { rows: [{ id: 'C', sprintId: 's1', startsOn: null, finish: null, deadline: null }] },
+      plotRow: null, plotDay: null, dragRow: null,
+    };
+    let sprintItemSaving = false;
+    const app = {
+      get: (k) => k.split('.').reduce((o, p) => (o == null ? o : o[p]), state),
+      set: (a, b) => { if (typeof a === 'string') state[a] = b; else Object.assign(state, a); },
+    };
+    ${['WEEK_COUNT', 'WORKDAYS_PER_WEEK', 'isoOf', 'isoAddDays', 'dayAtX', 'placeable', 'sprintRow'].map((n) => topDecl(n)).join('\n')}
+    const handlers = { plotHover(ctx, rowId) ${handlerBody('plotHover')} };
+    return {
+      state,
+      set: (patch) => Object.assign(state, patch),
+      hover: (rowId, clientX) => handlers.plotHover({ event: { clientX }, node: { getBoundingClientRect: () => RECT } }, rowId),
+    };
+  `)(
+    Array.from({ length: 12 }, (_, i) => ({ key: new Date(Date.UTC(2026, 7, 3) + i * 7 * 864e5).toISOString().slice(0, 10) })),
+    { left: 1000, width: 1104 },
+  ) as HoverHarness;
+
+describe('placement stands down while a bar drag is live (review 2026-09-09)', () => {
+  /** Viewport X at the middle of unit 12 on the harness's 1104px track. */
+  const X_UNIT_12 = 1000 + 12.5 * (1104 / 60);
+  const DAY_12 = '2026-08-19';
+
+  it('offers a day on an unplotted row when nothing else is happening', () => {
+    const h = hoverHarness();
+    h.hover('C', X_UNIT_12);
+    expect(h.state.plotRow).toBe('C');
+    expect(h.state.plotDay).toBe(DAY_12);
+  });
+
+  it('offers NOTHING while another row’s bar is being dragged', () => {
+    const h = hoverHarness();
+    h.set({ dragRow: 'A' }); // row A's bar is under the button
+    h.hover('C', X_UNIT_12);
+    expect(h.state.plotDay, 'a + lit on a neighbouring row mid-gesture').toBeNull();
+    expect(h.state.plotRow, 'the hover pair armed mid-gesture').toBeNull();
+  });
+
+  it('offers again the moment the gesture ends', () => {
+    const h = hoverHarness();
+    h.set({ dragRow: 'A' });
+    h.hover('C', X_UNIT_12);
+    h.set({ dragRow: null });
+    h.hover('C', X_UNIT_12);
+    expect(h.state.plotDay).toBe(DAY_12);
   });
 });
 

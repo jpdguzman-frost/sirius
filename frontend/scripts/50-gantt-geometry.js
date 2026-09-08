@@ -39,40 +39,33 @@ const MIN_GRAB_PX = 24;
 const UNIT_PX = WEEK_PX / WORKDAYS_PER_WEEK; // 18.4 — mirrors --gw divided by 5
 const MIN_GRAB_UNITS = MIN_GRAB_PX / UNIT_PX; // 1.3043478260869565
 
-/* The inverse of the geometry above (T153): a pointer's viewport X → the week
-   COLUMN it is over. The bar owns its own drop now, so something has to do this
-   mapping that the `.gweek` cells used to do by simply being hit.
+/* THE INVERSE OF THE AXIS ABOVE: a pointer's viewport X → the WORKDAY it is
+   over. The bar owns its own pointer events, so something has to do the
+   mapping the `.gweek` cells used to do by simply being hit (T153) — and
+   since block seven (JP 2026-09-08) a row is placed and dragged at DAY grain,
+   so the day is the only grain anything maps to. The week-column ancestor
+   `weekAtX` went with the last of its callers (review 2026-09-09).
+
    Pure on purpose — the caller passes the track's MEASURED rect and the week
    list, which is what lets a test execute this exact source out of the shipped
    file, and what keeps `document`/`window` out of it.
    The columns are equal by construction: `--gw` is declared once on `.gantt`,
    `.gweek` is `flex: none` at `width: var(--gw)`, and the universal
    `box-sizing: border-box` absorbs the 1px border — so the measured width is
-   divided by the COUNT rather than a hard-coded 92, and browser zoom / DPR
-   rounding then spreads evenly instead of drifting a column at the far end.
-   Half-open: column i owns [left + i·w, left + (i+1)·w), so a pointer exactly on
-   a boundary belongs to the RIGHT column. Clamped at both ends, so a drop can
-   never fall off the track; null only when there is nothing to map onto. */
-const weekAtX = (clientX, rect, weeks) => {
-  const n = weeks ? weeks.length : 0;
-  if (!n || !(rect.width > 0)) return null;
-  const col = Math.floor((clientX - rect.left) / (rect.width / n));
-  return weeks[Math.min(n - 1, Math.max(0, col))].key;
-};
-
-/* The DAY inverse of the same axis (block seven, JP 2026-09-08: a row is
-   placed and dragged at DAY grain, not by week column). Identical arithmetic
-   to weekAtX with one column per WORKDAY rather than per week: the track is
-   `weeks.length` x WORKDAYS_PER_WEEK units wide, unit i belongs to week
-   `floor(i / WORKDAYS_PER_WEEK)` and weekday `i % WORKDAYS_PER_WEEK`
+   divided by the unit COUNT rather than a hard-coded 18.4, and browser zoom /
+   DPR rounding then spreads evenly instead of drifting a column at the far end.
+   The track is `weeks.length` x WORKDAYS_PER_WEEK units wide, unit i belongs
+   to week `floor(i / WORKDAYS_PER_WEEK)` and weekday `i % WORKDAYS_PER_WEEK`
    (Mon..Fri), so a weekend can never be named — the grid has no width for
-   one. Half-open and clamped exactly as weekAtX is, and null for the same
-   unmeasurable cases.
+   one. Half-open: unit i owns [left + i·w, left + (i+1)·w), so a pointer
+   exactly on a boundary belongs to the RIGHT day. Clamped at both ends, so a
+   drop can never fall off the track; null only when there is nothing to map
+   onto.
 
    The date is derived with isoAddDays from the week's own Monday KEY: local
    calendar arithmetic on a 'YYYY-MM-DD' string, never a millisecond
    difference against a parsed date, which lands on the previous day west of
-   UTC (invariant 11). weekAtX stays exactly as it is for its own callers. */
+   UTC (invariant 11). */
 const dayAtX = (clientX, rect, weeks) => {
   const n = weeks ? weeks.length : 0;
   if (!n || !(rect.width > 0)) return null;
@@ -101,15 +94,28 @@ const dayAtX = (clientX, rect, weeks) => {
    An empty return means unplotted, unforecastable (no difficulty), or fully
    outside the drawn window — the template emits nothing and the violet +
    (placement) takes over on hover. */
-const itemBar = (row) => {
-  if (!row.startsOn || !row.finish) return [];
+/* The run's width in UNITS, MIN_GRAB widening included — null when the run
+   falls wholly outside the drawn window and nothing is drawn at all. ONE
+   owner, because two things need this number: the box `itemBar` sizes, and
+   the clamp `barLeftAt` applies to a preview of that same box at another day.
+   Written twice, the preview and the resting bar could differ by the width of
+   the widening and nothing would notice. */
+const barWidthUnits = (row) => {
   const l = clampUnits(dayIndex(row.startsOn));
   const r = clampUnits(dayIndex(row.finish) + 1);
-  if (r <= l) return []; // fully clipped by the window
-  const width = Math.max(r - l, MIN_GRAB_UNITS);
-  const left = Math.max(0, Math.min(l, TOTAL_UNITS - width));
+  return r <= l ? null : Math.max(r - l, MIN_GRAB_UNITS);
+};
+
+const itemBar = (row) => {
+  if (!row.startsOn || !row.finish) return [];
+  const width = barWidthUnits(row);
+  if (width === null) return []; // fully clipped by the window
   return [{
-    left: unitPct(left),
+    /* the resting left comes from `barLeftAt` below — ONE owner for the clamp,
+       for the same reason `barWidthUnits` owns the width: written twice, the
+       drag preview and the bar it previews could differ by the width of the
+       MIN_GRAB slide and nothing would notice (review 2026-09-09). */
+    left: barLeftAt(row, row.startsOn),
     width: unitPct(width),
     cls: itemPhase(row),
     title: `${row.startsOn} → ${row.finish}${row.late ? ' · past the client deadline' : ''}`,
@@ -148,21 +154,41 @@ app.set('deadlineTick', (row) => {
    pointer, it is not fixed to the column the mock shows; block seven moved
    the grain from the week to the day). Left edge of that day's unit as a
    track %, through the SAME dayIndex the bar is drawn from — so the + and the
-   bar it places cannot land a column apart — and the CSS centres the 24px
-   circle inside the one-unit column. The hovered cell's tint shares this
-   left, and so does a dragged bar's preview offset (`dragLeft`).
+   bar it places cannot land a column apart — and the CSS sizes the circle to
+   that one-unit column. The hovered cell's tint shares this left. A DRAGGED
+   bar does not: a bar is wider than its column and has its own clamp, which
+   is `barLeftAt` below (review 2026-09-09).
    Asymmetric at the window's edges, and for the same reasons deadlineTick is
    (JP 2026-08-28): a day BEFORE the window pins to the left edge, which is
-   exactly where itemBar has already clipped that row's bar to, so a dragged
-   bar's preview starts where the bar visibly is; a day BEYOND it returns null,
-   because there is nothing drawn out there to point at — and a row starting
-   past the window draws no bar at all, so nothing can be grabbed from it. */
+   where itemBar has already clipped that row's bar to; a day BEYOND it
+   returns null, because there is nothing drawn out there to point at — and a
+   row starting past the window draws no bar at all, so nothing can be
+   grabbed from it. */
 const plusLeft = (day) => {
   if (!day) return null;
   const u = dayIndex(day);
   return u >= TOTAL_UNITS ? null : unitPct(Math.max(0, u));
 };
 app.set('plusLeft', plusLeft);
+
+/* THE BAR'S LEFT ON A GIVEN DAY, MIN_GRAB's final-column slide included —
+   the ONE owner of that clamp (review 2026-09-09, finding 1). `itemBar` above
+   draws the resting bar through it, and the drag previews the same box at a
+   day not yet written; the template stamps `left: dragLeft` with `itemBar`'s
+   own `width`, so the two have to be the same arithmetic or the bar moves the
+   instant it is grabbed. `plusLeft` is the RAW column left: right for the
+   one-unit + and tint, which sit ON the column, and half a unit wrong for a
+   box wider than one. Drawn at `plusLeft`, a bar starting on the last drawn
+   day jumped right on mousedown and previewed with its right edge past the
+   end of the track.
+   Null wherever the row draws no bar: there is nothing to preview, and the
+   drag never arms. */
+const barLeftAt = (row, day) => {
+  if (!row || !day || !row.startsOn || !row.finish) return null;
+  const width = barWidthUnits(row);
+  if (width === null) return null;
+  return unitPct(Math.max(0, Math.min(clampUnits(dayIndex(day)), TOTAL_UNITS - width)));
+};
 
 /* THE AFFORDANCE GUARD (JP 2026-09-08, block seven): may this row be placed
    — or dragged — onto this day? Three rules, and the third is free:

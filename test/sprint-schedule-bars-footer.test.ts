@@ -36,6 +36,11 @@ interface Bar {
 interface GeoHarness {
   itemBar(row: Partial<SprintScheduleRow>): Bar[];
   itemPhase(row: { taskPrefix?: string | null }): string;
+  /** the run's width in UNITS — the one owner of the MIN_GRAB widening */
+  barWidthUnits(row: Partial<SprintScheduleRow>): number | null;
+  /** the drag preview's left: itemBar's own clamp, at a day not yet written */
+  barLeftAt(row: Partial<SprintScheduleRow> | null, day: string | null): string | null;
+  plusLeft(day: string | null): string | null;
   dayIndex(iso: string): number;
   unitPct(u: number): string;
   TOTAL_UNITS: number;
@@ -46,25 +51,25 @@ interface GeoHarness {
 }
 
 /**
- * Declaration order matters for the consts; `dayIndex` hoists. `dayIndex`
- * reads the window origin off the app instance and NOTHING else does, so the
- * one-key stand-in is the whole surface the shipped bodies need. Window:
- * 2026-08-03 (a Monday) through 12 columns × 5 workdays = 60 units.
- *
- * Sliced LAZILY (the drag-hittest weekAtX precedent): `topDecl` throws when a
- * declaration is absent, and a throw at module scope would take the WHOLE
- * file down — render suites included — while the scripts land.
+ * The geometry in DECLARATION order, so every const exists by the time
+ * anything is called. A few name a helper declared below them — `itemBar`
+ * reaches for `itemPhase` and `barLeftAt` — which is fine for arrows nothing
+ * invokes at load. ONE list: the drag harness further down executes the same
+ * recipe, and a second hand-copied list is how the two drift by a helper (the
+ * block-4 lesson, `PIPE_RECIPE_NAMES`).
  */
+const GEO_NAMES = [
+  'WEEK_COUNT', 'WEEK_PX', 'WORKDAYS_PER_WEEK', 'TOTAL_UNITS', 'dayIndex', 'clampUnits', 'pctOf', 'unitPct',
+  'MIN_GRAB_PX', 'UNIT_PX', 'MIN_GRAB_UNITS', 'barWidthUnits', 'itemBar', 'itemPhase', 'plusLeft', 'barLeftAt',
+];
 let geo: GeoHarness | undefined;
 const G = (): GeoHarness => {
   if (!geo) {
-    const src = ['WEEK_COUNT', 'WEEK_PX', 'WORKDAYS_PER_WEEK', 'TOTAL_UNITS', 'dayIndex', 'clampUnits', 'pctOf', 'unitPct', 'MIN_GRAB_PX', 'UNIT_PX', 'MIN_GRAB_UNITS', 'itemBar', 'itemPhase']
-      .map((n) => topDecl(n))
-      .join('\n');
+    const src = GEO_NAMES.map((n) => topDecl(n)).join('\n');
     geo = new Function(`
       const app = { get: (k) => { if (k !== 'weekStart') throw new Error('geometry harness: unstubbed app.get(' + k + ')'); return '2026-08-03'; } };
       ${src}
-      return { itemBar, itemPhase, dayIndex, unitPct, TOTAL_UNITS, WEEK_PX, MIN_GRAB_PX, UNIT_PX, MIN_GRAB_UNITS };
+      return { itemBar, itemPhase, barWidthUnits, barLeftAt, plusLeft, dayIndex, unitPct, TOTAL_UNITS, WEEK_PX, MIN_GRAB_PX, UNIT_PX, MIN_GRAB_UNITS };
     `)() as GeoHarness;
   }
   return geo;
@@ -120,9 +125,9 @@ describe('one row, one bar — start to finish, finish day INCLUSIVE', () => {
     expect(b!.width).toMatch(twoDp);
     // and the template multiplies nothing (the run-geometry law, re-pointed).
     // Mid-drag the LEFT comes from `dragLeft` instead — a value the handler
-    // already finished, through the same `plusLeft` the + uses — and the
-    // WIDTH is untouched, which is what makes the drag a translation rather
-    // than a resize (bar resizing is out of the pilot, §5.1b).
+    // already finished, through `barLeftAt`, which is itemBar's own clamp at
+    // another day — and the WIDTH is untouched, which is what makes the drag a
+    // translation rather than a resize (bar resizing is out of the pilot, §5.1b).
     const tag = /<div class="gitem[^>]*>/.exec(schedulesView());
     expect(tag, 'no .gitem in the schedules view').not.toBeNull();
     const style = /style="([^"]*)"/.exec(tag![0])?.[1] ?? '';
@@ -185,6 +190,81 @@ describe('the 24px minimum grab, ported intact (JP 2026-08-18 ruling 2)', () => 
         expect(b!.left, `unit ${u} moved off its anchor`).toBe(G().unitPct(u));
       }
     }
+  });
+});
+
+/* ====================================================================== *
+ * SUITE 5b — `barLeftAt`, the DRAG PREVIEW's left (review 2026-09-09,
+ * confirmed finding 1; PLAN.md amendment).
+ *
+ * THE RULE: the template renders the previewed bar as `left: dragLeft` with
+ * `width: b.width` — itemBar's own width. A left that is not itemBar's left
+ * for that width is therefore a DIFFERENT box: at the last drawn unit the raw
+ * column left (`plusLeft`) is half a unit right of where the bar rests, so the
+ * bar jumped the instant it was grabbed and previewed with its right edge past
+ * the end of the track. `barLeftAt` is itemBar's clamp applied to a day the
+ * row has not been written to yet.
+ * ====================================================================== */
+
+describe('barLeftAt — the preview is the SAME box, one day over', () => {
+  const oneDay = (day: string): Partial<SprintScheduleRow> => ({ startsOn: day, finish: day, taskPrefix: 'Render Asset' });
+  const FIVE_DAY: Partial<SprintScheduleRow> = { startsOn: '2026-08-17', finish: '2026-08-21', taskPrefix: 'Render Asset' };
+
+  it('takes its resting left FROM barLeftAt — one owner for the clamp (source)', () => {
+    /* Since the simplification pass the identity below is STRUCTURAL, not a
+       coincidence two copies happen to share: `itemBar` calls this helper for
+       its own left, the way it already calls `barWidthUnits` for its width.
+       This is the pin that keeps it that way — a second copy of the clamp
+       inside itemBar is exactly the drift finding 1 came from. */
+    const src = topDecl('itemBar');
+    expect(src).toContain('barLeftAt(row, row.startsOn)');
+    expect(src, 'itemBar grew a second copy of the MIN_GRAB clamp').not.toContain('TOTAL_UNITS - width');
+  });
+
+  it('gives the RESTING left on every one of the sixty days a bar can start', () => {
+    /* executed against itemBar itself (rule 2), never against a retyped clamp.
+       True by construction now (the pin above), and swept anyway: the VALUES
+       are bounded by the two cases below, so a broken clamp still shows. */
+    for (let u = 0; u < 60; u++) {
+      const day = isoAtUnit(u);
+      expect(G().barLeftAt(oneDay(day), day), `unit ${u}`).toBe(G().itemBar(oneDay(day))[0]!.left);
+    }
+  });
+
+  it('never previews off the track, whatever day a five-day bar is dragged to', () => {
+    const width = Number(G().itemBar(FIVE_DAY)[0]!.width);
+    for (let u = 0; u < 60; u++) {
+      const left = Number(G().barLeftAt(FIVE_DAY, isoAtUnit(u)));
+      expect(left, `unit ${u} left`).toBeGreaterThanOrEqual(0);
+      expect(left + width, `unit ${u} right edge`).toBeLessThanOrEqual(100.02);
+    }
+  });
+
+  it('parts from plusLeft exactly where the MIN_GRAB slide bites — the defect, in one column', () => {
+    const last = oneDay('2026-10-23'); // unit 59, the last drawn workday
+    expect(G().plusLeft('2026-10-23')).toBe(G().unitPct(59)); // the raw column left, unchanged
+    expect(G().barLeftAt(last, '2026-10-23')).toBe(G().itemBar(last)[0]!.left);
+    expect(G().barLeftAt(last, '2026-10-23'), 'the preview still opens at the raw column left')
+      .not.toBe(G().plusLeft('2026-10-23'));
+    expect(Number(G().barLeftAt(last, '2026-10-23')) + Number(G().itemBar(last)[0]!.width)).toBeLessThanOrEqual(100);
+    // and mid-window the two agree, which is why 59 of 60 columns never showed it
+    expect(G().barLeftAt(oneDay('2026-08-19'), '2026-08-19')).toBe(G().plusLeft('2026-08-19'));
+  });
+
+  it('sizes itself from the ONE width owner, so the preview and the bar cannot drift', () => {
+    // itemBar's width and barLeftAt's clamp are the same number, executed
+    // twice rather than written twice
+    for (const row of [oneDay('2026-08-19'), FIVE_DAY, oneDay('2026-10-23')]) {
+      expect(G().itemBar(row)[0]!.width).toBe(G().unitPct(G().barWidthUnits(row)!));
+    }
+  });
+
+  it('is null wherever no bar is drawn — there is nothing to preview', () => {
+    expect(G().barLeftAt(null, '2026-08-19')).toBeNull();
+    expect(G().barLeftAt(oneDay('2026-08-19'), null)).toBeNull();
+    expect(G().barLeftAt({ startsOn: null, finish: null }, '2026-08-19')).toBeNull();
+    // wholly outside the window: itemBar returns [], so the drag cannot arm
+    expect(G().barLeftAt({ startsOn: '2026-11-09', finish: '2026-11-13' }, '2026-08-19')).toBeNull();
   });
 });
 
@@ -522,28 +602,40 @@ describe('the drag lifecycle — four handlers, and what each one refuses (sourc
     expect(body).toContain('if (left === null) return;');
     // the mousedown's default is a text selection that follows the pointer
     expect(body).toContain('preventDefault()');
-    // it opens ON the row's own start, so a mousedown with no move is a no-op
-    // by arithmetic rather than by a special case at the other end
-    expect(body).toMatch(/const left = plusLeft\(row\.startsOn\);/);
-    expect(body).toMatch(/dragRow: rowId, dragDay: row\.startsOn, dragLeft: left/);
+    /* it opens ON the row's own start, at the left the BAR is resting at
+       (review 2026-09-09, finding 1: `plusLeft` is the raw column left, which
+       is half a unit right of the resting bar in the final column) — so a
+       mousedown with no movement is a no-op by arithmetic rather than by a
+       special case at the other end */
+    expect(body).toMatch(/const left = barLeftAt\(row, row\.startsOn\);/);
+    expect(body).toMatch(/dragRow: rowId,\s*dragDay: row\.startsOn,\s*dragLeft: left/);
   });
 
   it('binds mouseup and Escape on the WINDOW, and only while a drag is live', () => {
     const start = handlerBody('barDragStart');
     expect(start).toContain("window.addEventListener('mouseup', barDragUp)");
-    expect(start).toContain("window.addEventListener('keydown', barDragKey)");
+    /* CAPTURE (review 2026-09-09, finding 3): the mousedown's preventDefault
+       leaves focus wherever it was — a sprint's add-search field, whose own
+       Escape empties the query — so the drag has to claim the key on the way
+       DOWN, before the focused element sees it, and let it go again with the
+       same flag or the listener is never removed. */
+    expect(start).toContain("window.addEventListener('keydown', barDragKey, true)");
     // a release outside the track must still land; Escape must reach from
     // wherever the pointer wandered
     const stop = fnBody('barDragStop');
     expect(stop).toContain("window.removeEventListener('mouseup', barDragUp)");
-    expect(stop).toContain("window.removeEventListener('keydown', barDragKey)");
+    expect(stop).toContain("window.removeEventListener('keydown', barDragKey, true)");
     // and every exit goes through it — commit, cancel, project switch
     for (const via of ['barDragEnd', 'barDragCancel']) {
       expect(handlerBody(via), `${via} leaves the window listeners bound`).toContain('barDragStop();');
     }
     expect(fnBody('resetForProjectSwitch')).toContain('barDragStop();');
-    // the key is Escape and nothing else — a stray keystroke must not cancel
-    expect(APP_JS_CODE).toContain("const barDragKey = (e) => { if (e.key === 'Escape') app.fire('barDragCancel'); };");
+    // the key is Escape and nothing else — a stray keystroke must not cancel,
+    // and must not be swallowed on its way to the field either
+    const key = topDecl('barDragKey');
+    expect(key).toContain("e.key !== 'Escape'");
+    expect(key).toContain('e.stopPropagation();');
+    expect(key).toContain("app.fire('barDragCancel')");
   });
 
   it('the MOVE steers only its own row, and holds its day when it cannot measure', () => {
@@ -551,9 +643,13 @@ describe('the drag lifecycle — four handlers, and what each one refuses (sourc
     // every placed row's track binds this: a pointer crossing a NEIGHBOUR's
     // track mid-drag must not steer the bar being dragged
     expect(body).toContain("if (app.get('dragRow') !== rowId) return;");
-    expect(body).toContain('dayAtX(ctx.event.clientX, ctx.node.getBoundingClientRect()');
+    // a release the window listener never saw leaves the gesture armed; the
+    // buttons bitmask is the live truth about what is still held down
+    expect(body).toContain('ctx.event.buttons === 0');
+    expect(body).toContain("app.fire('barDragCancel')");
+    expect(body).toContain('dayAtX(');
     expect(body).toContain('if (!day) return;');
-    expect(body).toMatch(/dragDay: day, dragLeft: plusLeft\(day\)/);
+    expect(body).toMatch(/dragDay: day, dragLeft: left/);
   });
 
   it('writes on release ONLY when the day changed and the row may have it', () => {
@@ -578,7 +674,9 @@ describe('the drag lifecycle — four handlers, and what each one refuses (sourc
     // the refusal surfaces the SERVER's own sentence (OUT_OF_SPRINT /
     // PAST_DEADLINE / NOT_A_WORKDAY), and clearing the keys IS the snap-back
     expect(body).toContain('flashBanner(errText(err));');
-    expect(fnBody('barDragClear')).toMatch(/dragRow: null, dragDay: null, dragLeft: null/);
+    // all FOUR keys go together — the grab offset is as much a part of the
+    // gesture as the day is, and a stale one would offset the next drag
+    expect(fnBody('barDragClear')).toMatch(/dragRow: null,\s*dragDay: null,\s*dragLeft: null,\s*dragGrab: null/);
   });
 
   it('cancels on Escape without writing anything at all', () => {
@@ -595,5 +693,198 @@ describe('the drag lifecycle — four handlers, and what each one refuses (sourc
     // gesture can end, which is how a listener gets left bound.
     const names = [...APP_JS_CODE.matchAll(/\n  (?:async )?(barDrag\w+)\([^)]*\) \{/g)].map((m) => m[1]!).sort();
     expect(names).toEqual(['barDragCancel', 'barDragEnd', 'barDragMove', 'barDragStart']);
+  });
+});
+
+/* ====================================================================== *
+ * SUITE 5d — the drag EXECUTED (review 2026-09-09: findings 1, 3 and 5).
+ *
+ * The source pins above say which door calls which. These three defects were
+ * about what the doors DO with a pointer, so the shipped `barDragStart`,
+ * `barDragMove`, `barDragCancel` and `addKey` are sliced out of the client and
+ * RUN against the shipped geometry — nothing here is retyped.
+ *
+ * HONESTY NOTE: this is still not a browser. What it models is the ORDER a
+ * browser delivers a keydown in (capture listeners on the window, then the
+ * focused element's own handler, then bubble listeners) and the values a
+ * mouse event carries; a real pointer stays E2E's.
+ * ====================================================================== */
+
+/** The 12 drawn weeks, their Mondays derived from the same unit walker. */
+const WEEKS12 = Array.from({ length: 12 }, (_, i) => ({ key: isoAtUnit(i * 5) }));
+/** The shipped track: 12 × --gw, so one unit is exactly 18.4px. */
+const DRAG_RECT = { left: 1000, width: 1104 };
+const DRAG_UNIT = DRAG_RECT.width / 60;
+/** Viewport X at the middle of unit `u` — never on a boundary. */
+const xAt = (u: number): number => DRAG_RECT.left + (u + 0.5) * DRAG_UNIT;
+
+interface KeyResult { key: string; stopped: boolean }
+interface Drag {
+  state: Record<string, unknown>;
+  fired: string[];
+  listeners: Array<{ type: string; opts: unknown }>;
+  start(rowId: string, clientX: number, ev?: Record<string, unknown>): void;
+  move(rowId: string, clientX: number, ev?: Record<string, unknown>): void;
+  /** a keydown delivered the way the DOM delivers one, to a focused field */
+  press(key: string, sprintId: string | null): KeyResult;
+}
+
+let dragSrc: string | undefined;
+const dragHarness = (rows: Array<Partial<SprintScheduleRow>>): Drag => {
+  dragSrc ??= [
+    ...GEO_NAMES.map((n) => topDecl(n)),
+    ...['isoOf', 'isoAddDays', 'dayAtX', 'sprintRow', 'barDragUp', 'barDragKey', 'barDragStop', 'barDragClear'].map((n) => topDecl(n)),
+    `const handlers = {
+       barDragStart(ctx, rowId) ${handlerBody('barDragStart')},
+       barDragMove(ctx, rowId) ${handlerBody('barDragMove')},
+       barDragCancel() ${handlerBody('barDragCancel')},
+       addKey(ctx, sprintId) ${handlerBody('addKey')},
+     };`,
+  ].join('\n');
+  return new Function('ROWS', 'WEEKS', 'RECT', `
+    "use strict";
+    const state = {
+      weekStart: '2026-08-03', plannerWeeks: WEEKS, sprintItems: { rows: ROWS },
+      dragRow: null, dragDay: null, dragLeft: null, dragGrab: null,
+      addQ: { s1: 'illustrate' },
+    };
+    const fired = [];
+    const listeners = [];
+    let sprintItemSaving = false;
+    const app = {
+      get: (k) => k.split('.').reduce((o, p) => (o == null ? o : o[p]), state),
+      set: (a, b) => {
+        if (typeof a !== 'string') { Object.assign(state, a); return; }
+        const parts = a.split('.');
+        let o = state;
+        while (parts.length > 1) o = o[parts.shift()];
+        o[parts[0]] = b;
+      },
+      /* the window listeners fire handlers by name; barDragEnd is not in the
+         map on purpose — it writes, and a write is the other suites' business */
+      fire: (name) => { fired.push(name); if (handlers[name]) handlers[name](); },
+    };
+    const window = {
+      addEventListener: (type, fn, opts) => { listeners.push({ type, fn, opts }); },
+      removeEventListener: (type, fn, opts) => {
+        const i = listeners.findIndex((l) => l.type === type && l.fn === fn && String(l.opts) === String(opts));
+        if (i >= 0) listeners.splice(i, 1);
+      },
+    };
+    ${dragSrc}
+    const track = { getBoundingClientRect: () => RECT };
+    const ctxOf = (clientX, ev, node) => ({
+      event: { clientX, button: 0, buttons: 1, preventDefault() {}, ...ev },
+      node,
+    });
+    const isCapture = (l) => l.opts === true || !!(l.opts && l.opts.capture);
+    return {
+      state, fired, listeners,
+      start: (rowId, clientX, ev) => handlers.barDragStart(
+        ctxOf(clientX, ev, { closest: (s) => (s === '.gtrack' ? track : null), getBoundingClientRect: () => RECT }),
+        rowId,
+      ),
+      move: (rowId, clientX, ev) => handlers.barDragMove(ctxOf(clientX, ev, track), rowId),
+      press: (key, sprintId) => {
+        const e = { key, stopped: false, stopPropagation() { this.stopped = true; }, preventDefault() {} };
+        for (const l of listeners.filter((l) => l.type === 'keydown' && isCapture(l))) l.fn(e);
+        if (!e.stopped && sprintId) handlers.addKey({ event: e }, sprintId);
+        if (!e.stopped) for (const l of listeners.filter((l) => l.type === 'keydown' && !isCapture(l))) l.fn(e);
+        return { key, stopped: e.stopped };
+      },
+    };
+  `)(rows, WEEKS12, DRAG_RECT) as Drag;
+};
+
+describe('the drag, executed: the grab, the lost mouseup and the key it claims', () => {
+  /** units 10–14, five days — the bar the E2E script drags. */
+  const FIVE: Partial<SprintScheduleRow> = { id: 'r1', startsOn: '2026-08-17', finish: '2026-08-21', taskPrefix: 'Render Asset' };
+  /** unit 59: the one column where the MIN_GRAB slide moves the resting bar. */
+  const LAST: Partial<SprintScheduleRow> = { id: 'r2', startsOn: '2026-10-23', finish: '2026-10-23', taskPrefix: 'Render Asset' };
+
+  it('opens the preview where the bar RESTS — mousedown moves nothing (finding 1)', () => {
+    const d = dragHarness([LAST]);
+    const resting = G().itemBar(LAST)[0]!;
+    d.start('r2', xAt(59));
+    expect(d.state.dragLeft, 'the bar jumped on mousedown').toBe(resting.left);
+    expect(Number(d.state.dragLeft) + Number(resting.width), 'the preview hung off the end of the track')
+      .toBeLessThanOrEqual(100);
+  });
+
+  it('carries the grab offset: a five-day bar taken by its THIRD day moves one day per day (finding 5)', () => {
+    const d = dragHarness([FIVE]);
+    d.start('r1', xAt(12)); // the bar covers units 10–14; the pointer is on 12
+    expect(d.state.dragGrab, 'the offset between the bar’s left and the pointer’s column').toBe(-2);
+    expect(d.state.dragDay).toBe('2026-08-17'); // opens on the row's own start
+    d.move('r1', xAt(13)); // one unit right
+    expect(d.state.dragDay, 'the bar teleported its left edge under the pointer').toBe('2026-08-18');
+    expect(d.state.dragLeft).toBe(G().unitPct(11));
+  });
+
+  it('does not move while the pointer stays inside the day it was pressed on', () => {
+    const d = dragHarness([FIVE]);
+    d.start('r1', xAt(12));
+    d.move('r1', xAt(12) + 2);
+    expect(d.state.dragDay).toBe('2026-08-17');
+    expect(d.state.dragLeft).toBe(G().itemBar(FIVE)[0]!.left);
+  });
+
+  it('is unchanged for a bar grabbed by its first day — offset zero, pointer’s own day', () => {
+    const d = dragHarness([FIVE]);
+    d.start('r1', xAt(10));
+    expect(d.state.dragGrab).toBe(0);
+    d.move('r1', xAt(20));
+    expect(d.state.dragDay).toBe(isoAtUnit(20));
+  });
+
+  it('clamps the offset pointer to the window rather than naming a day off the axis', () => {
+    const d = dragHarness([FIVE]);
+    d.start('r1', xAt(12));
+    d.move('r1', DRAG_RECT.left + DRAG_RECT.width + 5000);
+    // the offset is applied FIRST and the clamp then holds the start on the
+    // last drawn day, exactly as an unoffset drag to the same place would
+    expect(d.state.dragDay).toBe(isoAtUnit(59));
+    d.move('r1', -5000);
+    expect(d.state.dragDay).toBe(isoAtUnit(0));
+  });
+
+  it('cancels on a BUTTON-LESS pointer — a lost mouseup does not leave the bar armed (finding 1, second half)', () => {
+    const d = dragHarness([FIVE]);
+    d.start('r1', xAt(10));
+    d.move('r1', xAt(20), { buttons: 0 });
+    expect(d.fired).toContain('barDragCancel');
+    expect(d.state, 'the drag survived a release the window never saw').toMatchObject({
+      dragRow: null, dragDay: null, dragLeft: null, dragGrab: null,
+    });
+    expect(d.listeners, 'the window listeners outlived the cancelled drag').toHaveLength(0);
+    d.move('r1', xAt(30)); // and a further move steers nothing
+    expect(d.state.dragDay).toBeNull();
+  });
+
+  it('claims Escape while it is live — the focused sprint search keeps its query (finding 3)', () => {
+    const d = dragHarness([FIVE]);
+    d.start('r1', xAt(10)); // mousedown preventDefaults, so focus stays in the field
+    const e = d.press('Escape', 's1');
+    expect(e.stopped, 'Escape ran on to the focused field').toBe(true);
+    expect((d.state.addQ as Record<string, string>).s1, 'the drag’s Escape wiped a typed query').toBe('illustrate');
+    expect(d.fired).toContain('barDragCancel');
+    expect(d.state.dragRow).toBeNull();
+  });
+
+  it('leaves Escape alone when no drag is live — the field clears as it always did', () => {
+    const d = dragHarness([FIVE]);
+    const e = d.press('Escape', 's1');
+    expect(e.stopped).toBe(false);
+    expect((d.state.addQ as Record<string, string>).s1).toBe('');
+    expect(d.fired).toEqual([]);
+  });
+
+  it('claims Escape and nothing else — every other key reaches the field mid-drag', () => {
+    const d = dragHarness([FIVE]);
+    d.start('r1', xAt(10));
+    const e = d.press('a', 's1');
+    expect(e.stopped).toBe(false);
+    expect(d.fired).toEqual([]);
+    expect(d.state.dragRow).toBe('r1');
   });
 });

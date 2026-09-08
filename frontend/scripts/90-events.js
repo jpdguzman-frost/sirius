@@ -73,6 +73,7 @@ async function resetForProjectSwitch() {
     dragRow: null,
     dragDay: null,
     dragLeft: null,
+    dragGrab: null,
     addQ: {},
     addBusy: null,
     collapsedBlocks: {},
@@ -203,16 +204,33 @@ const sprintRow = (itemId) => (app.get('sprintItems.rows') || []).find((r) => r.
    from wherever the pointer has wandered. Both come off on every exit — the
    commit, the cancel and a project switch — so nothing listens at rest. */
 const barDragUp = () => app.fire('barDragEnd');
-const barDragKey = (e) => { if (e.key === 'Escape') app.fire('barDragCancel'); };
+/* ESCAPE IS THE DRAG'S WHILE IT IS LIVE (review 2026-09-09, finding 3). The
+   mousedown's preventDefault leaves focus where it was — often a sprint's
+   add-search field, whose own Escape empties that sprint's query (R8-h) — so
+   a bubble-phase listener here meant one key doing two unrelated things and
+   the typed query gone. CAPTURE puts this first, on the way down, and
+   stopPropagation ends the key there. It is bound only while a drag runs, so
+   at rest Escape reaches the field exactly as it always did. */
+const barDragKey = (e) => {
+  if (e.key !== 'Escape') return;
+  e.stopPropagation();
+  app.fire('barDragCancel');
+};
 function barDragStop() {
   window.removeEventListener('mouseup', barDragUp);
-  window.removeEventListener('keydown', barDragKey);
+  // the SAME capture flag it was bound with, or the listener never comes off
+  window.removeEventListener('keydown', barDragKey, true);
 }
-/* The three keys go together, always: clearing them IS the snap-back, because
+/* The four keys go together, always: clearing them IS the snap-back, because
    the bar's resting geometry comes from the row's own `startsOn` — the value
    the server still holds after a refusal. */
 function barDragClear() {
-  app.set({ dragRow: null, dragDay: null, dragLeft: null });
+  app.set({
+    dragRow: null,
+    dragDay: null,
+    dragLeft: null,
+    dragGrab: null,
+  });
 }
 
 /* HOW AN ADD FAILS — one owner for both adds, because the policy is one
@@ -748,7 +766,13 @@ app.on({
        mouseleave that could ever clear it. The lock is already up for the
        whole flight, so it is the one fact that separates a live hover from
        this ghost. */
-    if (sprintItemSaving) return;
+    /* NOT while a BAR DRAG is live either (review 2026-09-09): the tracks are
+       stacked one per row, so a gesture that wanders vertically fires the
+       hover of whatever unplotted row it crosses — which then lights a +, a
+       day tint and a pointer cursor, offering a second placement in the
+       middle of the first. Nothing can be written from there (the click never
+       lands), so this is the affordance standing down, not a lock. */
+    if (sprintItemSaving || app.get('dragRow')) return;
     /* the day-grain sibling of the drop path's mapper (dayAtX): pointer X
        against the TRACK's measured rect. `rowId` is the committed row whose
        track the pointer is on — only committed rows bind this; the search row
@@ -824,27 +848,62 @@ app.on({
     if (ctx.event && ctx.event.button) return;
     const row = sprintRow(rowId);
     if (!row || !row.startsOn) return; // only a PLACED row has a bar to drag
-    /* the preview needs a left, and a start beyond the drawn window has none
-       — such a row draws no bar either, so this is unreachable from a real
-       pointer and is here to keep it that way */
-    const left = plusLeft(row.startsOn);
+    /* the preview needs a left, and a row drawing no bar — a start beyond the
+       drawn window, no forecast — has none; such a row shows nothing to grab
+       either, so this is unreachable from a real pointer and is here to keep
+       it that way. `barLeftAt`, not `plusLeft`: the preview is the same box
+       the bar is resting in, slide and all (review 2026-09-09, finding 1). */
+    const left = barLeftAt(row, row.startsOn);
     if (left === null) return;
     /* the mousedown's default is a text selection that follows the pointer
        across the row and the pane beside it; the drag owns the gesture now */
     if (ctx.event && ctx.event.preventDefault) ctx.event.preventDefault();
+    /* THE GRAB OFFSET (review 2026-09-09, split finding — PLAN.md amendment):
+       where inside the bar the pointer took hold, in whole units. Without it
+       the first mousemove teleports the bar's LEFT edge under the cursor, so
+       a five-day bar grabbed on its last day leaps four days back before it
+       moves anywhere — "drag by three days" only read true from the first
+       unit. The mousedown lands on the BAR, so the track's rect (the axis
+       every unit is measured against) comes from its container. */
+    const track = ctx.node && ctx.node.closest ? ctx.node.closest('.gtrack') : null;
+    const at = track ? dayAtX(ctx.event.clientX, track.getBoundingClientRect(), app.get('plannerWeeks')) : null;
     window.addEventListener('mouseup', barDragUp);
-    window.addEventListener('keydown', barDragKey);
+    window.addEventListener('keydown', barDragKey, true);
     /* opens ON the row's own start, so a mousedown with no movement is a
        no-op by arithmetic rather than by a special case in barDragEnd */
-    app.set({ dragRow: rowId, dragDay: row.startsOn, dragLeft: left });
+    app.set({
+      dragRow: rowId,
+      dragDay: row.startsOn,
+      dragLeft: left,
+      dragGrab: at ? dayIndex(row.startsOn) - dayIndex(at) : 0,
+    });
   },
   barDragMove(ctx, rowId) {
     /* the track binds this on every placed row, so a pointer crossing a
        NEIGHBOUR's track during a drag must not steer this one */
     if (app.get('dragRow') !== rowId) return;
-    const day = dayAtX(ctx.event.clientX, ctx.node.getBoundingClientRect(), app.get('plannerWeeks'));
+    /* A LOST MOUSEUP (review 2026-09-09, finding 1's second half): a release
+       the window listener never saw — over a native drag layer, at a devtools
+       break, outside the frame — leaves the gesture armed, the bar following
+       a button-less pointer, and the next stray mouseup committing a start
+       nobody chose. `buttons` is the live truth about what is still held. */
+    if (ctx.event && ctx.event.buttons === 0) {
+      app.fire('barDragCancel');
+      return;
+    }
+    const rect = ctx.node.getBoundingClientRect();
+    const weeks = app.get('plannerWeeks');
+    /* the pointer walks back by the grab offset — whole unit widths of the
+       measured track — and `dayAtX` then clamps and names the workday exactly
+       as it does for a hover: ONE mapper, one clamp, so the bar the pointer
+       is carrying and the + it would have placed cannot land a day apart. */
+    const units = (weeks ? weeks.length : 0) * WORKDAYS_PER_WEEK;
+    const grab = app.get('dragGrab') || 0;
+    const day = dayAtX(ctx.event.clientX + (units ? grab * (rect.width / units) : 0), rect, weeks);
     if (!day) return; // unmeasurable track — hold the last day rather than guess
-    app.set({ dragDay: day, dragLeft: plusLeft(day) });
+    const left = barLeftAt(sprintRow(rowId), day);
+    if (left === null) return;
+    app.set({ dragDay: day, dragLeft: left });
   },
   async barDragEnd() {
     const rowId = app.get('dragRow');

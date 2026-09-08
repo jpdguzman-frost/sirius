@@ -466,7 +466,7 @@ export interface DeadlinesState {
  * LAZY, unlike `DUE_CALENDAR_PARTIAL` above, and deliberately so: a throw at
  * module scope takes down every suite that imports this helper, not just the
  * one that wanted the partial (the reasoning drag-hittest states about
- * `weekAtX`). A missing partial should fail the render that wanted it, and
+ * `dayAtX`). A missing partial should fail the render that wanted it, and
  * nothing else.
  *
  * One slicer for every partial (block 5): the shared `noResults` block both

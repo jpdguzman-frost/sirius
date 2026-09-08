@@ -38,10 +38,13 @@ const FRONTEND_SHARED = [
   // incomplete-card hover card (owl #81) — the shared hover-close timer they
   // name is the filter chip panel's now. Naming debt, recorded where it lives.
   'unranked', 'updateThumb', 'WARN_CLOSE_MS', 'warnPopCancelClose',
-  // block 7 (JP 2026-09-08): the day-grain placement + bar drag. All three are
-  // declared in 50-gantt-geometry.js and read by the handlers in 90-events.js.
-  'dayAtX', 'placeable', 'plusLeft',
-  'WEEK_COUNT', 'WEEK_PX', 'weekAtX', 'withRouterSuppressed', 'WORKDAYS_PER_WEEK', 'workingDaysBetween',
+  // block 7 (JP 2026-09-08): the day-grain placement + bar drag. All of these
+  // are declared in 50-gantt-geometry.js and read by the handlers in
+  // 90-events.js — `barLeftAt` (the drag preview's left, itemBar's own clamp
+  // at a day not yet written) and `dayIndex` (the grab offset, in units) join
+  // them from review 2026-09-09.
+  'barLeftAt', 'dayAtX', 'dayIndex', 'placeable', 'plusLeft',
+  'WEEK_COUNT', 'WEEK_PX', 'withRouterSuppressed', 'WORKDAYS_PER_WEEK', 'workingDaysBetween',
   'writeCapacity', 'writeDeadline',
 ];
 
