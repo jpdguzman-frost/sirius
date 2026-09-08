@@ -390,15 +390,38 @@ describe('the add can arrive already PLOTTED — the draft row\u2019s + (PLAN 20
   it('refuses the same states on BOTH add paths — finished work and lanes outside the pipeline', async () => {
     expect([...NOT_ADDABLE_STATES].sort()).toEqual(['done', 'excluded']);
     // and no add path states the rule a second time by hand: every use of the
-    // lane classifier in this file asks the set, so widening the rule cannot
-    // reach one route and miss the other
+    // lane classifier in this file goes through the ONE refusal map, so
+    // widening the rule cannot reach one route and miss the other
     const src = await readFile(new URL('../src/routes/schedule.ts', import.meta.url), 'utf8');
     const uses = src
       .split('\n')
       .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)) // comments name it without calling it
       .filter((l) => /classifyList\(/.test(l) && !/^import /.test(l));
     expect(uses.length, 'nothing calls classifyList here — this guard is vacuous').toBeGreaterThan(0);
-    expect(uses.filter((l) => !/NOT_ADDABLE_STATES\.has\(classifyList\(/.test(l))).toEqual([]);
+    expect(uses.filter((l) => !/NOT_ADDABLE_REFUSAL\[classifyList\(/.test(l))).toEqual([]);
+    // …and the set the pool reads is the map's own keys, never a second list
+    expect(/NOT_ADDABLE_STATES[^=]*=\s*new Set\(Object\.keys\(NOT_ADDABLE_REFUSAL\)\)/.test(src)).toBe(true);
+  });
+
+  it('an EXCLUDED card is refused in its own words, not the completed card\u2019s (review ruling 2026-09-08)', async () => {
+    /* THE RULE: both states are refused, and each is refused HONESTLY. A card
+       in Discarded Work, Unused Work or an ops lane is not finished work, and
+       the PM reading the banner is being told why their click failed — the
+       done copy names a state the board does not hold.
+
+       Reachable the moment a card moves into such a lane between the schedule
+       load and the add, and on every batch add. The two are asserted side by
+       side because the defect was that they answered identically. */
+    const { project, agent } = await setup();
+    const sprint = await seedAddable(project._id, { current_list: 'Discarded Work' });
+    const res = await agent.post(`/api/projects/${project._id}/sprint-items`)
+      .send({ sprint_id: String(sprint._id), card_id: 'wc-3', starts_on: '2026-08-10' }).expect(409);
+    expect(res.body.error.code).toBe('CARD_EXCLUDED');
+    expect(res.body.error.message).toContain('outside the pipeline');
+    expect(res.body.error.message).not.toContain('complete');
+    // refused all the same: no row, no audit
+    expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(0);
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
   });
 
   it('a digit-shaped non-date is refused, on POST and PATCH alike (review 2026-08-28b, finding 8)', async () => {

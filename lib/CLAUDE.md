@@ -25,8 +25,6 @@ bundle, minified identifiers kept, DO NOT EDIT.
 
 ## What is NOT the trio [docs/architecture/map-backend.md; the file headers]
 
-- `dayplan.ts` — NEW code (phase 12), not the port: day capacities for
-  Deadlines daily plotting.
 - `planner.constants.ts` — verbatim VALUES, split out only so forecast and
   planner share them without an import cycle.
 - `model.ts` — verbatim grid-lookup semantics carrying the prototype's

@@ -75,11 +75,6 @@
      stdDeviation (6) where CSS wants the blur radius (12); the annotation and
      the style token both say 12, so 12 it is. */
   --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.15);
-  /* The JS twin of WARN_SHADOW_BLEED: both vertical clamp margins added up —
-     (OVERLAY_EDGE 4 + top bleed 8) + (OVERLAY_EDGE 4 + bottom bleed 16). The
-     last-resort scroll cap and placeBox's `over` verdict must agree on this
-     number or the capped box reads as "fits now" and oscillates. */
-  --warn-vclamp: 32px;
 
   /* Checkbox-With-Label fills (Figma component 77:1127, read through Rex
      2026-08-27, frame 731:101090). RAW fills in the design — no library

@@ -410,7 +410,7 @@ export interface DlCard {
   figmaUrl: string | null;
 }
 
-/** One day column of an expanded lane — `day` is the date every card in it finishes on (PLAN.md B2). */
+/** One day column of an expanded lane — `day` is the date every card in it STARTS on (spec v1.3 §6.2, 2026-09-08; it was the forecast finish under PLAN.md B2). */
 export interface DlDay {
   day: string;
   name: string;

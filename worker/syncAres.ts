@@ -10,7 +10,10 @@
 import { Types } from 'mongoose';
 import { AresClient, type AresMovement } from '../src/services/ares.ts';
 import { assignDisplayIds, mapTrello, type MappedDeliverable, type MappedWorkCard } from '../src/services/mapper.ts';
-import { classifyList, isKnownList } from '../src/services/status-rules.ts';
+import { classifyList, isKnownList, normalizeListName } from '../src/services/status-rules.ts';
+
+/** The excluded lane that is still a backlog: a move into it starts nothing. */
+const OPS_BACKLOG = normalizeListName('Operations Backlog');
 import { CardEvent, Deliverable, Project, SyncRun, WorkCard } from '../src/models/index.ts';
 import type { Env } from '../src/config/env.ts';
 import { assertNotProductionBoards } from '../src/services/guard.ts';
@@ -379,7 +382,9 @@ function pendingSpans(cards: SpanCard[], byCard: Map<string, Span>): PendingSpan
   const out: PendingSpan[] = [];
   for (const c of cards) {
     const s = byCard.get(c.trello_card_id) ?? { started: null, done: null };
-    // done is HELD only while the card sits in a done list today
+    // done is HELD only while the card sits in a done list today — an excluded
+    // lane is not one, so a card parked in `Ops Work Complete` reports no DONE
+    // date however its history reads (review ruling 2026-09-08)
     const done = classifyList(c.current_list ?? '') === 'done' ? s.done : null;
     if (
       (c.work_started_at?.getTime() ?? null) === (s.started?.getTime() ?? null) &&
@@ -415,10 +420,13 @@ async function writeSpans(model: SpanWriter, projectId: Types.ObjectId, pending:
  * Derive work_started_at / work_done_at for deliverable AND work cards, each
  * from its OWN movements — a row's Started/Done is that card's span, never
  * its MC group's (JP 2026-08-12, extended per the 2026-08-13 spec).
- * Started = the card's FIRST move into an ongoing-or-done list; done = the
+ * Started = the card's FIRST move into any lane that is not a Backlog one —
+ * ongoing, done or excluded alike, because an ops or discarded lane is still
+ * somebody having picked the card up (review ruling 2026-09-08); done = the
  * LATEST move into a done list, kept only while the card currently sits in a
- * done list (moving it back out clears it). Idempotent: same-value spans
- * write nothing. Shared by the full board sync and the push drain.
+ * done list (moving it back out, or into an excluded lane, clears it).
+ * Idempotent: same-value spans write nothing. Shared by the full board sync
+ * and the push drain.
  */
 export async function deriveWorkSpans(projectId: Types.ObjectId, cardIds?: string[]): Promise<number> {
   const filter: Record<string, unknown> = { project_id: projectId, active: true };
@@ -438,7 +446,15 @@ export async function deriveWorkSpans(projectId: Types.ObjectId, cardIds?: strin
   for (const e of events) {
     if (!e.to_list) continue; // a list-less movement is not a move INTO any list
     const cls = classifyList(e.to_list);
-    if (cls !== 'ongoing' && cls !== 'done') continue;
+    // a move into ANY non-pending lane starts work: an ops or discarded lane is
+    // still somebody picking the card up, so it anchors STARTED like an ongoing
+    // one. Only a Backlog lane is "not started yet" — including `Operations
+    // Backlog`, the one excluded lane that is a backlog by name (§7a excludes
+    // it by identity, not because work has begun). Excluded never anchors
+    // DONE — that stays the `done` branch below. (Review ruling 2026-09-08;
+    // before it, an excluded move was dropped and a card whose history passed
+    // through an ops lane lost its true, earlier start.)
+    if (cls === 'pending' || normalizeListName(e.to_list) === OPS_BACKLOG) continue;
     const s = byCard.get(e.trello_card_id) ?? { started: null, done: null };
     if (!s.started || e.occurred_at < s.started) s.started = e.occurred_at;
     if (cls === 'done' && (!s.done || e.occurred_at > s.done)) s.done = e.occurred_at;

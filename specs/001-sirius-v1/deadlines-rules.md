@@ -147,11 +147,16 @@ treatment, the empty cards, the navigator and rollover are as they were.
   translates WHOLE — never stretched to cover the delay. A Friday finish
   lands on Monday at Saturday's first tick. [#75 §2; `src/services/rollover.ts`;
   `test/rollover.test.ts`]
-- **R-d2-q Sprint membership follows the card's day.** The sprint holding the
-  NEW finish day becomes the row's `sprint_id` (tail position, the PATCH
-  route's rule); when no sprint covers it the row stays listed where it is
-  (a gap is legal, invariant 12). [#75 §2; PLAN B10 — the no-sprint case
-  decided, raised with Miles]
+- **R-d2-q Sprint membership follows the card's day, which is its START.** The
+  sprint holding the NEW `starts_on` becomes the row's `sprint_id` (tail
+  position, the PATCH route's rule); when no sprint covers it the row stays
+  listed where it is (a gap is legal, invariant 12). A row whose start stays
+  put while its forecast finish crosses a boundary does NOT change sprint —
+  it is filed where its Deadlines column and the head of its bar are, per
+  R-d2-c. #75 §2 read this off the finish because the finish was then the
+  card's day; spec v1.3 §6.2 (2026-09-08) makes the start the card's day and
+  supersedes that half. [spec v1.3 §6.2; #75 §2 superseded; PLAN B10 — the
+  no-sprint case decided, raised with Miles]
 - **R-d2-r Audited, unmarked, unstoppable.** One `audit_log` row per moved
   card (`sprintItem.rollover`, actor `system`, before/after `starts_on` +
   `sprint_id`) — the constitution audits every schedule move (invariant 10) —

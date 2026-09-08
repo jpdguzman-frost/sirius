@@ -132,16 +132,16 @@ The sheet has 93% coverage; Trello has 0.8%.
 Overlaps rejected on save, gaps allowed and surfaced. A week covered by no
 sprint appears under *Outside any sprint* rather than being absorbed.
 
-**Day placement never changes the week.** Ops places milestones on days; the
-week comes from Sprint Schedules. Day capacity is the week's capacity across
-non-holiday days using **largest remainder**, so the total is exact — per-day
-rounding drifts it (22 over 4 days rounds to 24).
+**Day-level capacity splitting is retired (2026-09-08).** The day planner's
+per-day capacity split — the largest-remainder arithmetic that kept a week's
+total exact across non-holiday days — left with `lib/dayplan.ts`, which is
+deleted (spec v1.3 §6.5). There is no day-capacity rule to infer any more.
 
-**Conflict acknowledgement is keyed on the situation.** `week | rule | capacity |
-sorted card:phase pairs` (constitution v4.3.0, amended 2026-08-17: the key carries
-the project's weekly capacity). Add, remove, replot or re-phase a card — or change
-the project's weekly capacity — and it resurfaces. Never key on the rule alone —
-that turns a warning off permanently by accident.
+**Conflict acknowledgements are retired (2026-09-08, owl #87, JP).** The
+situation-keyed dismissal (`week | rule | capacity | sorted card:phase pairs`)
+no longer exists: acknowledgement storage, the dismissal key, and the
+acknowledge/restore endpoints are deleted. Stored rows were archived by
+migration 011, never dropped. See CLAUDE.md invariant 13.
 
 ---
 

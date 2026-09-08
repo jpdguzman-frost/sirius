@@ -175,12 +175,13 @@ let sprintItemSaving = false;
 
 /* HOW AN ADD FAILS — one owner for both adds, because the policy is one
    policy: a refusal that means the LIST ON SCREEN is stale (the card is
-   already on the schedule, complete, gone from the board, or its sprint is
+   already on the schedule, complete, moved into a lane outside the pipeline,
+   gone from the board, or its sprint is
    gone) is answered with a reload BEFORE the banner, so the pool the server
    just refused is replaced, the refused row leaves the list, and the same
    click cannot refuse twice (review 2026-09-05, B2-R6). Any other failure
    (network, a server fault) leaves the list standing for another try. */
-const ADD_STALE = new Set(['NOT_FOUND', 'CARD_COMPLETE', 'ALREADY_SCHEDULED', 'SPRINT_GONE']);
+const ADD_STALE = new Set(['NOT_FOUND', 'CARD_COMPLETE', 'CARD_EXCLUDED', 'ALREADY_SCHEDULED', 'SPRINT_GONE']);
 const addFailed = async (err) => {
   if (err && err.detail && ADD_STALE.has(err.detail.code)) await loadAll();
   // errText prefers the server's own message — the refusals all carry one
@@ -191,7 +192,7 @@ const addFailed = async (err) => {
    only when the server skipped something — 'Added N of M — K already on the
    schedule, J complete.' The codes are the server's own; one this map does
    not know reads as itself, lowercased, rather than dropping out of the count. */
-const ADD_SKIP_WHY = { ALREADY_SCHEDULED: 'already on the schedule', CARD_COMPLETE: 'complete', NOT_FOUND: 'no longer on the board' };
+const ADD_SKIP_WHY = { ALREADY_SCHEDULED: 'already on the schedule', CARD_COMPLETE: 'complete', CARD_EXCLUDED: 'outside the pipeline', NOT_FOUND: 'no longer on the board' };
 function addSkipSummary(added, asked, skipped) {
   const counts = new Map();
   for (const s of skipped) counts.set(s.code, (counts.get(s.code) || 0) + 1);

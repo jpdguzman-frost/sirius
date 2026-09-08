@@ -5,8 +5,9 @@
  * The rule under test: after each successful ARES sync, a plotted, unfinished
  * work card whose forecast finish is before today (Manila) moves forward one
  * working day at a time until its finish is today or later; its sprint
- * follows its finish day (tail position on a change of sprint, the PATCH
- * route's rule); one audit row per moved card, actor `system`; nothing else
+ * follows its NEW START day (spec v1.3 §6.2, 2026-09-08 — superseding #75 §2's
+ * finish day; tail position on a change of sprint, the PATCH route's rule);
+ * one audit row per moved card, actor `system`; nothing else
  * moves, and nothing unchanged is written or audited. A project rolls only on
  * a FRESH, SUCCESSFUL ARES read of its own (R3-1); a row rewritten under the
  * job is left alone (R3-2); a move that cannot be audited is taken back
@@ -82,6 +83,7 @@ const SAT = 6;
    before the thirty-first, so the first two weeks are five clean days each. */
 const MONDAY = '2026-08-03';
 const WEDNESDAY = '2026-08-05';
+const FRIDAY = '2026-08-07';
 const SPRINT_A = { name: 'Sprint 12', starts_on: '2026-08-03', ends_on: '2026-08-07', position: 0 };
 const SPRINT_B = { name: 'Sprint 13', starts_on: '2026-08-10', ends_on: '2026-08-14', position: 1 };
 
@@ -334,16 +336,25 @@ describe('rows that never move', () => {
 });
 
 /* ---------------------------------------------------------------------- */
-/* sprint membership follows the finish                                    */
+/* sprint membership follows the start                                     */
 /* ---------------------------------------------------------------------- */
 
-describe('sprint membership follows the NEW finish day (#75 §2)', () => {
-  /* Wednesday's finish is Friday (asserted), Saturday is today, so the new
-     finish is Monday — the first day of the NEXT sprint. */
+describe('sprint membership follows the NEW START day (spec v1.3 §6.2)', () => {
+  /* #75 §2 read membership off the finish because the finish WAS the card's
+     day. Spec v1.3 §6.2 (2026-09-08) made the plotted START the card's day —
+     the day the Deadlines column draws it on, and the head of its Gantt bar —
+     so membership follows the start, and #75 §2's half of that sentence is
+     superseded. The scenario had to move with it: a Wednesday start rolls to
+     the Thursday INSIDE sprint A, and no longer crosses anything.
+
+     Friday's finish is the following Tuesday, so a Wednesday today leaves the
+     row one step late and the start lands on the Monday that opens sprint B —
+     asserted, so a model refresh that moves the snapshot fails loudly here
+     rather than quietly making the case vacuous. */
   const crossing = () => {
-    const f0 = finishFor(WEDNESDAY);
-    expect(weekday(f0)).toBe(FRI);
-    return plusDays(f0, 1);
+    expect(weekday(FRIDAY)).toBe(FRI);
+    expect(nextWorkday(FRIDAY)).toBe(SPRINT_B.starts_on); // the START is what crosses
+    return nextWorkday(finishFor(FRIDAY));
   };
 
   it('crosses into the next sprint: sprint_id changes and the row takes the TAIL position', async () => {
@@ -353,18 +364,18 @@ describe('sprint membership follows the NEW finish day (#75 §2)', () => {
     await mkWorkCard(project._id, 'b1');
     // B already lists a row at position four — unplotted, so it cannot itself roll
     await mkItem(project._id, sprintB._id, 'b1', null, { position: 4 });
-    const item = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY);
+    const item = await mkItem(project._id, sprintA._id, 'w1', FRIDAY);
 
     const today = crossing();
     await rollUnfinished({ today, projectId: project._id });
     const after = await SprintItem.findById(item._id).orFail();
 
-    expect(finishFor(after.starts_on!) >= SPRINT_B.starts_on).toBe(true);
+    expect(after.starts_on! >= SPRINT_B.starts_on).toBe(true);
     expect(String(after.sprint_id)).toBe(String(sprintB._id));
     expect(after.position).toBe(5); // the PATCH route's rule: tail of the target list, never the old slot
 
     const [row] = await AuditLog.find({ project_id: project._id });
-    expect(row!.before).toEqual({ starts_on: WEDNESDAY, sprint_id: String(sprintA._id) });
+    expect(row!.before).toEqual({ starts_on: FRIDAY, sprint_id: String(sprintA._id) });
     expect(row!.after).toEqual({ starts_on: after.starts_on, sprint_id: String(sprintB._id) });
   });
 
@@ -373,8 +384,8 @@ describe('sprint membership follows the NEW finish day (#75 §2)', () => {
     const sprintB = await Sprint.create({ project_id: project._id, ...SPRINT_B });
     await mkWorkCard(project._id, 'w1');
     await mkWorkCard(project._id, 'w2');
-    const first = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY, { position: 0 });
-    const second = await mkItem(project._id, sprintA._id, 'w2', WEDNESDAY, { position: 1 });
+    const first = await mkItem(project._id, sprintA._id, 'w1', FRIDAY, { position: 0 });
+    const second = await mkItem(project._id, sprintA._id, 'w2', FRIDAY, { position: 1 });
 
     await rollUnfinished({ today: crossing(), projectId: project._id });
     const a = await SprintItem.findById(first._id).orFail();
@@ -384,18 +395,18 @@ describe('sprint membership follows the NEW finish day (#75 §2)', () => {
     expect([a.position, b.position]).toEqual([0, 1]);
   });
 
-  it('no sprint covers the new finish → sprint_id and position stay as they were', async () => {
+  it('no sprint covers the new start → sprint_id and position stay as they were', async () => {
     const { project, sprintA } = await setup(); // sprint A alone; the week after is a gap
     await mkWorkCard(project._id, 'w1');
-    const item = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY, { position: 3 });
+    const item = await mkItem(project._id, sprintA._id, 'w1', FRIDAY, { position: 3 });
 
     const today = crossing();
     const result = await rollUnfinished({ today, projectId: project._id });
     const after = await SprintItem.findById(item._id).orFail();
 
     expect(result.moved).toBe(1); // the bar still moved
-    expect(after.starts_on).toBe(nextWorkday(WEDNESDAY));
-    expect(finishFor(after.starts_on!) > SPRINT_A.ends_on).toBe(true); // outside any sprint
+    expect(after.starts_on).toBe(nextWorkday(FRIDAY));
+    expect(after.starts_on! > SPRINT_A.ends_on).toBe(true); // outside any sprint
     expect(String(after.sprint_id)).toBe(String(sprintA._id));
     expect(after.position).toBe(3);
 
@@ -403,15 +414,41 @@ describe('sprint membership follows the NEW finish day (#75 §2)', () => {
     expect(row!.after).toEqual({ starts_on: after.starts_on, sprint_id: String(sprintA._id) });
   });
 
-  it('the same sprint still covers the finish → the row keeps its position', async () => {
+  it('the same sprint still covers the start → the row keeps its position', async () => {
     const { project, sprintA } = await setup({ ends_on: SPRINT_B.ends_on }); // one two-week sprint
     await mkWorkCard(project._id, 'w1');
-    const item = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY, { position: 3 });
+    const item = await mkItem(project._id, sprintA._id, 'w1', FRIDAY, { position: 3 });
 
     await rollUnfinished({ today: crossing(), projectId: project._id });
     const after = await SprintItem.findById(item._id).orFail();
     expect(String(after.sprint_id)).toBe(String(sprintA._id));
     expect(after.position).toBe(3);
+  });
+
+  it('a FINISH that crosses while the start does not leaves the row in its own sprint', async () => {
+    /* The case that separates the two rules, and the one a PM meets: a
+       multi-day card rolled one step still STARTS inside sprint A while its
+       forecast finish has already reached sprint B. Under the retired rule the
+       row was filed under B — a sprint neither its Deadlines column nor the
+       head of its bar belongs to. Sprint B exists here on purpose: it is the
+       list the finish-day rule would move the row into. */
+    const { project, sprintA } = await setup();
+    await Sprint.create({ project_id: project._id, ...SPRINT_B });
+    await mkWorkCard(project._id, 'w1');
+    const item = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY, { position: 3 });
+
+    const f0 = finishFor(WEDNESDAY);
+    expect(weekday(f0)).toBe(FRI);
+    await rollUnfinished({ today: plusDays(f0, 1), projectId: project._id }); // Saturday: one step late
+    const after = await SprintItem.findById(item._id).orFail();
+
+    // the scenario itself: the two days now answer with DIFFERENT sprints
+    expect(after.starts_on).toBe(nextWorkday(WEDNESDAY));
+    expect(after.starts_on! <= SPRINT_A.ends_on).toBe(true);
+    expect(finishFor(after.starts_on!) >= SPRINT_B.starts_on).toBe(true);
+
+    expect(String(after.sprint_id)).toBe(String(sprintA._id)); // the START's sprint wins
+    expect(after.position).toBe(3); // it never changed lists, so it never took a tail slot
   });
 });
 
@@ -621,10 +658,13 @@ describe('R3-2 — a row rewritten between the job’s read and its write is lef
 /* ---------------------------------------------------------------------- */
 
 describe('R3-3 — a move that cannot be audited is taken back, and one failure never stops the pass', () => {
+  /* The same crossing as the membership block above, and for the same reason:
+     the revert has all three fields to put back only while the roll really
+     changes sprints, which since spec v1.3 §6.2 means the START must cross. */
   const crossing = () => {
-    const f0 = finishFor(WEDNESDAY);
-    expect(weekday(f0)).toBe(FRI);
-    return plusDays(f0, 1);
+    expect(weekday(FRIDAY)).toBe(FRI);
+    expect(nextWorkday(FRIDAY)).toBe(SPRINT_B.starts_on);
+    return nextWorkday(finishFor(FRIDAY));
   };
 
   it('AuditLog.create rejects once → that row is back where it was (day, sprint, position), the next row moves and audits', async () => {
@@ -633,8 +673,8 @@ describe('R3-3 — a move that cannot be audited is taken back, and one failure 
     await mkWorkCard(project._id, 'w1');
     await mkWorkCard(project._id, 'w2');
     // both cross into sprint B — so the revert has all three fields to put back
-    const first = await mkItem(project._id, sprintA._id, 'w1', WEDNESDAY, { position: 0 });
-    const second = await mkItem(project._id, sprintA._id, 'w2', WEDNESDAY, { position: 1 });
+    const first = await mkItem(project._id, sprintA._id, 'w1', FRIDAY, { position: 0 });
+    const second = await mkItem(project._id, sprintA._id, 'w2', FRIDAY, { position: 1 });
 
     const spy = vi.spyOn(AuditLog, 'create').mockRejectedValueOnce(new Error('audit store unreachable'));
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -649,12 +689,12 @@ describe('R3-3 — a move that cannot be audited is taken back, and one failure 
 
     // the first row: exactly its pre-move state — nothing moved un-audited
     const a = await SprintItem.findById(first._id).orFail();
-    expect(a.starts_on).toBe(WEDNESDAY);
+    expect(a.starts_on).toBe(FRIDAY);
     expect(String(a.sprint_id)).toBe(String(sprintA._id));
     expect(a.position).toBe(0);
     // the second row: moved, at B's tail — which is empty, the first row having been taken back
     const b = await SprintItem.findById(second._id).orFail();
-    expect(b.starts_on).toBe(nextWorkday(WEDNESDAY));
+    expect(b.starts_on).toBe(nextWorkday(FRIDAY));
     expect(String(b.sprint_id)).toBe(String(sprintB._id));
     expect(b.position).toBe(0);
     // one audit row, the second row's
@@ -667,7 +707,7 @@ describe('R3-3 — a move that cannot be audited is taken back, and one failure 
 
     // and the next tick moves the reverted row, audited this time
     expect(await rollUnfinished({ today: crossing(), projectId: project._id })).toEqual(counts({ moved: 1 }));
-    expect((await SprintItem.findById(first._id).orFail()).starts_on).toBe(nextWorkday(WEDNESDAY));
+    expect((await SprintItem.findById(first._id).orFail()).starts_on).toBe(nextWorkday(FRIDAY));
     expect(await AuditLog.countDocuments({ project_id: project._id, entity_id: String(first._id) })).toBe(1);
   });
 

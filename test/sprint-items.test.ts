@@ -792,7 +792,7 @@ describe('Add All is one request that answers per card', () => {
     expect((await load(project._id)).rows.map((r) => r.cardId)).toEqual(['a0', 'w3', 'w1', 'w2']);
   });
 
-  it('skips a complete, an already-scheduled and an unknown card with a code, and still adds the rest', async () => {
+  it('skips a complete, an excluded, an already-scheduled and an unknown card each with its OWN code, and still adds the rest', async () => {
     const { project, sprint, agent } = await setup();
     const other = await otherProject();
     await WorkCard.create({
@@ -802,6 +802,7 @@ describe('Add All is one request that answers per card', () => {
     await mkWorkCard(project._id, 'open1');
     await mkWorkCard(project._id, 'open2');
     await mkWorkCard(project._id, 'done1', { current_list: 'Design Complete' });
+    await mkWorkCard(project._id, 'ops1', { current_list: 'Discarded Work' });
     await mkWorkCard(project._id, 'sched1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'sched1' }).expect(201);
 
@@ -812,13 +813,17 @@ describe('Add All is one request that answers per card', () => {
        write. The skip order is the request order. */
     const res = await batch(agent, project._id, {
       sprint_id: String(sprint._id),
-      card_ids: ['open1', 'done1', 'sched1', 'ghost', 'foreign', 'open2'],
+      card_ids: ['open1', 'done1', 'ops1', 'sched1', 'ghost', 'foreign', 'open2'],
     }).expect(200);
+    /* `ops1` carries its OWN code, not the done one (review ruling
+       2026-09-08): a card in Discarded Work is refused for a different reason
+       than a finished one, and the banner counts them separately. */
     expect(res.body).toEqual({
       ok: true,
       added: 2,
       skipped: [
         { card_id: 'done1', code: 'CARD_COMPLETE' },
+        { card_id: 'ops1', code: 'CARD_EXCLUDED' },
         { card_id: 'sched1', code: 'ALREADY_SCHEDULED' },
         { card_id: 'ghost', code: 'NOT_FOUND' },
         { card_id: 'foreign', code: 'NOT_FOUND' },

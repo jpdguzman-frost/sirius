@@ -186,6 +186,65 @@ describe('phase-13 row derivations', () => {
       .toBe('2026-08-04T01:00:00.000Z'); // the real move, not the list-less one
   });
 
+  it('a card living in an OPS lane keeps its Started, and never reports a Done', async () => {
+    /* THE RULE (review ruling 2026-09-08): a move into any lane that is not a
+       Backlog one is somebody picking the card up, so an excluded lane anchors
+       STARTED exactly like an ongoing one — while DONE is held only by a Done
+       lane, which an ops lane is not. 805 production cards sit in
+       `Ops Work Complete`; before the ruling they were written back with both
+       dates nulled, because the derivation read `excluded` as "no list at all". */
+    const p = await newProject();
+    await WorkCard.create({ project_id: p._id, mc_number: 'MC-9', trello_card_id: 'w9', name: 'ops chore', current_list: 'Ops Work Complete' });
+    await CardEvent.insertMany([
+      { project_id: p._id, trello_card_id: 'w9', source_event_id: 'x1', from_list: 'Operations Backlog', to_list: 'Working on Ops Work', occurred_at: new Date('2026-08-04T01:00:00Z') },
+      { project_id: p._id, trello_card_id: 'w9', source_event_id: 'x2', from_list: 'Working on Ops Work', to_list: 'Ops Work Complete', occurred_at: new Date('2026-08-06T05:00:00Z') },
+    ]);
+
+    expect(await deriveWorkSpans(p._id)).toBe(1);
+    const card = await WorkCard.findOne({ trello_card_id: 'w9' }).orFail();
+    expect(card.work_started_at?.toISOString()).toBe('2026-08-04T01:00:00.000Z');
+    // `Ops Work Complete` reads "complete" but is EXCLUDED, not Done: no Done date
+    expect(card.work_done_at).toBeNull();
+  });
+
+  it('a design card whose first move was into an ops lane keeps that EARLIER start', async () => {
+    /* The quiet half of the same ruling, and the one that touches in-scope
+       work: a card lent to ops before its design lane began. Dropping the
+       excluded move would leave the later design move as the anchor, and the
+       row would report a start days after work really began — a silent shift
+       in the very number the empirical model is refreshed from. */
+    const p = await newProject();
+    await Deliverable.create({ project_id: p._id, mc_number: 'MC-10', display_id: 'MC-10', trello_card_id: 'c10', name: 'D10', current_list: 'Design Complete' });
+    await CardEvent.insertMany([
+      { project_id: p._id, trello_card_id: 'c10', source_event_id: 'y1', from_list: 'Production Backlog', to_list: 'Working on Ops Work', occurred_at: new Date('2026-08-03T01:00:00Z') },
+      { project_id: p._id, trello_card_id: 'c10', source_event_id: 'y2', from_list: 'Working on Ops Work', to_list: 'Working on Design', occurred_at: new Date('2026-08-05T01:00:00Z') },
+      { project_id: p._id, trello_card_id: 'c10', source_event_id: 'y3', from_list: 'Working on Design', to_list: 'Design Complete', occurred_at: new Date('2026-08-07T05:00:00Z') },
+    ]);
+
+    expect(await deriveWorkSpans(p._id)).toBe(1);
+    const card = await Deliverable.findOne({ trello_card_id: 'c10' }).orFail();
+    expect(card.work_started_at?.toISOString()).toBe('2026-08-03T01:00:00.000Z'); // the OPS move, not the design one
+    expect(card.work_done_at?.toISOString()).toBe('2026-08-07T05:00:00.000Z');
+  });
+
+  it('a move into Operations Backlog starts NOTHING — the one excluded lane that is a backlog', async () => {
+    /* §7a excludes `Operations Backlog` by identity, not because work has
+       begun there; it is a backlog like `Production Backlog`. Without the
+       named exception the "any non-pending lane starts work" rule would stamp
+       a STARTED on a card that has only been queued for ops. */
+    const p = await newProject();
+    await Deliverable.create({ project_id: p._id, mc_number: 'MC-11', display_id: 'MC-11', trello_card_id: 'c11', name: 'D11', current_list: 'Working on Design' });
+    await CardEvent.insertMany([
+      { project_id: p._id, trello_card_id: 'c11', source_event_id: 'z1', from_list: 'Production Backlog', to_list: 'Operations Backlog', occurred_at: new Date('2026-08-03T01:00:00Z') },
+      { project_id: p._id, trello_card_id: 'c11', source_event_id: 'z2', from_list: 'Operations Backlog', to_list: 'Working on Design', occurred_at: new Date('2026-08-05T01:00:00Z') },
+    ]);
+
+    expect(await deriveWorkSpans(p._id)).toBe(1);
+    const card = await Deliverable.findOne({ trello_card_id: 'c11' }).orFail();
+    expect(card.work_started_at?.toISOString()).toBe('2026-08-05T01:00:00.000Z'); // the design move; the ops-backlog move is not a start
+    expect(card.work_done_at ?? null).toBeNull();
+  });
+
   /* ------------------------------------------------------------------ */
   /* §7a consumer guards — Pipeline and the capacity footer (block 6)     */
   /* ------------------------------------------------------------------ */

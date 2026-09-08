@@ -246,13 +246,15 @@ export interface PipelineResult {
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /**
- * `withSprintItems` is opt-in because only ONE of this function's four callers
- * returns them. `GET /deadlines`, `PUT /deadlines/day` and `POST /suggest` all
- * load the pipeline and never look at `sprintItems` — and while the client
- * still fired `/deliverables` and `/deadlines` in a single `Promise.all`
- * (before block 3 made Deadlines a view over `sprintItems.rows`), loading
- * them unconditionally did the work twice on every refresh and threw half
- * away.
+ * `withSprintItems` is opt-in because only ONE of this function's two
+ * remaining callers returns them: `GET /deliverables` asks for them, and
+ * `POST /suggest` loads the pipeline and never looks at `sprintItems`. It was
+ * one of four until 2026-09-08, when the acknowledgement deletion took
+ * `GET /deadlines` and `PUT /deadlines/day` with it. The flag earns its keep
+ * regardless — while the client still fired `/deliverables` and `/deadlines`
+ * in a single `Promise.all` (before block 3 made Deadlines a view over
+ * `sprintItems.rows`), loading them unconditionally did the work twice on
+ * every refresh and threw half away.
  */
 export async function loadPipeline(
   projectId: Types.ObjectId,
@@ -336,11 +338,11 @@ export async function loadPipeline(
        an EXCLUDED one: ops work and discarded work are not Sirius's to plan
        (§7a), and before the enumeration landed `Ops Work Complete` was already
        skipped here for the accidental reason that the keyword classifier
-       called it done. NOTE the divergence this opens: the planner's own row
-       list (`/replot`, src/routes/schedule.ts) still filters on `done` alone,
-       so an excluded row would be handed to the planner while being absent
-       from the footer it fills. Raised to the main thread 2026-09-08; that
-       file is not this agent's to change. */
+       called it done. The divergence this opened is CLOSED: the planner's own
+       row list — in `POST /suggest`, src/routes/schedule.ts, not `/replot`,
+       which takes explicit client-supplied moves and never filtered on status
+       — reads the same two states through `NOT_ADDABLE_STATES`, so no row is
+       handed to the planner while being absent from the footer it fills. */
     if (r.status === 'done' || r.status === 'excluded' || !r.slottedWeek) continue;
     const t = (perWeek[r.slottedWeek] ??= {
       cards: 0, rows: 0, hard: 0, hardShare: 0, over: false, hardOver: false, hardWarn: false,

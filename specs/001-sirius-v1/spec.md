@@ -601,7 +601,7 @@ From BRD §13. Marked, not resolved — each is answered by its owner and record
 
 - **OD-1** — ✅ Resolved 2026-08-03, see Clarifications.
 - **OD-2** [NEEDS CLARIFICATION: Rolling window for the empirical model — 6 or 12 months? Owner: PM. Affects FR-7.6.]
-- **OD-4** [NEEDS CLARIFICATION: Should acknowledged conflicts expire after a set period, or persist until the cards change? Owner: PM. Affects FR-6.7.]
+- **OD-4** — ✅ Closed 2026-09-08 as moot: conflict acknowledgements are retired (owl #87; CLAUDE.md invariant 13). Affects FR-6.7.
 - **OD-5** — ✅ Closed 2026-09-08: `Client Approval` lanes are Ongoing by §7a's enumeration (`Ready for Client Approval`, `Sent for Client Approval`).
 - **OD-6** [NEEDS CLARIFICATION: Which projects are in v1 beyond GCash? Owner: Leadership. Affects seed data and rollout.]
 - **OD-7** [NEEDS CLARIFICATION: Retention for closed requests and archived cards. Owner: Leadership.]

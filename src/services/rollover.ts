@@ -16,7 +16,10 @@
  * (Manila, invariant 11), its start moves to the next working day. The finish
  * is the engine's — `finishOf`, the same number the bar and the FORECASTED
  * column read — never a copy of its arithmetic. A row that moved re-picks the
- * sprint holding its NEW finish day and joins that sprint's list at the tail,
+ * sprint holding its NEW START day (spec v1.3 §6.2, 2026-09-08: the card's day
+ * is its plotted start, which supersedes #75 §2's finish day — a rolled row is
+ * filed under the sprint its Deadlines column and the head of its bar are in)
+ * and joins that sprint's list at the tail,
  * exactly as the PATCH sprint-items route does on a move; when no sprint
  * covers the day the row stays listed where it is (a gap between sprints is
  * a legal state, invariant 12, and "Outside any sprint" is how it surfaces).
@@ -391,7 +394,11 @@ async function rollRow(
 
   const before = { starts_on: startsOn, sprint_id: String(it.sprint_id), position: it.position };
 
-  /* Membership follows the FINISH day (#75 §2: "sprint membership follows").
+  /* Membership follows the NEW START day. #75 §2 read this off the finish,
+     because the finish was then the card's day; spec v1.3 §6.2 (2026-09-08)
+     made the plotted START the card's day, which supersedes it. Following the
+     finish now would file a multi-day row under a sprint that neither its
+     Deadlines column nor the head of its Gantt bar belongs to.
      A different sprint takes that list's TAIL position — the PATCH route's
      rule, for the PATCH route's reason: carrying the old position across
      lets the row tie with one already there, and the load sorts on
@@ -399,7 +406,7 @@ async function rollRow(
      keeps the row's position — and is not written at all, so a PM's
      reorder in the window is never clobbered (R3-2); no covering sprint
      keeps the row where it is listed. */
-  const target = sprintFor(finish, ranges);
+  const target = sprintFor(next, ranges);
   const moves = target !== null && target !== before.sprint_id;
   const position = moves ? await nextTailPosition(projectId, target as string) : before.position;
   const after = { starts_on: next, sprint_id: moves ? (target as string) : before.sprint_id, position };

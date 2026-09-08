@@ -48,29 +48,53 @@ const DATE_ONLY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => {
 const OBJECT_ID = z.string().refine((v) => Types.ObjectId.isValid(v), { message: 'not an id' });
 
 /**
- * Why a batch add left one card out (owl #77 §0; PLAN.md B3). The three are
+ * Why a batch add left one card out (owl #77 §0; PLAN.md B3). The four are
  * the single add's own refusals — 404 NOT_FOUND, 409 CARD_COMPLETE, 409
- * ALREADY_SCHEDULED — carried per id instead of per request, so the client
- * reads one vocabulary whichever route answered.
+ * CARD_EXCLUDED, 409 ALREADY_SCHEDULED — carried per id instead of per
+ * request, so the client reads one vocabulary whichever route answered.
+ *
+ * COMPLETE AND EXCLUDED ARE TWO CODES, not one (review ruling 2026-09-08).
+ * Both are refused by the same set, but a card in Discarded Work is not
+ * finished, and telling a PM it is says something false about their board.
  */
-type BatchSkipCode = 'NOT_FOUND' | 'CARD_COMPLETE' | 'ALREADY_SCHEDULED';
+type BatchSkipCode = 'NOT_FOUND' | 'CARD_COMPLETE' | 'CARD_EXCLUDED' | 'ALREADY_SCHEDULED';
 
 /**
- * The ADD-TIME refusal set (#72 §5; spec v1.3 §7a). A task card cannot join a
- * schedule when its lane says the work is finished, or when the lane sits
- * outside the delivery pipeline altogether — Operations, Discarded Work,
- * Unused Work, the process lane. Both add paths, single and batch, read this
- * ONE set, so the pool's answer and the server's answer cannot drift.
+ * THE ADD-TIME REFUSALS (#72 §5; spec v1.3 §7a), state by state. A task card
+ * cannot join a schedule when its lane says the work is finished, or when the
+ * lane sits outside the delivery pipeline altogether — Operations, Discarded
+ * Work, Unused Work, the process lane. Both add paths, single and batch, read
+ * this ONE map, so the pool's answer and the server's answer cannot drift, and
+ * the 409 body and the batch skip code cannot say different things about the
+ * same card.
+ *
+ * TWO STATES, TWO ANSWERS (review ruling 2026-09-08). Both are refused, but a
+ * card in Discarded Work is not complete, and answering an excluded card with
+ * the done copy told the PM something false about their own board.
  *
  * It governs what can be ADDED and never what is removed: a row whose card
  * later moves into one of these lanes stays on the schedule (#72 §5).
  *
- * Membership is tested as a STRING deliberately. The lane classifier's return
- * union is widening to carry the excluded state, and a set of strings states
- * the same rule on either side of that change instead of pinning this file to
- * one revision of the union.
+ * Keys are tested as STRINGS deliberately. The lane classifier's return union
+ * carries states this map does not name, and keying on strings states the same
+ * rule on either side of a change to that union instead of pinning this file
+ * to one revision of it. A state absent here is addable by definition.
  */
-export const NOT_ADDABLE_STATES: ReadonlySet<string> = new Set(['done', 'excluded']);
+const NOT_ADDABLE_REFUSAL: Readonly<Record<string, { code: BatchSkipCode; message: string }>> = {
+  done: { code: 'CARD_COMPLETE', message: 'That task card is already complete — the schedule is for work still to be done.' },
+  excluded: {
+    code: 'CARD_EXCLUDED',
+    message: 'That task card sits in a lane outside the pipeline — ops, discarded or unused — and cannot be scheduled.',
+  },
+};
+
+/**
+ * The same rule as a membership set, for the callers that ask only whether a
+ * state is addable — the search pool (src/services/sprint-items.ts) and the
+ * planner's own row list. DERIVED from the map above rather than restated, so
+ * a state can never be refusable in one place and addable in the other.
+ */
+export const NOT_ADDABLE_STATES: ReadonlySet<string> = new Set(Object.keys(NOT_ADDABLE_REFUSAL));
 
 
 /**
@@ -491,12 +515,11 @@ export function scheduleRouter(): Router {
       }
       /* #72 §5: a card already complete — or in a lane outside the pipeline —
          is never OFFERED, and the server says the same thing the search list's
-         pool does. See NOT_ADDABLE_STATES. */
-      if (NOT_ADDABLE_STATES.has(classifyList(card.current_list as string | undefined))) {
-        res.status(409).json({
-          ok: false,
-          error: { code: 'CARD_COMPLETE', message: 'That task card is already complete — the schedule is for work still to be done.' },
-        });
+         pool does. See NOT_ADDABLE_STATES, and NOT_ADDABLE_REFUSAL for why the
+         two cases answer with different words. */
+      const refusal = NOT_ADDABLE_REFUSAL[classifyList(card.current_list as string | undefined)];
+      if (refusal) {
+        res.status(409).json({ ok: false, error: refusal });
         return;
       }
 
@@ -616,8 +639,9 @@ export function scheduleRouter(): Router {
           continue;
         }
         // #72 §5: the add-time filter — the same answer the pool gives
-        if (NOT_ADDABLE_STATES.has(classifyList(card.current_list as string | undefined))) {
-          skipped.push({ card_id: id, code: 'CARD_COMPLETE' });
+        const refusal = NOT_ADDABLE_REFUSAL[classifyList(card.current_list as string | undefined)];
+        if (refusal) {
+          skipped.push({ card_id: id, code: refusal.code });
           continue;
         }
         if (taken.has(id)) {

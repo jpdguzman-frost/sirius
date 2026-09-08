@@ -229,6 +229,37 @@ describe('Add All — ONE request carrying the listed set, in list order (B3/B4)
     expect(clean.banners, 'a clean add interrupted with a banner — no confirmation, no count-check (Miles)').toEqual([]);
   });
 
+  it('names an EXCLUDED skip in its own words, and counts it apart from a complete one', async () => {
+    /* THE RULE (review ruling 2026-09-08): the server refuses a card outside
+       the pipeline with its own code, and the banner must not fold it into the
+       completed-card count — the PM reads this sentence to know what happened
+       to the cards that did not land. The map is READ out of the shipped
+       bundle by the prelude above, so this asserts the shipped wording. */
+    const run = await runAdd('addAll', [null, 's1'], seed, {
+      ok: true,
+      added: 0,
+      skipped: [{ card_id: 'c1', code: 'CARD_COMPLETE' }, { card_id: 'c3', code: 'CARD_EXCLUDED' }],
+    });
+    expect(run.banners).toHaveLength(1);
+    const text = run.banners[0]!;
+    expect(text).toContain('1 complete');
+    expect(text).toContain('1 outside the pipeline');
+    // and NOT the fallback, which would print the raw code back at the reader
+    expect(text).not.toContain('card excluded');
+  });
+
+  it('treats an EXCLUDED refusal on the single add as a STALE list — reload before the banner', async () => {
+    const stale = Object.assign(new Error('CARD_EXCLUDED'), {
+      detail: {
+        code: 'CARD_EXCLUDED',
+        message: 'That task card sits in a lane outside the pipeline — ops, discarded or unused — and cannot be scheduled.',
+      },
+    });
+    const run = await runAdd('addOne', [null, 's1', 'c1'], seed, stale);
+    expect(run.reloads, 'the refused row stays listed and the next click refuses again').toBe(1);
+    expect(run.state.banner).toBe(stale.detail.message);
+  });
+
   it('clears only the query it SENT — text typed during the flight survives (B2-R4)', async () => {
     const typedMeanwhile = (run: AddRun) => {
       (run.state.addQ as Record<string, string>).s1 = 'illustrate corey';

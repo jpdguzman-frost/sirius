@@ -31,7 +31,7 @@
 | `model_samples` | project_id, trello_card_id, difficulty, lane, metric(design\|review), days, completed_at | — | (project_id, difficulty, lane, metric, completed_at) |
 | `model_grid` | project_id, difficulty, lane, metric, confidence(Average\|0.7\|0.85\|0.95), value, sample_n, computed_at | (project_id, difficulty, lane, metric, confidence) | — |
 | `throughput_grid` | project_id, difficulty, p25, p50, p70, computed_at | (project_id, difficulty) | — |
-| `conflict_acknowledgements` | project_id, conflict_key (week\|rule\|sorted card:phase pairs — invariant 13), acknowledged_by(lowercase), reason, at | (project_id, conflict_key) | — |
+| `conflict_acknowledgements` *(archived 2026-09-08 as `conflict_acknowledgements_archive` by migration 011, owl #87 — model and routes deleted; row kept for history)* | project_id, conflict_key (week\|rule\|sorted card:phase pairs — invariant 13), acknowledged_by(lowercase), reason, at | (project_id, conflict_key) | — |
 | `frost_notes` *(added 2026-08-12, FR-11)* | project_id, mc_number, remark, clarify(false), clarify_reason, updated_by(lowercase), updated_at · one per request; never written to the sheet | (project_id, mc_number) | — |
 | `milestone_day_plan` *(added 2026-08-12, FR-12)* | project_id, trello_card_id, phase(sketch\|render), day(DATE_ONLY, must sit inside the milestone's week, non-holiday), week(DATE_ONLY — the Monday the placement was made for; a mismatch with the milestone's computed week = lapsed, reads as absent), set_by(lowercase), set_at · absent row = follow the forecast | (project_id, trello_card_id, phase) | — |
 | `audit_log` *(append-only)* | project_id, actor(lowercase), action, entity, entity_id, before, after, at | — | (project_id, entity, entity_id, at desc) |
@@ -49,6 +49,8 @@ Percentile computation (`model_grid`, `throughput_grid`) happens in worker code 
 pairs`. Adding, removing or replotting a card produces a different key and the conflict resurfaces. Storing an
 acknowledgement against the rule alone would let a warning be switched off permanently by accident.
 
+*(2026-09-08: this collection was archived as `conflict_acknowledgements_archive` by migration 011, owl #87 — the model and routes it describes are deleted; see CLAUDE.md invariant 13.)*
+
 **`card_events` is not optional.** Cycle time is measured in fractional days from Trello activity. Storing only two dates gives a coarser dataset than your history and the two stop being comparable — which would break the model refresh that fixes the forecast.
 
 ## Entity → spec traceability
@@ -63,7 +65,7 @@ acknowledgement against the rule alone would let a warning be switched off perma
 | `intake_requests`, `intake_rejects` | Intake request | FR-3.x, FR-8.4, AC-6, AC-9 |
 | `card_events` | Card event | FR-4.5, BR-2 (model raw material; idempotent on `source_event_id`) |
 | `model_samples`, `model_grid`, `throughput_grid` | Model grids | FR-7.3, FR-7.6, FR-7.7, BR-2/BR-4 |
-| `conflict_acknowledgements` | Conflict acknowledgement | FR-6.7–6.8, BR-9a, invariant 13 |
+| `conflict_acknowledgements` *(archived 2026-09-08, migration 011, owl #87)* | Conflict acknowledgement | FR-6.7–6.8, BR-9a, invariant 13 |
 | `audit_log` | Audit log entry | FR-2.6, NFR-7, invariant 10 |
 | `sync_runs` | Sync run | FR-8.5–8.6, invariant 8 |
 
@@ -291,6 +293,8 @@ create table throughput_grid (
 
 -- Conflicts can be acknowledged rather than resolved. The key includes the
 -- cards involved, so an acknowledgement lapses when the situation changes.
+-- ARCHIVED 2026-09-08: renamed to conflict_acknowledgements_archive by
+-- migration 011 (owl #87); kept below for historical reference only.
 create table conflict_acknowledgements (
   id            uuid primary key default gen_random_uuid(),
   project_id    uuid not null references projects(id) on delete cascade,

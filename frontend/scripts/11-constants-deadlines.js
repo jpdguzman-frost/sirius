@@ -139,6 +139,11 @@ function dlBuild(rows, mondays, cap) {
   for (const w of weeks) for (const d of w.days) slot.set(d.day, { w, d });
   for (const r of rows || []) {
     if (!r.startsOn || !r.finish) continue; // the gate: listed but unplotted, or no forecast
+    // An EXCLUDED lane (ops, discarded, unused) is treated exactly like a missing
+    // start: not drawn, not counted in any tally, and no weekly load. The server
+    // keeps sending the row — Sprint Schedules still lists what the PM added —
+    // so the filter belongs here. (PLAN.md frozen rule, review ruling 2026-09-08.)
+    if (r.status === 'excluded') continue;
     const at = slot.get(r.startsOn); // the START day places the card (spec v1.3 §6.2)
     if (!at) continue; // outside the shown month
     const card = {

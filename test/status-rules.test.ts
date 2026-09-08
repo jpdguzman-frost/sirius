@@ -181,6 +181,14 @@ describe('rule 2 — `➜ Ready for …` is always Ongoing (#82 §3)', () => {
   it('NEAR MISS: `Ready for Ops Review` carries no arrow and stays EXCLUDED', () => {
     // the exact table answers first, and the rule must not claim it either
     expect(classifyList('Ready for Ops Review')).toBe('excluded');
+    /* The second half, which the table cannot prove: an arrowless `Ready for`
+       name the table does NOT hold must stay UNKNOWN, so it reaches
+       `unmappedLists` and someone looks at it. Without these two the arrow
+       anchor can be dropped to a bare `\bready for\b` and the suite stays
+       green — the rule would then silently claim every ops sign-off lane as a
+       recognised pipeline lane. */
+    expect(isKnownList('Ready for Ops Sign-off')).toBe(false);
+    expect(isKnownList('Ready for Archive')).toBe(false);
   });
 
   it('NEAR MISS: `➜ Development: Ready for Release` is Done-adjacent, not a Ready-for list', () => {
@@ -247,6 +255,13 @@ describe('rule 4 — `Backlog…` is Pending, anchored at the start', () => {
     /* The retired classifier tested `\bbacklog\b` anywhere in the string and
        called this Pending — surfacing ops work as pipeline work. */
     expect(classifyList('Operations Backlog')).toBe('excluded');
+    /* …and the half the table cannot prove, because the table answers
+       `Operations Backlog` before any rule runs: a name carrying the word
+       anywhere but the START, which the table does NOT hold, must stay
+       ongoing and UNKNOWN. Restore the unanchored test and this line goes
+       pending/known while every table-held name still passes. */
+    expect(classifyList('On Hold Backlog')).toBe('ongoing');
+    expect(isKnownList('On Hold Backlog')).toBe(false);
   });
 
   it('NEAR MISS: `Backlogged Work` is not a Backlog list', () => {

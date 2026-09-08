@@ -92,14 +92,15 @@ const DUE_POP_W = 354;
 const DUE_POP_H = 420;
 
 /* The one viewport margin every fixed overlay honours: placeBox's on-screen
-   clamp holds this much clear on each side, and the last-resort scroll verdict
-   asks whether a box fits inside BOTH margins — the same number, so the
-   anti-oscillation `>=` in placeBox can never disagree with the clamp.
+   clamp holds this much clear on each side, so no overlay is ever painted
+   flush against the edge of the window.
 
-   The `bleed` an overlay could add on top of this went out with the
-   incomplete-card hover card (owl #81, 2026-09-07): it was the only overlay
-   that painted a shadow wide enough to be clipped at the viewport edge. The
-   parameter itself stays in placeBox, defaulting to nothing. */
+   Two things that used to sit on top of this went out with the incomplete-card
+   hover card (owl #81, 2026-09-07). The per-overlay extra margin an overlay
+   could ask for is gone — that card was the only one painting a shadow wide
+   enough to be clipped — and so is the scroll verdict that once weighed a box
+   against both margins at once; placeBox neither takes the one nor computes
+   the other any more. */
 const OVERLAY_EDGE = 4;
 /* The hover-dismissed overlays' close DELAY. Not specified by the annotation —
    150ms is long enough to cross the 4px gap between a chip and its panel and

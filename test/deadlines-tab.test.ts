@@ -351,6 +351,31 @@ describe('a card is on this tab only because someone put it there (#74 §1)', ()
     expect(w.cards.map((c) => c.cardId)).toEqual(['w1']);
   });
 
+  it('draws no card for a row whose lane sits OUTSIDE the pipeline, on a day it would otherwise fill', () => {
+    /* THE RULE (PLAN.md frozen `excluded` rule, review ruling 2026-09-08):
+       Deadlines never renders an excluded card. The server keeps sending the
+       row on purpose — Sprint Schedules still lists what the PM added, and
+       rollover deliberately leaves it where it is — so the ONLY thing that
+       keeps ops, discarded and unused work off this board is this filter.
+
+       The fixture is deliberately drawable: same start day, same shown week,
+       same shape as `w1` beside it, differing in `status` alone. So the
+       assertion cannot pass because the card fell outside the month or lost
+       its forecast — it passes only while the state is read. All four
+       consequences are pinned, because the row reaches four places: the day
+       column, the week's card list, the week's counts, and the load that
+       fills the progress bar against the project's capacity. */
+    const w = oneWeek([
+      row(),
+      row({ id: 'i9', cardId: 'w9', currentList: 'Discarded Work', status: 'excluded' }),
+      row({ id: 'i8', cardId: 'w8', currentList: 'Ops Work Complete', status: 'excluded', urgent: true }),
+    ]);
+    expect(w.days.find((d) => d.day === '2026-08-03')!.cards.map((c) => c.cardId)).toEqual(['w1']);
+    expect(w.cards.map((c) => c.cardId)).toEqual(['w1']);
+    expect([w.pending, w.urgent, w.done]).toEqual([0, 0, 0]);
+    expect([w.load, w.capPct]).toEqual([1, '0.8']);
+  });
+
   it('places a card on the day it STARTS, not on its forecast finish', () => {
     /* Spec v1.3 §6.2 (2026-09-08) reversing block 3's B2: the day work begins
        is the design lead's own instrument, and a computed finish is not a
@@ -410,8 +435,9 @@ describe('a card is on this tab only because someone put it there (#74 §1)', ()
   });
 
   it('reads the lane VERBATIM — no translation, no keyword tidying (#75 §1)', () => {
-    // the 50-lane mapping is Apollo's and has not landed (drift row 26); until
-    // it does, what the card shows is the Trello list's own words
+    // the 50-lane mapping LANDED on 2026-09-08 as the LIST_STATES table
+    // (src/services/status-rules.ts) — and what the card shows is still the
+    // Trello list's own words, never the state it maps to
     expect(oneWeek([row({ currentList: 'For Client Review (Batch 2)' })]).cards[0]!.lane).toBe('For Client Review (Batch 2)');
     expect(oneWeek([row({ currentList: null })]).cards[0]!.lane).toBeNull();
   });
