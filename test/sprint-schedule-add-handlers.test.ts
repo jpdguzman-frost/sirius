@@ -385,9 +385,16 @@ describe('the search row and its results in CSS (833:68629 / 840:31597 / 841:336
     expect(seam.some((r) => /border-top:\s*none/.test(r.body)), 'the footer doubles the rule of the row above it').toBe(true);
   });
 
-  it("yields the sixteenth pixel below the field to the row's own rule — 16 + 45 + 15 + 1 = 77 (surface-5)", () => {
+  it('pads the search pane 16 all round and the result pane 16 / 18 (JP fine-tune, 2026-09-08)', () => {
+    /* Supersedes surface-5's 16 / 24 / 15 / 16 (the 15 yielded the row's 1px
+       rule inside a 77px box). JP set the search pane to a plain 16 and the
+       result pane to 16 vertical / 18 horizontal on 2026-09-08. */
     const pane = rulesFor('gsearchpane');
-    expect(pane.some((r) => /padding:\s*var\(--space-16\) var\(--space-24\) 15px var\(--space-16\)/.test(r.body)), 'the search pane pads 16 below and the field overflows the border-box').toBe(true);
+    expect(pane.some((r) => /padding:\s*var\(--space-16\);/.test(r.body)), 'the search pane pads 16 on every side').toBe(true);
+    expect(pane.some((r) => /padding:[^;]*(15px|--space-24)/.test(r.body)), 'the old 16 / 24 / 15 / 16 recipe is gone').toBe(false);
+    const result = rulesFor('gresultpane');
+    expect(result.some((r) => /padding:\s*var\(--space-16\) 18px;/.test(r.body)), 'the result pane pads 16 vertical, 18 horizontal').toBe(true);
+    expect(result.some((r) => /padding:[^;]*29px/.test(r.body)), "the node's 29px label inset is gone").toBe(false);
   });
 
   it('keeps the placement circle — the + outlived the add zone it shared a recipe with', () => {

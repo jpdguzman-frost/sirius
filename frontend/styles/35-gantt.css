@@ -409,12 +409,9 @@
 .gantt .gsearch { height: 77px; }
 .gantt .gsearchpane {
   display: flex; align-items: center;
-  /* 16 / 24 / 15 / 16 — the node's 16 below the field is the padding PLUS
-     the row's own 1px rule: Figma draws that stroke INSIDE the box over the
-     last padding pixel, and border-box does the same only if the padding
-     yields it. 16 + 45 + 15 + 1 = the row's 77, nothing overflows
-     (review 2026-09-05, surface-5). */
-  padding: var(--space-16) var(--space-24) 15px var(--space-16);
+  /* 16 all round — JP's fine-tune, 2026-09-08 (was 16 / 24 / 15 / 16 from the
+     node; the 15 kept the row's 1px rule inside a 77px box). */
+  padding: var(--space-16);
   gap: var(--space-24);
 }
 /* the field FILLS the pane and gives way to the link beside it, so it flexes
@@ -452,7 +449,7 @@
 .gantt .gresult { height: 54px; }
 .gantt .gresultpane {
   display: flex; align-items: center;
-  padding: var(--space-16) var(--space-24) var(--space-16) 29px; /* the node's label inset — no token at this value */
+  padding: var(--space-16) 18px; /* JP's fine-tune, 2026-09-08 (was 16 / 24 / 16 / 29, the node's label inset); no token at 18 */
   gap: var(--space-24);
 }
 /* a display clamp only: the stored name is never cut (#73), so a long label
