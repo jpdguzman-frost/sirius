@@ -54,7 +54,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
   before building on one. **Thread**: miles→jp acked through **#71** + #76–#79;
   **#72/#73 UNACKED** (screens pending), **#80** §2 processed, §1/§3 (W4) asked back in #66; **#81–#87 ACKED** (block 6 deployed);
-  jp→miles sent through **#66** (2026-09-08, JP's yes: OPEN WORK, W4, §6.2 day capacity asked; #80 §4/#83/#86 answered); **#67 sent** 2026-09-08 on JP's word (block 6 report); #62–#65 = blocks 2–5 (state-log 09-05/09-06). Product is fixing frame defects; **until they
+  jp→miles sent through **#66** (2026-09-08, JP's yes: OPEN WORK, W4, §6.2 day capacity asked; #80 §4/#83/#86 answered); **#67 + #68 sent** 2026-09-08 on JP's word (block 6 report; the chip + inset rulings); #62–#65 = blocks 2–5 (state-log 09-05/09-06). Product is fixing frame defects; **until they
   confirm, this build is authoritative over those frames** — including the
   past-deadline legend reworded 2026-08-27. **Awaiting Miles**: #66's three answers, a ruling on the reworded legend. Build spec **v1.3 is the held copy** (`docs/product/build-spec-v1.3.md`; banner names #86/#87).
   Closed threads → `docs/history/state-log/`.
@@ -82,8 +82,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   server `?filter=`) · OD-4's non-capacity remainder (`decisions/0019`) ·
   loopback-listen test hardening (~21 files) · a custom drag image.
 - **Live browser passes owed** (JP's browser is shared — use an isolated
-  profile). **Prune this queue in the same commit that records a pass** — it
-  once went stale and was reported to JP as fact. Queue: **the white
+  profile). **Prune it in the commit that records a pass.** Queue: **the white
   background on Schedules + Deadlines** (live 2026-08-22, unseen) · the
   task-due picker by hand · the sub-350px last-resort scroll · the b13 note
   chip + clarification accent · drag a bar collapsed. *(The Forecast entry
