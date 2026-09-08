@@ -11,12 +11,12 @@ import { Types } from 'mongoose';
 import { AresClient, type AresMovement } from '../src/services/ares.ts';
 import { assignDisplayIds, mapTrello, type MappedDeliverable, type MappedWorkCard } from '../src/services/mapper.ts';
 import { classifyList, isKnownList, normalizeListName } from '../src/services/status-rules.ts';
-
-/** The excluded lane that is still a backlog: a move into it starts nothing. */
-const OPS_BACKLOG = normalizeListName('Operations Backlog');
 import { CardEvent, Deliverable, Project, SyncRun, WorkCard } from '../src/models/index.ts';
 import type { Env } from '../src/config/env.ts';
 import { assertNotProductionBoards } from '../src/services/guard.ts';
+
+/** The excluded lane that is still a backlog: a move into it starts nothing. */
+const OPS_BACKLOG = normalizeListName('Operations Backlog');
 
 export interface SyncStats {
   cards: number;

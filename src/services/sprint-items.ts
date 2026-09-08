@@ -32,6 +32,7 @@ import { forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { SprintItem } from '../models/index.ts';
 import { classifyList, type ListStatus } from './status-rules.ts';
+import type { PipelineRow, WorkCardDoc } from './pipeline.ts';
 
 /**
  * Never OFFERED by the add search (#72 §5, §7a). A finished card has nothing
@@ -41,7 +42,6 @@ import { classifyList, type ListStatus } from './status-rules.ts';
  * give one answer, or the PM sees a card the server then rejects.
  */
 const NOT_OFFERED: ReadonlySet<ListStatus> = new Set(['done', 'excluded']);
-import type { PipelineRow, WorkCardDoc } from './pipeline.ts';
 
 /** One scheduled row as the Sprint Schedules tab consumes it. */
 export interface SprintItemRow {

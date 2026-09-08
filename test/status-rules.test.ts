@@ -103,26 +103,22 @@ const EXCLUDED = [
   'Unused Work',
 ];
 
+/** The three enumerated states and their names — the pairing the whole of
+ *  section 1 asserts, stated once. */
+const TABLE = [
+  ['Pending', PENDING, 'pending'],
+  ['Done', DONE, 'done'],
+  ['Excluded', EXCLUDED, 'excluded'],
+] as const;
+
 describe('§7a exact table', () => {
-  for (const name of PENDING) {
-    it(`Pending: ${name}`, () => {
-      expect(classifyList(name)).toBe('pending');
-      expect(isKnownList(name)).toBe(true);
-    });
-  }
-
-  for (const name of DONE) {
-    it(`Done: ${name}`, () => {
-      expect(classifyList(name)).toBe('done');
-      expect(isKnownList(name)).toBe(true);
-    });
-  }
-
-  for (const name of EXCLUDED) {
-    it(`Excluded: ${name}`, () => {
-      expect(classifyList(name)).toBe('excluded');
-      expect(isKnownList(name)).toBe(true);
-    });
+  for (const [label, names, state] of TABLE) {
+    for (const name of names) {
+      it(`${label}: ${name}`, () => {
+        expect(classifyList(name)).toBe(state);
+        expect(isKnownList(name)).toBe(true);
+      });
+    }
   }
 
   it('holds every Pending, Done and Excluded name and no others', () => {

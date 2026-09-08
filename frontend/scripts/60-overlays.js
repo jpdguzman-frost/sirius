@@ -189,12 +189,13 @@ function placeBox(rect, opts) {
     left = Math.max(OVERLAY_EDGE, Math.min(left, window.innerWidth - opts.clampW - OVERLAY_EDGE));
     top = Math.max(OVERLAY_EDGE, Math.min(top, window.innerHeight - opts.h - OVERLAY_EDGE));
   }
-  /* `up` rides out with the coordinates because it is a fact the MARKUP can
-     need, not just the placer's: a flipped box squares the corner on the gap
-     side. Recomputing it anywhere else would be a second copy of a comparison
-     that could disagree with the one that actually moved the box. No overlay
-     reads it today; it costs one key and it is the placer's own verdict. */
-  return { left: Math.round(left), top: Math.round(top), up };
+  /* COORDINATES ONLY — the two keys every `…Pos` state declares. The flip
+     verdict rode out with them for the hover card, whose markup squared a
+     corner on the gap side; that card is withdrawn (owl #81) and nothing reads
+     the verdict now. A box that needs it again takes it back the way it left —
+     returned from here, never recomputed, so one comparison both moves the box
+     and describes it. */
+  return { left: Math.round(left), top: Math.round(top) };
 }
 
 /* One opener for every overlay. They differ only in state keys, box height
