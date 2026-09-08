@@ -48,9 +48,6 @@ const app = new Ractive({
     /* the chip panel hangs off the chip's right edge instead, when its left
        edge would put it off screen (the chips row wraps) */
     chipPopFlip: false,
-    /* still on the wire and still counted — OPEN WORK (kpi.open) is the
-       aggregate signal now that the table banner is gone (owl #36) */
-    corrections: [],
     sprints: [],
     capacity: { weekly: 0 },
     /* the slider's LIVE position (build-spec §5.4). It tracks the thumb on
@@ -83,10 +80,6 @@ const app = new Ractive({
     dueStaged: null, // clicked day — STAGED only; Apply is what writes (W2)
     dueBaseline: null, // value the popover opened on — the Apply no-op guard
     savingDeadline: {},
-    warnPop: null, // cardId whose incomplete-card hover card is open (node 537:69135)
-    // `up` is the FLIP decision, and the markup needs it: the squared corner
-    // and the hover bridge both sit on the gap side of the card (R-warn-p)
-    warnPopPos: { left: 0, top: 0, up: false },
     dowNames: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
     pipeThumb: { needed: false, left: 0, width: 100 },
     iconSprite: ICON_SPRITE,
@@ -257,10 +250,6 @@ const app = new Ractive({
            Naming them turns a quiet inaccuracy into a stated one. */
         unattached: unattached.cards,
         unattachedMcs: unattached.mcNumbers.length,
-        // OPEN WORK is the AGGREGATE incomplete-card signal now that the
-        // table banner is gone (owl #36) — the same corrections the per-row
-        // warnings render one at a time
-        open: this.get('corrections').length,
         urgent, // owl #78 §1 / PLAN D3 — counted above, with WORK CARDS
       };
     },

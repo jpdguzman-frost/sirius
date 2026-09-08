@@ -151,7 +151,7 @@ A Frost user switches project and every view scopes to it — no data bleeds bet
 - Sheet un-shared from the reader: access fails safely; re-sharing restores (AC-7).
 - Non-Frost account or Frost account off the allow-list: denied with a clear reason (AC-1, AC-2).
 - Urgency write fails mid-flight: local state rolls back (FR-4.7).
-- Trello list names are free text: classified Pending / Ongoing / Done by configurable keyword rules (BR-10).
+- Trello list names resolve to a lane state via a static table (`LIST_STATES` in `src/services/status-rules.ts`) → pending | ongoing | done | excluded, exact match after normalisation, with Ready-for / family-stage / Backlog rules for the prefixed Ongoing lanes and unknown names defaulting to ongoing and logged per sync (spec v1.3 §7a, owl #82, 2026-09-08) (BR-10).
 - A multi-deliverable MC (MC-655 × 3) carries **one** frost note — the note attaches to the request row, not to each deliverable (FR-11.1).
 - A deliverable whose MC group has no work cards weighs exactly 1 (BR-6c); the 20 unkeyed cards belong to no group and weigh into none.
 - A week whose Mon–Fri are all holidays: every day takes zero capacity and rejects drops; the week's milestones still render (FR-12.4).
@@ -356,7 +356,7 @@ Preserved verbatim from BRD §7.
 
 **BR-9a — Conflicts can be acknowledged.** Overlaps sometimes happen by choice. Any conflict banner may be dismissed, which also removes its items from the replot list. A dismissal is keyed on *week + rule + the exact cards involved*, so it silences one specific situation rather than the rule: if a card is added, removed, replotted or moves phase, the conflict is a different one and surfaces again. Card-level indicators — the red render bar, the late flag — are never suppressed. The alert is dismissible; the fact is not.
 
-**BR-10 — Status classification.** Trello list names are free text, classified as Pending / Ongoing / Done by configurable keyword rules.
+**BR-10 — Status classification.** *(Rewritten 2026-09-08, owl #82.)* Lane state is a static table of named Trello lists (`LIST_STATES` in `src/services/status-rules.ts`) → pending | ongoing | done | excluded, exact match after normalisation, with Ready-for / family-stage / Backlog rules for the prefixed Ongoing lanes and unknown names defaulting to ongoing and logged per sync (spec v1.3 §7a). The keyword classifier of T031 is retired.
 
 ### Non-Functional Requirements
 
@@ -602,7 +602,7 @@ From BRD §13. Marked, not resolved — each is answered by its owner and record
 - **OD-1** — ✅ Resolved 2026-08-03, see Clarifications.
 - **OD-2** [NEEDS CLARIFICATION: Rolling window for the empirical model — 6 or 12 months? Owner: PM. Affects FR-7.6.]
 - **OD-4** [NEEDS CLARIFICATION: Should acknowledged conflicts expire after a set period, or persist until the cards change? Owner: PM. Affects FR-6.7.]
-- **OD-5** [NEEDS CLARIFICATION: Is `Client Approval` an ongoing or done state? Owner: PM. Affects BR-10 keyword rules.]
+- **OD-5** — ✅ Closed 2026-09-08: `Client Approval` lanes are Ongoing by §7a's enumeration (`Ready for Client Approval`, `Sent for Client Approval`).
 - **OD-6** [NEEDS CLARIFICATION: Which projects are in v1 beyond GCash? Owner: Leadership. Affects seed data and rollout.]
 - **OD-7** [NEEDS CLARIFICATION: Retention for closed requests and archived cards. Owner: Leadership.]
 - **OD-8** — ✅ Resolved 2026-08-03, see Clarifications.

@@ -1,16 +1,18 @@
 /**
  * Phase 7 backend — schedule writes (AC-13/AC-14 API side), ownership
  * enforcement, sprint overlap rejection (FR-5.15), suggest-proposes-only
- * (AC-15), duplicate-without-links (FR-5.12), deadlines conflicts
- * (AC-17, AC-18; BR-6), audit on every change (invariant 10).
+ * (AC-15), duplicate-without-links (FR-5.12), audit on every change
+ * (invariant 10), and the withdrawn acknowledgement/day-plan routes staying
+ * withdrawn (owl #87, 2026-09-08).
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request, { type Agent } from 'supertest';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { readFile } from 'node:fs/promises';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { createApp } from '../src/app.ts';
+import { NOT_ADDABLE_STATES } from '../src/routes/schedule.ts';
 import { validateEnv } from '../src/config/env.ts';
 import { AuditLog, Deliverable, Project, Sprint, SprintItem, SyncRun, User, UserProject, WorkCard } from '../src/models/index.ts';
 import { getHolidays, setHolidays } from '../lib/calendar.ts';
@@ -367,13 +369,36 @@ describe('the add can arrive already PLOTTED — the draft row\u2019s + (PLAN 20
 
   it('a complete card is refused even when the click carries a placement (#72 \u00a75)', async () => {
     const { project, agent } = await setup();
-    const sprint = await seedAddable(project._id, { current_list: 'Done' });
+    // a REAL Done lane (spec v1.3 §7a), not the bare word: the lane
+    // classifier is moving from keywords to the enumerated table, where 'Done'
+    // is not a lane name at all
+    const sprint = await seedAddable(project._id, { current_list: 'Design Complete' });
     const res = await agent.post(`/api/projects/${project._id}/sprint-items`)
       .send({ sprint_id: String(sprint._id), card_id: 'wc-3', starts_on: '2026-08-10' }).expect(409);
     expect(res.body.error.code).toBe('CARD_COMPLETE');
     // the placement smuggles nothing past the ADD-time filter: no row, no audit
     expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(0);
     expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
+  });
+
+  /* The rule the two add paths share: a card is refused when its LANE says the
+     work is finished, or when the lane sits outside the delivery pipeline
+     altogether (spec v1.3 §7a's EXCLUDED group — Operations, Discarded Work,
+     Unused Work, the process lane). Stated over the shipped set rather than
+     over one lane name, because the behavioural half above can only exercise
+     the states the classifier already produces. */
+  it('refuses the same states on BOTH add paths — finished work and lanes outside the pipeline', async () => {
+    expect([...NOT_ADDABLE_STATES].sort()).toEqual(['done', 'excluded']);
+    // and no add path states the rule a second time by hand: every use of the
+    // lane classifier in this file asks the set, so widening the rule cannot
+    // reach one route and miss the other
+    const src = await readFile(new URL('../src/routes/schedule.ts', import.meta.url), 'utf8');
+    const uses = src
+      .split('\n')
+      .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)) // comments name it without calling it
+      .filter((l) => /classifyList\(/.test(l) && !/^import /.test(l));
+    expect(uses.length, 'nothing calls classifyList here — this guard is vacuous').toBeGreaterThan(0);
+    expect(uses.filter((l) => !/NOT_ADDABLE_STATES\.has\(classifyList\(/.test(l))).toEqual([]);
   });
 
   it('a digit-shaped non-date is refused, on POST and PATCH alike (review 2026-08-28b, finding 8)', async () => {
@@ -576,53 +601,80 @@ describe('duplicate (FR-5.12)', () => {
   });
 });
 
-describe('deadlines view (AC-17, AC-18; BR-6, BR-9a)', () => {
-  it('flags and names two urgent milestones in a week; late rows land on the replot list', async () => {
+/**
+ * The acknowledgement surface is GONE (owl #87, JP, 2026-09-08): the four
+ * routes below are deleted, not disabled, and this is the guard that says so.
+ *
+ * It is answered by an authenticated MEMBER of the project, so a 404 is the
+ * route table's answer and not an auth refusal — and a live route on each of
+ * the same two routers is asserted alongside, so the block cannot go green by
+ * the app failing to boot or the project id being wrong.
+ */
+describe('withdrawn routes — the acknowledgement and day-plan surface (owl #87)', () => {
+  it('answers 404 for every deleted route while the routers beside them still serve', async () => {
     const { project, agent, mk } = await setup();
-    // both urgent, slotted same week → sketch milestones collide (AC-17)
-    await mk(1, { urgency: 'Urgent', slotted_week: '2026-08-03', sheet_deadline: '2026-09-30' });
-    await mk(2, { urgency: 'Urgent', slotted_week: '2026-08-03', sheet_deadline: '2026-09-30' });
-    // deadline before the render forecast → late (AC-18)
-    await mk(3, { slotted_week: '2026-08-03', sheet_deadline: '2026-08-05' });
+    await mk(1, { slotted_week: '2026-08-03' });
 
-    const res = await agent.get(`/api/projects/${project._id}/deadlines`).expect(200);
-    const urgentConflicts = res.body.conflicts.filter((c: { rule: string }) => c.rule === 'urgent-overlap');
-    expect(urgentConflicts.length).toBeGreaterThanOrEqual(1);
-    const named = urgentConflicts[0].items.map((i: { displayId: string }) => i.displayId).sort();
-    expect(named).toEqual(['MC-1', 'MC-2']);
+    // the control: one live route per router that lost a route below
+    await agent.get(`/api/projects/${project._id}/deliverables`).expect(200); // deliverables router
+    await agent.patch(`/api/projects/${project._id}/deliverables/c1/planning`).send({ pinned: true }).expect(200); // schedule router
 
-    const late = res.body.milestones.filter((m: { late: boolean }) => m.late);
-    expect(late.length).toBe(1);
-    expect(late[0].displayId).toBe('MC-3');
-    expect(res.body.replot.map((r: { displayId: string }) => r.displayId)).toContain('MC-3');
-
-    // conflict keys carry the situation (invariant 13 v4.3.0): week | rule |
-    // capacity | sorted card:phase pairs — this project's capacity is 3.
-    expect(urgentConflicts[0].key).toMatch(/^2026-08-\d{2}\|urgent-overlap\|3\|c1:sketch,c2:sketch$/);
+    await agent.get(`/api/projects/${project._id}/deadlines`).expect(404);
+    await agent.put(`/api/projects/${project._id}/deadlines/day`)
+      .send({ cardId: 'c1', phase: 'sketch', day: '2026-08-04' }).expect(404);
+    await agent.post(`/api/projects/${project._id}/conflicts/acknowledge`)
+      .send({ conflict_key: '2026-08-03|urgent-overlap|3|c1:sketch' }).expect(404);
+    await agent.post(`/api/projects/${project._id}/conflicts/restore`)
+      .send({ conflict_key: '2026-08-03|urgent-overlap|3|c1:sketch' }).expect(404);
   });
 
-  it('a card with no deadline cannot raise a deadline conflict (BR-9)', async () => {
+  it('writes nothing: a call to a deleted route leaves no row and no audit trail', async () => {
     const { project, agent, mk } = await setup();
-    await mk(1, { slotted_week: '2026-08-03' }); // no deadline anywhere
-    const res = await agent.get(`/api/projects/${project._id}/deadlines`).expect(200);
-    expect(res.body.milestones.every((m: { late: boolean }) => !m.late)).toBe(true);
-    expect(res.body.conflicts.filter((c: { rule: string }) => c.rule === 'past-deadline')).toHaveLength(0);
+    await mk(1, { slotted_week: '2026-08-03' });
+    await agent.post(`/api/projects/${project._id}/conflicts/acknowledge`)
+      .send({ conflict_key: '2026-08-03|urgent-overlap|3|c1:sketch' }).expect(404);
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
+    const names = (await mongoose.connection.db!.listCollections().toArray()).map((c) => c.name);
+    expect(names).not.toContain('conflict_acknowledgements'); // 001 no longer creates it
+  });
+});
+
+/* BR-9 lives on, rehomed. The claim — a card with no deadline anywhere is
+   never LATE — was asserted through `GET /deadlines`'s milestones until that
+   route was deleted (owl #87). The same field rides the pipeline row every
+   live tab reads, so the rule keeps its guard. The urgent-overlap conflict
+   test that stood beside it went with the feature: there is no conflict left
+   to detect. */
+describe('BR-9 — no deadline is no conflict', () => {
+  it('a card with no deadline anywhere is never flagged late', async () => {
+    const { project, agent, mk } = await setup();
+    await mk(1, { slotted_week: '2026-08-03' }); // no trello_due, no sheet_deadline
+    const res = await agent.get(`/api/projects/${project._id}/deliverables`).expect(200);
+    const row = res.body.rows.find((r: { cardId: string }) => r.cardId === 'c1');
+    expect(row.deadline ?? null).toBeNull();
+    expect(row.forecast.late).toBe(false);
+  });
+
+  it('and one whose forecast lands past its deadline IS — so the guard above can fail', async () => {
+    const { project, agent, mk } = await setup();
+    await mk(2, { slotted_week: '2026-08-03', sheet_deadline: '2026-08-05' });
+    const res = await agent.get(`/api/projects/${project._id}/deliverables`).expect(200);
+    const row = res.body.rows.find((r: { cardId: string }) => r.cardId === 'c2');
+    expect(row.forecast.late).toBe(true);
   });
 });
 
 describe('pipeline read (FR-4.1–4.4)', () => {
-  it('serves rows with forecast, corrections, sprints and capacity', async () => {
+  it('serves rows with forecast, sprints and capacity', async () => {
     const { project, agent, mk } = await setup();
     await mk(1, { figma_url: 'https://figma.com/f/x', sheet_deadline: '2026-09-04' });
-    await mk(2, { difficulty: null }); // missing difficulty + deadline + figma
+    await mk(2, { difficulty: null }); // a second row, sparser than the first
     const res = await agent.get(`/api/projects/${project._id}/deliverables`).expect(200);
     expect(res.body.rows).toHaveLength(2);
     const r1 = res.body.rows.find((r: { cardId: string }) => r.cardId === 'c1');
     expect(r1.forecast.sketchDelivery).toBeTruthy();
     // invariant 14 / BR-9: no Trello due, so the SHEET date is the deadline the row is measured against
     expect(r1.deadline).toBe('2026-09-04');
-    const corrections = res.body.corrections.map((c: { cardId: string }) => c.cardId);
-    expect(corrections).toContain('c2');
     expect(res.body.capacity.weekly).toBe(3);
   });
 

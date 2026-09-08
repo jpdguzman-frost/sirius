@@ -2,7 +2,6 @@
   <div class="metrics">
     <div class="metric"><span class="mlabel">MAIN CARDS</span><span class="mvalue">{{kpi.main}}</span></div>
     <div class="metric"><span class="mlabel">WORK CARDS</span><span class="mvalue">{{kpi.work}}</span></div>
-    <div class="metric blue"><span class="mlabel">OPEN WORK</span><span class="mvalue">{{kpi.open}}</span></div>
     {{! owl #79, node 843:125894 — this tile was red; it is amber now, the
         same amber the Urgent badge wears on the work-card rows, so urgency
         speaks with ONE colour on this tab. The red belonged to the Deadlines
@@ -33,11 +32,15 @@
   </div>
 
   <div class="pipestack">
-  <!-- owl #36: the incomplete-card banner that used to sit here is gone. The
-       same three conditions now speak on the row that owns them (.prow.warn
-       below); the aggregate is the OPEN WORK metric above, which still counts
-       `corrections`. A warned row the search hides stays hidden — no special
-       case, which is exactly why the KPI keeps carrying the total. -->
+  <!-- owl #36 deleted the incomplete-card banner that used to sit here, and
+       owl #81 (2026-09-07, Miles) then withdrew build-spec §4.4 entirely — so
+       the per-row state that replaced the banner is gone too, and the metric
+       strip lost the OPEN WORK tile that aggregated it. Pipeline draws NOTHING
+       to mark a card as incomplete: an absent value reads as an em-dash
+       everywhere on this table and no cell asserts that a gap is a problem.
+       Do not reintroduce this as a smaller warning — §4.4 was ALREADY the
+       reduced version, and it replaced a full-row wash that lit 247 of 249
+       rows. Removing it is the answer that was reached. -->
 
   {{! owl #62, node 592:56850 — the search bar and the two buttons share one
       row. Filter (funnel) then Sort, 8px apart, to the RIGHT of the field. }}
@@ -119,11 +122,11 @@
             whole subtree is part of this element's hit region, so travelling
             from the chip down into a checkbox never leaves it and no close is
             ever armed. The relatedTarget guard covers the 4px gap crossing. }}
-        {{! focusin/focusout as well as the pointer: the warning card opens on
-            both for the same reason — the panel holds real controls, and a
-            keyboard user tabbing to the chip's ✕ should be able to reach them.
-            Both bubble, and focusout's relatedTarget is where focus went, so
-            chipPopOut's containment guard covers tabbing INTO the panel. }}
+        {{! focusin/focusout as well as the pointer: the panel holds real
+            controls, and a keyboard user tabbing to the chip's ✕ should be able
+            to reach them. Both bubble, and focusout's relatedTarget is where
+            focus went, so chipPopOut's containment guard covers tabbing INTO
+            the panel. }}
         <span class="fchip" on-mouseenter="['chipPopIn', c.key]" on-mouseleave="['chipPopOut']"
               on-focusin="['chipPopIn', c.key]" on-focusout="['chipPopOut']">
           <span class="fchiplabel">
@@ -180,18 +183,15 @@
         <thead><tr>{{#each pipeCols as c}}<th class="{{c.cls}}">{{c.label}}</th>{{/each}}</tr></thead>
         <tbody>
         {{#each pipelineRows as row}}
-          <!-- .warn is PRESENTATION ONLY (owl #36, revised by owl #41): the row
-               keeps its one keyboard behaviour (Enter expands the group) and
-               not one of its controls is disabled by an incomplete card. The
-               ICON in col-mc is the trigger — col-name carries nothing. -->
-          <tr class="prow {{#if row.blocker}}blocked{{/if}} {{#if row.warning}}warn{{/if}}" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
+          <tr class="prow {{#if row.blocker}}blocked{{/if}}" tabindex="0" on-keydown="['pipeRowKey', row.mcNumber]">
             <td class="col-mc"><div class="mccell">
               <!-- owl #45 (answered in jp→miles #40): a childless MC gets NO
                    expand affordance — expanding it showed nothing at all, an
                    affordance that lies. The spacer keeps the MC# column
-                   aligned. `hasTasks` is stamped in loadAll beside blob and
-                   warning (performance law: derived per-row data is never
-                   asked in the template), so no wire change either. -->
+                   aligned. `hasTasks` is stamped in loadAll beside the row's
+                   blob and its own work cards (performance law: derived
+                   per-row data is never asked in the template), so no wire
+                   change either. -->
               {{! owl #52: the chevron belongs to the MC, so it renders on the
                   group's FIRST row only. It always did control MC-level state
                   (the open flag is keyed on mcNumber) and the list always did
@@ -214,57 +214,21 @@
               {{/if}}
               <div class="mcid">
                 <span class="mcnum">{{{hl(row.mcLabel)}}}</span>
-                <!-- owl #41: the warning is a 14px ICON here, not a message
-                     line under the card name. The icon is the only textual
-                     carrier of the warning left on the row, so its accessible
-                     name is composed in the RECIPE (label + pluralised
-                     missing-field count + card identity) — the template does
-                     no arithmetic. The card sits IMMEDIATELY AFTER the button
-                     in DOM order so Tab reaches `Open Card`; it is
-                     position:fixed, so the cell's overflow cannot clip it.
-                     Nothing in this subtree may gain transform/filter/contain
-                     — that would re-anchor the fixed box to the cell.
-                     mouseenter/mouseleave/focus do not bubble, but Ractive
-                     delegates an each-block's events with a CAPTURE listener on
-                     the <tbody>, and capture reaches a non-bubbling event just
-                     the same — so these arrive without a per-row listener. -->
-                {{#if row.warning}}
-                  <div class="warnhost" on-focusout="['warnPopFocusOut']">
-                    <button class="warnbtn"
-                            on-mouseenter="['warnPopIn', row.cardId]"
-                            on-mouseleave="['warnPopOut']"
-                            on-focus="['warnPopIn', row.cardId]"
-                            aria-haspopup="dialog"
-                            aria-expanded="{{warnPop === row.cardId ? 'true' : 'false'}}"
-                            aria-label="{{row.warning.srLabel}}">
-                      <svg class="i14" aria-hidden="true"><use href="#i-warning" /></svg>
-                    </button>
-                    {{#if warnPop === row.cardId}}
-                      <div class="warnpop{{#if warnPopPos.up}} flip{{/if}}{{#if warnPopPos.over}} scroll{{/if}}" role="dialog"
-                           aria-label="{{row.warning.label}} — {{row.mcLabel}} {{row.name}}"
-                           style="left:{{warnPopPos.left}}px;top:{{warnPopPos.top}}px;"
-                           on-mouseenter="['warnPopIn', row.cardId]" on-mouseleave="['warnPopOut']">
-                        <div class="wphead"><svg class="i16" aria-hidden="true"><use href="#i-warning" /></svg><span class="wptitle">{{row.warning.label}}</span></div>
-                        <div class="wpitems">
-                          {{#each row.warning.items as it}}
-                            <div class="wpitem"><span class="wplabel">{{it.label}}</span><span class="wpwhy">{{it.why}}</span></div>
-                          {{/each}}
-                        </div>
-                        <!-- the deleted banner's own closing sentence, restored by
-                             Miles (owl #43 item B): the field list says what is
-                             broken and why it matters; this line says what to DO,
-                             and that Sirius will not fix it itself. Part of the
-                             MESSAGE, so it renders for a row with no Trello URL
-                             too — it is not the link's caption. -->
-                        <div class="wpfix">Fix in Trello and it corrects on the next sync.</div>
-                        <!-- the separator exists only to divide the details from
-                             Open Card, so a card Trello has no URL for draws
-                             neither: one conditional, not two -->
-                        {{#if row.trelloUrl}}<div class="wpsep"></div><a class="wpopen" href="{{row.trelloUrl}}" target="_blank" rel="noopener">Open Card</a>{{/if}}
-                      </div>
-                    {{/if}}
-                  </div>
-                {{/if}}
+                <!-- WITHDRAWN 2026-09-07 (owl #81, Miles): the incomplete-card
+                     warning that lived here — the 14px alert icon after the MC
+                     number and the 235-wide hover card with its per-field
+                     consequences, its "Fix in Trello and it corrects on the next
+                     sync." line and its Open Card link — is gone with the whole
+                     of build-spec §4.4. Nothing marks a card incomplete on this
+                     table. Do not rebuild it smaller: §4.4 was already the
+                     reduced version of a full-row amber wash that lit 247 of 249
+                     rows, and shrinking it again is not the answer that was
+                     reached. Two of its three conditions had other surfaces
+                     anyway (LINKS renders an absent Figma at 30%; the due-date
+                     condition died with Deadlines conflicts), and owl #86 closed
+                     the third: every card carries a difficulty label by
+                     construction, so a card without one is a DATA error for
+                     ingestion health, never a row state. -->
               </div>
             </div></td>
             <!-- WITHDRAWN 2026-08-27 (JP): the 'Main Card' SubTone under the
@@ -290,7 +254,7 @@
                  also now precedes difficulty, per the same node. -->
             <td class="col-urgency"><span class="dimcell">—</span></td>
             <td class="col-diff"><span class="dimcell">—</span></td>
-            <td class="col-status">{{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list, classified by keyword'}}">{{{hl(row.currentList)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
+            <td class="col-status">{{#if row.currentList}}<span class="pbadge s-{{row.status}}" title="{{row.statusNote ? 'Manual note: ' + row.statusNote : 'Trello list; state from the lane table'}}">{{{hl(row.currentList)}}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
             <!-- owl #78 §3 — REQUESTOR is gone from this table AND from the
                  filter panel (#66 put it "everywhere"; #78 is newer and takes
                  it off Pipeline only — the Requests table keeps its column).
@@ -421,18 +385,32 @@
                 </div></td>
                 <td class="col-status">{{#if w.currentList}}<span class="pbadge s-{{w.status}}">{{w.currentList}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
                 <!-- owl #78 §2, node 809:83486 — the work card DOES carry a
-                     deadline of its own, and Pipeline REFLECTS it. This is
-                     the read-only dress that used to be the observation-mode
-                     branch, now the only branch: there is no picker on this
-                     tab for either row kind. The setter moved to the Sprint
-                     Schedules DEADLINE cell (write registry W2, work-card
-                     scope), so the date has exactly one place it can be
-                     changed and the two screens cannot be edited apart.
+                     deadline of its own, and Pipeline REFLECTS it. The setter
+                     is the Sprint Schedules DEADLINE cell (write registry W2,
+                     work-card scope), so the date has exactly one place it can
+                     be changed and the two screens cannot be edited apart.
 
-                     The overdue and missing dressings stay — reflecting a
-                     date honestly includes reflecting that it has passed, or
-                     that the card has none. -->
-                <td class="col-deadline"><span class="datefield readonly {{w.due ? (w.overdue ? 'overdue' : '') : 'missing'}}"><span class="dpdate">{{w.due ? fmtLong(w.due) : 'No Due Date'}}</span><svg class="i16"><use href="#i-calendar" /></svg></span></td>
+                     owl #81 (2026-09-07, Miles) SUPERSEDES the read-only
+                     date-field dress this cell wore, node 841:32729: PLAIN
+                     TEXT, exactly like STARTED and DONE beside it. No border,
+                     no fill, no radius, no calendar glyph, no hover
+                     affordance, no cursor change — and no overdue tint
+                     either, because "exactly like the two cells beside it"
+                     admits no third state. A cell carrying the visual grammar
+                     of a date picker invites the click the rule exists to
+                     prevent, and a control that looks live but refuses is
+                     worse than none: the reader concludes the feature is
+                     broken rather than that it lives elsewhere. This cell
+                     REFLECTS; Sprint Schedules OWNS.
+
+                     Empty is the same em-dash every other absent value on this
+                     table draws — not the amber `No Due Date` badge. Amber is
+                     a warning colour and a card without a deadline is not a
+                     fault; most sit that way for their whole planning life.
+                     No `title`: STARTED and DONE carry the raw instant because
+                     the wire sends one, and the due date has no instant to
+                     carry (src/services/pipeline.ts sends the day alone). -->
+                <td class="col-deadline">{{#if w.due}}<span class="plaincell nowrap">{{fmtLong(w.due)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
                 <td class="col-started">{{#if w.started}}<span class="plaincell nowrap" title="{{fmtInstant(w.started, w.startedTs)}}">{{fmtLong(w.started)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
                 <td class="col-done">{{#if w.done}}<span class="plaincell nowrap" title="{{fmtInstant(w.done, w.doneTs)}}">{{fmtLong(w.done)}}</span>{{else}}<span class="dimcell">—</span>{{/if}}</td>
                 <td class="col-links">

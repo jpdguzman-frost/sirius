@@ -10,7 +10,7 @@
 import { Types } from 'mongoose';
 import { AresClient, type AresMovement } from '../src/services/ares.ts';
 import { assignDisplayIds, mapTrello, type MappedDeliverable, type MappedWorkCard } from '../src/services/mapper.ts';
-import { classifyList } from '../src/services/status-rules.ts';
+import { classifyList, isKnownList } from '../src/services/status-rules.ts';
 import { CardEvent, Deliverable, Project, SyncRun, WorkCard } from '../src/models/index.ts';
 import type { Env } from '../src/config/env.ts';
 import { assertNotProductionBoards } from '../src/services/guard.ts';
@@ -32,7 +32,42 @@ export interface SyncStats {
    * skip is deliberate and safe, but silence about it would not be.
    */
   unstamped: number;
+  /**
+   * Every DISTINCT list name this run saw that the §7a enumeration does not
+   * recognise — sorted, deduplicated, verbatim as ARES spelled it. §7a's
+   * safety net, in one line: "an unmapped lane must be SURFACED, never guessed
+   * at." `classifyList` still answers `ongoing` for these so the app renders,
+   * but that answer is a fallback and this is the record that it was used.
+   *
+   * ARES-sourced names ONLY — the card's current list and both ends of every
+   * movement. Nothing Sirius stores itself lands here, so a non-empty array is
+   * always a question for the board, never for our own data.
+   *
+   * Expected to be small and stable. Known today on the production board and
+   * left unknown deliberately: `For Archive`, `For Client Approval`,
+   * `Hard Deadline: Monday Mar. 23`, `NOTE`, `On Hold: Ryse, NBG` — none is a
+   * workflow state and §7a settles none of them. A SIXTH name appearing is the
+   * signal this array exists for.
+   */
+  unmappedLists: string[];
   capacity: Record<string, number | null> | null;
+}
+
+/**
+ * Collects the distinct unrecognised list names of one sync run. Empty and
+ * absent names are not collected: "the card is in no list" is a different fact
+ * from "the card is in a list we cannot classify", and mixing them would put a
+ * meaningless `''` in front of product every run.
+ */
+function collectUnmapped(): { see: (name: string | null | undefined) => void; names: () => string[] } {
+  const seen = new Set<string>();
+  return {
+    see: (name) => {
+      if (typeof name !== 'string' || name.trim() === '') return;
+      if (!isKnownList(name)) seen.add(name);
+    },
+    names: () => [...seen].sort(),
+  };
 }
 
 export function makeClient(env: Env): AresClient {
@@ -429,6 +464,8 @@ export async function syncProject(
   // carries the instant ARES fetched THAT card, so the window is per-card and
   // the widest-window problem does not exist to be reasoned about.
   const cards = await client.boardCards(project.trello_board_id);
+  const unmapped = collectUnmapped();
+  for (const c of cards) unmapped.see(c.currentList);
   const mapped = mapTrello(cards, project.trello_label ?? null);
 
   // Stable display ids: existing assignments never reshuffle (invariant 3).
@@ -475,6 +512,10 @@ export async function syncProject(
 
   // Movements → card_events, idempotent on the synthesized key (T032).
   const movements = await client.boardMovements(project.trello_board_id, movementsFrom);
+  for (const m of movements) {
+    unmapped.see(m.fromList);
+    unmapped.see(m.toList);
+  }
   const inserted = await insertCardEvents(projectId, movements);
 
   // Started/Done spans from the freshly appended movements.
@@ -496,6 +537,17 @@ export async function syncProject(
     );
   }
 
+  /* ONE line per run, at warn: this is a question for product about the board,
+     not an error in the sync, and a per-name log would drown the run. The array
+     on the sync_runs row is the durable record — no new collection, no UI. */
+  const unmappedLists = unmapped.names();
+  if (unmappedLists.length > 0) {
+    console.warn(
+      `[syncAres] ${project.code}: ${unmappedLists.length} list name(s) the §7a enumeration does not recognise — ` +
+        `classified \`ongoing\` as a fallback, not a classification: ${unmappedLists.join(' · ')}`,
+    );
+  }
+
   return {
     cards: cards.length,
     deliverables: mapped.deliverables.length,
@@ -506,6 +558,7 @@ export async function syncProject(
     workSpans,
     deactivated: deactivated.modifiedCount,
     unstamped,
+    unmappedLists,
     capacity: capacity.typical != null ? (capacity as unknown as Record<string, number | null>) : null,
   };
 }

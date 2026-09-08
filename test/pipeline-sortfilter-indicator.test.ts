@@ -171,7 +171,7 @@ describe('the filter indicator says what is filtered, in words', () => {
        arrives. The panel is also a DOM child of the chip, which is what makes
        the containment guard cover the whole journey. */
     // one bridge recipe, shared with the warning card's, in the gap's own token
-    expect(cssRule('.warnpop::before, .chipmenu::before', PIPELINE_CSS)).toContain('height: var(--space-4)');
+    expect(cssRule('.chipmenu::before', PIPELINE_CSS)).toContain('height: var(--space-4)');
     const body = handlerBody('chipPopOut');
     expect(body).toContain('relatedTarget');
     expect(body).toContain('ctx.node.contains(to)');
@@ -241,7 +241,6 @@ describe('the filter indicator says what is filtered, in words', () => {
     expect(policy).toContain('app.get(key) === id');
     expect(policy.indexOf('app.get(k)')).toBeLessThan(policy.indexOf('warnPopCancelClose()'));
     expect(APP_JS).toContain("openHoverOverlay('chipPop', key)");
-    expect(fnBody('showWarnPop')).toContain("openHoverOverlay('warnPop', cardId)");
   });
 
   it('ticks through the SAME handler the main panel uses', () => {

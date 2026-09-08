@@ -32,6 +32,42 @@ export const DELIVERABLES_V_PIPELINE = [
   },
 ];
 
+/**
+ * Migration 007's key helpers, INLINED 2026-09-08 (owl #87). They lived in
+ * `src/services/conflicts.ts`, which is deleted with the acknowledgement
+ * feature; the bodies below are that file's verbatim, so 007 keeps doing
+ * exactly what it did on every database that has already applied it.
+ *
+ * They are historical-migration support and nothing else: no live code path
+ * composes, splits or rebuilds a conflict key any more.
+ */
+
+/**
+ * The capacity token — String(n), deliberately NOT rounded or normalised.
+ * PATCH /capacity enforces an integer, but seed scripts type the field freely;
+ * rounding here would make the key disagree with the number the over-capacity
+ * explanation below already prints.
+ */
+const CAP = (weeklyCapacity: number): string => String(weeklyCapacity);
+
+const compose = (week: string, rule: string, weeklyCapacity: number, pairs: string): string =>
+  `${week}|${rule}|${CAP(weeklyCapacity)}|${pairs}`;
+
+/**
+ * Pre-007 keys have 3 components, amended keys 4. Card ids and phases never
+ * contain '|', and an empty pair list is legal (`week|over-capacity|50|`),
+ * so the component count discriminates cleanly in both directions.
+ */
+const KEY_PARTS = 4;
+const isLegacyConflictKey = (key: string): boolean => key.split('|').length === KEY_PARTS - 1;
+
+/** Migration 007's one lift — the same recipe, applied to an existing key. */
+const upgradeConflictKey = (key: string, weeklyCapacity: number): string => {
+  const p = key.split('|');
+  if (p.length !== KEY_PARTS - 1) return key; // already amended, or unrecognised — leave it alone
+  return compose(p[0]!, p[1]!, weeklyCapacity, p[2]!);
+};
+
 export const MIGRATIONS: Migration[] = [
   {
     id: '001-indexes',
@@ -161,7 +197,6 @@ export const MIGRATIONS: Migration[] = [
       const db = conn.db;
       if (!db) throw new Error('no database on connection');
       const { audit } = await import('../../src/services/audit.ts');
-      const { isLegacyConflictKey, upgradeConflictKey } = await import('../../src/services/conflicts.ts');
 
       const rows = await db
         .collection('conflict_acknowledgements')
@@ -279,6 +314,48 @@ export const MIGRATIONS: Migration[] = [
       await db
         .collection('projects')
         .updateMany({ model_frozen: { $exists: false } }, { $set: { model_frozen: true } });
+    },
+  },
+  {
+    /**
+     * Conflict acknowledgements are retired (owl #87, JP, 2026-09-08). The
+     * week-level badges an acknowledgement dismissed were replaced by a count,
+     * and a count asserts nothing, so it never needs dismissing — the routes,
+     * the model and the detection are deleted.
+     *
+     * THE ROWS ARE NOT. JP's word is "archived, not dropped": this RENAMES the
+     * collection, which keeps every document, its `_id`s and its indexes
+     * queryable under a name no model maps and no code reads. A rename also
+     * costs nothing on a large collection — no copy, no second write of the
+     * same data — and it cannot half-succeed the way copy-then-drop can.
+     *
+     * NEVER DROPS, in any branch. If the archive already exists the source is
+     * left exactly as it is: on a database where both names are present, a
+     * human decides which one is the real archive, not this migration.
+     *
+     * Idempotent by construction, and re-runnable outside the ledger: the
+     * second pass finds no source collection and returns. A fresh database
+     * never had one (`ConflictAcknowledgement` left ALL_MODELS with this
+     * change, so 001 no longer creates it), so this is a no-op there too.
+     *
+     * `audit_log` is untouched — the `conflict.acknowledge` and
+     * `conflict.restore` rows stay forever (invariant 10). No project_id is
+     * involved: a collection rename is not a per-project state change, so
+     * there is nothing to audit, the same as 010.
+     */
+    id: '011-archive-conflict-acknowledgements',
+    up: async (conn) => {
+      const db = conn.db;
+      if (!db) throw new Error('no database on connection');
+      const SOURCE = 'conflict_acknowledgements';
+      const ARCHIVE = 'conflict_acknowledgements_archive';
+      const [source, archive] = await Promise.all([
+        db.listCollections({ name: SOURCE }).toArray(),
+        db.listCollections({ name: ARCHIVE }).toArray(),
+      ]);
+      if (source.length === 0) return; // nothing stored, or already archived
+      if (archive.length > 0) return; // an archive is already there — leave both alone
+      await db.collection(SOURCE).rename(ARCHIVE);
     },
   },
 ];

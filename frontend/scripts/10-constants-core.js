@@ -1,6 +1,6 @@
 /* Split out of frontend/scripts/10-constants.js on 2026-09-05 (part 1 of 3):
    capacity fallbacks, planner geometry and the capacity band, the Requests
-   constants, the row warning and the date helpers. Bytes below unchanged. */
+   constants and the date helpers. Bytes below unchanged. */
 /* Sirius frontend — one Ractive instance, ARES conventions.
    Hard-mix constants mirror lib/planner.constants (HARD_MIX); load is BR-6c
    card-equivalents (row.weight from the server). */
@@ -91,57 +91,26 @@ const REQ_PAGE_SIZE = 10;
 const DUE_POP_W = 354;
 const DUE_POP_H = 420;
 
-/* ---- Pipeline row warning (owl #36, nodes 537:69131 / 537:69135) ----
-   Replaces the old incomplete-card table banner: the three read-only conditions
-   the server already computes per row (`missing`, src/services/pipeline.ts)
-   now speak on the row they belong to. The aggregate signal did not go away —
-   it is the OPEN WORK KPI, which still counts `corrections`.
-
-   WARN_LABEL is a VARIABLE string, not a literal at the render site: 'Needs
-   Info' today, 'Incomplete'/'Action' later. The icon's accessible name and the
-   popover title both read it, so they cannot drift apart. */
-const WARN_LABEL = 'Needs Info';
-/* WHY each missing field matters — the payload of the popover, and the whole
-   reason it exists. Keyed by the SERVER's own `missing` tokens, so the copy
-   lives in exactly one place; a token this map does not know renders an empty
-   rationale rather than throwing. The first two are the deleted banner's own
-   wording, carried over verbatim; the Figma line is new copy (R-warn-b). */
-const WARN_WHY = {
-  'difficulty label': 'Without a difficulty label the card cannot forecast.',
-  'due date': 'Without a due date the card cannot raise a deadline conflict.',
-  'Figma attachment': 'Without the Figma attachment the deliverable cannot be opened from the plan.',
-};
 /* The one viewport margin every fixed overlay honours: placeBox's on-screen
-   clamp holds this much clear on each side, and the last-resort scroll
-   verdict asks whether a box fits inside BOTH margins — the same number, so
-   the anti-oscillation `>=` in placeBox can never disagree with the clamp.
-   An overlay that casts a shadow adds its BLEED on top of this (see
-   WARN_SHADOW_BLEED) — the box lands on screen but its shadow must too.
-   Its CSS twin is the `--warn-vclamp` (= both vertical margins, bleed
-   included) in `.warnpop.scroll`'s max-height; change one and change the
-   other. */
+   clamp holds this much clear on each side, and the last-resort scroll verdict
+   asks whether a box fits inside BOTH margins — the same number, so the
+   anti-oscillation `>=` in placeBox can never disagree with the clamp.
+
+   The `bleed` an overlay could add on top of this went out with the
+   incomplete-card hover card (owl #81, 2026-09-07): it was the only overlay
+   that painted a shadow wide enough to be clipped at the viewport edge. The
+   parameter itself stays in placeBox, defaulting to nothing. */
 const OVERLAY_EDGE = 4;
-/* owl #53 — how far the hover card's shadow paints OUTSIDE its own box.
-   Derived from `--shadow-card: 0 4px 12px`: a 12px blur reaches 12px in every
-   direction, and the 4px downward offset takes 4 off the top and adds 4 to
-   the bottom. So 12 / 8 / 16, and the annotation's "~12px each side and ~8px
-   above" agrees — it simply does not mention the bottom, which is the biggest
-   of the three. Without this the geometry is right and the card still looks
-   broken: the box sits fully on screen with its shadow sliced off at the
-   viewport edge. Only the warning card passes it; the other overlays wear
-   --shadow-xs, whose 2px blur rounds to nothing. */
-const WARN_SHADOW_BLEED = { x: 12, top: 8, bottom: 16 };
-/* warning popover box (node 537:69135) — the pre-measure placeBox needs to
-   decide flip-up and the horizontal clamp before the element exists. The
-   HEIGHT hugs its content (one wrapping list-item per missing field, plus the
-   restored closing sentence — owl #43 item B: ~245px for one problem, ~390px
-   for all three), so this is the WORST case — showWarnPop measures the box
-   that actually rendered and places it a second time. Nothing in CSS pins it. */
-const WARN_POP_W = 235;
-const WARN_POP_H = 390;
-/* The hover card's close DELAY. Not specified by the annotation — 150ms is
-   long enough to cross the 4px gap and short enough not to feel sticky
-   (R-warn-j, flagged to Miles as a number he may want to tune). */
+/* The hover-dismissed overlays' close DELAY. Not specified by the annotation —
+   150ms is long enough to cross the 4px gap between a chip and its panel and
+   short enough not to feel sticky.
+
+   Naming debt, flagged not fixed (and now the last of it): the constant, the
+   timer handle and its canceller in 60-overlays.js still carry the `warn`
+   prefix from the day the incomplete-card hover card was the only overlay
+   using them. That card is withdrawn (owl #81); the filter chip's panel is the
+   remaining user, and the shared scheduler is deliberately NOT renamed here —
+   the guards that pin it by name live in suites this build does not own. */
 const WARN_CLOSE_MS = 150;
 /* THE PANEL WIDTH — the one geometric fact the CSS-anchored panels still need in
    JS, and only for the chip panel's edge flip: the row wraps, so a chip can sit
@@ -155,37 +124,6 @@ const WARN_CLOSE_MS = 150;
    happens. The overlays that DO float free of a wrapper still pre-measure; see
    placeBox in 60-overlays.js. */
 const PIPE_MENU_W = 276;
-/* ONE recipe for the warning, derived from the row the server already sends.
-   Returns null for a complete card — the template's only test — or
-   { label, items:[{ label, why }] }. items[0] is ALWAYS the card's OWN
-   identity (the frame's 'MC-821' is stale filler), then one item per missing
-   field IN THE SERVER'S ORDER. */
-const rowWarning = (row) => {
-  const miss = (row && row.missing) || [];
-  if (!miss.length) return null;
-  return {
-    label: WARN_LABEL,
-    /* The icon is now the ONLY textual carrier of the warning — the message
-       line is gone — so a screen-reader user has nothing else on the row that
-       announces it. Composed HERE and never in the markup: pluralising a count
-       is arithmetic, and the template must not do arithmetic. `miss.length` is
-       `items.length - 1` by construction — items[0] is the card's own identity
-       (R-warn-m). */
-    srLabel: `${WARN_LABEL} — ${miss.length} missing field${miss.length === 1 ? '' : 's'} — ${row.mcLabel} ${row.name}`,
-    items: [
-      { label: row.mcLabel, why: row.name },
-      /* SENTENCE-CASED for display only (JP, 2026-08-20 — the built card read
-         'due date' where the frame reads 'Due date'). The server's tokens are
-         lowercase because `srLabel` above reads them mid-sentence, where
-         'Due date' would be wrong; the frame shows them as list headings,
-         where lowercase is. So the case is applied at the point of display and
-         the token itself is untouched — WARN_WHY is still keyed on the raw
-         `f`, and 'Figma attachment' is unharmed because upper-casing an
-         already-capital letter is a no-op. */
-      ...miss.map((f) => ({ field: f, label: f.charAt(0).toUpperCase() + f.slice(1), why: WARN_WHY[f] || '' })),
-    ],
-  };
-};
 
 const isoOf = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

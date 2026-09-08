@@ -23,7 +23,7 @@ afterAll(async () => {
 });
 
 describe('NFR-1 @ 5,000 cards', () => {
-  it('pipeline + deadlines reads stay inside the server-side budget', async () => {
+  it('pipeline reads stay inside the server-side budget', async () => {
     const project = await Project.create({ code: 'rt-perf', name: 'Perf', trello_board_id: 'fxPerf', weekly_capacity: 120 });
     const user = await User.create({ email: 'perf@frostdesigngroup.com' });
     await UserProject.create({ user_id: user._id, project_id: project._id });
@@ -63,12 +63,7 @@ describe('NFR-1 @ 5,000 cards', () => {
     const pipelineMs = performance.now() - t1;
     expect(res.body.rows).toHaveLength(3000);
 
-    const t2 = performance.now();
-    await agent.get(`/api/projects/${project._id}/deadlines`).expect(200);
-    const deadlinesMs = performance.now() - t2;
-
-    console.log(`[perf] pipeline ${Math.round(pipelineMs)}ms · deadlines ${Math.round(deadlinesMs)}ms @ 5,000 cards`);
+    console.log(`[perf] pipeline ${Math.round(pipelineMs)}ms @ 5,000 cards`);
     expect(pipelineMs).toBeLessThan(1500); // server-side share of the 2 s p95 budget
-    expect(deadlinesMs).toBeLessThan(1500);
   }, 120_000);
 });

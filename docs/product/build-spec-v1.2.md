@@ -1,3 +1,5 @@
+> **Superseded 2026-09-08 by `build-spec-v1.3.md` (owls #83–#85).** Kept for the record; the interim engineering banner below is historical.
+
 # Frost: Sirius — build spec
 
 **v1.2** · 12 August 2026 · supersedes v1.1, incorporating the build team's errata.

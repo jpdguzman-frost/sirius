@@ -10,7 +10,14 @@ source and the guard that asserts it (`test/deadlines-tab.test.ts` unless the
 rule says otherwise). Rollover law is here too, because the tab is where it
 shows; the job itself lives in `src/services/rollover.ts`.
 
-_last-verified: 2026-09-05_
+_last-verified: 2026-09-08_
+
+**Amended 2026-09-08.** Spec v1.3 §6.2 flips PLACEMENT from the forecast
+finish to the plotted start (R-d2-c, R-d2-d); owl #86 rules the quote bar
+amber-600 (R-d2-k), which settles its old disagreement with R-d2-m; owl #87
+deletes the parked server half of the retired conflict machinery (R-d2-e).
+Nothing else on this tab moved — the counts, the order, the holiday
+treatment, the empty cards, the navigator and rollover are as they were.
 
 ## 1. What appears
 
@@ -26,11 +33,18 @@ _last-verified: 2026-09-05_
   The card's title is `MC-NNN: <full name>` (`addLabel`, the search row's
   label) clamped to three lines; the card carries NO date — the column it
   sits in is its date. [#74 §1/§3; node 810:122333]
-- **R-d2-c A card's day is its forecast FINISH** (`row.finish` =
-  `WORKDAY(start, lead + design)` from the engine). That is the day rollover
-  moves and the day "slated for" means for a delivery. Both tabs read the ONE
+- **R-d2-c A card's day is its plotted START** (`row.startsOn` =
+  `sprint_items.starts_on`, the PM's own click) — the day the team is slated
+  to pick the work up. That is the design lead's instrument and the reason
+  this view runs on days; a computed finish is not a date the lead can choose,
+  so placing cards on it left them arranging dates they cannot move. The
+  finish (`WORKDAY(start, lead + design)`) keeps its other two jobs: half of
+  R-d2-a's gate, and the condition rollover tests (R-d2-p). The WEEK a card
+  counts toward follows the same key — a card that starts in one week and
+  finishes in the next counts in the week it STARTS. Both tabs read the ONE
   row (`sprintItems.rows`), so they cannot disagree about where a card sits.
-  [PLAN B2 — decided, raised with Miles; `dlBuild` executed]
+  [spec v1.3 §6.2, 2026-09-08 — supersedes PLAN B2, which decided the finish
+  while the question was open with Miles; `dlBuild` executed]
 - **R-d2-d Weeks are the selected month's Mon–Fri weeks** — every week with
   at least one weekday inside the month, EXACTLY `lib/calendar.ts monthWeeks`
   (a straddling week shows under BOTH its months: Aug 31's week is August's
@@ -38,12 +52,15 @@ _last-verified: 2026-09-05_
   executed against the engine over 24 months). The
   month is Manila's (`manilaToday` + `monthOffset`). The navigator's label is
   the first shown Monday → the month's last day: `Aug 31 – Sept 30, 2026`
-  (the frame's `Sept`). Cards whose finish falls outside the shown weeks are
-  not drawn. [node 731:100859; PLAN B3/B16]
+  (the frame's `Sept`). Cards whose START falls outside the shown weeks are
+  not drawn — so a card that starts in the last shown week and finishes in the
+  next month is drawn here, and one that starts next month is not, whatever
+  its finish says. [node 731:100859; PLAN B3/B16; spec v1.3 §6.2, 2026-09-08]
 - **R-d2-e The tab reads the schedule's rows.** No `/deadlines` fetch; the old
-  route, the conflict engine, acknowledgements and the day plan are PARKED
-  server-side with no caller (JP 2026-09-05, ask 1). [PLAN B1/B9; withdrawal
-  sweep]
+  route, the conflict engine, acknowledgements and the day plan are DELETED
+  server-side (owl #87, JP 2026-09-08 — overruling the 2026-09-05 park, and
+  §6.3's own "parked, not deleted"; the stored acknowledgements were archived
+  by migration 011, never dropped). [PLAN B1/B9; withdrawal sweep]
 
 ## 2. Counting
 
@@ -58,12 +75,9 @@ _last-verified: 2026-09-05_
   week's cards at any status, C = `capacity.weekly`; the 6px bar fills
   min(100, N/C). Not BR-6c card-equivalents — the unit is the card. [node
   `#label` "0 / 120 Work Cards"; PLAN B5]
-- **R-d2-h Lane states come from `classifyList`** (keyword) as JP's INTERIM
-  (jp→miles #59: "keyword classification retires when the mapping lands").
-  The real mapping is per-project from Apollo via ARES; it needs Miles's rule
-  over Apollo's `group × type` (asked in #59, unanswered) AND an ARES read
-  endpoint (none exists — the Apollo config is admin-only). When it lands an
-  unmapped lane is SURFACED, never guessed (#75 §1). [drift row 26]
+- **R-d2-h Lane states come from the static `LIST_STATES` table**
+  (`src/services/status-rules.ts`), not the keyword interim — spec v1.3 §7a,
+  owl #82, 2026-09-08. `excluded` cards never render on the board.
 
 ## 3. The lane and the card
 
@@ -84,8 +98,11 @@ _last-verified: 2026-09-05_
   carries none of its own), lane (the verbatim
   Trello list). Links row pinned to the bottom: Trello, Figma, each when
   present. [#74 §3; node 810:122333; PLAN B6/B17]
-- **R-d2-k The quote bar means Urgent and nothing else.** A 4px red-500 band
-  on the LEFT edge only, drawn as the frame's curved path (an inline SVG
+- **R-d2-k The quote bar means Urgent and nothing else.** A 4px amber-600 band
+  (owl #86, 2026-09-08 — the node's red was wrong on hue and right on
+  geometry; this is now the SAME amber R-d2-m gives the Urgent badge, where
+  the two rules used to contradict each other) on the LEFT edge only, drawn as
+  the frame's curved path (an inline SVG
   clipped by the card's own radius), never `border-left` — the corners
   square off and "shipped wrong twice". Non-Urgent cards get NO bar, not a
   grey one, not a pale one. It is not a conflict, past-deadline or at-risk

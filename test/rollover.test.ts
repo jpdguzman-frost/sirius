@@ -243,11 +243,30 @@ describe('rows that never move', () => {
   const wayLate = () => localIso(workday(parseDate(finishFor(MONDAY)), 5));
 
   it('a card in a done lane — a done card does not roll (#75 §3)', async () => {
-    expect(classifyList('Done')).toBe('done'); // the premise, read off the classifier
-    const { result, after, audits } = await lateRow(MONDAY, wayLate(), { current_list: 'Done' });
+    expect(classifyList('Design Complete')).toBe('done'); // the premise, read off the classifier
+    const { result, after, audits } = await lateRow(MONDAY, wayLate(), { current_list: 'Design Complete' });
     expect(result.moved).toBe(0);
     expect(after.starts_on).toBe(MONDAY);
     expect(audits).toEqual([]);
+  });
+
+  /* §7a, 2026-09-08. The done test is now TWO states, and this is the second:
+     ops work and discarded work sit on the board but outside the pipeline, so
+     rolling their bars forward would be this job inventing a schedule for work
+     Sirius does not own. The list below classified ONGOING under the retired
+     keyword classifier — this row rolled every tick. */
+  it('a card in an EXCLUDED lane does not roll either (§7a)', async () => {
+    expect(classifyList('Working on Ops Work')).toBe('excluded'); // the premise
+    const { result, after, audits } = await lateRow(MONDAY, wayLate(), { current_list: 'Working on Ops Work' });
+    expect(result.moved).toBe(0);
+    expect(after.starts_on).toBe(MONDAY);
+    expect(audits).toEqual([]);
+  });
+
+  it('and an excluded lane whose name says nothing about ops — `Discarded Work`', async () => {
+    const { result, after } = await lateRow(MONDAY, wayLate(), { current_list: 'Discarded Work' });
+    expect(result.moved).toBe(0);
+    expect(after.starts_on).toBe(MONDAY);
   });
 
   it('a card with no difficulty label — no design cell, no finish, nothing to move', async () => {
@@ -281,11 +300,12 @@ describe('rows that never move', () => {
     expect((await SprintItem.findById(item._id).orFail()).starts_on).toBeUndefined();
   });
 
-  /* Owl #80 §2's watch item, recorded as behaviour: the keyword classifier is
-     JP's interim (#59), and a client-review lane matches neither its done nor
-     its pending regex, so it classifies ONGOING and rolls. When the Apollo
-     mapping lands this case is the one to revisit — until then it documents
-     the ruled state, so a change here is noticed rather than slipped. */
+  /* Owl #80 §2's watch item, recorded as behaviour. It SURVIVED the mapping:
+     §7a places `Sent for Client Review` in PROCESS · CONTENT as Ongoing, so a
+     card waiting on the client still steps forward one working day per tick.
+     Under the retired keyword classifier that was an accident of the regexes;
+     it is now the enumeration's answer, which makes this the ruled state
+     rather than an interim one. A change here is noticed rather than slipped. */
   it('WATCH (#80 §2): a client-review lane classifies ongoing and therefore ROLLS', async () => {
     expect(classifyList('Sent for Client Review')).toBe('ongoing');
     const { result, after } = await lateRow(MONDAY, nextWorkday(finishFor(MONDAY)), {

@@ -31,7 +31,16 @@ import { localIso } from '../../lib/calendar.ts';
 import { forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { SprintItem } from '../models/index.ts';
-import { classifyList } from './status-rules.ts';
+import { classifyList, type ListStatus } from './status-rules.ts';
+
+/**
+ * Never OFFERED by the add search (#72 §5, §7a). A finished card has nothing
+ * left to schedule; an excluded one — ops work, discarded work — is not a
+ * deliverable Sirius plans at all. The same pair the add ROUTES refuse
+ * (`NOT_ADDABLE_STATES`, src/routes/schedule.ts): the pool and the server must
+ * give one answer, or the PM sees a card the server then rejects.
+ */
+const NOT_OFFERED: ReadonlySet<ListStatus> = new Set(['done', 'excluded']);
 import type { PipelineRow, WorkCardDoc } from './pipeline.ts';
 
 /** One scheduled row as the Sprint Schedules tab consumes it. */
@@ -293,7 +302,12 @@ export async function loadSprintItems(
       /* `null`, not `classifyList(undefined)` — that falls through to
          'ongoing', so a row whose card has left the board rendered an active
          status chip beside a null list, a null bar and no name. Absent is its
-         own state and the UI must be able to say so. */
+         own state and the UI must be able to say so.
+
+         A row whose card sits in an EXCLUDED list keeps its row and reports
+         `'excluded'` here — the add filter above stops such a card being
+         OFFERED, but a row the PM already added STAYS (#72 §5: the filter
+         governs add, never remove), exactly as a completed one does. */
       status: w ? classifyList(w.current_list as string | undefined) : null,
       trelloUrl: (w?.trello_url as string) ?? null,
       figmaUrl: (w?.figma_url as string) ?? null,
@@ -329,7 +343,7 @@ export async function loadSprintItems(
   const addable: SprintItemsResult['addable'] = {};
   for (const w of workCards) {
     if (scheduled.has(w.trello_card_id as string)) continue; // one row per card
-    if (classifyList(w.current_list as string | undefined) === 'done') continue;
+    if (NOT_OFFERED.has(classifyList(w.current_list as string | undefined))) continue;
     const mc = w.mc_number as string;
     (addable[mc] ??= []).push({
       cardId: w.trello_card_id as string,

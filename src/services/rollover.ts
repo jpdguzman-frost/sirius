@@ -71,16 +71,20 @@
  * field. A reader who wants to know whether a bar was moved by hand or by
  * this job reads `audit_log` — `sprintItem.plot` against `sprintItem.rollover`.
  *
- * WHY `classifyList`, AND ITS WATCH ITEM. The done test is the keyword
- * classifier, which is JP's INTERIM (jp→miles #59: lanes come from Apollo per
- * project, no static table; keyword classification retires WHEN that mapping
- * lands — which needs Miles's group×type rule and an ARES lanes read
- * endpoint, and neither exists yet; drift row 26). Until then owl #80 §2's
- * watch item applies: a client-review lane ("Sent for Client Review") matches
- * neither regex, classifies ONGOING, and therefore ROLLS — a card waiting on
- * the client keeps stepping forward one working day per tick. That is the
- * ruled behaviour, recorded in the rulebook, not a defect to patch here; when
- * the mapping lands the swap is the one `classifyList` call below.
+ * WHY `classifyList`, AND ITS WATCH ITEM. The mapping landed on 2026-09-08
+ * (owl #82, build-spec v1.3 §7a): the keyword classifier is retired and the
+ * done test now reads the enumeration. TWO states stop a row here, not one —
+ * a DONE card has nothing left to move, and an EXCLUDED one was never
+ * Sirius's to move: ops work and discarded work are on the board but outside
+ * the pipeline, and rolling their bars forward would be this job inventing a
+ * schedule for work it does not own.
+ *
+ * Owl #80 §2's watch item SURVIVES the swap unchanged, and is now ruled
+ * rather than accidental: `Sent for Client Review` is explicitly Ongoing in
+ * §7a, so a card waiting on the client still steps forward one working day
+ * per tick. Under the keyword classifier that was a coincidence (the name
+ * matched neither regex); it is now the enumeration's answer. Still the ruled
+ * behaviour, recorded in the rulebook, not a defect to patch here.
  *
  * WHY THE WORK CARD, AND WHAT IS LEFT ALONE. The schedule's unit is the task
  * card (#72). This module reads `sprint_items` and never the board to fill
@@ -103,8 +107,16 @@ import { audit } from './audit.ts';
 import { loadProjectModel } from './model-grid.ts';
 import { manilaToday } from './pipeline.ts';
 import { finishOf, nextTailPosition } from './sprint-items.ts';
-import { classifyList } from './status-rules.ts';
+import { classifyList, type ListStatus } from './status-rules.ts';
 import { READ_SOURCES, latestRead } from './sync-status.ts';
+
+/**
+ * The two states that stop a row moving (§7a). A SET rather than two
+ * comparisons for the same reason `NOT_ADDABLE_STATES` in src/routes/schedule.ts
+ * is one: the rule is "these states do not roll", and a set says that on both
+ * sides of any future change to the state union.
+ */
+const NOT_ROLLED: ReadonlySet<ListStatus> = new Set(['done', 'excluded']);
 
 /**
  * R3-1: how old the project's latest successful read may be for this tick
@@ -328,7 +340,8 @@ async function rollRows(projectId: Types.ObjectId, today: string, counts: Rollov
     const w = byId.get(it.trello_card_id);
     if (!w) continue; // card gone — no finish, nothing to move (B2)
     if (!w.difficulty) continue; // no label → no design cell → no finish (B2)
-    if (classifyList(w.current_list) === 'done') continue; // a done card does not roll (#75 §3)
+    // a done card has nothing to move (#75 §3); an excluded one is not ours to move (§7a)
+    if (NOT_ROLLED.has(classifyList(w.current_list))) continue;
 
     /* R3-3: per-row guard. A throw here — the update itself, the audit, the
        revert — is this row's failure and nobody else's: counted, logged,

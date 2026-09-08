@@ -43,6 +43,13 @@
  * DEADLINE cell of a work-card row on Sprint Schedules, where the red tick
  * gives the date something to be compared against.
  *
+ * BLOCK 6, 2026-09-07 (owls #81 and #86): the work row's DEADLINE cell drops
+ * the read-only date-FIELD dress too — plain text, `.plaincell nowrap`, and
+ * the same `.dimcell` em-dash the rest of the table draws for an absent value.
+ * Build-spec §4.4, the incomplete-card warning, is withdrawn whole with it, so
+ * the fixtures carry no `missing` list and no warning recipe: section D holds
+ * the plain-cell guards and the withdrawal sweep.
+ *
  * Like every suite here: `toHTML()` has no layout, no pointer and no clock,
  * so widths, row heights and the live due write are the live pass's to
  * prove. This file proves structure, wiring and recipes.
@@ -64,7 +71,6 @@ export const row = (over: Partial<PipeRow> = {}): PipeRow => ({
   mcLabel: 'MC-837',
   displayId: 'MC-837',
   name: 'MC-837 Main Card: GBox Nav Icons',
-  missing: [],
   trelloUrl: 'https://trello.com/c/main-1',
   ...over,
 });
@@ -94,12 +100,10 @@ export const PARENT = row();
 export const CHILDLESS = row({ cardId: 'main-2', mcNumber: 'MC-901', mcLabel: 'MC-901', displayId: 'MC-901', name: 'Lone deliverable' });
 export const TASKS: Record<string, WorkCardRow[]> = { 'MC-837': [task(), task({ cardId: 'task-2', name: 'MC-837 Render Icon: My Groups', due: null, started: null, startedTs: null })] };
 
-export const rowWarning = () => null;
-
 const collapsed = () =>
-  renderPipelineTable({ pipelineRows: [PARENT, CHILDLESS], rowWarning, workCardsByMc: TASKS });
+  renderPipelineTable({ pipelineRows: [PARENT, CHILDLESS], workCardsByMc: TASKS });
 const open = (over: Record<string, unknown> = {}) =>
-  renderPipelineTable({ pipelineRows: [PARENT, CHILDLESS], rowWarning, workCardsByMc: TASKS, expanded: { 'MC-837': true }, ...over });
+  renderPipelineTable({ pipelineRows: [PARENT, CHILDLESS], workCardsByMc: TASKS, expanded: { 'MC-837': true }, ...over });
 /* the three recurring renders, hoisted once (a hoist pattern from the
    retired gantt-requestor-clip suite, 2026-08-28); fresh calls remain only
    where options differ */

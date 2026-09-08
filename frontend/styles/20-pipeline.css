@@ -6,12 +6,11 @@
 .shellnav { background: var(--surface-background); padding: 40px var(--page-inset) 0; }
 
 /* per-row sprite icons — one size class per glyph box the frames measure
-   (13 = the Gantt row action cluster, owl #27; 14 = the Pipeline row's warning
-   icon in the MC# cell, node I578:56516;484:27906; 15 = the warning triangle in
+   (13 = the Gantt row action cluster, owl #27; 15 = the warning triangle in
    the sprints modal's alert banner, node 328:38162). The 10px box went out with
-   the warning MESSAGE line owl #41 deleted — that glyph was its only user. */
+   the warning MESSAGE line owl #41 deleted, and the 14px box with the
+   incomplete-card icon owl #81 withdrew — each glyph was its box's only user. */
 .i13 { width: 13px; height: 13px; display: block; }
-.i14 { width: 14px; height: 14px; display: block; }
 .i15 { width: 15px; height: 15px; display: block; }
 .i16 { width: 16px; height: 16px; display: block; }
 .i18 { width: 18px; height: 18px; display: block; }
@@ -95,23 +94,22 @@
 .metrics .metric.quiet .mlabel, .metrics .metric.quiet .mvalue { color: var(--slate-400); }
 .metrics .metric.quiet .mvalue { cursor: help; }
 .metrics .metric.amber .mlabel, .metrics .metric.amber .mvalue { color: var(--amber-500); }
-/* OPEN WORK, owl miles→jp #69 (node 731:100892). BOTH text nodes take the
-   colour, not only the figure — the annotation says so twice because "changed
-   the colour of the stat" is naturally built as just the number, and a blue
-   32px figure under a slate-900 label reads as a rendering fault rather than a
-   treatment. Same construction as `.red` / `.green` / `.amber` above, so the
-   modifier is the only place the pairing is stated.
-
-   `--blue-500` is #3b82f6, the ramp the other three tiles already sit in. */
-.metrics .metric.blue .mlabel, .metrics .metric.blue .mvalue { color: var(--blue-500); }
+/* WITHDRAWN 2026-09-07 (owl #81, Miles): `.blue` was the OPEN WORK tile's, and
+   OPEN WORK counted the incomplete cards §4.4 withdrew. The strip is four
+   tiles now — MAIN CARDS, WORK CARDS, URGENT, UNATTACHED CARDS — and the rule
+   is removed rather than left orphaned: a dead modifier reads as a live
+   treatment to the next person pricing a change. If a count of incomplete
+   cards is ever wanted it needs its own decision, not a tile whose meaning has
+   moved. */
 
 /* ---- content stack: elements carry 0 margin, the container gaps 16px
    (frame geometry, confirmed against node 17:2063 child positions) ---- */
 .pipestack { display: flex; flex-direction: column; gap: var(--space-16); }
 
 /* the incomplete-card PANEL (annotations 70:1358/970/914) was deleted in owl
-   #36 — the state moved onto the row it describes (.prow.warn / .warnbtn /
-   .warnpop, below). Nothing replaces it above the table. */
+   #36, and the per-row state that replaced it went with the whole of
+   build-spec §4.4 in owl #81 (2026-09-07, Miles). Nothing above the table and
+   nothing on a row marks a card incomplete. */
 
 /* ---- THE FILTER INDICATOR (node 593:79380) --------------------------------
    One chip per filtered AXIS, then a blue Clear all. Sits between the toolbar
@@ -195,10 +193,18 @@
 .fchip .pipemenu .pmitems { padding-bottom: 0; }
 /* THE HOVER BRIDGE. The panel sits 4px clear of the chip; without this the
    pointer crosses dead space on its way down, `mouseleave` fires, and the close
-   can run out before it arrives — the same hazard the warning card's bridge
-   exists for, and the reason this is a hover PANEL and not a tooltip. It is
-   transparent, paints nothing, and is exactly the gap tall. It cannot outlive
-   the panel because the panel is not rendered while closed. */
+   can run out before it arrives — which is the reason this is a hover PANEL and
+   not a tooltip. It is transparent, paints nothing, and is exactly the gap
+   tall. It cannot outlive the panel because the panel is not rendered while
+   closed. The recipe was shared with the incomplete-card hover card until owl
+   #81 withdrew it; the chip panel is its only member now, so it is declared
+   HERE, beside the panel it belongs to, rather than left behind in the block
+   that used to own it. Absolutely positioned, so it is out of flow and takes
+   no share of the panel's own gap. */
+.chipmenu::before {
+  content: ''; position: absolute; left: 0; right: 0;
+  top: calc(var(--space-4) * -1); height: var(--space-4);
+}
 
 
 /* ---- search + callout (annotations 17:2057, 70:1211) ---- */
@@ -298,9 +304,11 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    the empty first column, where the MC# is not repeated — draws none, so the
    gutter under the parent's number reads as one continuous strip. Cell content
    wears the table's own recipes (.cardname, .plaincell, .dimcell): same
-   columns, same type scale — one column model, one type model. Row height is
-   content-derived here too (R-warn-a's rule): the frame's 75px is an outcome
-   of the single-line child, never a target. */
+   columns, same type scale — one column model, one type model. The DEADLINE
+   cell wears `.plaincell` too since owl #81: it reflects a date and sets
+   nothing, so it draws like STARTED and DONE beside it. Row height is
+   content-derived: the frame's 75px is an outcome of the single-line child,
+   never a target. */
 .ptable tr.ptask td { background: var(--slate-50); border-bottom-color: var(--slate-200); }
 .ptable tr.ptask td.col-mc { border-bottom-color: transparent; }
 /* WITHDRAWN 2026-08-27 (JP): the shared-MC caption row (.pshared) and its
@@ -372,6 +380,8 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .pbadge.s-pending { background: var(--status-warning-light); border-color: var(--amber-500); color: var(--amber-600); }
 .pbadge.s-ongoing { background: var(--blue-100); border-color: var(--blue-500); color: var(--blue-500); }
 .pbadge.s-done { background: var(--emerald-100); border-color: var(--green-500); color: var(--green-600); }
+/* excluded lanes (§7a) carry no state colour. */
+.pbadge.s-excluded { background: var(--slate-50); border-color: var(--slate-300); color: var(--slate-500); }
 .pbadge.blocked { background: var(--red-50); border-color: var(--red-300); color: var(--red-600); }
 
 /* select pill = the Badge recipe (.pbadge) + interaction chrome — urgency
@@ -415,9 +425,10 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
    repeated six of these declarations verbatim under a comment claiming it used
    this recipe, which is the drift a shared selector exists to prevent.
 
-   The base shadow is the light chrome one; two members override it with the
-   heavier card shadow — see `.warnpop` and `.pipemenu` below. */
-.selectmenu, .duepop, .warnpop, .pipemenu {
+   The base shadow is the light chrome one; `.pipemenu` below overrides it with
+   the heavier card shadow. (`.warnpop` was the other member until owl #81
+   withdrew the incomplete-card hover card.) */
+.selectmenu, .duepop, .pipemenu {
   position: fixed;
   background: var(--white); border: 1px solid var(--slate-200);
   box-shadow: var(--shadow-xs); display: flex; flex-direction: column;
@@ -462,8 +473,7 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 .datefield .dpdate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .datefield:hover:not(.readonly) { border-color: var(--surface-foreground); color: var(--surface-foreground); }
 /* one focus ring for the table's interactive chrome */
-.datefield:focus-visible, .duepop button:focus-visible, a.srclink:focus-visible,
-.warnbtn:focus-visible, .warnpop a:focus-visible {
+.datefield:focus-visible, .duepop button:focus-visible, a.srclink:focus-visible {
   outline: 2px solid var(--blue-500); outline-offset: 1px;
 }
 .datefield.missing { border-color: var(--amber-400); color: var(--amber-600); }
@@ -536,147 +546,24 @@ mark { background: var(--status-warning-light); color: var(--amber-800); border-
 }
 .duepop .dueapply:hover { background: var(--slate-700); border-color: var(--slate-700); }
 
-/* ---- incomplete-card row state + hover card (owl #36, revised by owl #41 —
-   nodes 537:69131 / 537:69135 / I578:56516;484:27906) ----
-
-   R-warn-a: the frame draws the amber-300 as a full "stroke" around the row
-   and grows the row past a 280px name column. Neither is buildable against
-   this table without breaking it: .col-name is fluid (width:auto) and the row
-   height is content-derived from td padding, so the accent is a 3px LEFT inset
-   on the first cell and the geometry stays the table's. Declared ONCE, here —
-   no other rule draws it. The row getting shorter now that the message line is
-   deleted is an OUTCOME of that deletion, never a target: no rule in this file
-   sets a row height, and the guards assert the absence of the message line
-   rather than any number.
-
-   R-warn-o (owl #41): the amber-50 row wash that shipped in batch 5 is GONE.
-   That is Miles ruling the amber-wall question I raised in my #21 — 247 of 249
-   live rows warn, so the wash was painting the table rather than a state. What
-   carries the warning now is this accent plus the 14px icon in the MC# cell,
-   and nothing else.
-
-   PRECEDENCE, by construction instead of by override: with the wash deleted NO
-   rule in this file paints a warned row's background — the accent below sets
-   box-shadow only, and only on td:first-child. So `.ptable tr.blocked td`
-   (--red-50, above) is uncontested on a row that is both blocked and warned,
-   and R-warn-g holds because nothing competes for the property, not because a
-   later rule out-specifies it. That is exactly why the old .prow.warn.blocked
-   override went out with the wash: it existed solely to out-specify the wash,
-   and now overrides nothing. */
-.ptable tr.prow.warn > td:first-child { box-shadow: inset 3px 0 0 0 var(--amber-300); }
-/* the MC# label and its warning icon are ONE group: .mccell's 16px gap
-   separates the CHEVRON from the identity, not the label from its own icon.
-   The frame's `content › icon-offset (utility-icons-small)` carries no px
-   value — R-warn-n, the same unmeasured-token situation as batch 5's
-   `subtone-offset` — so 4px here plus the button's own 4px pad reads as the
-   8px the frame shows. Rendered on every row, warned or not; it is layout, not
-   state. */
+/* ---- WITHDRAWN 2026-09-07 (owl #81, Miles) ----------------------------------
+   The incomplete-card row state and its hover card are GONE — the 3px
+   amber-300 left accent on `.prow.warn`, the `.warnhost` focusout host, the
+   `.warnbtn` trigger, the `.warnpop` card with its head, item list, closing
+   line, separator and `Open Card` link, and the card's own hover bridge (which
+   now lives with `.chipmenu` above, its only remaining member). Build-spec §4.4
+   is withdrawn whole: Pipeline draws NOTHING to mark a card as incomplete, and
+   an absent value reads as the em-dash every other absent value on this table
+   draws. Removed rather than left orphaned — dead selectors read as a live
+   treatment to the next person pricing a change. Do not rebuild this smaller:
+   §4.4 was already the reduced version of a full-row amber wash that lit 247 of
+   249 rows and stopped discriminating. */
+/* the MC# identity is its own group: .mccell's 16px gap separates the CHEVRON
+   from the identity, and this is the gap INSIDE the identity. It held the MC#
+   label and the incomplete-card icon until owl #81 withdrew the icon; the
+   4px stays because the group is what is being spaced, not the icon. Rendered
+   on every row — it is layout, not state. */
 .ptable .mcid { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
-/* rendered only on a warned row, because it is the focusout host and a clean
-   row must not attach a listener. Nothing in this subtree may gain transform /
-   filter / contain: .warnpop is position:fixed, and any of the three would
-   make THIS box its containing block instead of the viewport, re-anchoring the
-   card to the cell it was made fixed to escape. */
-.warnhost { display: flex; align-items: center; flex: none; }
-/* THE trigger — the row itself stays presentation only. The annotation asks
-   for a hit area larger than the glyph; Miles ruled the box up to the
-   documented target-size threshold (owl #46), so the icon sits in a box the
-   size of the spacing token below — the pad plus the minimum sizes are what
-   the pointer and the focus ring actually aim at. The row spacing already
-   accommodates it (his ruling says so in as many words). The ring is the
-   table's one shared rule above, not a second one restated here. */
-.warnbtn {
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none; background: none; padding: var(--space-4); cursor: pointer;
-  min-width: var(--space-24); min-height: var(--space-24);
-  border-radius: var(--radius-xs); color: var(--amber-600);
-}
-.warnbtn:hover { color: var(--amber-700); }
-/* shares .selectmenu/.duepop's fixed-box recipe above; the annotation's
-   slate-100 stroke is the ONE value that forks from it. The squared TOP-LEFT
-   is deliberate (owl #41): the card left-aligns to the icon and sits just
-   under it, and a corner missing exactly there reads as a caption growing out
-   of the icon rather than a panel floating over the row. Four explicit values,
-   top-left first, so the asymmetry cannot be read as an accident. */
-.warnpop {
-  width: 235px; z-index: 40; box-sizing: border-box;
-  border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
-  padding: var(--space-16); gap: var(--space-12); font-family: var(--font-sans);
-  border-color: var(--slate-100);
-  /* owl #53: the ONE value that forks from the shared overlay recipe besides
-     the stroke. Heavier on purpose — see --shadow-card. */
-  box-shadow: var(--shadow-card);
-}
-/* flipped ABOVE the icon — placeBox decided `up` and now says so in
-   warnPopPos, which is the only carrier of that fact. Mirror the square corner
-   to the BOTTOM-left so the card still grows out of the icon. The annotation
-   specifies the anchored-below case only; this default is mine, recorded as
-   R-warn-i and flagged to Miles. */
-.warnpop.flip { border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 0; }
-/* LAST-RESORT internal scroll (Miles, owl #43 item D, amending R-warn-h): the
-   rule is still no internal scrolling — this class exists only for a viewport
-   that genuinely cannot fit the card, where the alternative is content that
-   can never be reached. placeBox decides `over` from the measured height
-   against the viewport (the same second placement R-warn-h added), and the
-   template spells it here, so on every normal viewport this rule is inert and
-   the card stays uncapped. overscroll-behavior keeps a wheel at the card's
-   own end from chaining to the page and tripping the scroll dismisser while
-   the user is scrolling the card itself. In this one state the hover bridge
-   is clipped by the overflow — accepted: the card fills the viewport, so
-   there is no gap left for the bridge to span. */
-.warnpop.scroll { max-height: calc(100vh - var(--warn-vclamp)); overflow-y: auto; overscroll-behavior: contain; }
-/* THE HOVER BRIDGE. The card sits one --space-4 clear of the icon, so without
-   this the pointer crosses dead space, mouseleave fires, and the close timer
-   can run out before the pointer reaches `Open Card` — which is the whole
-   reason the annotation insists this is a hover CARD and not a tooltip. It is
-   transparent and paints nothing; it is exactly the gap tall; and it flips
-   with the card, because the case it matters most in is the bottom of the
-   viewport, which is precisely where the card flips. It cannot outlive the
-   card — the card is not rendered while closed, so neither is this.
-   Absolutely positioned, therefore out of flow: it is not a flex item of
-   .warnpop and takes no share of the card's gap. .warnpop is already
-   position:fixed and so is its own containing block — do NOT add
-   position:relative, which would drop the card back inside the .pscroll clip.
-   Two honest edges, both for the live pass (R-warn-p). (1) The containing
-   block is the card's PADDING box — the box inside the border, padding
-   included — so left:0/right:0 spans the full 235px LESS the two 1px borders,
-   and top:-4px starts 1px inside the gap rather than at its far edge. The
-   pointer crosses that one pixel within a frame, far inside the close delay.
-   (2) placeBox decides `up` BEFORE the on-screen clamp, so on a viewport too
-   short for the flipped card the clamp can slide it back over its own icon —
-   in that one case the strip is not over a gap at all. Neither is compensable
-   without a raw px here, which is a defect; the delay is what carries the
-   pointer across. */
-.warnpop::before, .chipmenu::before {
-  content: ''; position: absolute; left: 0; right: 0;
-  top: calc(var(--space-4) * -1); height: var(--space-4);
-}
-.warnpop.flip::before { top: auto; bottom: calc(var(--space-4) * -1); }
-.wphead { display: flex; align-items: center; gap: var(--space-8); }
-.wphead svg { color: var(--amber-700); }
-.wptitle { font-size: var(--text-body); font-weight: 600; color: var(--amber-700); }
-.wpitems { display: flex; flex-direction: column; gap: var(--space-12); }
-.wpitem { display: flex; flex-direction: column; gap: var(--space-4); }
-/* the frame gaps the card-identity item wider than the problem items */
-.wpitems .wpitem:first-child { gap: 6px; }
-.wplabel { font-size: var(--text-label); font-weight: 600; color: var(--slate-900); }
-/* the rationale's recipe — SHARED with the closing line (owl #43 item B):
-   both are message copy, so they wear one rule and a tweak lands once */
-.wpwhy, .wpfix { font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--slate-500); }
-.wpsep { height: 1px; background: var(--slate-300); }
-/* NOT underlined, and SETTLED — nothing in this card is underlined, at rest or
-   on hover/focus (Miles, owl #57, withdrawing the instruction outright).
-   History, so nobody re-derives it: the annotation TEXT said "UNDERLINED"
-   while the frame's own render never had it — `get_styled_text_segments`
-   returns `textDecoration: "NONE"`. The instruction was written for the
-   RETIRED design, where the warning was a text message under the card name and
-   an underline marked it as the trigger; when batch 10 moved to alert-icon +
-   hover-card the message line went away and the instruction lapsed, but nobody
-   retired it. Batch 10 resolved the contradiction toward the prose, JP reversed
-   it toward the frame on 2026-08-20, and Miles has now deleted the stale source
-   frame. Weight, colour and the focus ring carry the affordance. */
-.wpopen { font-size: var(--text-label); font-weight: 600; color: var(--blue-700); text-decoration: none; }
-
 /* links (node 431:17017) — both icons always render; the absent one is a
    non-interactive span at 30% */
 .srclink {

@@ -28,7 +28,6 @@ import {
   TASKS,
   cell,
   row,
-  rowWarning,
   task,
   taskRows,
 } from './helpers/pipeline-expanded.ts';
@@ -63,7 +62,7 @@ const openHarness = (): OpenHarness =>
     const computed = { ${['pipeSearched', 'pipeSortDef', 'pipelineRows', 'pipeWorkLive', 'pipeAutoOpen', 'pipeOpen', 'pipeKids'].map((n) => method(n)).join(', ')} };
     const DATA = { rows: [], searchQ: '', pipeFilters: PIPE_FILTERS_EMPTY(), pipeSort: null, expanded: {}, pipeShut: {}, workCardsByMc: {} };
     ${COMPUTED_CTX_JS}
-    const stamp = () => { DATA.rows = stampRows(DATA.rows, () => null, DATA.workCardsByMc); };
+    const stamp = () => { DATA.rows = stampRows(DATA.rows, DATA.workCardsByMc); };
     return {
       set: (k, v) => { DATA[k] = v; stamp(); },
       empty: () => PIPE_FILTERS_EMPTY(),
@@ -262,20 +261,20 @@ describe('the template gates on the DERIVED maps, not on the raw state (block 4)
     /* rendered both ways so the assertion cannot pass on a template that
        still reads `expanded`: that template opens the second render and not
        the first, which is exactly backwards */
-    const derived = renderPipelineTable({ pipelineRows: rows, rowWarning, workCardsByMc: TASKS, expanded: {}, pipeOpen: { 'MC-837': true } });
+    const derived = renderPipelineTable({ pipelineRows: rows, workCardsByMc: TASKS, expanded: {}, pipeOpen: { 'MC-837': true } });
     expect(taskRows(derived)).toHaveLength(2);
     const chev = /<button class="chevbtn[^"]*"[^>]*>/.exec(derived)![0];
     expect(chev).toMatch(/class="chevbtn open"/);
     expect(chev).toContain('aria-expanded="true"');
 
-    const manual = renderPipelineTable({ pipelineRows: rows, rowWarning, workCardsByMc: TASKS, expanded: { 'MC-837': true }, pipeOpen: {} });
+    const manual = renderPipelineTable({ pipelineRows: rows, workCardsByMc: TASKS, expanded: { 'MC-837': true }, pipeOpen: {} });
     expect(taskRows(manual)).toHaveLength(0);
     expect(/<button class="chevbtn[^"]*"[^>]*>/.exec(manual)![0]).toContain('aria-expanded="false"');
   });
 
   it('draws the children off `pipeKids` — the full map is not what an opened group iterates', () => {
     const narrowed = renderPipelineTable({
-      pipelineRows: rows, rowWarning, workCardsByMc: TASKS,
+      pipelineRows: rows, workCardsByMc: TASKS,
       pipeOpen: { 'MC-837': true }, pipeKids: { 'MC-837': [TASKS['MC-837']![0]!] },
     });
     expect(taskRows(narrowed)).toHaveLength(1);
@@ -308,7 +307,7 @@ describe('a multi-deliverable MC renders its task list ONCE (invariant 3)', () =
      firstOfMc. */
   const SIBLING = row({ cardId: 'main-1b', displayId: 'MC-837.2', name: 'Second deliverable, same MC' });
   const multi = renderPipelineTable({
-    pipelineRows: [PARENT, SIBLING, CHILDLESS], rowWarning, workCardsByMc: TASKS,
+    pipelineRows: [PARENT, SIBLING, CHILDLESS], workCardsByMc: TASKS,
     expanded: { 'MC-837': true }, writesEnabled: true,
   });
 
@@ -365,7 +364,6 @@ describe('a multi-deliverable MC renders its task list ONCE (invariant 3)', () =
        from the table entirely. */
     const second = renderPipelineTable({
       pipelineRows: [SIBLING], // the group's FIRST row filtered away
-      rowWarning: () => null,
       workCardsByMc: TASKS,
       expanded: { 'MC-837': true },
     });
@@ -421,7 +419,6 @@ const SHARED_SIBLING = row({
 const shared = (over: Record<string, unknown> = {}) =>
   renderPipelineTable({
     pipelineRows: [PARENT, SHARED_SIBLING, CHILDLESS],
-    rowWarning,
     workCardsByMc: TASKS,
     expanded: { 'MC-837': true },
     ...over,
@@ -467,7 +464,7 @@ describe('a shared MC surfaces its tasks once, at MC level — the caption is WI
        grows, which is the half that actually protects MC-825's 99 rows. */
     const many = renderPipelineTable({
       pipelineRows: [PARENT, SHARED_SIBLING, row({ cardId: 'main-1c' }), CHILDLESS],
-      rowWarning, workCardsByMc: TASKS, expanded: { 'MC-837': true },
+      workCardsByMc: TASKS, expanded: { 'MC-837': true },
     });
     expect(taskRows(many)).toHaveLength(2);
     expect(captionRows(many)).toHaveLength(0);

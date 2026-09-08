@@ -13,7 +13,6 @@ import {
   Deliverable,
   WorkCard,
   CardEvent,
-  ConflictAcknowledgement,
 } from '../src/models/index.ts';
 
 beforeAll(async () => {
@@ -171,17 +170,10 @@ describe('idempotency & situation keys', () => {
     await expect(CardEvent.create(base)).rejects.toThrow(/duplicate key/);
   });
 
-  it('conflict acknowledgements are unique per (project, situation key) — invariant 13', async () => {
-    const pid = projectId();
-    const ack = {
-      project_id: pid,
-      conflict_key: '2026-08-17|urgent-overlap|120|c1:render,c2:render',
-      acknowledged_by: 'PM@frostdesigngroup.com',
-    };
-    const created = await ConflictAcknowledgement.create(ack);
-    expect(created.acknowledged_by).toBe('pm@frostdesigngroup.com'); // lowercased
-    await expect(ConflictAcknowledgement.create(ack)).rejects.toThrow(/duplicate key/);
-  });
+  /* The conflict-acknowledgement uniqueness test stood here until 2026-09-08
+     (owl #87): the collection is retired, its rows archived by migration 011,
+     and no model maps it any more. `test/migrations-archive-acks.test.ts`
+     proves the archive; nothing here has a schema left to assert. */
 });
 
 describe('projects — FR-1.1', () => {

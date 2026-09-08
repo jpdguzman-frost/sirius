@@ -11,9 +11,8 @@ import { forecast, type Forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
 import { loadProjectModel } from './model-grid.ts';
-import { classifyList } from './status-rules.ts';
+import { classifyList, type ListStatus } from './status-rules.ts';
 import { WorkCard } from '../models/index.ts';
-import type { Milestone } from './conflicts.ts';
 import { loadSprintItems, type SprintItemsResult } from './sprint-items.ts';
 
 /** What a caller that did not ask for sprint items gets — never undefined, so
@@ -36,13 +35,6 @@ const MANILA_DAY = new Intl.DateTimeFormat('en-CA', {
 });
 export const manilaDate = (d: Date): string => MANILA_DAY.format(d);
 export const manilaToday = (): string => MANILA_DAY.format(new Date());
-
-const mondayOf = (d: Date) => {
-  const t = new Date(d);
-  const day = t.getDay() === 0 ? 7 : t.getDay();
-  t.setDate(t.getDate() - (day - 1));
-  return localDate(t);
-};
 
 /** Gantt segment kinds. `renderOverdue` is `render` drawn late (BR-9). */
 export type PlannerPhaseName = 'sketch' | 'review' | 'render' | 'renderOverdue';
@@ -81,7 +73,7 @@ export interface PipelineRow {
   mcNumber: string | null;
   name: string;
   currentList: string | null;
-  status: 'pending' | 'ongoing' | 'done';
+  status: ListStatus;
   statusNote: string | null;
   /**
    * The MAIN card's own `Difficulty: …` label and `Urgent` label. Since owl
@@ -159,7 +151,6 @@ export interface PipelineRow {
     workFinish: string;
     late: boolean;
   }) | null;
-  missing: string[];
 }
 
 /**
@@ -178,7 +169,7 @@ export interface WorkCardWire {
   name: string;
   taskPrefix: string | null;
   currentList: string | null;
-  status: string;
+  status: ListStatus;
   trelloUrl: string | null;
   figmaUrl: string | null;
   due: string | null;
@@ -222,7 +213,14 @@ export interface PipelineResult {
    * at source); it stops the gap being silent.
    */
   unattachedWork: { cards: number; mcNumbers: string[] };
-  corrections: Array<{ cardId: string; displayId: string; name: string; missing: string[]; trelloUrl: string | null }>;
+  /* NO `corrections`, AND NO PER-ROW `missing`. The §4.4 incomplete-card
+     warning was WITHDRAWN whole on 2026-09-08 (owl #86: the missing-difficulty
+     question is closed, and no design exists for an ingestion-health surface).
+     The three checks it fed — difficulty label, due date, Figma attachment —
+     lived here rather than in the UI because the display vocabulary belonged
+     with them; there is nothing left to display, so they are gone rather than
+     computed for nobody. Anything that wants them back reads the row's own
+     `difficulty` / `deadline` / `figmaUrl`, which never left. */
   model: { provenance: unknown };
   /**
    * Capacity-footer totals, keyed by slotted week Monday 'YYYY-MM-DD'. Weeks
@@ -329,16 +327,21 @@ export async function loadPipeline(
     r.weight = group > 0 ? 1 + tasks / group : 1;
   }
 
-  const corrections = rows
-    .filter((r) => r.missing.length > 0)
-    .map((r) => ({ cardId: r.cardId, displayId: r.displayId, name: r.name, missing: r.missing, trelloUrl: r.trelloUrl }));
-
   // Planner capacity footer: one entry per week that actually holds work —
   // over ALL slotted rows, not just the ones the client happens to be showing.
   // Runs after the BR-6c pass above so `cards` speaks card-equivalents.
   const perWeek: PipelineResult['perWeek'] = {};
   for (const r of rows) {
-    if (r.status === 'done' || !r.slottedWeek) continue; // same filter the planner's row list uses
+    /* A finished row does not consume this week's capacity, and neither does
+       an EXCLUDED one: ops work and discarded work are not Sirius's to plan
+       (§7a), and before the enumeration landed `Ops Work Complete` was already
+       skipped here for the accidental reason that the keyword classifier
+       called it done. NOTE the divergence this opens: the planner's own row
+       list (`/replot`, src/routes/schedule.ts) still filters on `done` alone,
+       so an excluded row would be handed to the planner while being absent
+       from the footer it fills. Raised to the main thread 2026-09-08; that
+       file is not this agent's to change. */
+    if (r.status === 'done' || r.status === 'excluded' || !r.slottedWeek) continue;
     const t = (perWeek[r.slottedWeek] ??= {
       cards: 0, rows: 0, hard: 0, hardShare: 0, over: false, hardOver: false, hardWarn: false,
     });
@@ -372,7 +375,7 @@ export async function loadPipeline(
     ? await loadSprintItems(projectId, model, workCards, rows)
     : emptySprintItems();
 
-  return { rows, workCardsByMc, mcDeliverables, unattachedWork, corrections, model: { provenance }, perWeek, sprintItems };
+  return { rows, workCardsByMc, mcDeliverables, unattachedWork, model: { provenance }, perWeek, sprintItems };
 }
 
 /**
@@ -452,12 +455,6 @@ function workFinishOf(f: Forecast, startDate: string): string {
 }
 
 function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string): PipelineRow {
-  // display vocabulary lives with the checks (frame §4.4), not in the UI
-  const missing: string[] = [];
-  if (!d.difficulty) missing.push('difficulty label');
-  if (!d.deadline) missing.push('due date');
-  if (!d.figma_url) missing.push('Figma attachment');
-
   const startDate = (d.slotted_week as string | null) ?? today;
   let fc: PipelineRow['forecast'] = null;
   if (d.difficulty) {
@@ -522,43 +519,11 @@ function toRow(d: Record<string, unknown>, model: EmpiricalModel, today: string)
     weight: 1, // BR-6c weight lands after the work-card load in loadPipeline
     phases: buildPhases(slottedWeek, fc),
     forecast: fc,
-    missing,
   };
 }
 
-/** Deadlines view input: two entries per slotted, forecastable deliverable (FR-6.3). */
-export function toMilestones(
-  rows: PipelineRow[],
-  workCardsByMc: PipelineResult['workCardsByMc'] = {},
-): Milestone[] {
-  const out: Milestone[] = [];
-  for (const r of rows) {
-    if (!r.forecast || !r.slottedWeek) continue;
-    for (const phase of ['sketch', 'render'] as const) {
-      const date = phase === 'sketch' ? r.forecast.sketchDelivery : r.forecast.renderDelivery;
-      out.push({
-        cardId: r.cardId,
-        displayId: r.displayId,
-        name: r.name,
-        phase,
-        date,
-        week: mondayOf(new Date(date + 'T00:00:00')),
-        urgent: r.urgency === 'Urgent',
-        deadline: r.deadline,
-        late: phase === 'render' && r.forecast.late,
-        weight: r.weight, // BR-6c default on Deadlines too, pending the errata answer
-        trelloUrl: r.trelloUrl,
-        figmaUrl: r.figmaUrl,
-        // owl #64's badge row and subtitle. `cards` counts the MC GROUP's work
-        // cards (invariant 4) — every deliverable under one MC therefore
-        // reports the same number, which is the truth: the work is attached to
-        // the group and cannot be split between its deliverables.
-        difficulty: r.difficulty,
-        currentList: r.currentList,
-        requestor: r.requestor,
-        cards: r.mcNumber ? (workCardsByMc[r.mcNumber]?.length ?? 0) : 0,
-      });
-    }
-  }
-  return out;
-}
+/* `toMilestones()` WAS HERE, deleted 2026-09-08 with the acknowledgement
+   retirement (owl #87). It fed exactly one consumer, `GET /deadlines`, and
+   that route went with the conflict/acknowledged/replot block; the Deadlines
+   tab has been built from schedule rows since block 3. Its `Milestone` type
+   lived in `src/services/conflicts.ts`, which is deleted in the same build. */

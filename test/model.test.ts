@@ -2,6 +2,13 @@
  * T040/T041/T042 — model refresh: dwell derivation, percentile math,
  * BR-4 keying, throughput, delta alerts, per-project loader fallback and
  * the model read route (FR-7.6, FR-7.7; AC-11 data side).
+ *
+ * FIXTURE NOTE (2026-09-08, block 6). The done-list fixtures said `'Done'`,
+ * which the retired keyword classifier matched on the word alone. `Done` bare
+ * is not a list on any real board — §7a's Done lists are named `Design
+ * Complete`, `➜ Screen: Done` and so on — so the fixtures now use one. The
+ * §7a-specific model guards (an excluded list is neither dwell nor a
+ * completion) live in test/model-refresh-lane-states.test.ts.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -41,7 +48,7 @@ describe('derivation (pure)', () => {
     const events = [
       { trello_card_id: 'c1', to_list: 'Design', occurred_at: at(0) },
       { trello_card_id: 'c1', to_list: 'Sent for Client Review', occurred_at: at(24) }, // 1d design
-      { trello_card_id: 'c1', to_list: 'Done', occurred_at: at(24 + 48) }, // 2d review
+      { trello_card_id: 'c1', to_list: 'Design Complete', occurred_at: at(24 + 48) }, // 2d review
     ];
     const samples = deriveSamples(events, [{ trello_card_id: 'c1', difficulty: 'Medium', lane: 'design' }]);
     expect(samples).toHaveLength(2);
@@ -54,7 +61,7 @@ describe('derivation (pure)', () => {
       { trello_card_id: 'c1', to_list: 'Production Backlog', occurred_at: at(0) }, // pending → no sample
       { trello_card_id: 'c1', to_list: 'Design', occurred_at: at(10) }, // open interval → excluded
       { trello_card_id: 'c2', to_list: 'Design', occurred_at: at(0) },
-      { trello_card_id: 'c2', to_list: 'Done', occurred_at: at(24) }, // no difficulty → excluded
+      { trello_card_id: 'c2', to_list: 'Design Complete', occurred_at: at(24) }, // no difficulty → excluded
     ];
     const samples = deriveSamples(events, [
       { trello_card_id: 'c1', difficulty: 'Easy', lane: 'design' },
@@ -96,9 +103,9 @@ describe('derivation (pure)', () => {
 
   it('throughput counts done-entries per week per difficulty', () => {
     const events = [
-      { trello_card_id: 'c1', to_list: 'Done', occurred_at: new Date('2026-07-06T10:00:00Z') },
-      { trello_card_id: 'c2', to_list: 'Done', occurred_at: new Date('2026-07-07T10:00:00Z') },
-      { trello_card_id: 'c3', to_list: 'Done', occurred_at: new Date('2026-07-14T10:00:00Z') },
+      { trello_card_id: 'c1', to_list: 'Design Complete', occurred_at: new Date('2026-07-06T10:00:00Z') },
+      { trello_card_id: 'c2', to_list: 'Design Complete', occurred_at: new Date('2026-07-07T10:00:00Z') },
+      { trello_card_id: 'c3', to_list: 'Design Complete', occurred_at: new Date('2026-07-14T10:00:00Z') },
     ];
     const rows = computeThroughput(events, [
       { trello_card_id: 'c1', difficulty: 'Easy', lane: 'design' },
@@ -132,7 +139,7 @@ describe('refresh + loader (integration)', () => {
     await CardEvent.insertMany([
       { project_id: p._id, trello_card_id: 'c1', source_event_id: 'e1', to_list: 'Design', occurred_at: at(0) },
       { project_id: p._id, trello_card_id: 'c1', source_event_id: 'e2', to_list: 'Sent for Client Review', occurred_at: at(36) },
-      { project_id: p._id, trello_card_id: 'c1', source_event_id: 'e3', to_list: 'Done', occurred_at: at(36 + 60) },
+      { project_id: p._id, trello_card_id: 'c1', source_event_id: 'e3', to_list: 'Design Complete', occurred_at: at(36 + 60) },
     ]);
     return p;
   }
@@ -174,7 +181,7 @@ describe('refresh + loader (integration)', () => {
     await CardEvent.insertMany([
       { project_id: p._id, trello_card_id: 'c9', source_event_id: 'e9a', to_list: 'Design', occurred_at: at(0) },
       { project_id: p._id, trello_card_id: 'c9', source_event_id: 'e9b', to_list: 'Sent for Client Review', occurred_at: at(12) },
-      { project_id: p._id, trello_card_id: 'c9', source_event_id: 'e9c', to_list: 'Done', occurred_at: at(12 + 24) },
+      { project_id: p._id, trello_card_id: 'c9', source_event_id: 'e9c', to_list: 'Design Complete', occurred_at: at(12 + 24) },
     ]);
     await refreshProjectModel(p._id);
     expect(await ModelGrid.countDocuments({ project_id: p._id, metric: 'design', difficulty: 'Medium' })).toBe(0); // grid IS sparse
@@ -206,7 +213,7 @@ describe('refresh + loader (integration)', () => {
     await CardEvent.insertMany([
       { project_id: p._id, trello_card_id: 'c10', source_event_id: 'f1', to_list: 'Asset Production', occurred_at: at(0) },
       { project_id: p._id, trello_card_id: 'c10', source_event_id: 'f2', to_list: 'Sent for Client Review', occurred_at: at(12 * 24) },
-      { project_id: p._id, trello_card_id: 'c10', source_event_id: 'f3', to_list: 'Done', occurred_at: at(12 * 24 + 24) },
+      { project_id: p._id, trello_card_id: 'c10', source_event_id: 'f3', to_list: 'Design Complete', occurred_at: at(12 * 24 + 24) },
     ]);
     await refreshProjectModel(p._id);
 

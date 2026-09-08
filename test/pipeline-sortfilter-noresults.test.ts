@@ -93,7 +93,7 @@ const renderPipestack = (state: { pipeNoResults: boolean; pipelineRows?: PipeRow
       chipPop: null,
       chipPopFlip: false,
       pipeNoResults: state.pipeNoResults,
-      ...pipeTableData({ pipelineRows: state.pipelineRows ?? [], rowWarning: () => null }),
+      ...pipeTableData({ pipelineRows: state.pipelineRows ?? [] }),
     },
   }).toHTML();
 
@@ -163,7 +163,7 @@ describe('the no-results state replaces the whole table block (owl #76)', () => 
   });
 
   it('renders the table — thead and all — whenever the verdict is false', () => {
-    const rows: PipeRow[] = [{ cardId: 'c1', mcNumber: 'MC-800', mcLabel: 'MC-800', displayId: 'MC-800', name: 'A card', urgency: 'Non-Urgent', missing: [], trelloUrl: null }];
+    const rows: PipeRow[] = [{ cardId: 'c1', mcNumber: 'MC-800', mcLabel: 'MC-800', displayId: 'MC-800', name: 'A card', urgency: 'Non-Urgent', trelloUrl: null }];
     const html = renderPipestack({ pipeNoResults: false, pipelineRows: rows });
     expect(html).toContain('<thead');
     expect(html).toContain('pscrollwrap');

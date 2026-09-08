@@ -3,6 +3,13 @@
 **Status:** accepted
 **Date:** 2026-08-17
 
+> **Superseded 2026-09-08 (owl #87, JP).** The acknowledgement machinery
+> this decision keyed was deleted whole — storage, endpoints, the three
+> per-week rules — and stored rows were archived by migration 011, never
+> dropped. OD-4 is closed as moot (there is no acknowledgement left to
+> expire). Kept for the record: migration 007 still exists and still needs
+> this context to explain the key shape it upgrades.
+
 ## Context
 
 Acknowledgements are keyed on the *situation* so that any change to the

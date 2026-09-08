@@ -610,10 +610,10 @@ export function renderSprintModal(state: SprintModalState = {}): string {
  *
  *   - every array the template iterates MUST be stubbed, or the section
  *     renders nothing and the assertion passes on an empty string;
- *   - the recipe UNDER TEST is never stubbed. `rowWarning` and `clarified`
- *     are therefore required arguments, extracted from the shipped
- *     the shipped app scripts by the suites that use them, so a render
- *     test proves the real function and the real markup together.
+ *   - the recipe UNDER TEST is never stubbed. `clarified` is therefore a
+ *     required argument, extracted from the shipped app scripts by the suites
+ *     that use it, so a render test proves the real function and the real
+ *     markup together.
  * ------------------------------------------------------------------ */
 
 /** A Pipeline row as `src/services/pipeline.ts toRow()` puts it on the wire. */
@@ -623,8 +623,6 @@ export interface PipeRow {
   mcLabel: string;
   displayId: string;
   name: string;
-  /** the read-only Trello gaps — 'difficulty label' · 'due date' · 'Figma attachment' */
-  missing: string[];
   trelloUrl: string | null;
   figmaUrl?: string | null;
   blocker?: string | null;
@@ -643,20 +641,6 @@ export interface PipeRow {
 
 export interface PipelineTableState {
   pipelineRows: PipeRow[];
-  /** cardId whose warning popover is open, or null for every row closed */
-  warnPop?: string | null;
-  /**
-   * Batch 10 (T165): `placeBox` now returns the flip decision alongside the
-   * coords, and the markup reads it — `up` is what puts `flip` on the card, and
-   * `flip` is what moves the hover bridge to the other side. It is therefore a
-   * view state a render test has to be able to set, not an implementation
-   * detail: the unflipped card and the flipped one are two different renders.
-   * `over` is the same contract for the last-resort scroll state (owl #43
-   * item D): placeBox decides it, `scroll` on the card spells it.
-   */
-  warnPopPos?: { left: number; top: number; up?: boolean; over?: boolean };
-  /** the SHIPPED recipe, executed out of the app scripts — never a stub */
-  rowWarning: (row: PipeRow) => unknown;
   /**
    * expanded MC groups (owl #45): mcNumber → true is the reader's HAND-opened
    * state. The template never reads it — it is the harness's fallback for
@@ -700,15 +684,15 @@ export interface PipelineTableState {
 export type WorkCardRow = Pick<WorkCardWire, 'cardId' | 'name'> & Partial<WorkCardWire>;
 
 /**
- * The template reads `row.warning` and `row.hasTasks`, fields `loadAll`
- * STAMPS once per load — deliberately not expressions, so neither runs per
- * row per render (the performance law). The harness stamps them the same way
- * rather than handing Ractive functions: the recipes under test are still the
- * shipped ones, and the render proves the same wiring the browser runs.
- * Exported so the executed-computed harnesses re-stamp through the same
- * recipe rather than restating it.
+ * The template reads `row.hasTasks`, a field `loadAll` STAMPS once per load —
+ * deliberately not an expression, so it does not run per row per render (the
+ * performance law). The harness stamps it the same way rather than handing
+ * Ractive a function, so the render proves the same wiring the browser runs.
+ * Exported so the executed-computed harnesses re-stamp the same way rather
+ * than restating it. (`row.warning` was stamped here too until owl #81
+ * withdrew build-spec §4.4 and the recipe behind it.)
  */
-export const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, byMc: Record<string, WorkCardRow[]>) => {
+export const stampRows = (rows: PipeRow[], byMc: Record<string, WorkCardRow[]>) => {
   const seen = new Set<string>();
   /* owl #52: how many deliverable rows carry each MC number. Counted from the
      rows themselves, which is exactly what the server does (`rowsByMc` in
@@ -720,11 +704,11 @@ export const stampRows = (rows: PipeRow[], recipe: (row: PipeRow) => unknown, by
   return rows.map((r) => {
     const mcDeliverables = perMc.get(r.mcNumber) ?? 1;
     /* block 4: the row carries its own work cards (`r.work`, stamped in
-       loadAll beside blob/warning) and `hasTasks` is that array's length —
-       the same truth as the key-presence test it replaces, since the server
-       only creates a key by pushing into it */
+       loadAll beside the blob) and `hasTasks` is that array's length — the
+       same truth as the key-presence test it replaces, since the server only
+       creates a key by pushing into it */
     const work = byMc[r.mcNumber] ?? [];
-    return { ...r, warning: recipe(r), work, hasTasks: work.length > 0, mcDeliverables, sharedMc: mcDeliverables > 1 };
+    return { ...r, work, hasTasks: work.length > 0, mcDeliverables, sharedMc: mcDeliverables > 1 };
   });
 };
 
@@ -802,10 +786,8 @@ export function renderPipelineTable(state: PipelineTableState): string {
 export function pipeTableData(state: PipelineTableState): Record<string, unknown> {
   return {
     pipeCols: PIPE_COLS,
-    pipelineRows: stampRows(state.pipelineRows, state.rowWarning, state.workCardsByMc ?? {}),
+    pipelineRows: stampRows(state.pipelineRows, state.workCardsByMc ?? {}),
     pipeMcAnchor: mcAnchor(state.pipelineRows),
-    warnPop: state.warnPop ?? null,
-    warnPopPos: state.warnPopPos ?? { left: 0, top: 0, up: false },
     // the two DERIVED gates the table reads (block 4); absent, they are what
     // the shipped computeds yield with no work axis and no derived sort live
     pipeOpen: state.pipeOpen ?? state.expanded ?? {},

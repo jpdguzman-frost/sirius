@@ -23,10 +23,14 @@
       that moves one between days is the server's rollover job, which leaves
       no marker (#74 §3, #75 §2).
 
-      WHICH DAY a card sits on is its forecast FINISH — the day the delivery
-      is expected to land, and the day rollover moves. It is not the client's
-      deadline: that lives on Sprint Schedules, beside the tick and the bar
-      that give it something to be compared against.
+      WHICH DAY a card sits on is the day it STARTS — the day the team is
+      slated to pick the work up, which is the design lead's instrument and
+      the reason this view runs on days at all. Flipped on 2026-09-08 by spec
+      v1.3 §6.2 (with the readings joined in owl #86): it was the forecast
+      finish, which left the lead arranging a date the engine owns. The finish
+      still gates the card and still decides when rollover moves it. It is not
+      the client's deadline either: that lives on Sprint Schedules, beside the
+      tick and the bar that give it something to be compared against.
 
       There is NO COLUMN TABLE here, no filter-and-sort pair and no search
       field: navigation is the month navigator plus scrolling (#74 §2). }}
@@ -95,10 +99,12 @@
                 at a time. This is passive GROUPING and nothing more — no
                 drop target, no arrow-key move, no put-it-back control. The
                 planner that used to own this shape retired with the tab: a
-                card's day is its forecast finish, and the server is the only
-                thing that changes it. A weekday column still renders on a
-                holiday; work simply never lands on one, so it draws the
-                empty card like any other quiet day. }}
+                card's day is the day it starts, plotted on Sprint Schedules
+                and moved afterwards only by the server's rollover — never
+                from here (spec v1.3 §6.2). A weekday column still renders on a
+                holiday and carries no flag saying so — a start plotted on one
+                draws there like on any other day, and a column with nothing
+                on it draws the empty card like any other quiet day. }}
             <div class="dldays">
               {{#each w.days as d}}
                 <div class="dlday">

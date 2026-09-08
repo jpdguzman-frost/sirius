@@ -330,12 +330,19 @@ describe('a card is on this tab only because someone put it there (#74 §1)', ()
        reconciled against the entire board, so cards nobody had scheduled
        appeared as deadlines. A row with no `startsOn` has not been plotted; a
        row with no `finish` cannot be forecast (no difficulty label, or the
-       card left the board) and has no day to sit on. Neither is drawn, and
-       neither rolls. The unplotted fixture carries a finish ON PURPOSE: the
-       server never emits that shape (a row without a start has no finish),
-       so it is the only way to prove the client's own half of the gate — a
-       revert proof that dropped the start check passed while both were null
-       (block 3 VALIDATE, proof P4). */
+       card left the board) and has no forecast to gate on. Neither is drawn,
+       and neither rolls.
+
+       WHICH HALF EACH FIXTURE CATCHES CHANGED with the placement key (spec
+       v1.3 §6.2, 2026-09-08). The `finish` half is now the load-bearing one:
+       `w3` is plotted on a day the lane draws, so dropping `!r.finish` would
+       put an unforecastable card on screen and this assertion is what stops
+       it. The `startsOn` half is now held TWICE — by the gate and by the
+       column lookup, which finds nothing for a null day — so `w2` can no
+       longer fail alone, and it stays as the statement of the rule rather
+       than as its only proof (it was the reverse under the finish-day key;
+       block 3 VALIDATE, proof P4). It still carries a finish on purpose: the
+       server never emits that shape. */
     const w = oneWeek([
       row(),
       row({ id: 'i2', cardId: 'w2', startsOn: null, finish: '2026-08-06' }),
@@ -344,18 +351,41 @@ describe('a card is on this tab only because someone put it there (#74 §1)', ()
     expect(w.cards.map((c) => c.cardId)).toEqual(['w1']);
   });
 
-  it('places a card on its forecast FINISH, not on the day work starts', () => {
-    // PLAN.md B2: the finish is what "slated for a day" means for a delivery,
-    // and it is what the rollover moves
+  it('places a card on the day it STARTS, not on its forecast finish', () => {
+    /* Spec v1.3 §6.2 (2026-09-08) reversing block 3's B2: the day work begins
+       is the design lead's own instrument, and a computed finish is not a
+       date the lead can choose or move. The finish keeps its two other jobs —
+       half of the gate above, and rollover's test — and loses this one. */
     const w = oneWeek([row({ startsOn: '2026-08-03', finish: '2026-08-06' })]);
-    expect(w.days.find((d) => d.day === '2026-08-06')!.cards.map((c) => c.cardId)).toEqual(['w1']);
-    expect(w.days.find((d) => d.day === '2026-08-03')!.cards).toEqual([]);
+    expect(w.days.find((d) => d.day === '2026-08-03')!.cards.map((c) => c.cardId)).toEqual(['w1']);
+    expect(w.days.find((d) => d.day === '2026-08-06')!.cards).toEqual([]);
   });
 
-  it('leaves a card whose finish falls outside the shown weeks undrawn', () => {
-    // the month is a SCOPE, as it always was (R-dl-l): a September finish is
+  it('counts a card in the week it STARTS, even when its finish lands in the next one', () => {
+    /* The key decides the WEEK as well as the day, and a Friday start with
+       the following Tuesday's finish is the only shape where the two answers
+       differ. Every number below sat one lane to the right under the retired
+       finish-day rule — the week's three counts, its load, and the day
+       header's own pair. */
+    const [first, second] = build([
+      row({ startsOn: '2026-08-07', finish: '2026-08-11', status: 'pending', urgent: true }),
+    ]);
+    const fri = first!.days.find((d) => d.day === '2026-08-07')!;
+    expect(fri.cards.map((c) => c.cardId)).toEqual(['w1']);
+    expect([fri.pending, fri.done]).toEqual([1, 0]);
+    expect([first!.pending, first!.urgent, first!.done, first!.load]).toEqual([1, 1, 0, 1]);
+    expect(second!.cards).toEqual([]);
+    expect([second!.pending, second!.urgent, second!.done, second!.load]).toEqual([0, 0, 0, 0]);
+  });
+
+  it('leaves a card whose START falls outside the shown weeks undrawn', () => {
+    // the month is a SCOPE, as it always was (R-d2-d): a September start is
     // not smuggled into an August lane
-    expect(build([row({ finish: '2026-09-09' })]).flatMap((w) => w.cards)).toEqual([]);
+    expect(build([row({ startsOn: '2026-09-09', finish: '2026-09-11' })]).flatMap((w) => w.cards)).toEqual([]);
+    // …and the mirror, which is what the flip changed: a card that STARTS in
+    // the shown weeks is drawn even though its finish has left the month
+    expect(build([row({ startsOn: '2026-08-24', finish: '2026-09-02' })]).flatMap((w) => w.cards).map((c) => c.cardId))
+      .toEqual(['w1']);
   });
 
   it('carries the card’s own fields through, label built by the ONE labeller', () => {
@@ -420,11 +450,12 @@ describe('the three counts are independent, and none is derived from another (#7
   });
 
   it('gives each DAY the two counts its header shows, and the week the three (#75 §4)', () => {
-    // the asymmetry is drawn, not an oversight: leave it
+    // the asymmetry is drawn, not an oversight: leave it. The rows are told
+    // apart by `startsOn`, which is what puts a card in a column (§6.2)
     const w = oneWeek([
-      row({ id: 'a', cardId: 'a', status: 'pending', finish: '2026-08-04' }),
-      row({ id: 'b', cardId: 'b', status: 'done', finish: '2026-08-04' }),
-      row({ id: 'c', cardId: 'c', status: 'ongoing', finish: '2026-08-05' }),
+      row({ id: 'a', cardId: 'a', status: 'pending', startsOn: '2026-08-04' }),
+      row({ id: 'b', cardId: 'b', status: 'done', startsOn: '2026-08-04' }),
+      row({ id: 'c', cardId: 'c', status: 'ongoing', startsOn: '2026-08-05' }),
     ]);
     const tue = w.days.find((d) => d.day === '2026-08-04')!;
     const wed = w.days.find((d) => d.day === '2026-08-05')!;
@@ -462,9 +493,9 @@ describe('the progress line counts work cards, not weighted load (PLAN.md B5)', 
 describe('the day columns are the working week (PLAN.md B7)', () => {
   it('draws Monday to Friday in order, named by position, and no weekend', () => {
     /* The frame draws no holiday state, so a column carries no flag and the
-       builder reads no calendar (simplification pass, F-1): the engine's
-       WORKDAY never puts a finish on a holiday, so nothing can land there,
-       and the column renders like any other. The names are fixed by position
+       builder reads no calendar (simplification pass, F-1): a day the PM
+       plots on renders like any other, holiday or not, and the tab says
+       nothing about it either way. The names are fixed by position
        — the Monday plus zero to four — never parsed from the date. */
     const w = oneWeek([]);
     expect(w.days.map((d) => d.name)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
@@ -490,9 +521,9 @@ describe('the day columns are the working week (PLAN.md B7)', () => {
        re-sort here would make the two tabs list the same cards differently for
        no reason a reader could see. */
     const w = oneWeek([
-      row({ id: 'z', cardId: 'z', finish: '2026-08-05' }),
-      row({ id: 'a', cardId: 'a', finish: '2026-08-05' }),
-      row({ id: 'm', cardId: 'm', finish: '2026-08-04' }),
+      row({ id: 'z', cardId: 'z', startsOn: '2026-08-05' }),
+      row({ id: 'a', cardId: 'a', startsOn: '2026-08-05' }),
+      row({ id: 'm', cardId: 'm', startsOn: '2026-08-04' }),
     ]);
     expect(w.days.find((d) => d.day === '2026-08-05')!.cards.map((c) => c.cardId)).toEqual(['z', 'a']);
     // …and across days the lane reads by DAY first, then by row order
@@ -778,13 +809,20 @@ describe('the deadlines stylesheet keeps the rules the frame is made of', () => 
     expect(faded[0]!.body).toMatch(/opacity\s*:\s*0?\.4(?![\d])/);
   });
 
-  it('paints the quote bar red-500, FOUR pixels from the card’s edge (R2-1 / R5-1)', () => {
-    /* The frame's export carries a two-pixel inset — the card's left edge is
-       path x = 2 — so a view box that starts at minus two paints eight. The
-       box starts at two, is eight wide (the inner curve reaches x = 10), and
-       the band is the four pixels from the edge to the inner curve. */
+  it('paints the quote bar amber-600, FOUR pixels from the card’s edge (owl #86; R2-1 / R5-1)', () => {
+    /* THE COLOUR is owl #86's ruling (2026-09-08): the bar carries the same
+       amber as the Urgent badge above it, so the two say urgency in one
+       voice. It was red until then, which had the badge and the bar
+       disagreeing about the same input — the absence assertion below is what
+       stops the old hue coming back beside the new one.
+       THE GEOMETRY is untouched by that ruling. The frame's export carries a
+       two-pixel inset — the card's left edge is path x = 2 — so a view box
+       that starts at minus two paints eight. The box starts at two, is eight
+       wide (the inner curve reaches x = 10), and the band is the four pixels
+       from the edge to the inner curve. */
     const quote = bodyOf('dlquote');
-    expect(quote).toContain('fill: var(--red-500)');
+    expect(quote).toContain('fill: var(--amber-600)');
+    expect(quote, 'the retired red is still painted somewhere on the bar').not.toContain('--red-500');
     expect(quote).toMatch(/(?<![\w-])width:\s*8px/);
     expect(TEMPLATE).toContain('class="dlquote" viewBox="2 1 8 180"');
   });
@@ -904,8 +942,9 @@ describe('the milestone tab is gone whole, not hidden', () => {
   });
 
   it('stops fetching the retired payload on every load', () => {
-    // PLAN.md B1: the tab reads the rows it already has; the old route parks
-    // server-side with no caller rather than being deleted (ask 1)
+    // PLAN.md B1: the tab reads the rows it already has. The old route had no
+    // caller from the rebuild onwards and is deleted outright on 2026-09-08
+    // (owl #87), so there is nothing left to fetch even by accident.
     expect(fnBody('loadAll')).not.toContain('/deadlines');
   });
 

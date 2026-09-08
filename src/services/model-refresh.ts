@@ -10,9 +10,16 @@
  *  - review time = dwell in lists matching /sent for client review/i,
  *    pooled GLOBALLY (the Appendix review row is one pool — the client is
  *    the client regardless of lane);
- *  - design time = dwell in lists classified `ongoing` by BR-10 rules that
- *    are not review lists, keyed by the LANE OF THE LIST DWELLED IN
+ *  - design time = dwell in lists classified `ongoing` by BR-10 that are not
+ *    review lists, keyed by the LANE OF THE LIST DWELLED IN
  *    (BR-2 "working-lane dwell" — not the card's current list);
+ *  - dwell in an EXCLUDED list is not measured at all (§7a, 2026-09-08): ops
+ *    work and discarded work are real time on a real board, but they are not
+ *    the work this model forecasts, and feeding them in would move every
+ *    percentile the PM reads. This is a REAL change of input, not a
+ *    rearrangement — under the retired keyword classifier `Working on Ops
+ *    Work` counted as design time and `Ops Work Complete` counted as a
+ *    completion. The model must be refreshed after this ships;
  *  - dwell is fractional days (§1.4 — coarser data would break comparability);
  *  - percentiles: Average = mean; 0.7/0.85/0.95 by linear interpolation on
  *    the sorted sample;
@@ -70,6 +77,15 @@ export function deriveSamples(events: EventLike[], cards: CardMeta[]): Sample[] 
       if (days <= 0) continue;
       if (REVIEW_RE.test(listName)) {
         samples.push({ trello_card_id: cardId, difficulty: m.difficulty, lane: 'design', metric: 'review', days, completed_at: next.occurred_at });
+        /* `=== 'ongoing'` and nothing else, which is what keeps EXCLUDED dwell
+           out: ops work and discarded work are real hours on a real board, but
+           they are not the work this model forecasts. No separate excluded
+           branch — one was written and removed the same day (2026-09-08)
+           because no input could reach it: the only way an excluded list could
+           escape this test is by ALSO matching the review regex above, and
+           none of the eight is named anything like a client review. A guard
+           that cannot fail is worse than none, and the mapping itself is what
+           test/model-refresh-lane-states.test.ts pins. */
       } else if (classifyList(listName) === 'ongoing') {
         const lane = laneOf({ currentList: listName, labels: [] }); // the list dwelled in
         samples.push({ trello_card_id: cardId, difficulty: m.difficulty, lane, metric: 'design', days, completed_at: next.occurred_at });
@@ -151,6 +167,10 @@ export function computeThroughput(events: EventLike[], cards: CardMeta[]): Throu
   const done = new Map<string, Date>(); // card → first time it entered a done list
   const ordered = [...events].sort((a, b) => a.occurred_at.getTime() - b.occurred_at.getTime());
   for (const e of ordered) {
+    /* `=== 'done'` and nothing else, so an EXCLUDED list is not a completion:
+       `Ops Work Complete` used to end a card here (the keyword classifier read
+       it as done) and inflated throughput with work that was never a
+       deliverable. §7a, 2026-09-08. */
     if (!done.has(e.trello_card_id) && classifyList(e.to_list ?? '') === 'done') {
       done.set(e.trello_card_id, e.occurred_at);
     }

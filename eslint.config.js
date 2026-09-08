@@ -22,19 +22,22 @@ const FRONTEND_SHARED = [
   'HARD_IDEAL', 'initialRoute', 'isoAddDays', 'isoNextMonday', 'isoOf', 'itemCount',
   'loadAdmin', 'loadAll', 'loadShell', 'MANILA_TIME', 'manilaToday', 'mcRank',
   'mondayIso', 'mondaysBetween', 'noteGrow', 'monthOf', 'monthOrder', 'MONTHS_LONG', 'MONTHS_SHORT', 'OVERLAY_EDGE',
-  'monthShiftYm', 'monthShort', 'normalizeUrl', 'noteText', 'NUDGE_PX', 'openOverlay', 'openMeasured', 'openHoverOverlay', 'leaveHoverOverlay', 'OVERLAY_ANCHORED', 'scheduleHoverClose', 'OVERLAY_SHIELDS', 'OVERLAY_SHIELD', 'OVERLAY_SELF_SCROLL',
+  'monthShiftYm', 'monthShort', 'normalizeUrl', 'noteText', 'NUDGE_PX', 'openOverlay', 'openHoverOverlay', 'leaveHoverOverlay', 'OVERLAY_ANCHORED', 'scheduleHoverClose', 'OVERLAY_SHIELDS', 'OVERLAY_SHIELD', 'OVERLAY_SELF_SCROLL',
   'PIPE_COLS', 'pipeColLabel', 'PIPE_FILTERS', 'PIPE_FILTERS_EMPTY', 'PIPE_SORTS', 'PIPE_SORT_DEFAULT', 'pipeCompare', 'pipeSortRows',
   'PIPE_MENU_W', 'pipeBackToTop',
   'pipeMatches', 'pipePick', 'pipeFacetList', 'pipeChipList', 'pipeValueLabel', 'pipeSortLabel',
   'pipeWorkMatch', // 12-constants-pipeline.js → the pipeKids computed (block 4, owl #78 §4)
   'DL_MONTHS', 'DL_DAY_NAMES', 'dlMonthWeeks', 'dlRangeLabel', 'dlWeekRange', 'dlBuild', // block 3 (owls #74/#75): the Deadlines helpers in 11-constants-deadlines.js
-  'NO_OVERLAYS', 'OVERLAY_KEYS', 'patchWorkCard', 'placeMeasured', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
+  'NO_OVERLAYS', 'OVERLAY_KEYS', 'patchWorkCard', 'PUSH_LIVE_MS', 'remeasure', 'REQ_COLS', 'REQ_FILTERS',
   'REQ_PAGE_SIZE', 'REQ_FILTERS_EMPTY', 'REQ_STATUS_VALUES', 'REQUEST_SEGMENT_STATUS', 'reqStatusOf', 'reqColLabel', // block 5 (owl #77 §1–4): the Requests filter/sort recipe in 20-requests-table.js
   'reqMatches', 'reqFacetList', 'reqChipList', 'REQ_SORTS', 'REQ_SORT_DEFAULT', 'reqSortRows', 'reqSortLabel',
   'cmpNullsLast', // 12-constants-pipeline.js → reqSortRows / reqOrderDivergence (block 5)
-  'REQUEST_SEGMENTS', 'requestBlob', 'resetForProjectSwitch', 'rowWarning', 'scrollerOf',
-  'selectTab', 'showWarnPop', 'sprintPayload', 'STATUS_FILED', 'thumbKeyOf',
-  'unranked', 'updateThumb', 'WARN_CLOSE_MS', 'WARN_POP_H', 'WARN_POP_W', 'WARN_SHADOW_BLEED', 'warnPopCancelClose',
+  'REQUEST_SEGMENTS', 'requestBlob', 'resetForProjectSwitch', 'scrollerOf',
+  'selectTab', 'sprintPayload', 'STATUS_FILED', 'thumbKeyOf',
+  // WARN_CLOSE_MS / warnPopCancelClose keep the `warn` prefix of the withdrawn
+  // incomplete-card hover card (owl #81) — the shared hover-close timer they
+  // name is the filter chip panel's now. Naming debt, recorded where it lives.
+  'unranked', 'updateThumb', 'WARN_CLOSE_MS', 'warnPopCancelClose',
   'WEEK_COUNT', 'WEEK_PX', 'weekAtX', 'withRouterSuppressed', 'WORKDAYS_PER_WEEK', 'workingDaysBetween',
   'writeCapacity', 'writeDeadline',
 ];

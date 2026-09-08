@@ -32,12 +32,12 @@ app.set({ hl: makeHighlighter('searchQ'), hlr: makeHighlighter('reqQ'), noteText
    other two itself. Dismissing DISCARDS the staged date: only Apply writes
    (W2), so the popover defends its own scrolling below. */
 /* The overlays, named ONCE. `anyMenuOpen`, `closeMenus` and `openOverlay`'s
-   mutual exclusion all derive from this list — adding `warnPop` used to mean
-   three hand-edits that had to agree, and a fourth list (the focus-held
-   selectors below) that nothing tied to them. Another overlay is one entry:
-   the Requests sort and filter panels (owl #77 §1) replaced the four select
-   menus here in one edit each way. */
-const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'warnPop', 'pipeSortMenu', 'pipeFilterMenu', 'reqSortMenu', 'reqFilterMenu', 'chipPop'];
+   mutual exclusion all derive from this list — an overlay used to mean three
+   hand-edits that had to agree, and a fourth list (the focus-held selectors
+   below) that nothing tied to them. Another overlay is one entry: the Requests
+   sort and filter panels (owl #77 §1) replaced the four select menus here in
+   one edit each way, and the incomplete-card hover card left in one (owl #81). */
+const OVERLAY_KEYS = ['urgencyMenu', 'diffMenu', 'duePopover', 'pipeSortMenu', 'pipeFilterMenu', 'reqSortMenu', 'reqFilterMenu', 'chipPop'];
 const NO_OVERLAYS = Object.fromEntries(OVERLAY_KEYS.map((k) => [k, null]));
 /* WHAT MUST NOT DISMISS EACH OVERLAY — its own trigger and its own box, keyed
    by the state key so the two lists cannot drift apart. They already had:
@@ -51,7 +51,6 @@ const OVERLAY_SHIELDS = {
   urgencyMenu: '.ubadge-wrap, .selectmenu',
   diffMenu: '.ubadge-wrap, .selectmenu',
   duePopover: '.duewrap, .duepop',
-  warnPop: '.warnpop',
   pipeSortMenu: '.sfbtn, .pipemenu',
   pipeFilterMenu: '.sfbtn, .pipemenu',
   /* the Requests panels are the same component under their own toolbar, so the
@@ -77,7 +76,7 @@ const OVERLAY_SHIELD = [...new Set(OVERLAY_KEYS.flatMap((k) => OVERLAY_SHIELDS[k
    Pipeline filter panel is here because its STATUS group is a deliberate
    internal scroller (R-pf-e), and the Requests one because it scrolls as a
    whole (PLAN D3) — a wheel over either would otherwise shut the panel. */
-const OVERLAY_SELF_SCROLL = '.duepop, .selectmenu, .warnpop, .pipemenu';
+const OVERLAY_SELF_SCROLL = '.duepop, .selectmenu, .pipemenu';
 /* ANCHORED overlays move WITH the page — they hang off an element in the flow
    rather than being pinned to the viewport, so a scroll cannot detach them from
    their trigger and there is nothing for the scroll dismisser to protect
@@ -97,20 +96,15 @@ function anyMenuOpen() {
    click restores nothing: focus has already gone to whatever was clicked, and
    a re-click on the trigger is standing on it. */
 let overlayTrigger = null;
-/* The hover card's pending close. ONE handle for the whole table, not one per
-   row: moving the pointer from row A's icon to row B's must not let A's close
-   fire and shut B, and a per-row handle makes that a race between two timers
-   nobody holds. Cleared on every open and every close (see openOverlay and
-   closeMenus below), so a timer can never outlive the state it was scheduled
-   against. */
+/* The pending close every hover-dismissed overlay shares. ONE handle, not one
+   per trigger: moving the pointer from chip A to chip B must not let A's close
+   fire and shut B, and a per-trigger handle makes that a race between two
+   timers nobody holds. Cleared on every open and every close (see openOverlay
+   and closeMenus below), so a timer can never outlive the state it was
+   scheduled against. Named for the incomplete-card hover card it was written
+   for; that card is withdrawn (owl #81) and the filter chip's panel is the
+   remaining user — see WARN_CLOSE_MS on the naming debt. */
 let warnCloseTimer = null;
-/* True only for the duration of closeMenus' programmatic focus return. The
-   warning icon now OPENS on focus, so restoring focus to it after Escape (or
-   after any dismissal that unmounted the element holding focus) would re-fire
-   `focus` and re-open the card we just closed — Escape would look broken.
-   `focus()` dispatches synchronously, so the flag is held across exactly one
-   call and read by exactly one opener. */
-let restoringFocus = false;
 function closeMenus({ restoreFocus = false } = {}) {
   warnPopCancelClose(); // one door out: no pending close survives a close
   const t = overlayTrigger;
@@ -122,16 +116,16 @@ function closeMenus({ restoreFocus = false } = {}) {
      — and a list naming only the three older overlays dropped them at <body>,
      restarting the next Tab from the top of the document.
      [review H1; PLAN.md §Fix amendment 3] */
-  const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .warnpop, .pipemenu'));
-  /* RETURNING focus, never STEALING it. Every overlay before this batch opened
-     on a CLICK of its own <button>, so the captured trigger was also what the
-     browser had just focused and the restore was a no-op or a step back inside
-     the overlay. The hover card is the first that a POINTER opens, with focus
-     left wherever the user actually is — so Escape pressed in the search field
-     would otherwise drag the caret onto a warning icon the pointer merely
-     grazed, and swallow every keystroke after it. Restore only when focus is
-     already on the trigger, inside the overlay being closed, or nowhere (an
-     unmount, or a browser that does not focus a clicked button). */
+  const heldFocus = !!(ae && ae.closest && ae.closest('.selectmenu, .duepop, .pipemenu'));
+  /* RETURNING focus, never STEALING it. Most overlays open on a CLICK of their
+     own <button>, so the captured trigger is also what the browser had just
+     focused and the restore is a no-op or a step back inside the overlay. A
+     POINTER-opened overlay (the filter chip's panel) leaves focus wherever the
+     user actually is — so Escape pressed in the search field would otherwise
+     drag the caret onto a chip the pointer merely grazed, and swallow every
+     keystroke after it. Restore only when focus is already on the trigger,
+     inside the overlay being closed, or nowhere (an unmount, or a browser that
+     does not focus a clicked button). */
   const focusIsOurs = heldFocus || !ae || ae === document.body || ae === t;
   overlayTrigger = null;
   app.set({ ...NO_OVERLAYS });
@@ -139,30 +133,16 @@ function closeMenus({ restoreFocus = false } = {}) {
      dismisser: without it, dismissing by scrolling yanks the viewport back to
      the trigger the user just scrolled away from — the focus return would undo
      the gesture that triggered it. */
-  if ((restoreFocus || heldFocus) && focusIsOurs && t && t.isConnected) {
-    restoringFocus = true;
-    t.focus({ preventScroll: true });
-    restoringFocus = false;
-  }
+  if ((restoreFocus || heldFocus) && focusIsOurs && t && t.isConnected) t.focus({ preventScroll: true });
 }
 document.addEventListener('click', (e) => {
-  // the ignore list names the TRIGGERS, not their wrappers: `.warnhost` is a
-  // tight inline box now, but the rule is unchanged — a wrapper that spans
-  // dead space would make that space a dead zone for dismissing
+  // the ignore list names the TRIGGERS, not their wrappers: a wrapper that
+  // spans dead space would make that space a dead zone for dismissing.
+  // Every entry is unconditional now — the one CONDITIONAL shield belonged to
+  // the incomplete-card icon, which had no click handler of its own, and it
+  // went with the card (owl #81).
   if (!anyMenuOpen()) return;
   if (e.target.closest(OVERLAY_SHIELD)) return;
-  /* `.warnbtn` is shielded CONDITIONALLY, and it is the only entry that is.
-     The other four triggers own a click handler that toggles their overlay, so
-     the dismisser has to keep its hands off them. The warning icon has no
-     click handler at all — hover and focus open it — so it is shielded only
-     while ITS card is what is open, which is what keeps a click (and a touch
-     tap, R-warn-l) from dismissing the card the pointer is standing on. While
-     some OTHER overlay holds the screen the icon is ordinary outside-click
-     territory: shielding it there would make the click do nothing whatsoever —
-     showWarnPop refuses to open over an active edit (R-warn-r) and the
-     dismisser would refuse to close the thing that is actually open. A
-     deliberate click is not the passive mouse path R-warn-r exists to guard. */
-  if (app.get('warnPop') && e.target.closest('.warnbtn')) return;
   closeMenus();
 });
 document.addEventListener('keydown', (e) => {
@@ -171,12 +151,7 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('scroll', (e) => {
   // the popover scrolls INSIDE itself on a viewport shorter than it is —
   // that must not dismiss the multi-step edit it exists to hold; the
-  // Requests filter panel scrolls itself for the same reason (D3). The warning card
-  // joined this list with Miles's last-resort ruling (owl #43 item D,
-  // amending R-warn-h): it can now scroll itself in exactly one state — a
-  // viewport its measured height cannot fit — and a scroll it answers
-  // itself must not dismiss it. On every other viewport it has no overflow,
-  // so a scroll's target is never inside it and dismissal is unchanged.
+  // Requests filter panel scrolls itself for the same reason (D3).
   // the cheap state read comes FIRST: this fires on every scroll in the
   // document, including the horizontal .pscroll drag, and the DOM walk is
   // pointless when nothing is open
@@ -200,50 +175,38 @@ document.addEventListener('wheel', (e) => {
    the .pscroll clip, so the flip-up near the viewport bottom (review finding
    3) and the on-screen clamp are ours to do. `h`/`clampW` are the box, not
    the trigger. */
-const NO_BLEED = { x: 0, top: 0, bottom: 0 };
 function placeBox(rect, opts) {
-  /* The clamp margin is the shared edge PLUS whatever this box paints outside
-     itself (owl #53). Absent `bleed` the three collapse back to OVERLAY_EDGE
-     and every arithmetic below is byte-for-byte the behaviour the other four
-     overlays already had. */
-  const bleed = opts.bleed || NO_BLEED;
-  const edgeX = OVERLAY_EDGE + bleed.x;
-  const edgeTop = OVERLAY_EDGE + bleed.top;
-  const edgeBottom = OVERLAY_EDGE + bleed.bottom;
+  /* ONE clamp margin, the shared edge. The per-box `bleed` that used to be
+     added to it (owl #53) went with the incomplete-card hover card in owl #81:
+     it was the only overlay whose shadow painted far enough outside its own
+     box to be sliced at the viewport edge, and the only one that could ever be
+     taller than the viewport (`over`, the last-resort scroll verdict, went with
+     it for the same reason). */
   const up = rect.bottom + opts.h + opts.gap > window.innerHeight;
-  /* `over`: the box is taller than the viewport can hold even at the clamp's
-     own margins — Miles's last-resort ruling (owl #43 item D). `>=` and not
-     `>`, deliberately: the scroll state CAPS the box at exactly
-     viewport-minus-both-margins, so a strict compare would read the capped
-     measurement as "fits now", drop the class, and oscillate. That arithmetic
-     only holds while this margin IS the clamp's margin, which is why both
-     read the one OVERLAY_EDGE. */
-  const over = opts.h + edgeTop + edgeBottom >= window.innerHeight;
   let left = rect.left;
   let top = up ? rect.top - opts.h - opts.gap : rect.bottom + opts.gap;
   if (opts.clampW) {
-    left = Math.max(edgeX, Math.min(left, window.innerWidth - opts.clampW - edgeX));
-    top = Math.max(edgeTop, Math.min(top, window.innerHeight - opts.h - edgeBottom));
+    left = Math.max(OVERLAY_EDGE, Math.min(left, window.innerWidth - opts.clampW - OVERLAY_EDGE));
+    top = Math.max(OVERLAY_EDGE, Math.min(top, window.innerHeight - opts.h - OVERLAY_EDGE));
   }
-  /* `up` and `over` ride out with the coordinates because both are facts the
-     MARKUP needs, not just the placer: the hover card's squared corner and its
-     hover bridge sit on the gap side, and its last-resort scroll state is a
-     class only the template can spell. Recomputing either anywhere else would
-     be a second copy of a comparison that could disagree with the one that
-     actually moved the box. The other four overlays gain unread keys; nothing
-     reads them. */
-  return { left: Math.round(left), top: Math.round(top), up, over };
+  /* `up` rides out with the coordinates because it is a fact the MARKUP can
+     need, not just the placer's: a flipped box squares the corner on the gap
+     side. Recomputing it anywhere else would be a second copy of a comparison
+     that could disagree with the one that actually moved the box. No overlay
+     reads it today; it costs one key and it is the placer's own verdict. */
+  return { left: Math.round(left), top: Math.round(top), up };
 }
 
 /* One opener for every overlay. They differ only in state keys, box height
    and gap, and whether the box is big enough to need clamping: the two row
-   select menus are fixed-length lists, the due popover is a 354×420 dialog
-   and the warning popover a 235-wide one, both of which must stay fully on
-   screen; the four toolbar panels are anchored in CSS and carry no box at all. Mutual exclusion lives here — opening any one nulls the others —
-   and so does the focus capture the shared close path restores from. */
+   select menus are fixed-length lists and the due popover is a 354×420 dialog
+   that must stay fully on screen; the four toolbar panels are anchored in CSS
+   and carry no box at all. Mutual exclusion lives here — opening any one nulls
+   the others — and so does the focus capture the shared close path restores
+   from. */
 function openOverlay(ctx, cardId, opts) {
-  // one door in: opening ANY overlay kills a pending hover-card close, or the
-  // warning card's timer fires after the next overlay is already up and shuts it
+  // one door in: opening ANY overlay kills a pending hover close, or the timer
+  // fires after the next overlay is already up and shuts it
   warnPopCancelClose();
   // one write in flight per card (invariant 8); the read-only sort and filter
   // panels have no write to guard, so they pass no `saving` key
@@ -268,57 +231,31 @@ function openOverlay(ctx, cardId, opts) {
   });
 }
 
-/* The warning popover has a DATA-derived height that no constant can state:
-   one list-item per missing field, each wrapping to as many lines as its
-   rationale needs — WARN_POP_H is the worst case, and a one-problem card
-   measures far under it. Its constant is therefore a pre-measure for the FIRST
-   flip decision only; this places the box a SECOND time against what actually
-   rendered. Without it a tall popover runs off the bottom of the viewport with
-   its separator and `Open Card` unreachable. (The Requests select menus shared
-   this path until owl #77 §1 replaced them with anchored panels.) Same
-   placeBox, no second positioner. Returns false only if the element is not in
-   the DOM yet, which is the caller's cue to retry on the next frame. */
-function placeMeasured(trigger, id, opts) {
-  if (app.get(opts.key) !== id) return true; // the click closed it — nothing to place
-  const el = document.querySelector(opts.sel);
-  if (!el) return false;
-  /* `bleed` rides along (owl #53): this SECOND placement is the one that
-     actually decides where a measured card sits, so dropping it here would
-     re-clamp the hover card to the bare edge and undo the shadow allowance
-     the first placement made. `sel` identifies the overlay, so the bleed
-     travels with the same opts object the caller already passes. */
-  app.set(opts.posKey, placeBox(trigger.getBoundingClientRect(), { h: el.offsetHeight, gap: 4, clampW: el.offsetWidth, bleed: opts.bleed }));
-  return true;
-}
-
-/* OPEN, THEN PLACE AGAINST WHAT ACTUALLY RENDERED — the only piece of overlay
-   lifecycle that used to live outside `openOverlay`. Four callers each wrote
-   the same five lines and each rebuilt a second opts object restating `key` and
-   `posKey`, which the two had to keep in agreement by hand; they already drift
-   (the Pipeline panels never passed `bleed`). One opts object, one door, and a
-   change to the retry policy is one edit rather than four.
-
-   `placeMeasured` returns true when the click closed the overlay again, so a
-   toggle-off schedules no frame. */
-function openMeasured(ctx, id, opts) {
-  openOverlay(ctx, id, opts);
-  const node = ctx.node;
-  if (!placeMeasured(node, id, opts)) requestAnimationFrame(() => placeMeasured(node, id, opts));
-}
+/* WITHDRAWN 2026-09-07 (owl #81): `placeMeasured` and `openMeasured` — open,
+   then place a SECOND time against what actually rendered — had exactly one
+   caller left, the incomplete-card hover card, whose height was one list-item
+   per missing field and so could not be stated as a constant. Every surviving
+   overlay either states its box (the two select menus, the due popover) or is
+   anchored in CSS with no box at all (the four toolbar panels and the chip's),
+   so `openOverlay` places all of them once and correctly. Removed rather than
+   left callerless: dead machinery reads as a live path to the next person
+   pricing a change. (The Requests select menus went through it until owl #77
+   §1; the Pipeline panels never passed a bleed.) */
 
 /* THE HOVER-OPEN POLICY, once, for every overlay a POINTER opens. Three rules
    that used to be re-typed per overlay:
 
    1. a passive hover must not destroy an ACTIVE edit — the due popover holds a
       staged date only Apply writes (W2), and moving the pointer across the
-      table is not consent to discard it (R-warn-r). Derived from OVERLAY_KEYS,
-      so a sixth overlay is one entry.
+      table is not consent to discard it. Derived from OVERLAY_KEYS, so another
+      overlay is one entry.
    2. re-entering what is already open is not a toggle.
    3. ⚠️ THE CANCEL COMES AFTER THE REFUSAL, and that ordering is load-bearing.
       The close timer is SHARED, so cancelling before knowing whether we will
       open cancels somebody else's pending close and never reschedules it:
-      graze a chip while a warning card is closing and the card is stranded
-      open with no pointer on it. The copy this replaces had that bug.
+      graze one hover-dismissed overlay while another is closing and the second
+      is stranded open with no pointer on it. The copy this replaces had that
+      bug, found when a second overlay joined the timer.
 
    Returns false when it declined, so the caller can skip its own opening. */
 function openHoverOverlay(key, id) {
@@ -344,45 +281,24 @@ function leaveHoverOverlay(key) {
   return true;
 }
 
-/* ---- the warning hover card's opener (owl #41, node 537:69135) ----
-   Hoisted on purpose: openOverlay and closeMenus above both call the canceller,
-   and the pair belongs beside the placer it uses rather than beside them. */
+/* ---- the shared hover-close timer ----
+   Hoisted on purpose: openOverlay and closeMenus above both call the canceller.
+   Named for the incomplete-card hover card it was written for (owl #41); that
+   card is withdrawn (owl #81) and the filter chip's panel is the remaining
+   user. See WARN_CLOSE_MS in 10-constants-core.js on why the name stays. */
 function warnPopCancelClose() {
   if (warnCloseTimer) { clearTimeout(warnCloseTimer); warnCloseTimer = null; }
 }
 
-/* THE ONE SCHEDULER for every hover-dismissed overlay — the warning card and
-   the filter chip's panel both leave through here. A second `setTimeout` beside
-   this one is the shape that leaks: two handles, and the older one fires
+/* THE ONE SCHEDULER for every hover-dismissed overlay — the Pipeline and
+   Requests filter chips' panels leave through here. A second `setTimeout`
+   beside this one is the shape that leaks: two handles, and the older one fires
    against state it was never scheduled for. The delay is named once
    (WARN_CLOSE_MS) so it stays tunable in one place, and the caller supplies
-   only what to do when it runs out.
-
-   Naming debt, flagged not fixed: the handle and the canceller still carry the
-   `warn` prefix from the day only one overlay used them. */
+   only what to do when it runs out. */
 function scheduleHoverClose(onFire) {
   warnCloseTimer = setTimeout(() => {
     warnCloseTimer = null;
     onFire();
   }, WARN_CLOSE_MS);
 }
-
-/* The hover card opens on pointer-enter AND on keyboard focus, so opening has
-   to be IDEMPOTENT: openOverlay TOGGLES, and re-entering an already-open icon
-   would shut it. Guarded here rather than in openOverlay, whose toggle the
-   other four overlays depend on. */
-function showWarnPop(node, cardId) {
-  /* closeMenus hands focus back to the trigger, and the trigger is this icon:
-     without this the Escape that closed the card would immediately re-open it.
-     Checked BEFORE the cancel because closeMenus has already cancelled. */
-  if (restoringFocus) return;
-  if (!openHoverOverlay('warnPop', cardId)) return;
-  // the height is one list-item per missing field, each wrapping — measure the
-  // rendered box and place it again, as the Requests select menus once did. The
-  // second placement is also what settles the FLIP the bridge rides on.
-  openMeasured({ node }, cardId, {
-    key: 'warnPop', posKey: 'warnPopPos', sel: '.warnpop',
-    h: WARN_POP_H, gap: 4, clampW: WARN_POP_W, bleed: WARN_SHADOW_BLEED,
-  });
-}
-

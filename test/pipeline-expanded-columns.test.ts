@@ -1,17 +1,27 @@
 /*
  * Sections A–E of test/pipeline-expanded.test.ts (split 2026-09-05): the one
- * column model, the childless MC, the nesting cues, the read-only DEADLINE
- * cell and the per-project view state. Describes moved verbatim; the shared
- * prelude lives in ./helpers/pipeline-expanded.ts.
+ * column model, the childless MC, the nesting cues, the DEADLINE cell and the
+ * per-project view state. Describes moved verbatim; the shared prelude lives
+ * in ./helpers/pipeline-expanded.ts.
+ *
+ * AMENDED 2026-09-07 (owls #81 and #86). Section D holds the work row's
+ * DEADLINE cell to the plain-text ruling — same recipe as STARTED beside it,
+ * em-dash when empty, no box/glyph/hover/cursor/tint — and section D2 is the
+ * withdrawal sweep for build-spec §4.4, the incomplete-card warning, which is
+ * struck whole. The sweep names the machinery the filter chip's hover panel
+ * shares with the withdrawn card, so removing the card cannot take the panel's
+ * dismissal with it.
  */
 
 import { describe, expect, it } from 'vitest';
 import {
+  APP_JS,
   APP_JS_CODE,
   PIPE_COLS,
   PIPELINE_CSS,
   TEMPLATE,
   cssRule,
+  decl,
   fnBody,
   renderPipelineTable,
   tabViewCode,
@@ -24,7 +34,6 @@ import {
   WRITABLE,
   cell,
   row,
-  rowWarning,
   task,
   taskRows,
 } from './helpers/pipeline-expanded.ts';
@@ -110,7 +119,7 @@ describe('the task rows live in the parent’s own column grid', () => {
     /* the render, not the template text: a badge whose class never changes
        with the data looks right in one fixture and is wrong in every other. */
     const html = renderPipelineTable({
-      pipelineRows: [PARENT], rowWarning, expanded: { 'MC-837': true }, writesEnabled: true,
+      pipelineRows: [PARENT], expanded: { 'MC-837': true }, writesEnabled: true,
       workCardsByMc: { 'MC-837': [task({ urgency: 'Urgent', difficulty: 'Easy' })] },
     });
     const r = taskRows(html)[0]!;
@@ -158,6 +167,33 @@ describe('the task rows live in the parent’s own column grid', () => {
     expect(cell(r, 'col-name')).toContain('<span class="cardname">MC-837 Render Icon: APIs — Filled</span>');
     expect(cell(r, 'col-status')).toContain('class="pbadge s-pending"');
     expect(cell(r, 'col-status')).toContain('Backlogs: Icon');
+  });
+
+  /* §7a: a lane outside the delivery pipeline still shows its Trello list name
+     like every other row, but the badge carries NO state colour — neutral
+     slate, so the cell reads as "not a stage of the work" rather than as a
+     fourth stage. And the badge's own tooltip must stop claiming the state
+     comes from keywords: it comes from the static lane table. */
+  it('gives an EXCLUDED lane a neutral badge and names the lane table in the tooltip', () => {
+    const rule = cssRule('.pbadge.s-excluded', PIPELINE_CSS); // throws if the rule is gone
+    expect(rule).toContain('background: var(--slate-50)');
+    expect(rule).toContain('border-color: var(--slate-300)');
+    expect(rule).toContain('color: var(--slate-500)');
+    // the rule is "no state colour": every colour it names is a slate
+    expect(rule.match(/var\(--[a-z0-9-]+\)/g) ?? []).toEqual([
+      'var(--slate-50)', 'var(--slate-300)', 'var(--slate-500)',
+    ]);
+    /* the row itself is KEPT and still names its lane — only the colour goes */
+    const excluded = renderPipelineTable({
+      pipelineRows: [row({ currentList: 'Discarded Work', status: 'excluded' })],
+      workCardsByMc: {},
+    });
+    const statusCell = cell(excluded, 'col-status');
+    expect(statusCell).toContain('class="pbadge s-excluded"');
+    expect(statusCell).toContain('Discarded Work');
+    // and the tooltip cites the lane table rather than the retired keyword classifier
+    expect(statusCell).toContain('title="Trello list; state from the lane table"');
+    expect(TEMPLATE, 'a status tooltip still credits the keyword classifier').not.toContain('classified by keyword');
   });
 
   it('shows Started/Done with the parent’s plaincell recipe, dash when absent', () => {
@@ -267,7 +303,7 @@ describe('the parent’s SubTone is WITHDRAWN (JP, 2026-08-27)', () => {
 });
 
 /* ---------------------------------------------------------------------- */
-/* D — the DEADLINE cell is READ-ONLY on BOTH row kinds (owl #78 §2)        */
+/* D — the DEADLINE cell REFLECTS, in plain text (owl #78 §2, owl #81)      */
 /* ---------------------------------------------------------------------- */
 
 /**
@@ -281,6 +317,13 @@ describe('the parent’s SubTone is WITHDRAWN (JP, 2026-08-27)', () => {
  */
 const pipelineView = (): string => tabViewCode('pipeline');
 
+/** A `<td class="col-X">…</td>` reduced to what the RULE says two cells share:
+ *  the column class differs by definition, and a `title` carries a raw instant
+ *  the wire sends for STARTED/DONE and does not send for a due date (Ractive
+ *  renders an empty one bare, so both spellings are normalised away). */
+const cellShape = (markup: string): string =>
+  markup.replace(/class="col-[a-z]+"/, 'class="col-X"').replace(/ title(="[^"]*")?/g, '');
+
 describe('Pipeline REFLECTS the deadline and never sets it (owl #78 §2)', () => {
   /* THE RULE, and the reason it is a rule: W2 writes the work card's Trello due
      date, and there is exactly ONE place in the product where that write is
@@ -288,6 +331,15 @@ describe('Pipeline REFLECTS the deadline and never sets it (owl #78 §2)', () =>
      red tick gives the date something to be compared against. Pipeline shows
      the same date and cannot change it. Two armed pickers over one field is how
      two screens start disagreeing about which of them last wrote.
+
+     owl #81 (Miles, 2026-09-07, node 841:32729) finishes the move: read-only
+     was not enough, because the cell still WORE the picker's dress — a
+     bordered field with a calendar glyph, the same recipe Sprint Schedules
+     uses to set the date. "A control that looks live but refuses is worse than
+     no control: the reader concludes the feature is broken rather than that it
+     lives elsewhere." So it is plain text, exactly like STARTED and DONE
+     beside it, and an empty one is the same em-dash every other absent value
+     on this table draws.
 
      The main row shows an em-dash for the reason #78 §1 gives about urgency and
      difficulty one column over: a main card does not HAVE this property. Not
@@ -302,12 +354,38 @@ describe('Pipeline REFLECTS the deadline and never sets it (owl #78 §2)', () =>
     expect(mainOnly, 'a date control survived on the main row').not.toContain('datefield');
   });
 
-  it('draws the WORK row’s own date, read-only, with the calendar mark kept', () => {
+  it('draws the WORK row’s date in the SAME cell recipe as STARTED beside it', () => {
+    /* DERIVED, not copied (test/CLAUDE.md rule 2): the ruling is "exactly like
+       STARTED and DONE beside it", so the guard renders a card whose due and
+       start are the same day and compares the two cells to each other. A
+       hard-coded `.plaincell nowrap` string here would pass just as happily
+       while STARTED moved on to something else and the two cells diverged —
+       which is the whole failure the ruling is about. */
+    const same = renderPipelineTable({
+      pipelineRows: [PARENT], expanded: { 'MC-837': true }, writesEnabled: true,
+      workCardsByMc: { 'MC-837': [task({ due: '2026-08-02', started: '2026-08-02' })] },
+    });
+    const r = taskRows(same)[0]!;
+    expect(cellShape(cell(r, 'col-deadline'))).toBe(cellShape(cell(r, 'col-started')));
+    expect(cell(r, 'col-deadline')).toContain('2026-08-02');
+  });
+
+  it('wears NO box, glyph, hover or cursor — the four things owl #81 struck', () => {
     const due = cell(taskRows(WRITABLE)[0]!, 'col-deadline');
-    expect(due).toContain('class="datefield readonly');
-    expect(due).toContain('2026-08-07');
-    expect(due).toContain('i-calendar');
-    expect(due, 'the work row still carries a pressable date field').not.toContain('<button');
+    expect(due, 'the date-field dress came back').not.toContain('datefield');
+    expect(due, 'the calendar glyph came back').not.toContain('i-calendar');
+    expect(due, 'the picker’s inner label came back').not.toContain('dpdate');
+    expect(due, 'the work row grew a pressable date field').not.toContain('<button');
+    /* the overdue tint is struck with the rest: "exactly like the two cells
+       beside it" admits no third state, and #81 re-permits none. Proven by
+       rendering the same date twice, once flagged overdue — the two cells must
+       be byte-identical, which no tint can survive. */
+    const late = renderPipelineTable({
+      pipelineRows: [PARENT], expanded: { 'MC-837': true }, writesEnabled: true,
+      workCardsByMc: { 'MC-837': [task({ overdue: true })] },
+    });
+    expect(cell(taskRows(late)[0]!, 'col-deadline'))
+      .toBe(cell(taskRows(WRITABLE)[0]!, 'col-deadline'));
   });
 
   it('is read-only EVEN ON A WRITEABLE PROJECT — that is the whole change', () => {
@@ -322,21 +400,27 @@ describe('Pipeline REFLECTS the deadline and never sets it (owl #78 §2)', () =>
     expect(on).not.toContain('Select Date');
   });
 
-  it('says `No Due Date` and wears the missing dress when the card has none', () => {
-    const due = cell(taskRows(WRITABLE)[1]!, 'col-deadline');
-    expect(due).toContain('No Due Date');
-    expect(due).toMatch(/class="datefield readonly[^"]*missing/);
+  it('draws the em-dash when the card has no due date — not a `No Due Date` badge', () => {
+    /* owl #81: amber is a warning colour and a card without a deadline is not a
+       fault — most sit that way for their whole planning life. Held against the
+       MAIN row's own empty cell, which is the pattern being joined: a table
+       that says `—` in nine places and `No Due Date` in the tenth answers one
+       question two ways. */
+    const empty = cell(taskRows(WRITABLE)[1]!, 'col-deadline');
+    expect(empty).toBe('<td class="col-deadline"><span class="dimcell">—</span></td>');
+    expect(empty, 'the amber No Due Date badge came back').not.toContain('No Due Date');
+    expect(empty, 'the missing dress came back').not.toContain('missing');
   });
 
-  it('keeps the OVERDUE tint — reflecting a date includes reflecting that it has passed', () => {
-    const late = renderPipelineTable({
-      pipelineRows: [PARENT], rowWarning,
-      workCardsByMc: { 'MC-837': [task({ overdue: true })] },
-      expanded: { 'MC-837': true }, writesEnabled: true,
-    });
-    expect(cell(taskRows(late)[0]!, 'col-deadline')).toMatch(/class="datefield readonly[^"]*overdue/);
-    // …and a current one stays undressed
-    expect(cell(taskRows(WRITABLE)[0]!, 'col-deadline')).not.toContain('overdue');
+  it('leaves the SETTER’s recipe alone — Sprint Schedules still owns it', () => {
+    /* The `.datefield` family is SHARED and deliberately unprefixed: Pipeline
+       stopped rendering it, the tab that WRITES still does. Deleting it with
+       the Pipeline markup would have taken the live W2 control with it, which
+       is exactly the mistake this guard exists to catch on the next pass. */
+    expect(cssRule('.datefield.readonly', PIPELINE_CSS)).toContain('cursor: default');
+    expect(cssRule('.datefield', PIPELINE_CSS)).toContain('border:');
+    expect(tabViewCode('schedules'), 'the writes-off span lost its recipe')
+      .toContain('datefield readonly');
   });
 
   it('carries NO picker anywhere in the Pipeline view — trigger, popover or calendar', () => {
@@ -374,6 +458,96 @@ describe('Pipeline REFLECTS the deadline and never sets it (owl #78 §2)', () =>
 });
 
 /* ---------------------------------------------------------------------- */
+/* D2 — build-spec §4.4 is WITHDRAWN: the sweep (owl #81)                  */
+/* ---------------------------------------------------------------------- */
+
+describe('nothing on this table marks a card incomplete (build-spec §4.4, withdrawn)', () => {
+  /* THE RULING (owl #81, Miles, 2026-09-07): "Pipeline draws nothing to mark a
+     card as incomplete." Struck whole — the 3px amber-300 left accent, the
+     14×14 alert icon after the MC number, the 235-wide hover card with its
+     per-field consequences, the "Fix in Trello and it corrects on the next
+     sync." line and its Open Card link, and all three conditions.
+
+     "Do not reintroduce this as a smaller warning" — §4.4 was ALREADY the
+     reduced version; it replaced a full-row amber wash that lit 247 of 249
+     rows. So the sweep is written to fail on ANY member coming back on its
+     own, not on the feature returning whole: a rebuild starts with one
+     constant or one class, and that is where it has to be caught.
+
+     Corpora are the COMMENT-STRIPPED bundle, view and stylesheet: the files
+     record in prose where the feature went, naming its parts, and reading raw
+     would fire the guard on the record of the decision rather than on a
+     rebuild (test/CLAUDE.md rule 3, in the kind direction). `rowWarning` is
+     the one name checked raw as well — no surviving comment spells it, so a
+     comment that revived the recipe would be caught too. */
+
+  /** the shipped Pipeline stylesheet with its prose removed */
+  const cssCode = PIPELINE_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+  it('reads a NON-EMPTY corpus for each sweep below', () => {
+    /* rule 6's hazard, in the absence direction: every assertion in this
+       describe is a `not`, so a slicer that returned '' would pass all of
+       them against a stylesheet, a view and a bundle nobody had read. Each
+       corpus is anchored on something that must still be there. */
+    expect(cssCode, 'the stylesheet slice came back empty').toContain('.ptable tr.ptask td');
+    expect(pipelineView(), 'the Pipeline view slice came back empty').toContain('col-deadline');
+    expect(APP_JS_CODE.length, 'the bundle came back empty').toBeGreaterThan(10000);
+  });
+
+  it('leaves no warning RECIPE or constant in the bundle', () => {
+    for (const name of ['rowWarning', 'WARN_LABEL', 'WARN_WHY', 'WARN_POP_W', 'WARN_POP_H', 'WARN_SHADOW_BLEED']) {
+      expect(APP_JS_CODE, `\`${name}\` outlived build-spec §4.4`).not.toContain(name);
+    }
+    expect(APP_JS, '`rowWarning` came back, if only in prose').not.toContain('rowWarning');
+    // the SERVER's three tokens were the recipe's only input; the strings go
+    // with it, so a re-derivation cannot start from the copy left behind
+    for (const token of ['difficulty label', 'Figma attachment', 'cannot forecast']) {
+      expect(APP_JS_CODE, `the withdrawn "${token}" copy is still in the client`).not.toContain(token);
+    }
+  });
+
+  it('leaves no warning HANDLER, overlay key or state key in the bundle', () => {
+    for (const name of ['showWarnPop', 'warnPopIn', 'warnPopOut', 'warnPopFocusOut', 'warnPopPos']) {
+      expect(APP_JS_CODE, `\`${name}\` outlived the hover card`).not.toContain(name);
+    }
+    // the overlay roster and its shield map are the two lists an overlay lives
+    // in; a key left in either is a dismisser aimed at nothing
+    expect(decl(APP_JS_CODE, 'OVERLAY_KEYS'), 'warnPop is still an overlay').not.toMatch(/\bwarnPop\b/);
+    expect(decl(APP_JS_CODE, 'OVERLAY_SHIELDS'), 'warnPop is still shielded').not.toMatch(/\bwarnPop\b/);
+    expect(APP_JS_CODE, 'the client still holds the incomplete-card set').not.toContain('corrections');
+  });
+
+  it('leaves no warning MARKUP in the Pipeline view', () => {
+    expect(pipelineView(), 'a member of the withdrawn warning is back in the markup')
+      .not.toMatch(/warn/i);
+    expect(pipelineView(), 'the withdrawn OPEN WORK tile is back').not.toContain('OPEN WORK');
+    expect(pipelineView(), 'the tile’s figure is back').not.toContain('kpi.open');
+  });
+
+  it('leaves no warning RULE in the stylesheet', () => {
+    for (const sel of ['.prow.warn', '.warnhost', '.warnbtn', '.warnpop', '.wphead', '.wptitle', '.wpitems', '.wpitem', '.wplabel', '.wpwhy', '.wpfix', '.wpsep', '.wpopen', '.i14']) {
+      expect(cssCode, `\`${sel}\` outlived the markup that wore it`).not.toContain(sel);
+    }
+  });
+
+  it('KEEPS the hover machinery the filter chip’s panel shares with it (R-pf-m)', () => {
+    /* The close timer, its canceller and the two hover policies were written
+       for the hover card and are the chip panel's now — removing them with the
+       card would have taken the chip panel's own dismissal with it. This is
+       the other half of the sweep above, and the reason it is written by name
+       rather than as "delete everything matching /warn/". */
+    for (const name of ['scheduleHoverClose', 'warnPopCancelClose', 'warnCloseTimer', 'WARN_CLOSE_MS', 'openHoverOverlay', 'leaveHoverOverlay']) {
+      expect(APP_JS_CODE, `\`${name}\` went with the withdrawn card`).toContain(name);
+    }
+    expect(decl(APP_JS_CODE, 'OVERLAY_KEYS'), 'the chip panel left the overlay roster').toContain('chipPop');
+    expect([...APP_JS_CODE.matchAll(/warnCloseTimer\s*=\s*setTimeout\(/g)],
+      'a second close timer appeared beside the shared one').toHaveLength(1);
+    // its hover bridge outlived the card's — one rule now, and it is the chip's
+    expect(cssRule('.chipmenu::before', PIPELINE_CSS)).toContain('height: var(--space-4)');
+  });
+});
+
+/* ---------------------------------------------------------------------- */
 /* E — view state                                                           */
 /* ---------------------------------------------------------------------- */
 
@@ -393,7 +567,6 @@ describe('expansion is per-project view state', () => {
   it('keeps multi-expand — the template keys each group on its own mcNumber', () => {
     const both = renderPipelineTable({
       pipelineRows: [PARENT, row({ cardId: 'main-3', mcNumber: 'MC-850', mcLabel: 'MC-850', displayId: 'MC-850', name: 'Second parent' })],
-      rowWarning,
       workCardsByMc: { ...TASKS, 'MC-850': [task({ cardId: 'task-9', name: 'MC-850 Render Icon: Other' })] },
       expanded: { 'MC-837': true, 'MC-850': true },
     });

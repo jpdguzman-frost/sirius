@@ -388,7 +388,7 @@ export const renderPipeNoResults = (): string =>
       chipPop: null,
       chipPopFlip: false,
       pipeNoResults: true,
-      ...pipeTableData({ pipelineRows: [], rowWarning: () => null }),
+      ...pipeTableData({ pipelineRows: [] }),
     },
   }).toHTML();
 

@@ -44,7 +44,7 @@ describe('phase-13 row derivations', () => {
     const p = await newProject();
     await Deliverable.create({
       project_id: p._id, mc_number: 'MC-1', display_id: 'MC-1.1', trello_card_id: 'c1', name: 'D1',
-      current_list: 'Done',
+      current_list: 'Design Complete',
       work_started_at: new Date('2026-08-03T02:00:00Z'), work_done_at: new Date('2026-08-10T02:00:00Z'),
     });
     // same MC group, its own span — the sibling's dates must not leak across
@@ -71,7 +71,7 @@ describe('phase-13 row derivations', () => {
     const p = await newProject();
     await Deliverable.create({
       project_id: p._id, mc_number: 'MC-2', display_id: 'MC-2', trello_card_id: 'c1', name: 'D1',
-      current_list: 'Done',
+      current_list: 'Design Complete',
       work_started_at: new Date('2026-08-03T02:15:30Z'), work_done_at: new Date('2026-08-10T09:45:00Z'),
     });
     const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
@@ -83,7 +83,7 @@ describe('phase-13 row derivations', () => {
     const p = await newProject();
     await Deliverable.create({
       project_id: p._id, mc_number: 'MC-3', display_id: 'MC-3', trello_card_id: 'c3', name: 'D3',
-      current_list: 'Done',
+      current_list: 'Design Complete',
       // 23:00 UTC = 07:00 NEXT DAY in Manila — a UTC host must not show Aug 2
       work_started_at: new Date('2026-08-02T23:00:00Z'),
       work_done_at: new Date('2026-08-06T23:30:00Z'), // Manila Aug 7 (Fri)
@@ -107,10 +107,10 @@ describe('phase-13 row derivations', () => {
 
   it('deriveWorkSpans fills the spans from card movements — sync review fix', async () => {
     const p = await newProject();
-    await WorkCard.create({ project_id: p._id, mc_number: 'MC-4', trello_card_id: 'w4', name: 't4', current_list: 'Done' });
+    await WorkCard.create({ project_id: p._id, mc_number: 'MC-4', trello_card_id: 'w4', name: 't4', current_list: 'Design Complete' });
     await CardEvent.insertMany([
-      { project_id: p._id, trello_card_id: 'w4', source_event_id: 'e1', from_list: 'Backlog', to_list: 'Working on Design', occurred_at: new Date('2026-08-04T01:00:00Z') },
-      { project_id: p._id, trello_card_id: 'w4', source_event_id: 'e2', from_list: 'Working on Design', to_list: 'Done', occurred_at: new Date('2026-08-06T05:00:00Z') },
+      { project_id: p._id, trello_card_id: 'w4', source_event_id: 'e1', from_list: 'Design Backlog', to_list: 'Working on Design', occurred_at: new Date('2026-08-04T01:00:00Z') },
+      { project_id: p._id, trello_card_id: 'w4', source_event_id: 'e2', from_list: 'Working on Design', to_list: 'Design Complete', occurred_at: new Date('2026-08-06T05:00:00Z') },
     ]);
 
     expect(await deriveWorkSpans(p._id)).toBe(1);
@@ -129,12 +129,12 @@ describe('phase-13 row derivations', () => {
 
   it('deriveWorkSpans derives the DELIVERABLE card’s own span too', async () => {
     const p = await newProject();
-    await Deliverable.create({ project_id: p._id, mc_number: 'MC-5', display_id: 'MC-5', trello_card_id: 'c5', name: 'D5', current_list: 'Done' });
+    await Deliverable.create({ project_id: p._id, mc_number: 'MC-5', display_id: 'MC-5', trello_card_id: 'c5', name: 'D5', current_list: 'Design Complete' });
     await CardEvent.insertMany([
       { project_id: p._id, trello_card_id: 'c5', source_event_id: 'm1', from_list: 'Production Backlog', to_list: 'Working on Design', occurred_at: new Date('2026-08-04T01:00:00Z') },
       { project_id: p._id, trello_card_id: 'c5', source_event_id: 'm2', from_list: 'Working on Design', to_list: 'Production Backlog', occurred_at: new Date('2026-08-05T01:00:00Z') },
       { project_id: p._id, trello_card_id: 'c5', source_event_id: 'm3', from_list: 'Production Backlog', to_list: 'Working on Design', occurred_at: new Date('2026-08-06T01:00:00Z') },
-      { project_id: p._id, trello_card_id: 'c5', source_event_id: 'm4', from_list: 'Working on Design', to_list: 'Done', occurred_at: new Date('2026-08-07T05:00:00Z') },
+      { project_id: p._id, trello_card_id: 'c5', source_event_id: 'm4', from_list: 'Working on Design', to_list: 'Design Complete', occurred_at: new Date('2026-08-07T05:00:00Z') },
     ]);
 
     expect(await deriveWorkSpans(p._id)).toBe(1);
@@ -157,10 +157,10 @@ describe('phase-13 row derivations', () => {
 
   it('a card that skipped straight to done still counts as started', async () => {
     const p = await newProject();
-    await Deliverable.create({ project_id: p._id, mc_number: 'MC-6', display_id: 'MC-6', trello_card_id: 'c6', name: 'D6', current_list: 'Done' });
+    await Deliverable.create({ project_id: p._id, mc_number: 'MC-6', display_id: 'MC-6', trello_card_id: 'c6', name: 'D6', current_list: 'Design Complete' });
     await CardEvent.create({
       project_id: p._id, trello_card_id: 'c6', source_event_id: 'k1',
-      from_list: 'Production Backlog', to_list: 'Done', occurred_at: new Date('2026-08-04T01:00:00Z'),
+      from_list: 'Production Backlog', to_list: 'Design Complete', occurred_at: new Date('2026-08-04T01:00:00Z'),
     });
     expect(await deriveWorkSpans(p._id)).toBe(1);
     const card = await Deliverable.findOne({ trello_card_id: 'c6' }).orFail();
@@ -184,6 +184,50 @@ describe('phase-13 row derivations', () => {
     expect((await Deliverable.findOne({ trello_card_id: 'c8' }).orFail()).work_started_at).toBeFalsy();
     expect((await Deliverable.findOne({ trello_card_id: 'c8b' }).orFail()).work_started_at?.toISOString())
       .toBe('2026-08-04T01:00:00.000Z'); // the real move, not the list-less one
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* §7a consumer guards — Pipeline and the capacity footer (block 6)     */
+  /* ------------------------------------------------------------------ */
+
+  it('an EXCLUDED lane keeps its Pipeline row — the card is still on the board', async () => {
+    /* §7a: excluded is a visibility filter, not a state. The row is NOT
+       dropped: a main card sitting in an ops lane is a fact about the board
+       and hiding it would leave the PM looking for a card Sirius knows about
+       and will not show. */
+    const p = await newProject();
+    await Deliverable.create({ project_id: p._id, mc_number: 'MC-20', display_id: 'MC-20', trello_card_id: 'x1', name: 'Ops thing', current_list: 'Working on Ops Work' });
+    await Deliverable.create({ project_id: p._id, mc_number: 'MC-21', display_id: 'MC-21', trello_card_id: 'x2', name: 'Real thing', current_list: 'Working on Design' });
+
+    const { rows } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
+    expect(rows.map((r) => r.cardId).sort()).toEqual(['x1', 'x2']);
+    expect(rows.find((r) => r.cardId === 'x1')!.status).toBe('excluded');
+    expect(rows.find((r) => r.cardId === 'x2')!.status).toBe('ongoing');
+  });
+
+  it('a work card in an excluded lane reaches its MC group the same way', async () => {
+    const p = await newProject();
+    await Deliverable.create({ project_id: p._id, mc_number: 'MC-22', display_id: 'MC-22', trello_card_id: 'y1', name: 'D', current_list: 'Working on Design' });
+    await WorkCard.create({ project_id: p._id, mc_number: 'MC-22', trello_card_id: 'yw1', name: 'ops task', current_list: 'Reviewing Ops Work' });
+
+    const { workCardsByMc } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
+    expect(workCardsByMc['MC-22']!.map((w) => w.status)).toEqual(['excluded']);
+  });
+
+  it('an excluded row does NOT consume the week’s capacity, and an ongoing one does', async () => {
+    /* The footer counts work the week owes. Ops work and discarded work are
+       not Sirius's to plan, so they weigh nothing — the same answer a DONE row
+       gets, reached for a different reason. Before the enumeration, one of
+       these two (`Ops Work Complete`) was already skipped, by the accident of
+       the keyword classifier calling it done. */
+    const p = await newProject();
+    const base = { project_id: p._id, difficulty: 'Medium' as const, slotted_week: '2026-08-03' };
+    await Deliverable.create({ ...base, mc_number: 'MC-30', display_id: 'MC-30', trello_card_id: 'z1', name: 'Ops', current_list: 'Ops Work Complete' });
+    await Deliverable.create({ ...base, mc_number: 'MC-31', display_id: 'MC-31', trello_card_id: 'z2', name: 'Discarded', current_list: 'Discarded Work' });
+    await Deliverable.create({ ...base, mc_number: 'MC-32', display_id: 'MC-32', trello_card_id: 'z3', name: 'Real', current_list: 'Working on Design' });
+
+    const { perWeek } = await loadPipeline(p._id, '2026-08-03', p.weekly_capacity);
+    expect(perWeek['2026-08-03']!.rows).toBe(1); // z3 alone
   });
 
   it('a card with no movements derives nothing', async () => {

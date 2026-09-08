@@ -127,8 +127,10 @@
 
 /* ---- D. the day columns (810:121954). Monday to Friday, each a lane of its
    own that clips and scrolls independently, so a heavy Tuesday does not push
-   its neighbours down. A weekday still renders when it is a holiday: the frame
-   draws no holiday state and nothing can be slated on one anyway. ---- */
+   its neighbours down. A weekday still renders when it is a holiday, and it
+   renders exactly like the four beside it: the frame draws no holiday state,
+   and since a card sits on the day it STARTS (spec v1.3 §6.2, 2026-09-08) a
+   plotted start can land on one — it simply looks like any other day. ---- */
 .dldays { display: flex; align-items: stretch; gap: var(--space-12); height: 683px; flex: none; }
 .dlday {
   flex: none; width: 350px;
@@ -174,11 +176,16 @@
    honest at the top and bottom. The frame's export carries a two-pixel inset —
    the card's left edge is path x = 2 — so the view box starts THERE and the
    band is the four pixels from the edge to the inner curve (review finding
-   R2-1/R5-1: a view box starting at minus two painted eight). */
+   R2-1/R5-1: a view box starting at minus two painted eight).
+   THE HUE was ruled on 2026-09-08 (owl #86): the bar is amber, the same amber
+   as the Urgent badge sitting above it, because one signal saying urgency
+   twice must say it in one colour — it was red until then, which made the
+   badge and the bar disagree. The geometry above is untouched by that ruling:
+   the node is right about the shape and only wrong about the colour. */
 .dlquote {
   position: absolute; left: 0; top: 0; display: block;
   width: 8px; height: 180px;
-  fill: var(--red-500);
+  fill: var(--amber-600);
 }
 
 /* ---- F. the card badges — ONE recipe with colour variants (#74 §3). The

@@ -279,15 +279,13 @@ async function loadAll() {
     // reaches what the table shows, and a term that matches nothing visible
     // returns rows for a reason the reader cannot see. It is still searchable
     // on Requests, where the column lives.
-    /* `warning` rides along for the same reason: the template asked
-       `rowWarning(row)` in SEVEN places, so the recipe ran seven times per row
-       on every re-render — and the table re-renders on every search keystroke,
-       every urgency/difficulty/due write and every load. Stamped once here it
-       is a plain keypath, which also gives `{{#each row.warning.items}}` a
-       stable array identity instead of a fresh one to diff each pass. */
+    /* WITHDRAWN 2026-09-07 (owl #81): a `warning` used to be stamped here
+       beside the blob, for the same performance reason — the template asked
+       the recipe in seven places and the table re-renders on every
+       search keystroke. Build-spec §4.4 is withdrawn whole, so there is no
+       recipe left to run and no row state to stamp. */
     pipeline.rows.forEach((r) => {
       r.blob = `${r.displayId} ${r.mcNumber || ''} ${r.name} ${r.assetType || ''} ${r.currentList || ''} ${r.statusNote || ''}`.toLowerCase();
-      r.warning = rowWarning(r);
       /* the row's own WORK CARDS (owl #78 §4/§5; PLAN.md B2/B5): the two
          work-card filter axes and the four derived sorts read them per row
          through pipeWorkKids, so the list is stamped here once rather than
@@ -321,7 +319,6 @@ async function loadAll() {
       writesEnabled: pipeline.writesEnabled !== false,
       workCardsByMc: pipeline.workCardsByMc,
       unattachedWork: pipeline.unattachedWork || { cards: 0, mcNumbers: [] },
-      corrections: pipeline.corrections,
       sprints: pipeline.sprints,
       /* stored VERBATIM off the payload (#72): {rows, addable} is the whole
          Sprint Schedules body — rows are position-sorted per sprint and

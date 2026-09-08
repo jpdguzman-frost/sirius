@@ -14,13 +14,12 @@ import { ensureAuthenticated, type SessionUser } from '../auth/session.ts';
 import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
 import { classifyList } from '../services/status-rules.ts';
-import { loadPipeline, manilaToday, toMilestones } from '../services/pipeline.ts';
+import { loadPipeline, manilaToday } from '../services/pipeline.ts';
 import { nextTailPosition, tailPosition } from '../services/sprint-items.ts';
-import { ConflictAcknowledgement, Deliverable, MilestoneDayPlan, Sprint, SprintItem, WorkCard } from '../models/index.ts';
+import { Deliverable, MilestoneDayPlan, Sprint, SprintItem, WorkCard } from '../models/index.ts';
 import { sprintIssues, suggestPlan, type PlannerCard } from '../../lib/planner.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
 import { buildWeeks } from '../../lib/calendar.ts';
-import { isHolidayDate, weekDays } from '../../lib/dayplan.ts';
 
 /* Shape AND calendar validity (review 2026-08-28b, finding 8): the regex
    alone let `2026-08-32` through, and a stored non-date walks the forecast
@@ -55,6 +54,23 @@ const OBJECT_ID = z.string().refine((v) => Types.ObjectId.isValid(v), { message:
  * reads one vocabulary whichever route answered.
  */
 type BatchSkipCode = 'NOT_FOUND' | 'CARD_COMPLETE' | 'ALREADY_SCHEDULED';
+
+/**
+ * The ADD-TIME refusal set (#72 §5; spec v1.3 §7a). A task card cannot join a
+ * schedule when its lane says the work is finished, or when the lane sits
+ * outside the delivery pipeline altogether — Operations, Discarded Work,
+ * Unused Work, the process lane. Both add paths, single and batch, read this
+ * ONE set, so the pool's answer and the server's answer cannot drift.
+ *
+ * It governs what can be ADDED and never what is removed: a row whose card
+ * later moves into one of these lanes stays on the schedule (#72 §5).
+ *
+ * Membership is tested as a STRING deliberately. The lane classifier's return
+ * union is widening to carry the excluded state, and a set of strings states
+ * the same rule on either side of that change instead of pinning this file to
+ * one revision of the union.
+ */
+export const NOT_ADDABLE_STATES: ReadonlySet<string> = new Set(['done', 'excluded']);
 
 
 /**
@@ -405,47 +421,14 @@ export function scheduleRouter(): Router {
     },
   );
 
-  // Conflict acknowledgements (FR-6.7/6.8; BR-9a; invariant 13): keyed on
-  // the situation; must reach the audit log (phase 8a).
-  router.post(
-    '/api/projects/:projectId/conflicts/acknowledge',
-    ensureAuthenticated,
-    ensureProjectMember,
-    async (req, res) => {
-      const body = z.object({ conflict_key: z.string().min(3).max(8000), reason: z.string().max(500).optional() }).strict().safeParse(req.body);
-      if (!body.success) {
-        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
-        return;
-      }
-      const projectId = res.locals.project._id as Types.ObjectId;
-      const actor = (req.user as SessionUser).email;
-      await ConflictAcknowledgement.updateOne(
-        { project_id: projectId, conflict_key: body.data.conflict_key },
-        { $set: { acknowledged_by: actor, reason: body.data.reason ?? null, at: new Date() }, $setOnInsert: { project_id: projectId } },
-        { upsert: true },
-      );
-      await audit({ project_id: projectId, actor, action: 'conflict.acknowledge', entity: 'conflict', entity_id: body.data.conflict_key, after: { reason: body.data.reason ?? null } });
-      res.json({ ok: true });
-    },
-  );
-
-  router.post(
-    '/api/projects/:projectId/conflicts/restore',
-    ensureAuthenticated,
-    ensureProjectMember,
-    async (req, res) => {
-      const body = z.object({ conflict_key: z.string().min(3).max(8000) }).strict().safeParse(req.body);
-      if (!body.success) {
-        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
-        return;
-      }
-      const projectId = res.locals.project._id as Types.ObjectId;
-      const actor = (req.user as SessionUser).email;
-      await ConflictAcknowledgement.deleteOne({ project_id: projectId, conflict_key: body.data.conflict_key });
-      await audit({ project_id: projectId, actor, action: 'conflict.restore', entity: 'conflict', entity_id: body.data.conflict_key });
-      res.json({ ok: true });
-    },
-  );
+  /* Conflict acknowledgements — DELETED 2026-09-08 (owl #87, JP).
+     `POST /conflicts/acknowledge` and `POST /conflicts/restore` lived here,
+     with the `conflict_acknowledgements` collection behind them. The week-level
+     conflict badges they dismissed were replaced by a count (`N Pending ·
+     N Urgent · N Done`), and a count asserts nothing, so it never needs
+     dismissing. Stored rows were archived by migration 011, never dropped;
+     the `conflict.acknowledge` / `conflict.restore` audit rows stay forever
+     (invariant 10). Do not reintroduce either route. */
 
   /* ------------------------------------------------------------------ */
   /* Sprint Schedules — the scheduled row. THE UNIT IS THE WORK CARD.     */
@@ -506,11 +489,10 @@ export function scheduleRouter(): Router {
         res.status(404).json({ ok: false, error: { code: 'NOT_FOUND', message: 'That sprint or task card no longer exists — reload the schedule.' } });
         return;
       }
-      /* #72 §5: a card already complete is never OFFERED, and the server says
-         the same thing the search list's pool does. This is the ADD-time
-         filter — it governs what can be added and NEVER what is removed, so a
-         row whose card completes later is untouched by it. */
-      if (classifyList(card.current_list as string | undefined) === 'done') {
+      /* #72 §5: a card already complete — or in a lane outside the pipeline —
+         is never OFFERED, and the server says the same thing the search list's
+         pool does. See NOT_ADDABLE_STATES. */
+      if (NOT_ADDABLE_STATES.has(classifyList(card.current_list as string | undefined))) {
         res.status(409).json({
           ok: false,
           error: { code: 'CARD_COMPLETE', message: 'That task card is already complete — the schedule is for work still to be done.' },
@@ -634,7 +616,7 @@ export function scheduleRouter(): Router {
           continue;
         }
         // #72 §5: the add-time filter — the same answer the pool gives
-        if (classifyList(card.current_list as string | undefined) === 'done') {
+        if (NOT_ADDABLE_STATES.has(classifyList(card.current_list as string | undefined))) {
           skipped.push({ card_id: id, code: 'CARD_COMPLETE' });
           continue;
         }
@@ -825,78 +807,13 @@ export function scheduleRouter(): Router {
     },
   );
 
-  // FR-12: day placement on Deadlines. Never changes the week (FR-12.3) —
-  // the day must sit inside the milestone's CURRENT week and off holidays
-  // (FR-12.4 rejects drops). null clears back to the forecast default.
-  router.put(
-    '/api/projects/:projectId/deadlines/day',
-    ensureAuthenticated,
-    ensureProjectMember,
-    async (req, res) => {
-      const body = z
-        .object({
-          cardId: z.string().min(1),
-          phase: z.enum(['sketch', 'render']),
-          day: DATE_ONLY.nullable(),
-        })
-        .strict()
-        .safeParse(req.body);
-      if (!body.success) {
-        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY', issues: body.error.issues } });
-        return;
-      }
-      const projectId = res.locals.project._id as Types.ObjectId;
-      const actor = (req.user as SessionUser).email;
-      const { cardId, phase, day } = body.data;
-
-      const pipeline = await loadPipeline(projectId, manilaToday(), res.locals.project.weekly_capacity);
-      const milestone = toMilestones(pipeline.rows).find((m) => m.cardId === cardId && m.phase === phase);
-      if (!milestone) {
-        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } }); // unslotted/unforecastable cards have no milestone
-        return;
-      }
-
-      const existing = await MilestoneDayPlan.findOne({ project_id: projectId, trello_card_id: cardId, phase }).lean();
-      const beforeDay = existing && existing.week === milestone.week ? existing.day : null;
-
-      if (day === null) {
-        if (!existing) {
-          res.json({ ok: true, plannedDay: null, noop: true });
-          return;
-        }
-        await MilestoneDayPlan.deleteOne({ project_id: projectId, trello_card_id: cardId, phase });
-        await audit({
-          project_id: projectId, actor, action: 'deadline.day_cleared', entity: 'deliverable',
-          entity_id: cardId, before: { phase, day: beforeDay }, after: { phase, day: null },
-        });
-        res.json({ ok: true, plannedDay: null });
-        return;
-      }
-
-      if (!weekDays(milestone.week).includes(day)) {
-        res.status(400).json({ ok: false, error: { code: 'DAY_OUTSIDE_WEEK', week: milestone.week } });
-        return;
-      }
-      if (isHolidayDate(day)) {
-        res.status(400).json({ ok: false, error: { code: 'HOLIDAY' } }); // holidays take zero and reject drops
-        return;
-      }
-      if (beforeDay === day) {
-        res.json({ ok: true, plannedDay: day, noop: true });
-        return;
-      }
-      await MilestoneDayPlan.updateOne(
-        { project_id: projectId, trello_card_id: cardId, phase },
-        { $set: { day, week: milestone.week, set_by: actor, set_at: new Date() } },
-        { upsert: true },
-      );
-      await audit({
-        project_id: projectId, actor, action: 'deadline.day_set', entity: 'deliverable',
-        entity_id: cardId, before: { phase, day: beforeDay }, after: { phase, day, week: milestone.week },
-      });
-      res.json({ ok: true, plannedDay: day });
-    },
-  );
+  /* Day placement on Deadlines — DELETED 2026-09-08 (owl #87 / spec v1.3
+     §6.5, JP). `PUT /deadlines/day` was the day-drag planner's write; the
+     planner is retired and the route had no caller after the milestone tab
+     left (owls #74/#75). Which day a card sits on is now its own
+     `sprint_items.starts_on`, set on Sprint Schedules. The `MilestoneDayPlan`
+     model stays only because the two lapse sweeps above still clear stale
+     rows; nothing writes new ones. Do not reintroduce this route. */
 
   // Cards/week (BR-6a): Sirius-internal planning data, the same class as
   // slotted_week and pins — no source system is touched, so this is NOT gated
@@ -979,7 +896,9 @@ export function scheduleRouter(): Router {
       const projectId = res.locals.project._id as Types.ObjectId;
       const pipeline = await loadPipeline(projectId, body.data.from, res.locals.project.weekly_capacity);
       const cards: PlannerCard[] = pipeline.rows
-        .filter((r) => r.status !== 'done')
+        // §7a: the planner pool skips finished work AND lanes outside the
+        // delivery pipeline, the same set the two add paths refuse.
+        .filter((r) => !NOT_ADDABLE_STATES.has(r.status))
         .map((r) => ({
           id: r.cardId,
           difficulty: r.difficulty ?? undefined,

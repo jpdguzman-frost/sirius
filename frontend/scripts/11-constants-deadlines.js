@@ -5,9 +5,17 @@
    731:100872, 810:121954; PLAN.md block 3 B1–B7, B12–B16) ----------------
    The tab is a VIEW over the schedule's own rows: a work card appears only
    when it is added to a sprint AND plotted AND has a forecast finish (#74 §1
-   — doubly opt-in, never reconciled against the board), on the day of its
-   forecast FINISH (B2 — the day rollover moves, and what "slated for a day"
-   means for a delivery). Every helper below is PURE — no app access — so the
+   — doubly opt-in, never reconciled against the board), on the day it STARTS
+   — `startsOn`, the day the team is slated to pick the work up.
+
+   PLACEMENT FLIPPED on 2026-09-08 (spec v1.3 §6.2, the answer to the question
+   block 3 raised while it was still open): it was the forecast FINISH under
+   B2. The day work begins is the design lead's own instrument, where a
+   computed finish is not something the lead can choose or move. The finish is
+   still half of the gate above, still what the card's own forecast reads and
+   still what rollover tests — it is only no longer the placement key.
+
+   Every helper below is PURE — no app access — so the
    recipe suite can execute it from shipped source against fixture rows, and
    the milestone tab's own recipes (a rule table, a week-range and two card
    formatters) left with the tab they described (B9).
@@ -92,13 +100,17 @@ function dlWeekRange(monday) {
    THE OPT-IN GATE (#74 §1, B2): a row without `startsOn` (listed, not
    plotted) or without `finish` (no difficulty label, or the card has left
    the board) is skipped — nothing to draw, and the rollover never moves it
-   either. A finish outside the shown weeks is not drawn: month scope.
+   either. Both halves of the gate still hold; only the placement key moved.
+   A START outside the shown weeks is not drawn: month scope.
 
-   THE DAY is the forecast FINISH (B2). A card lands in its day's column, and
-   the collapsed lane stacks the days in order with each day's cards in the
-   rows' own order (B7) — nothing here re-sorts. A holiday column renders like
-   any other and carries no flag: the frame draws no holiday state, and the
-   engine's WORKDAY never puts a finish on one, so nothing can land there.
+   THE DAY is the plotted START, `startsOn` (spec v1.3 §6.2, 2026-09-08 —
+   supersedes B2's forecast finish). A card lands in its start day's column,
+   and the collapsed lane stacks the days in order with each day's cards in
+   the rows' own order (B7) — nothing here re-sorts. The WEEK follows the same
+   key, so a card that starts in one week and finishes in the next counts in
+   the week it starts. A holiday column renders like any other and carries no
+   flag: the frame draws no holiday state, and a start plotted on one draws
+   there like on any other day — no calendar is read here, then or now.
 
    THE COUNTS are three INDEPENDENT tallies (#75 §1, B4): pending is the
    pending lane, done the done lane, urgent the label on ANY status. An
@@ -127,7 +139,7 @@ function dlBuild(rows, mondays, cap) {
   for (const w of weeks) for (const d of w.days) slot.set(d.day, { w, d });
   for (const r of rows || []) {
     if (!r.startsOn || !r.finish) continue; // the gate: listed but unplotted, or no forecast
-    const at = slot.get(r.finish);
+    const at = slot.get(r.startsOn); // the START day places the card (spec v1.3 §6.2)
     if (!at) continue; // outside the shown month
     const card = {
       id: r.id,

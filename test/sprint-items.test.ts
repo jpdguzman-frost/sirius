@@ -368,7 +368,7 @@ describe('every row is placed by hand, render included (BR-1a)', () => {
 describe('two rules that look alike and are not (#72 §5)', () => {
   it('a card already complete is never OFFERED', async () => {
     const { project, sprint, agent } = await setup();
-    await mkWorkCard(project._id, 'done1', { current_list: 'Done' });
+    await mkWorkCard(project._id, 'done1', { current_list: 'Design Complete' });
     await mkWorkCard(project._id, 'open1');
 
     const { addable } = await load(project._id);
@@ -377,12 +377,45 @@ describe('two rules that look alike and are not (#72 §5)', () => {
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'done1' }).expect(409);
   });
 
+  /* §7a, 2026-09-08. The add filter is now TWO states, and this is the second.
+     Under the retired keyword classifier none of the ops lists but
+     `Ops Work Complete` was filtered at all, so ops task cards were offered
+     into the sprint pool as ordinary work. */
+  it('a card in an EXCLUDED lane is never OFFERED either (§7a)', async () => {
+    const { project, sprint, agent } = await setup();
+    await mkWorkCard(project._id, 'ops1', { current_list: 'Working on Ops Work' });
+    await mkWorkCard(project._id, 'binned1', { current_list: 'Discarded Work' });
+    await mkWorkCard(project._id, 'open1');
+
+    const { addable } = await load(project._id);
+    expect(addable['MC-07']!.map((c) => c.cardId)).toEqual(['open1']);
+    // and the routes give the same answer the pool does
+    await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'ops1' }).expect(409);
+  });
+
+  it('an excluded card the PM already scheduled STAYS, and its row says `excluded`', async () => {
+    /* The filter governs ADD, never REMOVE — the same rule a completed card
+       gets. A row that vanished when someone moved its card to an ops lane
+       would destroy the record of what was planned. */
+    const { project, sprint, agent } = await setup();
+    await mkWorkCard(project._id, 'w1');
+    await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
+
+    await WorkCard.updateOne({ project_id: project._id, trello_card_id: 'w1' }, { $set: { current_list: 'Working on Ops Work' } });
+
+    const { rows, addable } = await load(project._id);
+    expect(rows.map((r) => r.cardId)).toEqual(['w1']);
+    expect(rows[0]!.status).toBe('excluded'); // NOT null — null means the card left the board
+    expect(rows[0]!.startsOn).toBe('2026-08-03'); // and it keeps its bar
+    expect(addable['MC-07'] ?? []).toEqual([]);
+  });
+
   it('a card that completes AFTER being scheduled STAYS', async () => {
     const { project, sprint, agent } = await setup();
     await mkWorkCard(project._id, 'w1');
     await addAndPlot(agent, project._id, 'w1', String(sprint._id), '2026-08-03');
 
-    await WorkCard.updateOne({ project_id: project._id, trello_card_id: 'w1' }, { $set: { current_list: 'Done' } });
+    await WorkCard.updateOne({ project_id: project._id, trello_card_id: 'w1' }, { $set: { current_list: 'Design Complete' } });
 
     /* Not removed, not greyed out, not prompted to clear. A tidy-up that
        pruned completed rows would destroy the record of what was planned. */
@@ -768,7 +801,7 @@ describe('Add All is one request that answers per card', () => {
     });
     await mkWorkCard(project._id, 'open1');
     await mkWorkCard(project._id, 'open2');
-    await mkWorkCard(project._id, 'done1', { current_list: 'Done' });
+    await mkWorkCard(project._id, 'done1', { current_list: 'Design Complete' });
     await mkWorkCard(project._id, 'sched1');
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 'sched1' }).expect(201);
 
@@ -813,7 +846,7 @@ describe('Add All is one request that answers per card', () => {
 
   it('audits one sprintItem.add per CREATED row, in the single add’s own shape (invariant 10)', async () => {
     const { project, sprint, agent } = await setup();
-    for (const id of ['s1', 'b1', 'b2', 'done1']) await mkWorkCard(project._id, id, id === 'done1' ? { current_list: 'Done' } : {});
+    for (const id of ['s1', 'b1', 'b2', 'done1']) await mkWorkCard(project._id, id, id === 'done1' ? { current_list: 'Design Complete' } : {});
     await add(agent, project._id, { sprint_id: String(sprint._id), card_id: 's1' }).expect(201);
     await batch(agent, project._id, { sprint_id: String(sprint._id), card_ids: ['b1', 'b2', 'done1'] }).expect(200);
 

@@ -4,10 +4,20 @@
 > node `630:51389`, deliverable × phase), superseded whole by the work-card rebuild of
 > owls #74/#75/#78 §2 (JP ruling 2026-08-27; built block 3, 2026-09-05). Current law:
 > `deadlines-rules.md`; where this file and it disagree, `deadlines-rules.md` wins. Kept
-> because it records WHY R-dl-a…n were built as they were — the acknowledge/day-planner
-> hold (R-dl-i) is now PARKED server-side with no caller (JP 2026-09-05), and R-dl-n (the
-> acknowledged-state design) is still with product. The node `630:51389` no longer
+> because it records WHY R-dl-a…n were built as they were. The node `630:51389` no longer
 > exists in the file.
+>
+> **Amended 2026-09-08** — three rules below are now doubly superseded, recorded here so
+> this archive is not read as live law:
+> - **R-dl-b** (the caption date "places the card in this week") — placement is the
+>   plotted START day, not any forecast date (spec v1.3 §6.2, joined with the readings in
+>   owl #86; the work-card rebuild had it on the forecast finish until this date).
+> - **R-dl-k** (every card carries an accent, red urgent / blue not) — the bar is
+>   URGENT-ONLY and amber-600 (owl #86); a non-urgent card gets no bar at all.
+> - **R-dl-i / R-dl-n** (the acknowledge action and the day planner "stay", parked
+>   server-side with no caller as of 2026-09-05) — both are DELETED, server half
+>   included, on owl #87's ruling; stored acknowledgements were archived by migration
+>   011, never dropped. The acknowledged-state design R-dl-n waited on is moot.
 
 Layer-2 law for the redesigned Deadlines tab. Five categorized annotations were
 read off the frame and verified against the owl before a line was written; the

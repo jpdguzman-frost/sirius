@@ -363,23 +363,14 @@ const throughputGridSchema = new Schema(
 );
 throughputGridSchema.index({ project_id: 1, difficulty: 1 }, { unique: true });
 
-// ============ conflict acknowledgements ============
-// Keyed on the situation: week | rule | capacity | sorted card:phase pairs
-// (invariant 13 v4.3.0). The key is composed in ONE place — src/services/
-// conflicts.ts — and is opaque everywhere else: a superseded ack simply stops
-// matching and its row stays put (a non-match is not a state change).
-
-const conflictAckSchema = new Schema(
-  {
-    project_id: projectRef,
-    conflict_key: { type: String, required: true },
-    acknowledged_by: { type: String, required: true, lowercase: true, trim: true },
-    reason: String,
-    at: { type: Date, required: true, default: Date.now },
-  },
-  { collection: 'conflict_acknowledgements' },
-);
-conflictAckSchema.index({ project_id: 1, conflict_key: 1 }, { unique: true });
+// ============ conflict acknowledgements — RETIRED 2026-09-08 ============
+// Owl #87 (JP): the week-level conflict badges an acknowledgement dismissed
+// were replaced by a count, and a count asserts nothing, so it never needs
+// dismissing. The schema, the model and the ALL_MODELS entry are gone; the
+// stored rows are NOT — migration 011 renamed the collection to
+// `conflict_acknowledgements_archive`, which no model maps and nothing reads.
+// The `conflict.acknowledge` / `conflict.restore` audit rows stay forever
+// (invariant 10). A fresh database never creates the collection at all.
 
 // ============ audit ============
 // Append-only: the audit writer service (src/services/audit) exposes insert
@@ -549,7 +540,6 @@ export const CardEvent = mongoose.model('CardEvent', cardEventSchema);
 export const ModelSample = mongoose.model('ModelSample', modelSampleSchema);
 export const ModelGrid = mongoose.model('ModelGrid', modelGridSchema);
 export const ThroughputGrid = mongoose.model('ThroughputGrid', throughputGridSchema);
-export const ConflictAcknowledgement = mongoose.model('ConflictAcknowledgement', conflictAckSchema);
 export const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 export const SyncRun = mongoose.model('SyncRun', syncRunSchema);
 export const PushEvent = mongoose.model('PushEvent', pushEventSchema);
@@ -570,7 +560,6 @@ export const ALL_MODELS = [
   ModelSample,
   ModelGrid,
   ThroughputGrid,
-  ConflictAcknowledgement,
   AuditLog,
   SyncRun,
   PushEvent,

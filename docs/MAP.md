@@ -19,7 +19,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 
 <!-- GEN:AREAS -->
 - `frontend` — 36 files → docs/architecture/map-frontend.md — no-bundler Ractive app: numbered app scripts (one shared scope, filename order) + a template layout with numbered partials and views + numbered styles
-- `backend` — 66 files → docs/architecture/map-backend.md — Express 5 + worker; lib/ holds the verbatim-port trio; scripts/ are ops
+- `backend` — 63 files → docs/architecture/map-backend.md — Express 5 + worker; lib/ holds the verbatim-port trio; scripts/ are ops
 <!-- /GEN:AREAS -->
 
 ## Doc map
@@ -41,7 +41,7 @@ _Read first, instead of exploring: live status · the areas (per-file lines live
 - test/gantt-legend.test.ts — one phase→colour map only; deadline tick reuses .gdl (1px red).
 - test/planner-weeks.test.ts — week/month labels + bar geometry from shipped planner text.
 - test/sprints-modal.test.ts — modal validators executed out of the shipped app scripts + rendered states.
-- test/pipeline-warning-recipe.test.ts, -wiring, -dismissal-css, -live — warning icon + hover card, keyed on server-emitted tokens.
+- test/pipeline-warning-recipe.test.ts, -wiring, -dismissal-css, -live — DELETED 2026-09-08 (spec v1.3 §4.4 WITHDRAWN, owl #87); the withdrawal sweep and the plain DEADLINE cell are now covered by test/pipeline-expanded-columns.test.ts and test/pipeline-expanded-metrics.test.ts.
 
 <!-- HAND:BEGIN -->
 - lib/calendar.ts + lib/forecast.ts + lib/planner.ts = the VERBATIM-port trio (invariant 5); golden tests pin parity (test/golden/).

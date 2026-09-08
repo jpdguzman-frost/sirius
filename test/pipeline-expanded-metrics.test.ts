@@ -1,8 +1,15 @@
 /*
  * Sections H–I and the two colour sections of test/pipeline-expanded.test.ts
  * (split 2026-09-05): the work-card urgency/difficulty writes, the URGENT and
- * UNATTACHED metrics, and the amber/blue tile colours. Describes moved
- * verbatim.
+ * UNATTACHED metrics, and the tile colours. Describes moved verbatim.
+ *
+ * AMENDED 2026-09-07 (owl #81, Miles): OPEN WORK is off the strip. It counted
+ * the incomplete-card set of build-spec §4.4, and §4.4 is withdrawn whole —
+ * so the tile, its blue recipe, the `open` figure in the kpi computed and the
+ * `corrections` state it counted are all gone, and the guard that pinned them
+ * is now the guard that they stay gone. The colour RULE #69 established (a
+ * coloured tile colours the label as well as the figure) outlived its first
+ * tile and is asserted over the two modifiers that remain.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -97,7 +104,7 @@ describe('the URGENT tile counts urgent WORK cards, project-wide', () => {
       const computed = { ${method('kpi')} };
       return computed.kpi.call({ get: (k) => DATA[k] });
     `)({
-      rows: [], workCardsByMc: {}, corrections: [],
+      rows: [], workCardsByMc: {},
       unattachedWork: { cards: 0, mcNumbers: [] },
       ...over,
     }) as { urgent: number; main: number; work: number };
@@ -316,20 +323,64 @@ describe('the Pipeline urgency colour set is amber, tile and badge alike', () =>
 });
 
 /* ------------------------------------------------------------------ */
-/* OPEN WORK goes blue — owl miles→jp #69, node 731:100892             */
+/* The metric strip — owl #81 took OPEN WORK off it                    */
+/* ------------------------------------------------------------------ */
+
+describe('the strip counts four things, and incomplete cards is not one of them', () => {
+  const kpi = { main: 10, work: 45, urgent: 1, unattached: 0, unattachedMcs: 0 };
+
+  /* THE RULING (owl #81, Miles, 2026-09-07). OPEN WORK counted `corrections`
+     — the incomplete-card set build-spec §4.4 described — and §4.4 is
+     withdrawn whole. The stale claim went with it: the metric strip counts
+     work cards now, and the incomplete set has NO tile. If a count of
+     incomplete cards is ever wanted it needs its own decision rather than
+     inheriting a tile whose meaning has moved.
+
+     This is the negation of the guard that used to stand here ("keeps OPEN
+     WORK counting corrections"). It is asserted at three depths, because the
+     tile could come back at any one of them on its own: the rendered strip,
+     the computed that fed it, and the state key the computed counted. */
+
+  it('renders MAIN CARDS · WORK CARDS · URGENT — and no OPEN WORK', () => {
+    const markup = renderMetrics(kpi);
+    expect(markup, 'the withdrawn tile is back on the strip').not.toContain('OPEN WORK');
+    expect(markup, 'the tile came back under another word').not.toContain('metric blue');
+    for (const label of ['MAIN CARDS', 'WORK CARDS', 'URGENT']) {
+      expect(markup, `${label} left the strip`).toContain(label);
+    }
+  });
+
+  it('draws UNATTACHED CARDS as the fourth, and only when there is some (owl #61)', () => {
+    // the conditional tile is what makes "four" the full strip rather than a
+    // count of what this fixture happens to carry
+    expect(renderMetrics(kpi), 'a permanent zero teaches people to stop reading it')
+      .not.toContain('UNATTACHED CARDS');
+    expect(renderMetrics({ ...kpi, unattached: 35, unattachedMcs: 11 })).toContain('UNATTACHED CARDS');
+  });
+
+  it('stops computing `open`, and stops holding `corrections` to compute it from', () => {
+    /* Deeper than the markup: a tile removed from the template while the
+       computed still counted a state key nobody filled would ship a silent
+       arithmetic over an empty array, ready for the next reader to re-surface.
+       The payload half is the server's (agent L) — this is the client's. */
+    expect(method('kpi'), 'the kpi computed still returns an `open` count').not.toMatch(/\bopen:/);
+    expect(APP_JS, 'the client still holds a `corrections` array').not.toContain('corrections');
+  });
+
+  it('leaves NO .blue tile recipe behind for it to come back to', () => {
+    // dead selectors read as a live treatment to the next person pricing a
+    // change — the whole reason the withdrawn rules are removed, not orphaned
+    expect(PIPELINE_CSS, 'the OPEN WORK tile colour outlived the tile')
+      .not.toMatch(/\.metric\.blue/);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Tile colour pairs the label with the figure — owl #69              */
 /* ------------------------------------------------------------------ */
 
 describe('a coloured metric tile colours the LABEL as well as the figure', () => {
-  const kpi = { main: 10, work: 45, open: 4, urgent: 1, unattached: 0, unattachedMcs: 0 };
-
-  it('OPEN WORK carries blue/500', () => {
-    expect(renderMetrics(kpi)).toContain('class="metric blue"');
-    const rule = cssRule('.metrics .metric.blue .mlabel, .metrics .metric.blue .mvalue', PIPELINE_CSS);
-    expect(rule).toContain('var(--blue-500)');
-    // that the token EXISTS, not what it is worth: pinning the hex here would
-    // fail on a palette retune that has nothing to do with this tile
-    expect(TOKENS_CSS).toContain('--blue-500:');
-  });
+  const kpi = { main: 10, work: 45, urgent: 1, unattached: 0, unattachedMcs: 0 };
 
   /* THE RULE, not this tile. #69 says "both text nodes take the colour" and
      says it twice, because the natural build is to colour only the 32px
@@ -347,7 +398,7 @@ describe('a coloured metric tile colours the LABEL as well as the figure', () =>
        modifiers they introduce, and both must be inside this walk rather than
        beside it. Named explicitly so a renamed modifier fails here instead of
        quietly leaving the pairing rule uncovered. */
-    expect([...new Set(modifiers)].sort()).toEqual(['blue', 'quiet', 'urgent']);
+    expect([...new Set(modifiers)].sort()).toEqual(['quiet', 'urgent']);
 
     for (const mod of new Set(modifiers)) {
       const selector = `.metrics .metric.${mod} .mlabel, .metrics .metric.${mod} .mvalue`;

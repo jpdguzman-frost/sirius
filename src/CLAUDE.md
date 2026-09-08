@@ -48,11 +48,9 @@ this file points in one line — it never restates.
    session AND membership re-checked per route. Hiding a tab is not access
    control [invariant 9; decisions/0005].
 
-7. **The conflict-ack key recipe has ONE home**: `conflictKey()` in
-   `src/services/conflicts.ts` — `week | rule | capacity | sorted card:phase
-   pairs` [invariant 13, 2026-08-17 amendment; decisions/0019]. Nothing else
-   composes, splits, or rebuilds a key; routes and client treat it as an
-   opaque string.
+7. **The conflict-key recipe has no home anymore**: `src/services/conflicts.ts`
+   is deleted (2026-09-08, owl #87; invariant 13). Migration 007 in
+   `scripts/migrate/migrations.ts` carries the two key helpers inlined, verbatim.
 
 8. **Probing a running instance** (host or laptop, `npx tsx -e`): the Mongo
    env var is **`MONGODB_URI`**; imports need explicit **`.ts`** extensions;

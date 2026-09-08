@@ -229,19 +229,19 @@ describe('push-path Started/Done spans (FR-9.4 + the 2026-08-13 span spec)', () 
   it('a reopened card re-completed by push gets the NEW done date, never the stale one', async () => {
     const project = await makeProject();
     const start = movement();
-    const done1 = movement({ fromList: 'Working on Design', toList: 'Done', detectedAt: '2026-08-07T01:00:00.000Z' });
-    await drainOne(aresCard({ currentList: 'Done' }), [start, done1], project._id);
+    const done1 = movement({ fromList: 'Working on Design', toList: 'Design Complete', detectedAt: '2026-08-07T01:00:00.000Z' });
+    await drainOne(aresCard({ currentList: 'Design Complete' }), [start, done1], project._id);
     expect((await Deliverable.findOne({ trello_card_id: 'c9' }).orFail()).work_done_at?.toISOString())
       .toBe('2026-08-07T01:00:00.000Z');
 
     // reopened — done clears, start survives
-    const reopen = movement({ fromList: 'Done', toList: 'Working on Design', detectedAt: '2026-08-10T01:00:00.000Z' });
+    const reopen = movement({ fromList: 'Design Complete', toList: 'Working on Design', detectedAt: '2026-08-10T01:00:00.000Z' });
     await drainOne(aresCard({ currentList: 'Working on Design' }), [start, done1, reopen], project._id);
     expect((await Deliverable.findOne({ trello_card_id: 'c9' }).orFail()).work_done_at).toBeNull();
 
     // re-completed — the Aug 14 move, not the Aug 7 one
-    const done2 = movement({ fromList: 'Working on Design', toList: 'Done', detectedAt: '2026-08-14T01:00:00.000Z' });
-    await drainOne(aresCard({ currentList: 'Done' }), [start, done1, reopen, done2], project._id);
+    const done2 = movement({ fromList: 'Working on Design', toList: 'Design Complete', detectedAt: '2026-08-14T01:00:00.000Z' });
+    await drainOne(aresCard({ currentList: 'Design Complete' }), [start, done1, reopen, done2], project._id);
     const doc = await Deliverable.findOne({ trello_card_id: 'c9' }).orFail();
     expect(doc.work_started_at?.toISOString()).toBe('2026-08-04T01:00:00.000Z');
     expect(doc.work_done_at?.toISOString()).toBe('2026-08-14T01:00:00.000Z');

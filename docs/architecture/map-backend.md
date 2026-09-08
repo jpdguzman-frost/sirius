@@ -5,7 +5,6 @@ _last-verified: 2026-08-18_
 
 <!-- GEN:MODULES -->
 - `lib/calendar.ts` — VERBATIM: workday math, weeks, toFriday quirk; injectable holidays (ARES canonical); workday/toFriday/setHolidays.
-- `lib/dayplan.ts` — NEW (not the port): day capacities for Deadlines daily plotting; dayCapacities/weekDays.
 - `lib/forecast.legacy.ts` — RETIRED workbook formula, migration tests only, never UI; legacyForecast.
 - `lib/forecast.ts` — VERBATIM: the empirical forecast users see; SLA overrides cascade; forecast.
 - `lib/model.ts` — verbatim grid lookup + shipped EMPIRICAL snapshot; designCell/laneOf.
@@ -13,7 +12,6 @@ _last-verified: 2026-08-18_
 - `lib/planner.ts` — VERBATIM: suggestPlan/weekLoad/sprintFor/sprintIssues/reflowSprints.
 - `lib/sheets.ts` — read-only service-account Sheets source; makeSheetSource.
 - `lib/trello.ts` — THE write path, exactly W1/W2/W3; TrelloClient/makeTrelloWriter.
-- `scripts/ackcap-probe.ts` — seeded e2e proof on in-memory mongod.
 - `scripts/allowlist.ts` — ONLY path creating allow-list rows/memberships/admin flags (CLI).
 - `scripts/ares-probe.mjs` — openapi contract-drift (CI).
 - `scripts/batch3-probe.ts` — seeded e2e proof on in-memory mongod.
@@ -53,7 +51,6 @@ _last-verified: 2026-08-18_
 - `src/services/ares.ts` — ARES read-API client (v1 envelopes, 60/min); AresClient.
 - `src/services/audit.ts` — insert-only audit writer; audit.
 - `src/services/calendar-sync.ts` — ARES-canonical work calendar persist/load (global; invariant-1 exception); loadCalendar/syncCalendarFromAres.
-- `src/services/conflicts.ts` — BR-6 detection + invariant-13 situation key; detectConflicts/conflictKey.
 - `src/services/guard.ts` — refuse prod board ids outside production; assertNotProductionBoards.
 - `src/services/intake-parser.ts` — sheet parser (ragged rows, serial dates, dup Type cols); parseIntake.
 - `src/services/mapper.ts` — Trello taxonomy → deliverables + MC-group work cards; mapTrello.

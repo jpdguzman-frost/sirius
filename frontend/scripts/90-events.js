@@ -446,8 +446,8 @@ app.on({
      opened under it so a reader can see and change what the chip names without
      going back to the Filter button.
 
-     It opens on POINTER, like the warning card, and leaves through the same
-     scheduler: the panel sits 4px clear of the chip, so without a delay the
+     It opens on POINTER and leaves through the shared hover-close scheduler:
+     the panel sits 4px clear of the chip, so without a delay the
      pointer crossing that gap would close what it is reaching for. It is a DOM
      CHILD of the chip, which is what makes the containment guard below cover
      the panel too — moving onto a checkbox never leaves `.fchip`. */
@@ -645,75 +645,12 @@ app.on({
       extra: { dueStaged: current, dueBaseline: current, dueMonth: monthOf(current || manilaToday()) },
     });
   },
-  /* ---- incomplete-card HOVER CARD (owl #41, node 537:69135) ----
-     Read-only: it explains what Trello is missing and links out. Same placer,
-     same dismissers, same focus return as every other overlay — the only thing
-     it brings of its own is its box size and the fact that a POINTER, not a
-     click, opens it. It is still a card and not a tooltip because it contains
-     `Open Card`, which a pointer-only overlay would put out of reach.
-     `warnPopIn` is bound to the icon AND to the card itself: the card's own
-     enter is what cancels the pending close while the pointer crosses the 4px
-     gap, so there is no separate "hold" handler. */
-  warnPopIn(ctx, cardId) { showWarnPop(ctx.node, cardId); },
-  warnPopOut(ctx) {
-    /* Nothing of OURS is open, so nothing of ours is leaving. showWarnPop
-       REFUSES to open over another overlay (R-warn-r) — without the same rule
-       on this side, a pointer that merely grazed a warning icon while a due
-       popover was up would schedule a close that discards a staged date only
-       Apply writes (W2). The refusal to open has to be matched by a refusal to
-       close, or the guard only holds one way. */
-    if (!leaveHoverOverlay('warnPop')) return;
-    /* Ractive delegates an each-block's events from the <tbody> with a CAPTURE
-       listener and then simulates bubbling by walking up from `ev.target` — so
-       a child's mouseleave is re-dispatched to this ancestor's handler even
-       though mouseleave does not bubble. Moving the pointer off the 14px glyph
-       onto the button's own padding, or between two lines inside the card,
-       would otherwise schedule a close while the pointer never left anything.
-       `relatedTarget` is where the pointer actually went; if that is still
-       inside the node this directive sits on, nothing left. Same shape as
-       warnPopFocusOut's guard, for the same reason. */
-    const to = ctx.event.relatedTarget;
-    if (to && ctx.node.contains(to)) return;
-    scheduleHoverClose(() => {
-      /* A card the KEYBOARD opened is not the pointer's to close: the icon can
-         be focused with the mouse resting on it, and a nudge off the glyph
-         would otherwise strand a focused trigger with nothing open and no key
-         that reopens it. Focus-out and Escape own that card's dismissal.
-         Scoped to the host of the card that is ACTUALLY open, not to any host:
-         every warned row has one, so `closest('.warnhost')` alone stands down
-         for a card focus was never in — Tab to row A's icon, then hover row
-         B's and leave, and B is stranded open with no pointer on it and no
-         focus in it. `overlayTrigger` is the open card's own icon. */
-      const ae = document.activeElement;
-      const host = ae && ae.closest && ae.closest('.warnhost');
-      if (host && overlayTrigger && host.contains(overlayTrigger)) return;
-      closeMenus();
-    });
-  },
-  /* Dismiss only when focus leaves the icon AND the card — focus moving from
-     the icon INTO `Open Card` is a Tab we exist to allow, and `.warnhost`
-     contains both, which is the whole reason the host element exists.
-     Nulling `overlayTrigger` first is load-bearing: closeMenus' heldFocus
-     branch would otherwise yank focus straight back to the icon the moment the
-     user Tabs off `Open Card` — a focus trap. It is the same idiom
-     openOverlay's toggle branch uses. A null relatedTarget (window blur, a
-     click on non-focusable chrome) does NOT close: the document click
-     dismisser owns that case, and closing here would fight it. */
-  warnPopFocusOut(ctx) {
-    /* Only OUR card is this handler's to dismiss, and `.warnhost` renders on
-       EVERY warned row — so "is a card open" is not the question, "is the open
-       card inside this host" is. The icon is tabbable on all 247 of them, so
-       Tab can carry focus through one while a due popover is open (closeMenus
-       would discard that staged date, W2, for nothing — R-warn-r from the
-       focus side) or while a card the POINTER opened on another row is up
-       (closing it here would discard a trigger this host never captured). The
-       card is rendered inside this host exactly when it is ours. */
-    if (!ctx.node.querySelector('.warnpop')) return;
-    const to = ctx.event.relatedTarget;
-    if (!to || ctx.node.contains(to)) return;
-    overlayTrigger = null;
-    closeMenus();
-  },
+  /* WITHDRAWN 2026-09-07 (owl #81, Miles): `warnPopIn`, `warnPopOut` and
+     `warnPopFocusOut` — the incomplete-card hover card's open, hover-leave and
+     focus-leave handlers — are gone with build-spec §4.4. The shared machinery
+     they exercised stays and is now the filter chip panel's alone:
+     `openHoverOverlay` / `leaveHoverOverlay` (the refuse-over-an-active-edit
+     and re-entry rules) and `scheduleHoverClose` (the one close timer). */
   duePick(_ctx, iso) { app.set('dueStaged', iso); }, // stages only — Apply writes
   dueNav(_ctx, dir) { app.set('dueMonth', monthShiftYm(app.get('dueMonth'), dir)); },
   // shortcuts are Manila-relative (invariant 11) and move the visible month

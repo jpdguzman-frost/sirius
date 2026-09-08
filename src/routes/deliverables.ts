@@ -1,7 +1,13 @@
 /**
  * Deliverables routes — pipeline read (FR-4.1–4.5), model read (FR-7.7,
- * AC-11), deadlines view (FR-6.1–6.6, BR-6). All read-only; Trello- and
- * sheet-owned fields never writable here (invariant 2).
+ * AC-11). All read-only; Trello- and sheet-owned fields never writable here
+ * (invariant 2).
+ *
+ * `GET /deadlines` (the milestone-unit read: milestones, day capacities,
+ * conflicts, acknowledged, replot) was DELETED 2026-09-08 — owl #87, JP.
+ * It lost its caller with the milestone tab (owls #74/#75) and the conflict
+ * half is withdrawn outright, not parked. The Deadlines tab reads
+ * `GET /deliverables` like every other tab. Do not reintroduce it.
  */
 
 import { Router } from 'express';
@@ -9,12 +15,10 @@ import { ensureAuthenticated } from '../auth/session.ts';
 import { ensureProjectMember } from '../auth/membership.ts';
 import { loadProjectModel } from '../services/model-grid.ts';
 import { latestRead } from '../services/sync-status.ts';
-import { loadPipeline, manilaToday, toMilestones } from '../services/pipeline.ts';
-import { detectConflicts, replotList } from '../services/conflicts.ts';
-import { dayCapacities } from '../../lib/dayplan.ts';
+import { loadPipeline, manilaToday } from '../services/pipeline.ts';
 import { getHolidays } from '../../lib/calendar.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
-import { ConflictAcknowledgement, MilestoneDayPlan, PushEvent, Sprint, SyncRun } from '../models/index.ts';
+import { PushEvent, Sprint, SyncRun } from '../models/index.ts';
 
 
 export function deliverablesRouter(): Router {
@@ -83,58 +87,6 @@ export function deliverablesRouter(): Router {
               lastSuccessAt: lastAresGood?.at ?? null,
             }
           : null,
-      });
-    },
-  );
-
-  router.get(
-    '/api/projects/:projectId/deadlines',
-    ensureAuthenticated,
-    ensureProjectMember,
-    async (_req, res) => {
-      const projectId = res.locals.project._id;
-      const pipeline = await loadPipeline(projectId, manilaToday(), res.locals.project.weekly_capacity);
-      const milestones = toMilestones(pipeline.rows, pipeline.workCardsByMc);
-
-      // FR-12: join day placements. A placement is valid only while the
-      // milestone still lands in the week it was made for — a moved week
-      // means the placement has LAPSED and reads as absent (FR-12.6).
-      const plans = await MilestoneDayPlan.find({ project_id: projectId }).lean();
-      const planByKey = new Map(plans.map((p) => [`${p.trello_card_id}:${p.phase}`, p]));
-      for (const m of milestones) {
-        const plan = planByKey.get(`${m.cardId}:${m.phase}`);
-        m.plannedDay = plan && plan.week === m.week ? plan.day : null;
-      }
-      // Day capacities per distinct milestone week (FR-12.4) — columns always
-      // sum exactly to the weekly capacity; holidays take zero.
-      const days: Record<string, ReturnType<typeof dayCapacities>> = {};
-      for (const week of new Set(milestones.map((m) => m.week))) {
-        days[week] = dayCapacities(week, res.locals.project.weekly_capacity);
-      }
-
-      const all = detectConflicts(milestones, res.locals.project.weekly_capacity);
-      // BR-9a: an acknowledgement silences ONE situation — its key carries the
-      // exact cards AND the weekly capacity they were acknowledged under, so a
-      // change to either re-surfaces the conflict (invariant 13 v4.3.0). The
-      // match is one set-membership test on an opaque string; the mismatch that
-      // re-surfaces a week writes nothing (it is a non-match, not a change).
-      // Card-level indicators (late flags on milestones) are NEVER suppressed.
-      const acks = await ConflictAcknowledgement.find({ project_id: projectId });
-      const ackedKeys = new Set(acks.map((a) => a.conflict_key));
-      const active = all.filter((c) => !ackedKeys.has(c.key));
-      const acknowledged = all.filter((c) => ackedKeys.has(c.key));
-      res.json({
-        ok: true,
-        milestones,
-        days,
-        conflicts: active,
-        acknowledged: acknowledged.map((c) => ({
-          ...c,
-          ack: acks.find((a) => a.conflict_key === c.key)
-            ? { by: acks.find((a) => a.conflict_key === c.key)!.acknowledged_by, reason: acks.find((a) => a.conflict_key === c.key)!.reason ?? null, at: acks.find((a) => a.conflict_key === c.key)!.at }
-            : null,
-        })),
-        replot: replotList(active),
       });
     },
   );

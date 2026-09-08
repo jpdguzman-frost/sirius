@@ -229,7 +229,10 @@ describe('planner phases — the Gantt bar (R3, contract §1.2)', () => {
     expect(row.difficulty).toBeNull();
     expect(row.forecast).toBeNull();
     expect(row.phases).toEqual([]);
-    expect(row.missing).toContain('difficulty label');
+    /* `row.missing` was asserted here. The per-row `missing` list left the
+       pipeline payload on 2026-09-08 with the §4.4 incomplete-card warning it
+       fed (owl #86); the row's own `difficulty` above is the fact this test
+       was ever about. */
   });
 
   it('never overlaps and never runs backwards across a mixed board', async () => {
@@ -277,7 +280,7 @@ describe('perWeek — the capacity footer (contract §1.3)', () => {
   it('excludes done rows and unslotted rows from the footer', async () => {
     const p = await newProject();
     await mk(p._id, 'live', { slotted_week: '2026-08-03' });
-    await mk(p._id, 'done', { slotted_week: '2026-08-03', current_list: 'Done' });
+    await mk(p._id, 'done', { slotted_week: '2026-08-03', current_list: 'Design Complete' });
     await mk(p._id, 'unslotted', {});
     const { rows, perWeek } = await load(p);
 
