@@ -41,13 +41,35 @@ thing wrong with it.
 
 | Route | Guarded when |
 |---|---|
-| `PATCH /api/projects/:projectId/sprint-items/:itemId` | the body carries a non-null `starts_on`. Judged against the TARGET sprint when the same request moves the row, so a move that carries a day is measured against where the row lands. `starts_on: null` un-plots and is never judged; a bare `sprint_id` move supplies no day and is never judged either — rollover legitimately walks a row past its sprint's end (§6.2) and the PM must still be able to re-file it |
+| `PATCH /api/projects/:projectId/sprint-items/:itemId` | the body carries a non-null `starts_on` — all three checks, against the TARGET sprint when the same request moves the row, so a move that carries a day is measured against where the row lands. `starts_on: null` un-plots and is never judged. A bare `sprint_id` move is judged too, on the RANGE alone — see below |
 | `POST /api/projects/:projectId/sprint-items` | the optional `starts_on` is present. The card-state refusals (409 `CARD_COMPLETE` / `CARD_EXCLUDED`) answer first — a card that cannot be scheduled at all is not a question about a day |
 | `POST /api/projects/:projectId/sprint-items/batch` | **never** — the batch body has no `starts_on` and `.strict()` refuses one (400 `INVALID_BODY`), so its rows land unplotted by construction (#72 §6) and its skip list (`NOT_FOUND`, `CARD_COMPLETE`, `CARD_EXCLUDED`, `ALREADY_SCHEDULED`) carries no placement code |
 
+### The bare list move (PATCH with a `sprint_id` and no `starts_on`)
+
+A request that changes only the list still **moves a bar**: the row carries its
+existing day across. So a **plotted** row is judged against the target sprint's
+range and refused with `OUT_OF_SPRINT` — the same 422 envelope and the same
+words, naming the TARGET's dates — when its current day falls outside them. The
+check runs after the no-op guard and after the target sprint's 404, before any
+mutation; a refusal writes nothing and audits nothing.
+
+It asks the **range and nothing else**: not the deadline, not the working-day
+calendar. That day was already judged in full when it was placed, and re-filing
+a row into another list is not re-placing it, so a refusal on either would be a
+422 for a day the request never named. An **unplotted** row (`starts_on` null)
+has no bar to misplace and moves into any sprint freely.
+
+The clause is `sprintRangeIssue()` in `src/services/sprint-items.ts`, which
+`plotIssue()` calls as its own first check — one range rule, one sentence, two
+callers. A row rollover has walked out of every sprint is re-filed by moving it
+into the sprint that DOES cover its day, or by sending a `starts_on` with the
+move.
+
 A refused write **creates nothing and audits nothing** — invariant 10 logs
 changes, not attempts. `src/services/rollover.ts` never calls the validator:
-§6.2 lets a roll leave its sprint and outrun the deadline, with no cap.
+§6.2 lets a roll leave its sprint and outrun the deadline, with no cap. It
+writes through Mongo, never through this route, so nothing above binds it.
 
 ## Withdrawn routes — deleted, not disabled
 

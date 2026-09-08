@@ -209,7 +209,7 @@ export function finishOf(
  * to the GROUP, never to one of them (invariant 4). "Earliest" was the
  * judgement that papered over that, and it went with the rule.
  */
-export function deadlineFor(card: { trello_due?: string | null } | undefined): string | null {
+export function deadlineFor(card: { trello_due?: string | null } | null | undefined): string | null {
   return card?.trello_due ?? null;
 }
 
@@ -255,13 +255,50 @@ export interface WorkingCalendar {
 }
 
 /**
+ * IS THIS DAY INSIDE THE SPRINT'S OWN DATES? `null` if yes, `OUT_OF_SPRINT` if
+ * not. Rule 1 of `plotIssue` below, factored out because it has a SECOND
+ * caller that must not ask the other two.
+ *
+ * That caller is the bare list move (`PATCH /sprint-items/:itemId` with a
+ * `sprint_id` and no `starts_on`, D5 resolved strict 2026-09-09). Moving a
+ * plotted row between lists moves its BAR — the row carries its day across —
+ * so the day has to be inside the sprint it lands in, and JP's 2026-09-08
+ * ruling ("a row cannot be placed outside its sprint's dates") is about where
+ * the bar ENDS UP, not about which request put it there. But the other two
+ * questions are not the move's to ask: the day was accepted once when it was
+ * placed, and neither the card's deadline nor the working-day calendar is
+ * something the PM is touching by dragging a row to another list — refusing on
+ * either would be a 422 for a day the request never named.
+ *
+ * ONE range rule with one set of words, not two: a copy here and a copy in
+ * `plotIssue` would be two places for the boundary (inclusive at both ends)
+ * and the sentence the PM reads to drift apart.
+ *
+ * Dates compare as strings — see `plotIssue`.
+ */
+export function sprintRangeIssue(input: {
+  sprint: { starts_on: string; ends_on: string };
+  startsOn: string;
+}): PlotIssue | null {
+  const { sprint, startsOn } = input;
+  if (startsOn < sprint.starts_on || startsOn > sprint.ends_on) {
+    return {
+      code: 'OUT_OF_SPRINT',
+      message: `That day is outside the sprint's dates (${longDate(sprint.starts_on)} – ${longDate(sprint.ends_on)}).`,
+    };
+  }
+  return null;
+}
+
+/**
  * CAN THE PM PLACE A BAR ON THIS DAY? `null` if yes, the refusal if not.
  *
  * ONE validator for every route that takes a `starts_on` from a person — the
  * single add and the plot/move PATCH — so the three answers cannot drift apart
  * per route. JP's rules (2026-09-08):
  *
- *  1. the day must be inside the sprint's own dates, both ends included;
+ *  1. the day must be inside the sprint's own dates, both ends included —
+ *     `sprintRangeIssue` above, which the bare list move asks on its own;
  *  2. the day must not be AFTER the card's deadline. The START is what is
  *     guarded — a FINISH past the deadline stays legal and paints the bar red
  *     (§5.1, R9-b). The deadline day itself is a legal start;
@@ -292,12 +329,8 @@ export function plotIssue(input: {
 }): PlotIssue | null {
   const { sprint, startsOn, deadline = null, calendar } = input;
 
-  if (startsOn < sprint.starts_on || startsOn > sprint.ends_on) {
-    return {
-      code: 'OUT_OF_SPRINT',
-      message: `That day is outside the sprint's dates (${longDate(sprint.starts_on)} – ${longDate(sprint.ends_on)}).`,
-    };
-  }
+  const range = sprintRangeIssue({ sprint, startsOn });
+  if (range) return range;
   if (deadline && startsOn > deadline) {
     return { code: 'PAST_DEADLINE', message: `That day is after the card's deadline (${longDate(deadline)}).` };
   }

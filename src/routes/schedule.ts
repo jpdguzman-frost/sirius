@@ -15,7 +15,7 @@ import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
 import { classifyList } from '../services/status-rules.ts';
 import { loadPipeline, manilaToday } from '../services/pipeline.ts';
-import { deadlineFor, nextTailPosition, plotIssue, tailPosition } from '../services/sprint-items.ts';
+import { deadlineFor, nextTailPosition, plotIssue, sprintRangeIssue, tailPosition } from '../services/sprint-items.ts';
 import { Deliverable, MilestoneDayPlan, Sprint, SprintItem, WorkCard } from '../models/index.ts';
 import { sprintIssues, suggestPlan, type PlannerCard } from '../../lib/planner.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
@@ -216,6 +216,17 @@ function blankNameIssues(sprints: { id: string; name: string; start: string }[])
   });
   return issues;
 }
+
+/**
+ * THE SPRINT A PLACEMENT IS JUDGED AGAINST, read under its project (invariant
+ * 1): the id — whose absence is the 404 at each call site — and the two dates
+ * `plotIssue` needs. ONE projection for all three readers below (the add, the
+ * target of a move, and the list a row already sits in), because a projection
+ * that forgot a boundary would hand the validator `undefined` and the range
+ * check would silently pass everything.
+ */
+const findPlotSprint = (projectId: Types.ObjectId, sprintId: string | Types.ObjectId) =>
+  Sprint.findOne({ _id: sprintId, project_id: projectId }).select({ _id: 1, starts_on: 1, ends_on: 1 }).lean();
 
 export function scheduleRouter(): Router {
   const router = Router();
@@ -501,9 +512,7 @@ export function scheduleRouter(): Router {
         /* The sprint's DATES come back too — an add may carry the placement
            (PLAN.md B13), and a placement is judged against the sprint it lands
            in (`plotIssue`). One read either way. */
-        Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId })
-          .select({ _id: 1, starts_on: 1, ends_on: 1 })
-          .lean(),
+        findPlotSprint(projectId, body.data.sprint_id),
         WorkCard.findOne({ project_id: projectId, trello_card_id: body.data.card_id, active: true })
           .select({ trello_card_id: 1, mc_number: 1, current_list: 1, trello_due: 1 })
           .lean(),
@@ -782,9 +791,7 @@ export function scheduleRouter(): Router {
         SprintItem.findOne({ _id: itemId, project_id: projectId }),
         body.data.sprint_id === undefined
           ? Promise.resolve(null)
-          : Sprint.findOne({ _id: body.data.sprint_id, project_id: projectId })
-              .select({ _id: 1, starts_on: 1, ends_on: 1 })
-              .lean(),
+          : findPlotSprint(projectId, body.data.sprint_id),
       ]);
       if (!item) {
         res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
@@ -806,19 +813,43 @@ export function scheduleRouter(): Router {
         res.json({ ok: true, noop: true });
         return;
       }
-      /* THE PLACEMENT GUARD (JP 2026-09-08), on the day the PM SUPPLIES and on
-         nothing else. Clearing the bar (`null`) is the absence of a placement
-         and is never judged; a bare list move supplies no day either, and
-         refusing one would strand the rows that most need moving — rollover
-         walks a row past its sprint's end and past its deadline by design
-         (§6.2), and the PM must still be able to re-file it. When a day IS
-         sent it is judged against the sprint the row will BE in, so a move
-         that carries a day is measured against the target, never the origin. */
+      /* THE BARE LIST MOVE (D5 resolved strict, 2026-09-09). A request that
+         changes `sprint_id` and supplies no day still MOVES A BAR: the row
+         carries its existing day across, so a plotted row is judged against
+         the TARGET's range — and against nothing else. Not the deadline and
+         not the calendar: that day was accepted when it was placed, and the
+         PM re-filing a row into another list is not re-placing it, so either
+         would be a 422 for a day the request never named. An UNPLOTTED row
+         has no bar to misplace and moves freely.
+
+         This was permissive at first, on the reasoning that rollover walks a
+         row past its sprint's end by design (§6.2) and the PM must still be
+         able to re-file it. That case survives — the roll leaves the day
+         alone only when NO sprint covers it, and the re-file the PM then
+         wants is INTO the sprint that does cover it, which passes. What the
+         old rule also allowed was an ordinary in-range row being re-filed
+         OUT of range, i.e. exactly the placement JP's 2026-09-08 ruling
+         forbids, reached by not mentioning the day. Rollover itself is
+         untouched: it writes through Mongo and never through this route.
+
+         Before any mutation, after the no-op guard and the target's 404 —
+         a refusal writes nothing and audits nothing (invariant 10). */
+      if (body.data.starts_on === undefined && sprint && before.starts_on) {
+        const range = sprintRangeIssue({ sprint, startsOn: before.starts_on });
+        if (range) {
+          res.status(422).json({ ok: false, error: range });
+          return;
+        }
+      }
+      /* THE PLACEMENT GUARD (JP 2026-09-08), on the day the PM SUPPLIES.
+         Clearing the bar (`null`) is the absence of a placement and is never
+         judged. When a day IS sent it is judged against the sprint the row
+         will BE in, so a move that carries a day is measured against the
+         target, never the origin — and it answers all three questions, where
+         the bare move above answers only the range. */
       if (body.data.starts_on != null) {
         const [target, card] = await Promise.all([
-          sprint ?? Sprint.findOne({ _id: item.sprint_id, project_id: projectId })
-            .select({ _id: 1, starts_on: 1, ends_on: 1 })
-            .lean(),
+          sprint ?? findPlotSprint(projectId, item.sprint_id),
           /* The row's deadline is the card's OWN Trello due date and nothing
              inherited (`deadlineFor`, owl #78 §2) — the same date the row
              draws its tick from, so the guard and the tick cannot disagree. */
@@ -837,7 +868,7 @@ export function scheduleRouter(): Router {
         const placement = plotIssue({
           sprint: target,
           startsOn: body.data.starts_on,
-          deadline: deadlineFor(card ?? undefined),
+          deadline: deadlineFor(card),
         });
         if (placement) {
           res.status(422).json({ ok: false, error: placement });
