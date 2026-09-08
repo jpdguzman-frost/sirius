@@ -15,7 +15,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 |---|---|---|---|
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12**; T073/T091 ⏸, T075 pending | write-enable on rt-837 = next JP gate |
-| 18i | **Lane-state table (§7a/#82) · start-day Deadlines (§6.2) · plain DEADLINE cell, amber bar, §4.4 withdrawn (#81/#86) · acknowledgement half deleted, archived by migration 011 (#87)** | **BUILT 2026-09-08** (`28b6080` · `547effd` · `81000d0` · `fe1089f`): VALIDATE ×4, 47 proofs, review 24 → 14 fixed, one simplify agent, E2E green by real pointer on the local rt-test copy | **deploy = JP's word**; then owl #67 + ack #81–#87 |
+| 18i | **Lane-state table (§7a/#82) · start-day Deadlines (§6.2) · plain DEADLINE cell, amber bar, §4.4 withdrawn (#81/#86) · acknowledgement half deleted, archived by migration 011 (#87)** | **DEPLOYED 2026-09-08** (`28b6080`…`2359a65`, JP's word): VALIDATE ×4, 47 proofs, review 24 → 14 fixed, E2E green; live healthz 200 ×3, migration 011 applied (archive 0 rows), withdrawn routes 404, worker up, urgency smoke green | Miles's #66/#67 answers |
 | 19 | **The ARES-sourced, tag-classified cycle-time model** (T179–T183, ~3–4d) — replaces the inter-event dwell derivation that produced `Medium/design = 0.13d`. Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
 
 **Build health (2026-09-08):** 1493 tests, 0 `it.todo`, 78 files — green
@@ -53,8 +53,8 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
   before building on one. **Thread**: miles→jp acked through **#71** + #76–#79;
-  **#72/#73 UNACKED** (screens pending), **#80** §2 processed, §1/§3 (W4) asked back in #66; **#81–#87 processed by block 6, ack at ship**;
-  jp→miles sent through **#66** (2026-09-08, JP's yes: OPEN WORK, W4, §6.2 day capacity asked; #80 §4/#83/#86 answered); **#67 drafted** for the ship (scratchpad `block6/owl-67-draft.md`); #62–#65 = blocks 2–5 (state-log 09-05/09-06). Product is fixing frame defects; **until they
+  **#72/#73 UNACKED** (screens pending), **#80** §2 processed, §1/§3 (W4) asked back in #66; **#81–#87 ACKED** (block 6 deployed);
+  jp→miles sent through **#66** (2026-09-08, JP's yes: OPEN WORK, W4, §6.2 day capacity asked; #80 §4/#83/#86 answered); **#67 sent** 2026-09-08 on JP's word (block 6 report); #62–#65 = blocks 2–5 (state-log 09-05/09-06). Product is fixing frame defects; **until they
   confirm, this build is authoritative over those frames** — including the
   past-deadline legend reworded 2026-08-27. **Awaiting Miles**: #66's three answers, a ruling on the reworded legend. Build spec **v1.3 is the held copy** (`docs/product/build-spec-v1.3.md`; banner names #86/#87).
   Closed threads → `docs/history/state-log/`.
