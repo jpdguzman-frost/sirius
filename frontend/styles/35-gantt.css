@@ -29,6 +29,11 @@
 
 .gantt {
   --gw: 92px; /* one week column — mirrors WEEK_PX in 10-constants-core.js */
+  /* one WORKDAY column: the placement grain since block seven (JP
+     2026-09-08). Derived from the week rather than shipped as a second pixel
+     number, so a zoom or a retuned column keeps the day and the week exact
+     halves of one another — the divisor mirrors WORKDAYS_PER_WEEK. */
+  --gu: calc(var(--gw) / 5);
   --gleft: 952px; /* 122 + 262 + 163 + 142 + 263 — mirrors LEFT_PANE_PX. No gutter: the checkbox replaced the grip */
   --gbar-h: 31px; /* the bar band (frame 731:98682) */
   font-family: var(--font-sans);
@@ -301,7 +306,12 @@
 .gantt .gact[disabled]:hover { background: none; color: var(--slate-400); }
 
 /* ---- 6. the timeline track + the bar ---- */
-.gantt .gtrack { position: relative; flex: none; display: flex; }
+/* the track takes the placement click on an unplotted row; `placing` is the
+   template's word for "the pointer is on a day this row may actually have",
+   so the pointer cursor is the affordance and its ABSENCE is the refusal —
+   a day outside the sprint or past the deadline never gets one. */
+.gantt .gtrack { position: relative; flex: none; display: flex; cursor: default; }
+.gantt .gtrack.placing { cursor: pointer; }
 .gantt .gweeks { display: flex; flex: 1; }
 /* the body gridline is the SAME hairline as the headers' (#e2e8f0 in the frame
    dump's row-weeks and footer Cells), so it runs continuously past the header
@@ -335,16 +345,25 @@
 .gantt .gitem {
   position: absolute; top: 50%; transform: translateY(-50%);
   height: var(--gbar-h); border-radius: var(--radius-xs);
+  cursor: grab; user-select: none;
 }
+/* mid-gesture (block seven). The bar IS the thing that moves — there is no
+   follower element to keep in step — so `dragging` only lifts it off the
+   grid a little, and `refused` says the drop will not be taken: a day
+   outside the row's sprint or past its deadline. Neither touches the fill,
+   which stays the one phase→colour map above; a second background here
+   would be a second answer to what colour a bar is. */
+.gantt .gitem.dragging { cursor: grabbing; box-shadow: var(--shadow-card); }
+.gantt .gitem.refused { cursor: not-allowed; opacity: 0.4; outline: 1px solid var(--red-500); outline-offset: 1px; }
 
 /* the client-deadline tick — the frame's hairline (731:98733; owl #72's
    ruling fixes width and colour, and the legend swatch above inherits both
    by borrowing this recipe rather than declaring its own) */
 .gantt .gdl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--red-500); }
 
-/* the placement + — rides HOVER over any UNPLOTTED row's track, in whichever
-   week column the pointer is over. plusLeft hands over the COLUMN's left
-   edge; the margin centres the circle inside the --gw column so the CSS half
+/* the placement + — rides HOVER over any UNPLOTTED row's track, on whichever
+   WORKDAY the pointer is over. plusLeft hands over that day's left edge; the
+   margin centres the 24px circle on the one-unit column, so the CSS half
    never repeats the geometry maths. `pointer-events: none` is load-bearing:
    the TRACK owns the click (#72 §6), and a solid button under the pointer
    would swallow the very click it advertises.
@@ -354,7 +373,7 @@
    halves to drift apart. */
 .gantt .gplus {
   position: absolute; top: 50%;
-  margin-left: calc((var(--gw) - 24px) / 2);
+  margin-left: calc((var(--gu) - 24px) / 2);
   transform: translateY(-50%);
   pointer-events: none;
   display: inline-flex; align-items: center; justify-content: center;
@@ -364,18 +383,18 @@
 }
 .gantt .gplus svg { display: block; }
 
-/* the hovered week cell — the slate-50 tint under the + (node 731:100271).
+/* the hovered DAY cell — the slate-50 tint under the + (node 731:100271).
    Placement is hover-gated on any unplotted row — Miles's note on 731:100277;
    the checkbox gates nothing — so this and the + appear and leave together.
-   Width mirrors the week column's --gw; the template stamps the column's
-   left%, so this rule repeats none of the geometry maths. No z-index on
+   One workday wide since block seven; the template stamps that day's left%,
+   so this rule repeats none of the geometry maths. No z-index on
    purpose: DOM order seats it under the bar, the deadline tick and the +,
    and being positioned at all lifts it over the static week grid.
    `pointer-events: none` for the same reason as the +'s: the TRACK owns the
    click. */
 .gantt .ghovcell {
   position: absolute; top: 0; bottom: 0;
-  width: var(--gw);
+  width: var(--gu);
   background: var(--slate-50);
   pointer-events: none;
 }

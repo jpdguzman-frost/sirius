@@ -18,6 +18,7 @@ import {
   divFragment,
   cssRule,
   renderSprintSchedule,
+  topDecl,
 } from './helpers/gantt-render.ts';
 import { groupsOf, schedulesView } from './helpers/sprint-schedule-tab.ts';
 
@@ -287,21 +288,109 @@ describe('the icon trio — two parked, one live (ruled decision 4)', () => {
  * (PLAN 2026-08-28 F2; Miles's note on node 731:100277)
  * ====================================================================== */
 
-describe('the violet + rides the hovered week of any unplotted row — the checkbox gates nothing', () => {
+/**
+ * The AFFORDANCE GUARD, executed out of the shipped file (rule 2) — never a
+ * retyped copy of its three clauses. `placeable` reads one key off the app
+ * instance (`sprints`), so a one-key stand-in is the whole surface it needs.
+ */
+interface PlaceHarness {
+  setSprints(list: Array<{ id: string; start: string | null; end: string | null }>): void;
+  placeable(row: unknown, day: string | null): boolean;
+}
+let place: PlaceHarness | undefined;
+const P = (): PlaceHarness => {
+  if (!place) {
+    place = new Function(`
+      const SPRINTS = { v: [] };
+      const app = { get: (k) => { if (k !== 'sprints') throw new Error('placeable harness: unstubbed app.get(' + k + ')'); return SPRINTS.v; } };
+      ${topDecl('placeable')}
+      return { setSprints: (list) => { SPRINTS.v = list; }, placeable };
+    `)() as PlaceHarness;
+  }
+  return place;
+};
+
+/** Sprint A runs Mon 10 Aug — Fri 21 Aug 2026, both ends inclusive. */
+const SPRINT_A = { id: 's1', start: '2026-08-10', end: '2026-08-21' };
+const inSprint = (deadline: string | null) => ({ sprintId: 's1', deadline });
+
+describe('placeable — the affordance guard, and the three rules it holds (JP 2026-09-08)', () => {
+  it('takes a day INSIDE the sprint, both boundary days included', () => {
+    P().setSprints([SPRINT_A]);
+    expect(P().placeable(inSprint(null), '2026-08-10')).toBe(true); // the first day
+    expect(P().placeable(inSprint(null), '2026-08-14')).toBe(true); // the middle
+    expect(P().placeable(inSprint(null), '2026-08-21')).toBe(true); // the last day
+  });
+
+  it('refuses a day BEFORE the sprint starts and one AFTER it ends', () => {
+    P().setSprints([SPRINT_A]);
+    expect(P().placeable(inSprint(null), '2026-08-07')).toBe(false); // the Friday before
+    expect(P().placeable(inSprint(null), '2026-08-24')).toBe(false); // the Monday after
+  });
+
+  it('takes the DEADLINE DAY itself and refuses the day after it', () => {
+    // §5.1 keeps a late FINISH legal and red; what JP refused is a START
+    // after the date the card was promised for — so the deadline day is in
+    P().setSprints([SPRINT_A]);
+    expect(P().placeable(inSprint('2026-08-18'), '2026-08-18')).toBe(true);
+    expect(P().placeable(inSprint('2026-08-18'), '2026-08-19')).toBe(false);
+    expect(P().placeable(inSprint('2026-08-18'), '2026-08-17')).toBe(true);
+  });
+
+  it('lets a row with NO deadline have the whole sprint (BR-9: no deadline, no lateness)', () => {
+    P().setSprints([SPRINT_A]);
+    for (const day of ['2026-08-10', '2026-08-13', '2026-08-21']) {
+      expect(P().placeable(inSprint(null), day), day).toBe(true);
+    }
+    expect(P().placeable({ sprintId: 's1' }, '2026-08-21')).toBe(true); // absent key, not null
+  });
+
+  it('refuses when there is nothing to measure against — no row, no day, no sprint, no dates', () => {
+    P().setSprints([SPRINT_A]);
+    expect(P().placeable(null, '2026-08-12')).toBe(false);
+    expect(P().placeable(inSprint(null), null)).toBe(false);
+    expect(P().placeable({ sprintId: 'gone', deadline: null }, '2026-08-12')).toBe(false);
+    P().setSprints([{ id: 's1', start: null, end: null }]);
+    expect(P().placeable(inSprint(null), '2026-08-12')).toBe(false);
+  });
+
+  it('names the row’s OWN sprint, not the first one on the board', () => {
+    // the guard is per ROW; two sprints in the list must not blur into one range
+    P().setSprints([SPRINT_A, { id: 's2', start: '2026-08-24', end: '2026-09-04' }]);
+    expect(P().placeable({ sprintId: 's2', deadline: null }, '2026-08-12')).toBe(false);
+    expect(P().placeable({ sprintId: 's2', deadline: null }, '2026-08-26')).toBe(true);
+  });
+
+  it('reads the calendar as STRINGS, so no Date and no timezone can shift a day', () => {
+    // invariant 11: 'YYYY-MM-DD' compares chronologically as text; a `new
+    // Date(iso)` here would land on the previous day west of UTC
+    const src = topDecl('placeable');
+    expect(src).not.toContain('new Date');
+    expect(src).not.toContain('getTime');
+  });
+});
+
+/* ====================================================================== *
+ * SUITE 3 — placement: the violet + rides HOVER on any UNPLOTTED row, on
+ * the WORKDAY under the pointer (block 7; PLAN 2026-08-28 F2; Miles's note
+ * on node 731:100277)
+ * ====================================================================== */
+
+describe('the violet + rides the hovered DAY of any unplotted row — the checkbox gates nothing', () => {
   /* `plotRow` cannot reach a render: the harness passes only the state the
      template owned before the hover pair, and directives never fire in
-     `toHTML()` — so the POSITIVE (pointer on a track → + at its week) is
+     `toHTML()` — so the POSITIVE (pointer on a track → + at its day) is
      E2E's real-pointer proof, per this file's honesty note. What a render
      CAN prove is the negative space: the retired `sprintSel` gate must not
      summon the + — under the pre-F2 template both of these drew it. */
-  it('a selected, unplotted, hovered-week row shows NOTHING without plotRow', () => {
-    const html = renderSprintSchedule({ sprintGroups: groupsOf(UNPLOTTED), sprintSel: 'i2', plotWeek: '2026-08-10' });
+  it('a selected, unplotted, hovered-day row shows NOTHING without plotRow', () => {
+    const html = renderSprintSchedule({ sprintGroups: groupsOf(UNPLOTTED), sprintSel: 'i2', plotDay: '2026-08-12' });
     expect(html).not.toContain('gplus');
     expect(html).not.toContain('ghovcell');
   });
 
-  it('a hovered week alone draws neither — plotRow names WHOSE track', () => {
-    const html = renderSprintSchedule({ sprintGroups: groupsOf(UNPLOTTED, PLOTTED), plotWeek: '2026-08-10' });
+  it('a hovered day alone draws neither — plotRow names WHOSE track', () => {
+    const html = renderSprintSchedule({ sprintGroups: groupsOf(UNPLOTTED, PLOTTED), plotDay: '2026-08-12' });
     expect(html).not.toContain('gplus');
     expect(html).not.toContain('ghovcell');
   });
@@ -309,37 +398,54 @@ describe('the violet + rides the hovered week of any unplotted row — the check
   /** Both `.gtrack` subtrees of the view — the committed row's, then the draft's. */
   const trackBlocks = (): [string, string] => {
     const view = schedulesView();
-    const first = divFragment('<div class="gtrack"', view);
-    const second = divFragment('<div class="gtrack"', view.slice(view.indexOf(first) + first.length));
+    const first = divFragment('<div class="gtrack', view);
+    const second = divFragment('<div class="gtrack', view.slice(view.indexOf(first) + first.length));
     return [first, second];
   };
 
-  it('the committed track carries the FROZEN handler gate — hover on any unplotted row', () => {
+  it('the committed track carries the FROZEN handler gate — hover on any unplotted row, DRAG on a placed one', () => {
     expect(schedulesView()).toContain(
-      `{{#if !row.startsOn}}on-mousemove="['plotHover', row.id]" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{/if}}`,
+      `{{#if !row.startsOn}}on-mousemove="['plotHover', row.id]" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{else}}on-mousemove="['barDragMove', row.id]"{{/if}}`,
     );
   });
 
-  it('the + and the hover cell both gate on !row.startsOn && plotRow === row.id && plotWeek — the frozen strings', () => {
+  it('the + and the hover cell both gate on !row.startsOn && plotRow === row.id && plotDay — the frozen strings', () => {
     const [committed] = trackBlocks();
     /* !row.startsOn in the RENDER gate, not just the handler gate (review
        2026-08-28b, finding 1): a plotRow re-armed during the placement
        reload survives the row flipping to plotted — with its mouseleave
        gone. The render clause is what keeps that ghost invisible. */
     expect(committed).toContain(
-      '{{#if !row.startsOn && plotRow === row.id && plotWeek}}<div class="ghovcell" style="left:{{plusLeft(plotWeek)}}%;" aria-hidden="true"></div>{{/if}}',
+      '{{#if !row.startsOn && plotRow === row.id && plotDay}}<div class="ghovcell" style="left:{{plusLeft(plotDay)}}%;" aria-hidden="true"></div>{{/if}}',
     );
-    // the + repeats the SAME gate in its own section, so the bars and the
-    // deadline tick stack between the tint and the circle by DOM order
-    expect(committed.split('{{#if !row.startsOn && plotRow === row.id && plotWeek}}').length - 1).toBe(2);
-    expect(committed).toContain('aria-label="Place the bar in the week of {{plotWeek}}"');
+    // the + repeats the SAME gate in its own section, and the TRACK wears it a
+    // third time as the `placing` cursor — so the affordance, the tint and the
+    // pointer cursor cannot disagree about whether this day is on offer
+    expect(committed.split('{{#if !row.startsOn && plotRow === row.id && plotDay}}').length - 1).toBe(3);
+    expect(committed).toContain('aria-label="Place the bar on {{fmtLongIso(plotDay)}}"');
+  });
+
+  it('names the day the way the rest of the app does — the shared long-date formatter, not a raw ISO string', () => {
+    // `fmtLongIso` is the FORECASTED cell's formatter too (10-constants-core.js);
+    // an aria-label reading "2026-08-12" would be the one place the app spells
+    // a date to a screen reader in machine form
+    const [committed] = trackBlocks();
+    expect(committed, 'the + announced a raw ISO day').not.toContain('the bar on {{plotDay}}');
+    const html = renderSprintSchedule({
+      sprintGroups: groupsOf(UNPLOTTED),
+      plotDay: '2026-08-12',
+      // the render harness stubs fmtLongIso as `long:<iso>`; what is proven
+      // here is that the label goes THROUGH it, not what it renders
+    });
+    expect(html).not.toContain('gplus'); // still gated on plotRow — the negative space above
+    expect(committed).toContain('fmtLongIso(plotDay)');
   });
 
   it('the retired sprintSel gate is GONE — the old strings, and the track blocks whole', () => {
     const view = schedulesView();
     expect(view, 'the pre-F2 handler gate regressed — checkbox-armed placement breaks the 731:100277 ruling')
       .not.toContain('sprintSel === row.id && !row.startsOn}}on-mousemove');
-    expect(view, 'the pre-F2 + gate regressed').not.toContain('sprintSel === row.id && plotWeek');
+    expect(view, 'the pre-F2 + gate regressed').not.toContain('sprintSel === row.id && plotDay');
     for (const block of trackBlocks()) {
       expect(block, 'sprintSel reached into a track block — the checkbox gates nothing in placement').not.toContain('sprintSel');
     }
@@ -347,17 +453,36 @@ describe('the violet + rides the hovered week of any unplotted row — the check
 
   it('lets the TRACK take the click — the + itself is pointer-transparent (CSS)', () => {
     // the same reasoning the drag era swept: a solid circle over the track
-    // would swallow the placement click at exactly the column the user aims at
+    // would swallow the placement click at exactly the day the user aims at
     expect(GANTT_CSS).toMatch(/\.gplus[^{]*\{[^}]*pointer-events: none/);
   });
 
-  it('the hover cell is a slate-50 week column, stacked by DOM order (node 731:100271)', () => {
+  it('the hover cell is a slate-50 ONE-DAY column, stacked by DOM order (node 731:100271)', () => {
     const rule = cssRule('.gantt .ghovcell');
     expect(rule).toContain('var(--slate-50)');
-    expect(rule).toContain('width: var(--gw)'); // mirrors the week column, no re-derived maths
+    // ONE unit, not one week: the tint has to sit under a + that names a day
+    expect(rule).toContain('width: var(--gu)');
+    expect(rule, 'the cell is still a whole week wide').not.toContain('width: var(--gw)');
     expect(rule).toMatch(/position: absolute; top: 0; bottom: 0;/);
     expect(rule).toContain('pointer-events: none'); // the TRACK owns the click, here too
     expect(rule, 'z-index would outstack the bars — DOM order is the seating here').not.toContain('z-index');
+  });
+
+  it('derives the day unit from the week column rather than shipping a second pixel number', () => {
+    // --gu is what makes the tint, the + and the bar agree at any zoom
+    expect(GANTT_CSS).toMatch(/\.gantt \{[^}]*--gu: calc\(var\(--gw\) \/ 5\)/);
+    expect([...GANTT_CSS.matchAll(/--gu:/g)], '--gu is declared more than once').toHaveLength(1);
+    // and the + is centred on the DAY column, not the week's
+    expect(cssRule('.gantt .gplus')).toContain('margin-left: calc((var(--gu) - 24px) / 2)');
+  });
+
+  it('shows a pointer cursor only where a day is actually on offer', () => {
+    // the refusal has no chrome of its own — it is the ABSENCE of the offer
+    // (no tint, no +, no pointer), which is what keeps the client from
+    // advertising a write the server would answer 422 to
+    expect(cssRule('.gantt .gtrack')).toContain('cursor: default');
+    expect(cssRule('.gantt .gtrack.placing')).toContain('cursor: pointer');
+    expect(schedulesView()).toContain('<div class="gtrack{{#if !row.startsOn && plotRow === row.id && plotDay}} placing{{/if}}"');
   });
 
   it('wires hover, leave and click on the track, row id and all (source)', () => {
@@ -367,29 +492,37 @@ describe('the violet + rides the hovered week of any unplotted row — the check
     expect(view).toContain(`on-click="['plotPlace', row.id]"`);
   });
 
-  it('plotHover names the row and maps the pointer; plotLeave clears the pair (source)', () => {
+  it('plotHover maps the pointer to a DAY and stores it only when the row may have it (source)', () => {
     const hover = handlerBody('plotHover');
     expect(hover).toContain('plotRow');
-    expect(hover).toContain('weekAtX'); // the drop era's pure mapper — rect in, week key out
+    expect(hover, 'the week mapper survived — placement is at day grain now').not.toContain('weekAtX');
+    expect(hover).toContain('dayAtX'); // the pure mapper: rect in, workday ISO out
+    // the guard rides in the STORE, so one key carries "no hover" and "no offer"
+    expect(hover).toMatch(/placeable\(sprintRow\(rowId\), day\) \? day : null/);
     const leave = handlerBody('plotLeave');
     expect(leave).toContain('plotRow');
-    expect(leave).toContain('plotWeek');
+    expect(leave).toContain('plotDay');
   });
 
-  it('plotPlace PATCHes starts_on and reloads; the geometry mapping is weekAtX (source)', () => {
+  it('plotPlace PATCHes the hovered DAY and reloads; a refused day never reaches the wire (source)', () => {
     const body = handlerBody('plotPlace');
-    expect(body).toContain('starts_on');
+    expect(body).toContain('starts_on: day');
     expect(body).toContain('/sprint-items/');
     expect(body).toContain('loadAll');
-    // the same pure mapper the drop used — measured rect in, week key out
-    expect(handlerBody('plotHover')).toContain('weekAtX');
+    // no plotDay = no mousemove, or a day this row may not have — either way
+    // the click is a no-op, and the server stays the backstop for both
+    expect(body).toContain("if (!day || app.get('plotRow') !== itemId || sprintItemSaving) return;");
+    expect(body, 'a refusal must surface the SERVER’s own sentence').toContain('flashBanner(errText(err))');
   });
 
-  it('a project switch clears the whole placement and add state (source)', () => {
+  it('a project switch clears the whole placement, drag and add state (source)', () => {
     const body = fnBody('resetForProjectSwitch');
-    for (const key of ['sprintSel', 'plotRow', 'plotWeek', 'addBusy']) {
+    for (const key of ['sprintSel', 'plotRow', 'plotDay', 'dragRow', 'dragDay', 'dragLeft', 'addBusy']) {
       expect(body, `${key} survives a project switch`).toMatch(new RegExp(`${key}: null`));
     }
+    // and the drag's window listeners come down with it — state cleared while
+    // a mouseup listener still waits is a listener that fires into nothing
+    expect(body).toContain('barDragStop();');
     /* the queries reset to an EMPTY MAP, not null (PLAN.md B10): `addQ` is
        one field per sprint and several may hold text, and the sprint ids it
        is keyed on are per-project — carried over, a query would name another
@@ -398,7 +531,7 @@ describe('the violet + rides the hovered week of any unplotted row — the check
   });
 });
 
-/* Review 2026-08-28b: `plotRow`/`plotWeek` are one GLOBAL pair under many
+/* Review 2026-08-28b: `plotRow`/`plotDay` are one GLOBAL pair under many
    tracks, and every defect the correctness pass confirmed was a way for that
    pair to outlive or outreach the hover that set it. These pins hold the four
    disciplines that close them. */
@@ -414,7 +547,7 @@ describe('the hover pair cannot strand, and a click places only its OWN hover (r
      §0); the committed row's half is the whole rule now — result rows land
      UNPLOTTED (PLAN.md B5), so nothing but a committed track ever places. */
   it('plotPlace demands the hover is ITS OWN before writing (finding 7)', () => {
-    expect(handlerBody('plotPlace'), 'plotPlace would place this row at a week hovered on another track')
+    expect(handlerBody('plotPlace'), 'plotPlace would place this row at a day hovered on another track')
       .toContain("app.get('plotRow') !== itemId");
   });
 });

@@ -12,6 +12,9 @@ import {
   GANTT_CSS,
   OFF_BOARD,
   PLOTTED,
+  cssRule,
+  fnBody,
+  handlerBody,
   renderSprintSchedule,
   topDecl,
   type SprintScheduleRow,
@@ -115,11 +118,15 @@ describe('one row, one bar — start to finish, finish day INCLUSIVE', () => {
     const twoDp = /^\d+\.\d{2}$/;
     expect(b!.left).toMatch(twoDp);
     expect(b!.width).toMatch(twoDp);
-    // and the template multiplies nothing (the run-geometry law, re-pointed)
+    // and the template multiplies nothing (the run-geometry law, re-pointed).
+    // Mid-drag the LEFT comes from `dragLeft` instead — a value the handler
+    // already finished, through the same `plusLeft` the + uses — and the
+    // WIDTH is untouched, which is what makes the drag a translation rather
+    // than a resize (bar resizing is out of the pilot, §5.1b).
     const tag = /<div class="gitem[^>]*>/.exec(schedulesView());
     expect(tag, 'no .gitem in the schedules view').not.toBeNull();
     const style = /style="([^"]*)"/.exec(tag![0])?.[1] ?? '';
-    expect(style).toMatch(/^left:\{\{b\.left\}\}%;width:\{\{b\.width\}\}%;?$/);
+    expect(style).toMatch(/^left:\{\{ dragRow === row\.id \? dragLeft : b\.left \}\}%;width:\{\{b\.width\}\}%;?$/);
   });
 
   it('returns [] for unplotted, unforecastable, and fully-clipped rows — no branch in the template', () => {
@@ -338,24 +345,37 @@ describe('the footer caption — the committed capacity through the one band rec
 });
 
 /* ====================================================================== *
- * SUITE 7 — WITHDRAWN with the drag (owl #72). Source sweeps: the view
- * slice, the script bundle (comment-stripped — rule 3's kinder corpus),
- * and the stylesheet.
+ * SUITE 7 — THE DRAG CONTRACT (block 7, JP 2026-09-08). Was the drag
+ * WITHDRAWAL sweep (owl #72, 2026-08-28); a placed bar drags again, by
+ * POINTER, so this suite states what that means and keeps the HTML5
+ * machinery — and the Suggest era it was swept alongside — gone for good.
+ * Source sweeps: the view slice, the script bundle (comment-stripped —
+ * rule 3's kinder corpus), and the stylesheet.
  * ====================================================================== */
 
-describe('the schedules view carries no drag, no drop, no ghost, no Suggest', () => {
-  it('has no draggable and no drag/drop directives anywhere in the subtree', () => {
+describe('the drag is POINTER events on the coloured run — no HTML5 drag, no ghost', () => {
+  it('carries no draggable attribute and no drag/drop directive anywhere in the subtree', () => {
+    // §5.2's own reason, unchanged: HTML5 drag-and-drop fails inside sticky,
+    // scrolling containers, and this layout is one. A `draggable` here would
+    // hand the gesture to a machine that cancels it in the tick it starts.
     const view = schedulesView();
     expect(view).not.toMatch(/\bdraggable=/);
     expect(view).not.toMatch(/on-drag/);
     expect(view).not.toMatch(/on-drop/);
   });
 
-  it('dropped the drag-era chrome: grip, ghost, unsched hint, gdragging, run box', () => {
+  it('keeps the HTML5 drag API out of the shipped scripts too', () => {
+    for (const gone of ['dragstart', 'dragover', 'dragend', 'dragenter', 'dragleave', 'dataTransfer', 'setDragImage']) {
+      expect(APP_JS_CODE, `\`${gone}\` — the HTML5 drag machinery is back in the client`).not.toContain(gone);
+    }
+  });
+
+  it('drags NO ghost: the bar itself moves, and nothing follows the cursor', () => {
     const view = schedulesView();
     for (const gone of ['ghandle', 'gghost', 'gunsched', 'gdragging', 'grun', 'gbar', 'ghostBar']) {
       expect(view, `\`${gone}\` survives in the schedules view`).not.toContain(gone);
     }
+    expect(GANTT_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ')).not.toContain('gghost');
   });
 
   it('dropped the Suggest branch and both conflict banners', () => {
@@ -365,15 +385,20 @@ describe('the schedules view carries no drag, no drop, no ghost, no Suggest', ()
     }
   });
 
-  it('teaches the CLICK, not the drag — the standing hint is the placement sentence', () => {
+  it('teaches both acts — the click on an unplotted row, the drag on a placed one', () => {
     expect(schedulesView()).toContain(
-      'Hover a week on an unplotted row and click to place its bar — the finish is computed.',
+      'Hover a day on an unplotted row and click to place its bar; drag a placed bar to move it. The finish is computed.',
     );
   });
 
-  it('the retired handlers, computeds and state keys are out of the shipped bundle', () => {
+  it('the retired handlers, computeds and state keys are still out of the shipped bundle', () => {
+    /* The reinstated names left this list when the drag came back — `dragRow`
+       is a STATE KEY now and `barDragEnd` contains the old `dragEnd` — so the
+       sweep names what is genuinely retired and nothing that merely rhymes
+       with it. A ban that outlives the thing it banned reads as law and is
+       not one. */
     for (const gone of [
-      'dragRow', 'dragEnd', 'dropOnWeek', 'dropOnBar', 'dragOverBlock', 'dropBlock',
+      'dropOnWeek', 'dropOnBar', 'dragOverBlock', 'dropBlock',
       'moveRows', 'rowKey', 'togglePin', 'duplicateRow', 'unslotRow', 'editNote',
       'runSuggest', 'clearSuggest', 'acceptSuggest', 'suggestProposed', 'suggestFlagged',
       'suggestHardHeavy', 'suggestBlockedWhy', 'suggestOffWeeks', 'schedRows',
@@ -392,5 +417,183 @@ describe('the schedules view carries no drag, no drop, no ghost, no Suggest', ()
     for (const gone of ['.gseg.review', '.gseg.renderOverdue', '.grun', '.gbar', '.gghost', '.gunsched', '.gdragging', '.ghandle']) {
       expect(css, `\`${gone}\` survives in 35-gantt.css`).not.toContain(gone);
     }
+  });
+});
+
+describe('the drag SOURCE is the coloured run of a PLACED row, and nothing else', () => {
+  /** The one `.gitem` open tag in the shipped view. */
+  const barTag = (): string => {
+    const tag = /<div class="gitem[^>]*>/.exec(schedulesView());
+    expect(tag, 'no .gitem in the schedules view').not.toBeNull();
+    return tag![0];
+  };
+
+  it('starts the drag on the BAR, carrying the row it belongs to', () => {
+    expect(barTag()).toContain(`on-mousedown="['barDragStart', row.id]"`);
+  });
+
+  it('leaves the track, the deadline tick and the row label inert to mousedown', () => {
+    /* the standing hit-test principle in the other direction: the SOURCE is
+       one element, so nothing around it may also answer the button. A
+       mousedown on the track would arm a drag from empty grid, and one on the
+       `.gdl` (which paints ABOVE the bar at its own column) would swallow the
+       grab at exactly the day a late row is dragged away from. */
+    const view = schedulesView();
+    const mousedowns = [...view.matchAll(/<[a-z]+[^>]*on-mousedown="\[[^\]]*\][^>]*>/g)].map((m) => m[0]);
+    expect(mousedowns, 'more than one element answers mousedown on this tab').toHaveLength(1);
+    expect(mousedowns[0]!).toContain('class="gitem');
+    expect(view).toMatch(/<div class="gdl"[^>]*>/);
+    expect(/<div class="gdl"[^>]*>/.exec(view)![0]).not.toContain('on-mouse');
+  });
+
+  it('binds the MOVE on the track, and only on a row that already has a bar', () => {
+    // the unplotted branch places; the placed branch drags. One `{{#if}}`,
+    // two mutually exclusive wirings — a row can never offer both.
+    const view = schedulesView();
+    expect(view).toContain(
+      `{{#if !row.startsOn}}on-mousemove="['plotHover', row.id]" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{else}}on-mousemove="['barDragMove', row.id]"{{/if}}`,
+    );
+    // and the inert tracks stay inert: the search row and its results (B5)
+    const inert = [...view.matchAll(/<div class="gtrack"><div class="gweeks">/g)];
+    expect(inert.length, 'the search/result tracks stopped being inert grid').toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders the preview at dragLeft with the bar’s OWN width, wearing `dragging`', () => {
+    const html = renderSprintSchedule({
+      sprintGroups: groupsOf(PLOTTED),
+      dragRow: 'i1', dragDay: '2026-08-05', dragLeft: '5.00',
+    });
+    expect(html).toMatch(/class="gitem render dragging"/);
+    expect(html).toMatch(/style="left:5\.00%;width:11\.67%;"/); // the stub bar's own width, unchanged
+  });
+
+  it('wears `refused` on a day the row may not have, and says so with the cursor', () => {
+    const html = renderSprintSchedule({
+      sprintGroups: groupsOf(PLOTTED),
+      dragRow: 'i1', dragDay: '2026-09-30', dragLeft: '90.00',
+      placeable: () => false,
+    });
+    expect(html).toMatch(/class="gitem render dragging refused"/);
+    expect(cssRule('.gantt .gitem.refused')).toContain('cursor: not-allowed');
+    // colour is NOT how refusal is said: the phase→colour map stays the one
+    // answer to what colour a bar is (the `late` red included)
+    expect(cssRule('.gantt .gitem.refused')).not.toContain('background');
+    expect(cssRule('.gantt .gitem.dragging')).not.toContain('background');
+  });
+
+  it('leaves every OTHER row’s bar at rest while one drags', () => {
+    const html = renderSprintSchedule({
+      sprintGroups: groupsOf(PLOTTED, OFF_BOARD),
+      dragRow: 'i1', dragDay: '2026-08-05', dragLeft: '5.00',
+    });
+    expect(html).toMatch(/class="gitem render dragging"/);
+    expect(html).toMatch(/class="gitem render late"/); // OFF_BOARD, untouched
+    expect([...html.matchAll(/dragging/g)]).toHaveLength(1);
+  });
+
+  it('suppresses the bar’s own tooltip for the gesture, so it cannot fight the drag', () => {
+    const dragging = renderSprintSchedule({
+      sprintGroups: groupsOf(PLOTTED), dragRow: 'i1', dragDay: '2026-08-05', dragLeft: '5.00',
+    });
+    expect(dragging, 'the bar kept its resting tooltip mid-drag').not.toContain('title="2026-08-03');
+    expect(dragging).toMatch(/class="gitem render dragging" style="left:5\.00%;width:11\.67%;" title>/);
+    // …and it is back the moment the gesture ends
+    expect(renderSprintSchedule({ sprintGroups: groupsOf(PLOTTED) })).toMatch(/title="2026-08-03 → 2026-08-12"/);
+  });
+
+  it('offers the grab cursor and refuses to select text under the pointer', () => {
+    const rule = cssRule('.gantt .gitem');
+    expect(rule).toContain('cursor: grab');
+    expect(rule).toContain('user-select: none');
+    expect(cssRule('.gantt .gitem.dragging')).toContain('cursor: grabbing');
+  });
+});
+
+describe('the drag lifecycle — four handlers, and what each one refuses (source)', () => {
+  it('arms only a PLACED row, and only when nothing else is in flight', () => {
+    const body = handlerBody('barDragStart');
+    expect(body).toContain('if (sprintItemSaving) return;');
+    expect(body, 'an unplotted row has no bar to drag').toContain('if (!row || !row.startsOn) return;');
+    // the PRIMARY button only: a right-click's own mouseup would otherwise end
+    // a drag the user never started, behind the context menu
+    expect(body).toContain('if (ctx.event && ctx.event.button) return;');
+    // and a row whose start is beyond the drawn window has no preview offset —
+    // it draws no bar either, which is what makes this unreachable by pointer
+    expect(body).toContain('if (left === null) return;');
+    // the mousedown's default is a text selection that follows the pointer
+    expect(body).toContain('preventDefault()');
+    // it opens ON the row's own start, so a mousedown with no move is a no-op
+    // by arithmetic rather than by a special case at the other end
+    expect(body).toMatch(/const left = plusLeft\(row\.startsOn\);/);
+    expect(body).toMatch(/dragRow: rowId, dragDay: row\.startsOn, dragLeft: left/);
+  });
+
+  it('binds mouseup and Escape on the WINDOW, and only while a drag is live', () => {
+    const start = handlerBody('barDragStart');
+    expect(start).toContain("window.addEventListener('mouseup', barDragUp)");
+    expect(start).toContain("window.addEventListener('keydown', barDragKey)");
+    // a release outside the track must still land; Escape must reach from
+    // wherever the pointer wandered
+    const stop = fnBody('barDragStop');
+    expect(stop).toContain("window.removeEventListener('mouseup', barDragUp)");
+    expect(stop).toContain("window.removeEventListener('keydown', barDragKey)");
+    // and every exit goes through it — commit, cancel, project switch
+    for (const via of ['barDragEnd', 'barDragCancel']) {
+      expect(handlerBody(via), `${via} leaves the window listeners bound`).toContain('barDragStop();');
+    }
+    expect(fnBody('resetForProjectSwitch')).toContain('barDragStop();');
+    // the key is Escape and nothing else — a stray keystroke must not cancel
+    expect(APP_JS_CODE).toContain("const barDragKey = (e) => { if (e.key === 'Escape') app.fire('barDragCancel'); };");
+  });
+
+  it('the MOVE steers only its own row, and holds its day when it cannot measure', () => {
+    const body = handlerBody('barDragMove');
+    // every placed row's track binds this: a pointer crossing a NEIGHBOUR's
+    // track mid-drag must not steer the bar being dragged
+    expect(body).toContain("if (app.get('dragRow') !== rowId) return;");
+    expect(body).toContain('dayAtX(ctx.event.clientX, ctx.node.getBoundingClientRect()');
+    expect(body).toContain('if (!day) return;');
+    expect(body).toMatch(/dragDay: day, dragLeft: plusLeft\(day\)/);
+  });
+
+  it('writes on release ONLY when the day changed and the row may have it', () => {
+    const body = handlerBody('barDragEnd');
+    /* invariant 10 logs CHANGES, not attempts: a bar dropped on the day it
+       started must send nothing, or the audit log grows a row for a gesture
+       that moved nothing. The refused day is refused here too — the client
+       does not ask the server a question it already knows the answer to. */
+    expect(body).toContain("if (!row || !day || day === row.startsOn || !placeable(row, day) || sprintItemSaving) {");
+    expect(body).toContain('barDragClear();');
+    expect(body).toContain('starts_on: day');
+    expect(body).toContain('/sprint-items/');
+    expect(body).toContain('loadAll();');
+  });
+
+  it('is OPTIMISTIC with a snap-back: the keys clear AFTER the flight, on both paths', () => {
+    const body = handlerBody('barDragEnd');
+    const clearAt = body.lastIndexOf('barDragClear();');
+    const finallyAt = body.indexOf('} finally {');
+    expect(finallyAt, 'the clear moved out of finally — a thrown request would strand the preview').toBeGreaterThan(-1);
+    expect(clearAt, 'the preview is cleared before the reload — the bar rewinds and then jumps').toBeGreaterThan(finallyAt);
+    // the refusal surfaces the SERVER's own sentence (OUT_OF_SPRINT /
+    // PAST_DEADLINE / NOT_A_WORKDAY), and clearing the keys IS the snap-back
+    expect(body).toContain('flashBanner(errText(err));');
+    expect(fnBody('barDragClear')).toMatch(/dragRow: null, dragDay: null, dragLeft: null/);
+  });
+
+  it('cancels on Escape without writing anything at all', () => {
+    const body = handlerBody('barDragCancel');
+    expect(body).toContain('barDragStop();');
+    expect(body).toContain('barDragClear();');
+    for (const forbidden of ['api.send', 'starts_on', 'loadAll']) {
+      expect(body, `Escape reached the wire via \`${forbidden}\``).not.toContain(forbidden);
+    }
+  });
+
+  it('has exactly these four handlers and no fifth', () => {
+    // the frozen names (PLAN.md block 7). A fifth would be a second place the
+    // gesture can end, which is how a listener gets left bound.
+    const names = [...APP_JS_CODE.matchAll(/\n  (?:async )?(barDrag\w+)\([^)]*\) \{/g)].map((m) => m[1]!).sort();
+    expect(names).toEqual(['barDragCancel', 'barDragEnd', 'barDragMove', 'barDragStart']);
   });
 });

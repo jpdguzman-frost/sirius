@@ -6,16 +6,22 @@
  * ────────────────────────────────────────────────────────────────────────────
  * WHAT SURVIVES THE TRIM, AND WHY.
  *
- * 1. THE DRAG-SOURCE SWEEP — now over the EMPTY set. The schedules sources
- *    (`.grun`, `.growr`) died with their drag on 2026-08-28, and the Deadlines
- *    day entry — the one that survived that trim — died with the day planner on
- *    2026-09-05 (owls #74/#75, PLAN.md block 3: the rebuilt cards are read-only
- *    and derived, and the server's rollover is the only thing that moves one).
- *    The sweep is KEPT and stays wired to the template, so a new `draggable`
- *    rejoins it automatically; what changed is that its non-vacuity is proven
- *    against a fixture source (`FIXTURE_SOURCES`) rather than against a shipped
- *    element, because a sweep over an empty list finds nothing for reasons that
- *    have nothing to do with the law.
+ * 1. THE DRAG-SOURCE SWEEP — REAL AGAIN (block 7, JP 2026-09-08). The sources
+ *    (`.grun`, `.growr`) died with their drag on 2026-08-28 and the Deadlines
+ *    day entry died with the day planner on 2026-09-05, leaving this sweep over
+ *    an empty set — exactly the state in which a guard quietly stops being one.
+ *    A PLACED bar drags again now, so `.gitem` is a source and the sweep has a
+ *    shipped element to bite on.
+ *
+ *    WHAT CHANGED IN THE DERIVATION: the source is found by the HANDLER that
+ *    starts the drag, not by a `draggable` attribute. There is no attribute to
+ *    find — deliberately: the HTML5 API dies inside the sticky, scrolling
+ *    containers this layout is built from (build-spec §5.2), so the drag is
+ *    pointer events and the bar itself is the only thing the browser must keep
+ *    hit-testable. The `draggable` set is swept SEPARATELY, and must stay
+ *    EMPTY. The fixture (`FIXTURE_SOURCES`) is kept beside the shipped source:
+ *    it proves the sweeps fire on the ancestor-chain shapes the bug wore twice,
+ *    which no arrangement of today's stylesheet can demonstrate.
  *
  * 2. THE WEEK-CELL SWEEP, same law, NEW CONSUMER. The `.gweek` cells used to
  *    be the drop path outside the coloured run; they are now the columns a
@@ -30,15 +36,19 @@
  *    guard cannot see an inline write, so the cheapest way to keep inline
  *    writes visible is to have none (minus the one documented exemption).
  *
- * 4. THE weekAtX SUITE. The mapper survived the rebuild unchanged
- *    (50-gantt-geometry.js) and `plotHover` now feeds it the pointer, so the
- *    arithmetic that used to place a DROP places a CLICK.
+ * 4. THE weekAtX SUITE, and its day-grain sibling `dayAtX` (block 7). The week
+ *    mapper survived the rebuild unchanged (50-gantt-geometry.js); `dayAtX`
+ *    beside it is the same half-open, clamped arithmetic at WORKDAY grain, and
+ *    it is what both the placement hover and the bar drag now feed the pointer
+ *    to. One is not the other's replacement — they are two grains of one axis,
+ *    and both are executed here out of the shipped file.
  *
- * Gone with the drags: the `.grun`/`.gbar` source sweeps and their `auto`
- * dependency pair, the `.gdragging` mid-drag sweep (the class is withdrawn),
- * the dropOnBar/dropOnWeek wiring suite, and the pinned/unscheduled render
- * suites. No mid-drag sweep replaces the old one — neither retired drag ever
- * carried a mid-drag state class.
+ * Gone with the retired drags: the `.grun`/`.gbar` source sweeps and their
+ * `auto` dependency pair, the `.gdragging` sweep (that class is withdrawn — the
+ * rebuilt drag dresses the BAR, not the board), the dropOnBar/dropOnWeek wiring
+ * suite, and the pinned/unscheduled render suites. The mid-drag states the new
+ * drag DOES carry — `dragging` and `refused` — are swept as part of the source's
+ * own class list, which is where they live.
  * ────────────────────────────────────────────────────────────────────────────
  * HONESTY NOTE — READ BEFORE TRUSTING A GREEN RUN.
  *
@@ -304,8 +314,31 @@ function parseTemplate(src: string): { elements: TemplateElement[]; problems: st
 const PARSED = parseTemplate(TEMPLATE_CODE);
 const TEMPLATE_ELEMENTS = PARSED.elements;
 
-/** Every element in the shipped template that carries a `draggable` directive. */
-const DRAG_SOURCES: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) => /\bdraggable=/.test(e.source));
+/**
+ * THE DRAG SOURCES — derived by the handler that STARTS a drag.
+ *
+ * Block 7 gives a placed bar a pointer drag: mousedown on the coloured run,
+ * mousemove over the track, mouseup writes the day. There is no `draggable`
+ * attribute to key on, so the derivation reads the handler instead — and it is
+ * still a derivation, not a list: a second drag source added tomorrow joins
+ * every sweep below the day it appears.
+ */
+const DRAG_SOURCES: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) =>
+  /on-mousedown="\['barDragStart'/.test(e.source),
+);
+
+/** The HTML5 set — swept separately, and it must stay EMPTY (build-spec §5.2). */
+const HTML5_SOURCES: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) => /\bdraggable=/.test(e.source));
+
+/**
+ * The bar's PHASE classes, read out of the shipped `itemPhase` recipe.
+ *
+ * `class="gitem {{b.cls}}…"` hides them from `possibleClasses` — a mustache is
+ * not a token — so `.gitem.work { pointer-events: none }` would sail past a
+ * target list built from the template alone. Derived from the recipe's own
+ * return literals, never listed here (test/CLAUDE.md rule 2).
+ */
+const PHASE_CLASSES: string[] = [...decl(APP_JS, 'itemPhase').matchAll(/return '([\w-]+)'/g)].map((m) => m[1]!);
 
 /**
  * A SYNTHETIC drag source, parsed by the SAME `parseTemplate` the shipped sweep
@@ -366,7 +399,11 @@ function offendersIn(
 const targetsFor = (label: string, els: { name: string; classes: string[] }[]): { name: string; classes: string[] }[] =>
   els.map((e) => ({ name: `${label} <${e.name}${e.classes.map((c) => `.${c}`).join('')}>`, classes: e.classes }));
 
-const SOURCE_TARGETS = targetsFor('the drag source', DRAG_SOURCES);
+/** The source targets, widened by the phase classes the mustache hides. */
+const SOURCE_TARGETS = targetsFor('the drag source', DRAG_SOURCES).map((t) => ({
+  ...t,
+  classes: [...new Set([...t.classes, ...PHASE_CLASSES])],
+}));
 /** The same target list, built from the fixture — what keeps the sweeps honest. */
 const FIXTURE_TARGETS = targetsFor('the drag source', FIXTURE_SOURCES);
 
@@ -516,34 +553,64 @@ describe('the guard’s own parsers actually see the shipped files', () => {
  * ====================================================================== */
 
 describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT prove this — real input only)', () => {
-  it('enumerates the drag sources FROM the template — the set is EMPTY since the day planner withdrew', () => {
-    /* 2026-08-28 (#72): `.grun` and `.growr` died with the planner drag, and
-       the Deadlines day entry was the one drag left. 2026-09-05 (owls #74/#75,
-       PLAN.md block 3) retires that one too — the cards on the rebuilt tab are
-       read-only and derived, and the server's rollover is the only thing that
-       moves a card now. So the shipped app drags NOTHING.
+  it('enumerates the drag sources FROM the template — the placed bar’s coloured run', () => {
+    /* One source, and it is the BAR (block 7, JP 2026-09-08). Not the track:
+       a mousedown on empty grid would arm a drag from nothing. Not the row:
+       the pane holds the DEADLINE setter and three buttons, and a drag armed
+       there would fight every one of them. */
+    expect(DRAG_SOURCES.map((s) => s.classes[0]).sort()).toEqual(['gitem']);
+    expect(DRAG_SOURCES).toHaveLength(1);
+  });
 
-       Asserted as the empty SET rather than by deleting the sweep: the count is
-       a fact about today, the law is not, and the derivation below still reads
-       the template — so a `draggable` added tomorrow rejoins every guard in
-       this suite automatically, and has to justify itself here when it does. */
-    expect(DRAG_SOURCES.map((s) => s.classes[0]).sort()).toEqual([]);
+  it('drags by POINTER only — the `draggable` set stays empty', () => {
+    // §5.2's own reason: HTML5 drag-and-drop fails inside sticky, scrolling
+    // containers, and this layout is one. An attribute here would hand the
+    // gesture to a machine that cancels it in the tick it starts.
+    expect(HTML5_SOURCES.map((e) => e.classes.join('.'))).toEqual([]);
+  });
+
+  it('knows every STATE the source wears, phase fills included', () => {
+    /* The class list is what a `pointer-events` rule can bite: the resting
+       class, the two conditionals the drag adds, the row's `late` flag, and
+       the three phase fills the mustache hides from the parser. There is no
+       in-flight class to add — the write is optimistic and the row reloads,
+       so the bar wears nothing while the PATCH is in the air. */
+    expect(DRAG_SOURCES[0]!.classes).toEqual(['gitem', 'late', 'dragging', 'refused']);
+    expect(PHASE_CLASSES.sort()).toEqual(['render', 'sketch', 'work']);
+    expect(SOURCE_TARGETS[0]!.classes.sort())
+      .toEqual(['dragging', 'gitem', 'late', 'refused', 'render', 'sketch', 'work']);
+  });
+
+  it('lets NO rule make the bar un-hit-testable in ANY of those states — and would catch one that did', () => {
+    /* THE BUG, on a source that exists again. A `pointer-events: none` on the
+       run — in any state, at any viewport — cancels the drag in the tick it
+       starts, and nothing else in the suite notices. Both halves are asserted
+       together so neither can pass for an uninteresting reason: the shipped
+       sheets are clean, AND the sweep fires on every shape that would dirty
+       them. */
+    expect(offendersIn(ALL_RULES, SOURCE_TARGETS)).toEqual([]);
+    const fixture = (css: string) => offendersIn(cssRules('fixture.css', css), SOURCE_TARGETS);
+    for (const sel of [
+      '.gitem',
+      '.gitem.late', // the red past-deadline bar — the one most worth dragging
+      '.gitem.dragging', // mid-gesture: a cure that evaporates on grab is no cure
+      '.gitem.refused',
+      '.gitem.dragging.refused',
+      '.gitem.work', // a phase fill, which the template hides behind a mustache
+      '.gitem:hover', // the state the pointer is IN when the button goes down
+      '.gitem:active',
+      '.gantt .gtrack .gitem.sketch',
+    ]) {
+      expect(fixture(`${sel} { pointer-events: none; }`), `\`${sel}\` slipped past the sweep`).toHaveLength(1);
+    }
   });
 
   it('reads the conditional class tokens too — a rule may target a state, not a resting class', () => {
-    // proven on the fixture: a source's STATE classes are part of what a
-    // selector can bite, and dropping them would let `.entry.late` slip past
+    // the same derivation on the fixture, whose chain is the shape the bug
+    // wore twice: a source's STATE classes are part of what a selector can
+    // bite, and dropping them would let `.entry.late` slip past
     const entry = FIXTURE_SOURCES.find((s) => s.classes[0] === 'entry')!;
     expect(entry.classes).toEqual(['entry', 'late', 'urgent']);
-  });
-
-  it('lets NO rule in ANY stylesheet make a drag source pointer-events: none, in any state', () => {
-    // THIS IS THE BUG. A rule whose SUBJECT is the element carrying
-    // `draggable` cancels the drag in the tick it starts. NO EXEMPTION HERE,
-    // ever: a source that turns ITSELF off has nothing left to cure it.
-    // Vacuous while nothing drags — kept armed, and kept honest by the fixture
-    // proof below, which runs the same function against a real source.
-    expect(offendersIn(ALL_RULES, SOURCE_TARGETS)).toEqual([]);
   });
 
   it('IS NOT VACUOUS — it flags the batch-7 bug shape on a source that exists', () => {
@@ -584,10 +651,12 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
   it('sweeps ANCESTORS too, because pointer-events is an inherited property', () => {
     // a transparent wrapper would disable the source inside it just as surely,
     // and the chains come from the template's own nesting so one added
-    // tomorrow is swept the day it appears. Empty today, armed all the same.
+    // tomorrow is swept the day it appears
     expect(ancestorOffenders(ALL_RULES)).toEqual([]);
-    // the chain the sweep WOULD walk is real — proven on the fixture, so this
-    // pair cannot both be empty for the same uninteresting reason
+    // …and the bar's chain is a real one, off the shipped template's own
+    // nesting: the track it moves inside, and the sheet that scrolls
+    expect(DRAG_SOURCES[0]!.ancestors.flatMap((a) => a.classes))
+      .toEqual(expect.arrayContaining(['gantt', 'gtrack', 'growr']));
     expect(FIXTURE_SOURCES.flatMap((s) => s.ancestors).length).toBeGreaterThan(3);
   });
 
@@ -678,9 +747,15 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     // guard can see it. Neither exists today, and this is what keeps it so.
     const styleOf = (el: TemplateElement): string => /style="([^"]*)"/.exec(el.source)?.[1] ?? '';
     for (const el of TEMPLATE_ELEMENTS) expect(styleOf(el)).not.toMatch(/pointer-events/i);
-    // the stricter per-source clause: empty while nothing drags, kept armed for
-    // the day something does — the whole-template line above is what bites now
-    for (const src of DRAG_SOURCES) expect(styleOf(src)).not.toMatch(/pointer-events|visibility|display/i);
+    /* the stricter per-source clause, live again: the bar DOES carry a
+       `style=` (its left and width are inline percentages out of the geometry
+       helper), so this is the one place an inline `display:none` or a
+       `visibility` write could hide the drag source from the sweep above. */
+    expect(DRAG_SOURCES.length, 'the per-source clause went vacuous').toBeGreaterThan(0);
+    for (const src of DRAG_SOURCES) {
+      expect(styleOf(src), 'the bar carries no inline geometry any more').not.toBe('');
+      expect(styleOf(src)).not.toMatch(/pointer-events|visibility|display/i);
+    }
     for (const { js } of SCRIPTS) {
       // the properties that actually take an element out of hit-testing:
       // banned outright, in every script, with no way to opt out
@@ -814,6 +889,131 @@ describe('placement maps a pointer’s X to a week column (arithmetic only — i
   it('is a named top-level function, not an expression buried in the handler', () => {
     expect(APP_JS).toMatch(/\nconst weekAtX = /);
     expect(WEEK_AT_X_SRC().startsWith('\nconst weekAtX =')).toBe(true);
+  });
+});
+
+/* ====================================================================== *
+ * SUITE 2b — the pointer-X → WORKDAY mapping (block 7, JP 2026-09-08).
+ * The same axis at the other grain: `plotHover` and `barDragMove` both
+ * feed the pointer to this one, so a placement click and a bar drop land
+ * on the same day for the same X. The recipe is the shipped `dayAtX`.
+ * ====================================================================== */
+
+type DayAtX = (clientX: number, rect: { left: number; width: number }, weeks?: { key: string }[]) => string | null;
+
+/** Sliced LAZILY, for the reason `weekAtX` is: a throw at module scope would
+    take the hit-test guard above down with it. `isoAddDays` and `isoOf` come
+    along because the recipe derives its date through them — string calendar
+    arithmetic, not a millisecond difference (invariant 11). */
+let dayAtXSrc: string | undefined;
+const DAY_AT_X_SRC = (): string => (dayAtXSrc ??= decl(APP_JS, 'dayAtX'));
+let dayAtXFn: DayAtX | undefined;
+const dayAtX: DayAtX = (...args) =>
+  (dayAtXFn ??= new Function(
+    [decl(APP_JS, 'WORKDAYS_PER_WEEK'), decl(APP_JS, 'isoOf'), decl(APP_JS, 'isoAddDays'), DAY_AT_X_SRC(), 'return dayAtX;'].join('\n'),
+  )() as DayAtX)(...args);
+
+/** The 60 workdays the 12 columns draw, derived from the week keys themselves. */
+const WORKDAYS: string[] = WEEK_KEYS.flatMap((key) => {
+  const monday = new Date(`${key}T00:00:00Z`);
+  return [0, 1, 2, 3, 4].map((n) => new Date(monday.getTime() + n * 864e5).toISOString().slice(0, 10));
+});
+/** 1104px ÷ 60 units = 18.4px, the shipped `--gu`. */
+const UNIT = 1104 / 60;
+
+describe('placement and the drag map a pointer’s X to a WORKDAY (arithmetic only — a real pointer is E2E’s)', () => {
+  it('walks all sixty units in order, so no off-by-one hides in the middle of a week', () => {
+    const mids = WORKDAYS.map((_, i) => dayAtX(RECT.left + i * UNIT + UNIT / 2, RECT, WEEKS));
+    expect(mids).toEqual(WORKDAYS);
+    expect(WORKDAYS).toHaveLength(60);
+  });
+
+  it('never names a weekend — the grid has no width for one', () => {
+    // the whole reason the axis counts workdays: Sat and Sun are not drawn, so
+    // no X can land on one, and `starts_on` cannot reach the server as one
+    for (let i = 0; i < 60; i++) {
+      const iso = dayAtX(RECT.left + i * UNIT + UNIT / 2, RECT, WEEKS)!;
+      const dow = new Date(`${iso}T00:00:00Z`).getUTCDay();
+      expect(dow, `unit ${i} landed on day-of-week ${dow} (${iso})`).toBeGreaterThanOrEqual(1);
+      expect(dow, `unit ${i} landed on day-of-week ${dow} (${iso})`).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it('answers the first unit at its exact left edge and the last at its last subpixel', () => {
+    expect(dayAtX(1000, RECT, WEEKS)).toBe('2026-08-03'); // Monday of week 1
+    expect(dayAtX(2103.9, RECT, WEEKS)).toBe('2026-10-23'); // Friday of week 12
+  });
+
+  it('treats a unit as half-open [start, end) — a pointer ON the boundary belongs to the RIGHT day', () => {
+    /* Measured on a track whose unit divides EXACTLY (1200 ÷ 60 = 20px): at
+       the shipped 18.4px the boundary is not a representable double, and an
+       assertion there would be pinning IEEE-754 rounding rather than the
+       half-open rule. The rule is what this defends; the 18.4px axis is swept
+       unit by unit at its midpoints above, where rounding cannot reach. */
+    const exact = { left: 1000, width: 1200 };
+    expect(dayAtX(1019.99, exact, WEEKS)).toBe('2026-08-03');
+    expect(dayAtX(1020, exact, WEEKS)).toBe('2026-08-04');
+    // and the week boundary is just another unit boundary — Friday to Monday
+    expect(dayAtX(1099.99, exact, WEEKS)).toBe('2026-08-07');
+    expect(dayAtX(1100, exact, WEEKS)).toBe('2026-08-10');
+  });
+
+  it('clamps BELOW the track to the first workday and BEYOND it to the last', () => {
+    // a drop can never fall off the axis; the guards decide whether the day is
+    // allowed, and they can only do that if a day comes back at all
+    expect(dayAtX(999.99, RECT, WEEKS)).toBe('2026-08-03');
+    expect(dayAtX(500, RECT, WEEKS)).toBe('2026-08-03');
+    expect(dayAtX(-5000, RECT, WEEKS)).toBe('2026-08-03');
+    expect(dayAtX(2104, RECT, WEEKS)).toBe('2026-10-23');
+    expect(dayAtX(99999, RECT, WEEKS)).toBe('2026-10-23');
+  });
+
+  it('divides the MEASURED width, not a hard-coded 18.4 — the same sixty days come back at 2× zoom', () => {
+    const zoom = { left: 0, width: 2208 };
+    expect(WORKDAYS.map((_, i) => dayAtX(i * 36.8 + 18.4, zoom, WEEKS))).toEqual(WORKDAYS);
+    expect(dayAtX(36.79, zoom, WEEKS)).toBe('2026-08-03');
+    expect(dayAtX(36.8, zoom, WEEKS)).toBe('2026-08-04');
+    expect(dayAtX(-1, zoom, WEEKS)).toBe('2026-08-03');
+    expect(dayAtX(99999, zoom, WEEKS)).toBe('2026-10-23');
+  });
+
+  it('returns null rather than a wrong day when it cannot measure', () => {
+    expect(dayAtX(1500, { left: 1000, width: 0 }, WEEKS)).toBeNull();
+    expect(dayAtX(1500, RECT, [])).toBeNull();
+    expect(dayAtX(1500, RECT, undefined)).toBeNull();
+  });
+
+  it('agrees with weekAtX at every X — two grains of ONE axis, never two axes', () => {
+    /* the property that matters: whatever day the pointer names, its WEEK is
+       the week the older mapper names for the same X. If these two could ever
+       disagree, the hover tint and the column it sits in would drift apart. */
+    for (let i = 0; i < 60; i++) {
+      const x = RECT.left + i * UNIT + UNIT / 2;
+      expect(WEEK_KEYS.indexOf(weekAtX(x, RECT, WEEKS)!), `unit ${i}`).toBe(Math.floor(i / 5));
+    }
+  });
+
+  it('derives the date by STRING calendar arithmetic, never a millisecond difference', () => {
+    // invariant 11: `new Date(iso) - base` divided by a day is a day early
+    // west of UTC across a DST edge; `isoAddDays` moves the calendar fields
+    const src = DAY_AT_X_SRC();
+    expect(src).toContain('isoAddDays');
+    expect(src).not.toContain('new Date');
+    expect(src).not.toContain('864e5');
+  });
+
+  it('is PURE — no document, no window, no app.get, no shared week constants', () => {
+    for (const forbidden of ['document', 'window', 'app.get', 'WEEK_PX', 'WEEK_COUNT']) {
+      expect(DAY_AT_X_SRC()).not.toContain(forbidden);
+    }
+  });
+
+  it('is a named top-level function, and it did NOT replace weekAtX', () => {
+    expect(APP_JS).toMatch(/\nconst dayAtX = /);
+    expect(DAY_AT_X_SRC().startsWith('\nconst dayAtX =')).toBe(true);
+    // the week mapper still ships: `weekAtX` has other callers, and a rewrite
+    // in place would have moved them all to a grain they never asked for
+    expect(APP_JS).toMatch(/\nconst weekAtX = /);
   });
 });
 

@@ -60,6 +60,28 @@ const weekAtX = (clientX, rect, weeks) => {
   return weeks[Math.min(n - 1, Math.max(0, col))].key;
 };
 
+/* The DAY inverse of the same axis (block seven, JP 2026-09-08: a row is
+   placed and dragged at DAY grain, not by week column). Identical arithmetic
+   to weekAtX with one column per WORKDAY rather than per week: the track is
+   `weeks.length` x WORKDAYS_PER_WEEK units wide, unit i belongs to week
+   `floor(i / WORKDAYS_PER_WEEK)` and weekday `i % WORKDAYS_PER_WEEK`
+   (Mon..Fri), so a weekend can never be named — the grid has no width for
+   one. Half-open and clamped exactly as weekAtX is, and null for the same
+   unmeasurable cases.
+
+   The date is derived with isoAddDays from the week's own Monday KEY: local
+   calendar arithmetic on a 'YYYY-MM-DD' string, never a millisecond
+   difference against a parsed date, which lands on the previous day west of
+   UTC (invariant 11). weekAtX stays exactly as it is for its own callers. */
+const dayAtX = (clientX, rect, weeks) => {
+  const n = weeks ? weeks.length : 0;
+  if (!n || !(rect.width > 0)) return null;
+  const units = n * WORKDAYS_PER_WEEK;
+  const raw = Math.floor((clientX - rect.left) / (rect.width / units));
+  const i = Math.min(units - 1, Math.max(0, raw));
+  return isoAddDays(weeks[Math.floor(i / WORKDAYS_PER_WEEK)].key, i % WORKDAYS_PER_WEEK);
+};
+
 /* ---- the sprint-item bar (owls #72/#73, frame 731:98513) -----------------
 
    One row = one task card = one bar. The bar spans the PM's click
@@ -122,14 +144,54 @@ app.set('deadlineTick', (row) => {
 });
 
 /* The violet + rides HOVER over any UNPLOTTED row's track (node 731:100277)
-   and renders in whichever week column the pointer is over (#72 §6: it tracks
-   the pointer, it is not fixed to the column the mock shows). Left edge of
-   that column as a track %; the CSS centres the 24px circle inside the --gw
-   column, and the hovered cell's tint shares this same left. */
-app.set('plusLeft', (weekKey) => {
-  const at = app.get('plannerWeeks').findIndex((w) => w.key === weekKey);
-  return at < 0 ? null : unitPct(at * WORKDAYS_PER_WEEK);
-});
+   and renders on whichever WORKDAY the pointer is over (#72 §6: it tracks the
+   pointer, it is not fixed to the column the mock shows; block seven moved
+   the grain from the week to the day). Left edge of that day's unit as a
+   track %, through the SAME dayIndex the bar is drawn from — so the + and the
+   bar it places cannot land a column apart — and the CSS centres the 24px
+   circle inside the one-unit column. The hovered cell's tint shares this
+   left, and so does a dragged bar's preview offset (`dragLeft`).
+   Asymmetric at the window's edges, and for the same reasons deadlineTick is
+   (JP 2026-08-28): a day BEFORE the window pins to the left edge, which is
+   exactly where itemBar has already clipped that row's bar to, so a dragged
+   bar's preview starts where the bar visibly is; a day BEYOND it returns null,
+   because there is nothing drawn out there to point at — and a row starting
+   past the window draws no bar at all, so nothing can be grabbed from it. */
+const plusLeft = (day) => {
+  if (!day) return null;
+  const u = dayIndex(day);
+  return u >= TOTAL_UNITS ? null : unitPct(Math.max(0, u));
+};
+app.set('plusLeft', plusLeft);
+
+/* THE AFFORDANCE GUARD (JP 2026-09-08, block seven): may this row be placed
+   — or dragged — onto this day? Three rules, and the third is free:
+
+     1. the day is inside the row's OWN sprint's dates, both ends included;
+     2. it is not after the card's deadline (a row may FINISH late and turn
+        red — §5.1's whole point — but it may not START after the date it
+        was promised for);
+     3. it is a working day, which the geometry gives for nothing: dayAtX
+        names Mon..Fri only.
+
+   This is the AFFORDANCE, never the authority. The server re-checks all
+   three on every write path (plotIssue, src/services/sprint-items.ts) and
+   answers 422 with its own message; holidays are refused THERE, since the
+   ARES working-day calendar is canonical and the client holds no copy of it.
+   A row whose sprint is missing or dateless is not placeable — the refusal
+   is the safe direction, and the server would refuse it too.
+
+   Rollover is exempt from all of this (§6.2): it moves a card the PM placed,
+   out of the sprint and past the deadline, with no cap. It never comes
+   through here or through the route. */
+const placeable = (row, day) => {
+  if (!row || !day) return false;
+  const s = (app.get('sprints') || []).find((x) => x && x.id === row.sprintId);
+  if (!s || !s.start || !s.end) return false;
+  if (day < s.start || day > s.end) return false;
+  return !(row.deadline && day > row.deadline);
+};
+app.set('placeable', placeable);
 
 /* The sprints modal's LENGTH cell — DERIVED and read-only, never an input. It
    is the same counted-Mondays helper the sprint block headers print ('2 wk'),

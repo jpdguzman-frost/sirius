@@ -50,7 +50,7 @@
         written for). }}
     <div class="fnbox">
       <button class="fnbtn ghost" on-click="['openSprints']"><svg class="i16" aria-hidden="true"><use href="#i-calendar" /></svg>Sprints</button>
-      <span class="fnnote">Hover a week on an unplotted row and click to place its bar — the finish is computed.</span>
+      <span class="fnnote">Hover a day on an unplotted row and click to place its bar; drag a placed bar to move it. The finish is computed.</span>
     </div>
   </div>
 
@@ -272,23 +272,31 @@
                       fully clipped — nothing draws, and the track offers
                       placement instead. Placement rides the POINTER (Miles,
                       node 731:100277 — hover-gated, no checkbox): hovering
-                      ANY unplotted row's track lights the violet + at the
-                      pointer's week and tints that week cell slate-50 beneath
-                      it (.ghovcell, node 731:100271), and the CLICK lands on
-                      the TRACK — the + itself is pointer-events: none. The
-                      row plots on the hovered week's MONDAY; day-granular
-                      placement is #75's rollover territory. Placement stays a
-                      SECOND act: nothing below this loop offers a week, and
-                      the search rows draw no + of their own (owl #77 §0, node
-                      840:31630). }}
-                  <div class="gtrack"
-                       {{#if !row.startsOn}}on-mousemove="['plotHover', row.id]" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{/if}}>
+                      ANY unplotted row's track lights the violet + on the
+                      pointer's WORKDAY and tints that one-unit cell slate-50
+                      beneath it (.ghovcell, node 731:100271), and the CLICK
+                      lands on the TRACK — the + itself is pointer-events:
+                      none. Block seven (JP 2026-09-08) moved the grain from
+                      the week to the day and gated the offer: a day outside
+                      the row's own sprint, or after its deadline, names no
+                      day at all, so there is no tint, no + and no writable
+                      click there. Placement stays a SECOND act: nothing below
+                      this loop offers a day, and the search rows draw no + of
+                      their own (owl #77 §0, node 840:31630).
+
+                      A PLACED row's bar is a pointer DRAG SOURCE instead: the
+                      coloured run alone, never the track, never the label.
+                      The bar itself moves for the gesture and commits on
+                      release — no follower element, and no HTML5 drag
+                      attribute or directive anywhere on this tab. }}
+                  <div class="gtrack{{#if !row.startsOn && plotRow === row.id && plotDay}} placing{{/if}}"
+                       {{#if !row.startsOn}}on-mousemove="['plotHover', row.id]" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{else}}on-mousemove="['barDragMove', row.id]"{{/if}}>
                     <div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div>
-                    {{#if !row.startsOn && plotRow === row.id && plotWeek}}<div class="ghovcell" style="left:{{plusLeft(plotWeek)}}%;" aria-hidden="true"></div>{{/if}}
-                    {{#each itemBar(row) as b}}<div class="gitem {{b.cls}} {{#if row.late}}late{{/if}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}"></div>{{/each}}
+                    {{#if !row.startsOn && plotRow === row.id && plotDay}}<div class="ghovcell" style="left:{{plusLeft(plotDay)}}%;" aria-hidden="true"></div>{{/if}}
+                    {{#each itemBar(row) as b}}<div class="gitem {{b.cls}}{{#if row.late}} late{{/if}}{{#if dragRow === row.id}} dragging{{#if !placeable(row, dragDay)}} refused{{/if}}{{/if}}" style="left:{{ dragRow === row.id ? dragLeft : b.left }}%;width:{{b.width}}%;" title="{{ dragRow === row.id ? '' : b.title }}" on-mousedown="['barDragStart', row.id]"></div>{{/each}}
                     {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
-                    {{#if !row.startsOn && plotRow === row.id && plotWeek}}
-                      <button class="gplus" type="button" tabindex="-1" style="left:{{plusLeft(plotWeek)}}%;" aria-label="Place the bar in the week of {{plotWeek}}"><svg class="i16" aria-hidden="true"><use href="#i-plus" /></svg></button>
+                    {{#if !row.startsOn && plotRow === row.id && plotDay}}
+                      <button class="gplus" type="button" tabindex="-1" style="left:{{plusLeft(plotDay)}}%;" aria-label="Place the bar on {{fmtLongIso(plotDay)}}"><svg class="i16" aria-hidden="true"><use href="#i-plus" /></svg></button>
                     {{/if}}
                   </div>
                 </div>

@@ -30,11 +30,15 @@ async function resetForProjectSwitch() {
   // Planner view state is per-project too (R-d, owl #25; re-based on the
   // work-card unit, #72): the search queries `addQ` are keyed on THIS
   // project's sprint ids — carried over, they would name sprints the next
-  // project does not have — and `sprintSel` (the checkbox highlight) plus
-  // the hover pair `plotRow`/`plotWeek` point at rows it does not have
-  // either. `collapsedBlocks` is keyed on sprint ids, which are
+  // project does not have — and `sprintSel` (the checkbox highlight), the
+  // hover pair `plotRow`/`plotDay` and the drag trio point at rows it does
+  // not have either. `collapsedBlocks` is keyed on sprint ids, which are
   // per-project. `leftCollapsed` deliberately does NOT reset — it is a
   // reader preference about the pane, not project data.
+  /* a drag cannot survive a project switch — the pointer is held down on a
+     bar that is about to stop existing — but the window listeners it binds
+     would, so they come down before the keys are cleared below. */
+  barDragStop();
   app.set({
     /* the six axes, the sort, the search and the page — the whole narrowing,
        cleared through the recipe's own empty rather than a list of axis names
@@ -65,7 +69,10 @@ async function resetForProjectSwitch() {
        the sprint ids they are keyed on. */
     sprintSel: null,
     plotRow: null,
-    plotWeek: null,
+    plotDay: null,
+    dragRow: null,
+    dragDay: null,
+    dragLeft: null,
     addQ: {},
     addBusy: null,
     collapsedBlocks: {},
@@ -172,6 +179,41 @@ function toggleMc(mc) {
    anything. The adds also raise `addBusy` (state), which is what the
    template reads to make ONE sprint's links inert (PLAN.md B10). */
 let sprintItemSaving = false;
+
+/* ONE row of the schedule by its item id — the rows the server sent, which is
+   where `startsOn`, `deadline` and `sprintId` live. Placement and the drag
+   both need the row they are acting on to ask `placeable` about it, and
+   neither can read it off the DOM: the template hands a handler an id, never
+   the row. */
+const sprintRow = (itemId) => (app.get('sprintItems.rows') || []).find((r) => r.id === itemId) || null;
+
+/* ---- the bar drag: pointer events, and no ghost (block seven, JP 2026-09-08)
+   ------------------------------------------------------------------------
+   A PLACED row's coloured run is the drag source. Mousedown on the bar arms
+   the gesture, mousemove over that row's own track names the workday under
+   the pointer through `dayAtX`, and mouseup writes `starts_on`. Nothing else
+   moves: no ghost element (a second thing to keep in step with the bar) and
+   NO HTML5 drag API — no `draggable`, no dragstart/dragover/drop anywhere.
+   The HTML5 API dies inside sticky, scrolling containers, which is exactly
+   what this layout is (build-spec §5.2), and the bar itself is then the only
+   element the browser has to keep hit-testable (gantt-rules §1).
+
+   `mouseup` and `keydown` ride the WINDOW, and only while a drag is live: a
+   release outside the track has to land somewhere, and Escape has to cancel
+   from wherever the pointer has wandered. Both come off on every exit — the
+   commit, the cancel and a project switch — so nothing listens at rest. */
+const barDragUp = () => app.fire('barDragEnd');
+const barDragKey = (e) => { if (e.key === 'Escape') app.fire('barDragCancel'); };
+function barDragStop() {
+  window.removeEventListener('mouseup', barDragUp);
+  window.removeEventListener('keydown', barDragKey);
+}
+/* The three keys go together, always: clearing them IS the snap-back, because
+   the bar's resting geometry comes from the row's own `startsOn` — the value
+   the server still holds after a refusal. */
+function barDragClear() {
+  app.set({ dragRow: null, dragDay: null, dragLeft: null });
+}
 
 /* HOW AN ADD FAILS — one owner for both adds, because the policy is one
    policy: a refusal that means the LIST ON SCREEN is stale (the card is
@@ -682,11 +724,16 @@ app.on({
   async capCommit(ctx) { await writeCapacity(Number(ctx.node.value)); },
   /* ---- Sprint Schedules placement (owls #72/#73, node 731:100277) --------
      Hover, then click: the pointer over any UNPLOTTED row's track names a
-     week (the cell tints, the violet + rides the column), and the click
-     writes `starts_on` — the drag era's five-handler dance replaced by one
-     PATCH. The finish is computed server-side, so no forecast math runs here
-     (invariants 5–7), and the bar and the FORECASTED column read the same
-     field back. */
+     WORKDAY (the cell tints one unit wide, the violet + rides it), and the
+     click writes `starts_on` — the drag era's five-handler dance replaced by
+     one PATCH. The finish is computed server-side, so no forecast math runs
+     here (invariants 5–7), and the bar and the FORECASTED column read the
+     same field back.
+
+     Block seven (JP 2026-09-08) moved the grain from the week to the day and
+     put a guard in front of the offer: a day outside the row's sprint, or
+     after its deadline, names no `plotDay` at all — no tint, no +, and a
+     click that lands there does nothing. */
   sprintSelect(_ctx, itemId) {
     /* toggle only — the checkbox is a row HIGHLIGHT whose semantics are
        still with product (owl jp→miles #60); it no longer arms placement,
@@ -702,27 +749,34 @@ app.on({
        whole flight, so it is the one fact that separates a live hover from
        this ghost. */
     if (sprintItemSaving) return;
-    /* the same pure mapper the drop path used (weekAtX): pointer X against
-       the TRACK's measured rect. `rowId` is the committed row whose track
-       the pointer is on — only committed rows bind this; the search row and
-       its results have inert tracks (#77 §0, PLAN.md B5) — so the + and the
-       cell tint render on that row alone. Per-mousemove is fine — Ractive
-       no-ops the set until something actually changes. */
+    /* the day-grain sibling of the drop path's mapper (dayAtX): pointer X
+       against the TRACK's measured rect. `rowId` is the committed row whose
+       track the pointer is on — only committed rows bind this; the search row
+       and its results have inert tracks (#77 §0, PLAN.md B5) — so the + and
+       the cell tint render on that row alone. Per-mousemove is fine —
+       Ractive no-ops the set until something actually changes.
+
+       `plotDay` carries the OFFER, not merely the pointer: a day this row may
+       not be placed on stores null, so the affordance never appears where the
+       server would answer 422. `plotRow` is still set, so leaving the track
+       clears a real pair rather than a half one. */
+    const day = dayAtX(ctx.event.clientX, ctx.node.getBoundingClientRect(), app.get('plannerWeeks'));
     app.set({
-      plotWeek: weekAtX(ctx.event.clientX, ctx.node.getBoundingClientRect(), app.get('plannerWeeks')),
+      plotDay: placeable(sprintRow(rowId), day) ? day : null,
       plotRow: rowId,
     });
   },
-  plotLeave() { app.set({ plotWeek: null, plotRow: null }); },
+  plotLeave() { app.set({ plotDay: null, plotRow: null }); },
   async plotPlace(_ctx, itemId) {
-    const week = app.get('plotWeek');
-    /* no week means no mousemove ran before the click (a tap, or a click
-       racing the first hover) — nothing to place, so nothing to send. And
-       the week must be THIS track's hover (review 2026-08-28b, finding 7):
-       `plotWeek` is a single global, so a click that outran its own first
-       mousemove could otherwise place this row at a week hovered on some
-       OTHER row's track. */
-    if (!week || app.get('plotRow') !== itemId || sprintItemSaving) return;
+    const day = app.get('plotDay');
+    /* no day means either no mousemove ran before the click (a tap, or a
+       click racing the first hover) or the pointer is on a day this row may
+       not have — nothing to place either way, so nothing to send. And the day
+       must be THIS track's hover (review 2026-08-28b, finding 7): `plotDay`
+       is a single global, so a click that outran its own first mousemove
+       could otherwise place this row at a day hovered on some OTHER row's
+       track. */
+    if (!day || app.get('plotRow') !== itemId || sprintItemSaving) return;
     /* THE LOCK SPANS THE RELOAD (review 2026-08-28, finding 2). Released in
        the old `finally`, it dropped while loadAll was still fetching — the
        row on screen still looked placeable/clearable and a second gesture
@@ -731,24 +785,105 @@ app.on({
        after the awaited reload, on both paths. */
     sprintItemSaving = true;
     try {
-      /* #72 §6: placement is by hovered WEEK, and the week's Monday is the
-         start — `plotWeek` IS that Monday (plannerWeeks keys are Mondays).
-         Day-granular placement is #75's rollover territory. */
-      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/sprint-items/${itemId}`, { starts_on: week });
+      /* #72 §6 as amended by JP 2026-09-08: placement is by hovered WORKDAY,
+         and `plotDay` IS that day — dayAtX names Mon..Fri only, so the value
+         on the wire is always a working date. */
+      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/sprint-items/${itemId}`, { starts_on: day });
       /* Clear the hover state ONLY if it still points at this row (the
          finding-4 discipline): a hover that moved onto another row during
          the await belongs to the USER'S next placement, not to this one's
          cleanup. */
-      if (app.get('plotRow') === itemId) app.set({ plotRow: null, plotWeek: null });
+      if (app.get('plotRow') === itemId) app.set({ plotRow: null, plotDay: null });
       await loadAll();
     } catch (err) {
-      // nothing was optimistic and the selection survives, so the user can
-      // re-click once the banner explains what refused
+      /* nothing was optimistic and the selection survives, so the user can
+         re-click once the banner explains what refused — and on a 422 the
+         banner IS the server's own sentence (errText prefers it), which is
+         the one that names the sprint's dates or the deadline. */
       flashBanner(errText(err));
     } finally {
       sprintItemSaving = false;
     }
   },
+  /* ---- the bar drag, four handlers and no more (block seven) ------------
+     barDragStart  mousedown on the coloured run of a PLACED row
+     barDragMove   mousemove on that row's track — names the day, moves the bar
+     barDragEnd    mouseup, from the window — writes, or snaps back
+     barDragCancel Escape, from the window — snaps back, writes nothing
+
+     The bar renders at `dragLeft` with its own width for the whole gesture,
+     wearing `dragging` — and `refused` on a day the row may not have, which
+     is a state the drop then declines to commit rather than a state the
+     server has to answer for. */
+  barDragStart(ctx, rowId) {
+    /* a placement or a previous drag is still in the air: this bar is about
+       to be replaced by the reload, so the gesture would drag a corpse */
+    if (sprintItemSaving) return;
+    /* the PRIMARY button only: a right-click opens the context menu, and its
+       own mouseup would then end a drag the user never started */
+    if (ctx.event && ctx.event.button) return;
+    const row = sprintRow(rowId);
+    if (!row || !row.startsOn) return; // only a PLACED row has a bar to drag
+    /* the preview needs a left, and a start beyond the drawn window has none
+       — such a row draws no bar either, so this is unreachable from a real
+       pointer and is here to keep it that way */
+    const left = plusLeft(row.startsOn);
+    if (left === null) return;
+    /* the mousedown's default is a text selection that follows the pointer
+       across the row and the pane beside it; the drag owns the gesture now */
+    if (ctx.event && ctx.event.preventDefault) ctx.event.preventDefault();
+    window.addEventListener('mouseup', barDragUp);
+    window.addEventListener('keydown', barDragKey);
+    /* opens ON the row's own start, so a mousedown with no movement is a
+       no-op by arithmetic rather than by a special case in barDragEnd */
+    app.set({ dragRow: rowId, dragDay: row.startsOn, dragLeft: left });
+  },
+  barDragMove(ctx, rowId) {
+    /* the track binds this on every placed row, so a pointer crossing a
+       NEIGHBOUR's track during a drag must not steer this one */
+    if (app.get('dragRow') !== rowId) return;
+    const day = dayAtX(ctx.event.clientX, ctx.node.getBoundingClientRect(), app.get('plannerWeeks'));
+    if (!day) return; // unmeasurable track — hold the last day rather than guess
+    app.set({ dragDay: day, dragLeft: plusLeft(day) });
+  },
+  async barDragEnd() {
+    const rowId = app.get('dragRow');
+    const day = app.get('dragDay');
+    barDragStop(); // the listeners go FIRST, on every path below
+    const row = sprintRow(rowId);
+    /* Four ways a release writes nothing, and all four snap the bar back to
+       where the row already is: nothing was dragging, the bar was dropped on
+       the day it started (invariant 10 logs changes, not attempts — a no-op
+       PATCH would bank an audit row for one), the day is one this row may not
+       have, or another write is in the air. */
+    if (!row || !day || day === row.startsOn || !placeable(row, day) || sprintItemSaving) {
+      barDragClear();
+      return;
+    }
+    sprintItemSaving = true;
+    try {
+      await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/sprint-items/${rowId}`, { starts_on: day });
+      await loadAll();
+    } catch (err) {
+      // the server's own sentence — OUT_OF_SPRINT, PAST_DEADLINE or
+      // NOT_A_WORKDAY names what refused and why
+      flashBanner(errText(err));
+    } finally {
+      /* CLEARED AFTER THE RELOAD, on both paths — the optimistic half of the
+         gesture (invariant 8's shape). The bar stays where it was dropped for
+         the whole flight, so the drop does not visibly rewind and then jump;
+         on success the reloaded row already carries the new start, so
+         clearing changes nothing on screen, and on a refusal clearing IS the
+         snap-back to the start the server still holds. */
+      barDragClear();
+      sprintItemSaving = false;
+    }
+  },
+  barDragCancel() {
+    barDragStop();
+    barDragClear();
+  },
+
   /* the calendar icon: clear the placement, the row stays (#72). Three locks
      against a no-op reaching the audit log (invariant 10 logs changes, not
      attempts): the button is disabled without a `startsOn`; this in-flight

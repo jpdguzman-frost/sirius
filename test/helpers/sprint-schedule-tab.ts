@@ -3,9 +3,15 @@
    files can share it. */
 /**
  * Sprint Schedules, rebuilt on the WORK CARD (owls #72/#73, frame 731:98513;
- * PLAN.md 2026-08-28). One row = one task card, placement is a CLICK (select
- * the row, hover a week, click), and the bar is `itemBar(row)` — start to
+ * PLAN.md 2026-08-28). One row = one task card, placement is a CLICK (hover a
+ * day on an unplotted row, click), and the bar is `itemBar(row)` — start to
  * finish, finish day INCLUSIVE, out of the row's own server fields.
+ *
+ * BLOCK 7 (2026-09-08, JP): the grain moved from the WEEK to the WORKDAY, an
+ * affordance guard sits in front of the offer (a day outside the row's sprint
+ * or after its deadline is not offered, and the server refuses it as a 422
+ * backstop), and a PLACED bar drags — by POINTER, on the coloured run, with no
+ * HTML5 drag API and no ghost.
  *
  * RETIRED WITH THE FEATURE, 2026-08-28 (the Forecast-tab pattern — the file
  * goes, the reasoning stays where a reader will look):
@@ -37,7 +43,7 @@
  *      QUERY opens a panel (revert: seed `rows` from `addable` in the
  *      computed, or emit a panel for a blank query)
  *   3. the violet + gates on `!row.startsOn && plotRow === row.id &&
- *      plotWeek`, and the track's handlers on `!row.startsOn` — the checkbox
+ *      plotDay`, and the track's handlers on `!row.startsOn` — the checkbox
  *      gates NOTHING (revert: drop any one clause, or re-gate on `sprintSel`;
  *      the !row.startsOn render clause is review 2026-08-28b finding 1 — a
  *      hover re-armed during the placement reload must not strand chrome on
@@ -51,11 +57,12 @@
  *   7. `.gdl` is 1px red-500 (revert: the old 2px slate-400)
  *   8. footer overlap counts include a Friday start and a Monday finish
  *      (revert: strict inequalities)
- *   9. the withdrawal sweeps (revert: reintroduce `draggable`, a drop
+ *   9. the withdrawal sweeps (revert: reintroduce `draggable`, an HTML5 drop
  *      handler, Suggest markup, or any of the retired add flow)
- *  10. the hover cell renders in BOTH tracks only under `plotRow`+`plotWeek`
- *      and wears slate-50 (revert: drop the `.ghovcell` element, its gate
- *      clause, or the `var(--slate-50)` fill)
+ *  10. the hover cell renders in BOTH tracks only under `plotRow`+`plotDay`
+ *      and wears slate-50, ONE WORKDAY wide (revert: drop the `.ghovcell`
+ *      element, its gate clause, the `var(--slate-50)` fill, or widen it back
+ *      to `var(--gw)`)
  *  11. a PAST deadline pins to the window's LEFT edge; the right clip stays
  *      (revert: restore the `u >= 0` left clip in `deadlineTick`)
  *  12. Add All sends the PANEL'S OWN ids to the batch route in one act, and
@@ -70,6 +77,25 @@
  *      field's right edge (revert: a min-height on `.gsearch`/`.gresult`)
  *  16. the two blues are two TOKENS (revert: one colour at an opacity on
  *      `.galink`/`.gaddone`/`.gaddall`)
+ *
+ * BLOCK 7 adds five more, each owed the same proof:
+ *  17. `dayAtX` names the workday under the pointer and round-trips through
+ *      `dayIndex` on all sixty units (revert: divide by the week COUNT, or
+ *      derive the date by millisecond difference instead of `isoAddDays`)
+ *  18. `placeable` refuses a day outside the row's own sprint and a day AFTER
+ *      its deadline, and takes both boundary days and the deadline day itself
+ *      (revert: strict inequalities at the sprint ends, `>=` on the deadline,
+ *      or reading the first sprint in the list instead of the row's own)
+ *  19. the drag source is the `.gitem` run of a PLACED row and nothing else,
+ *      and it stays hit-testable in every state it wears (revert: move the
+ *      mousedown to `.gtrack`, or put `pointer-events: none` on any of
+ *      `.gitem` / `.gitem.dragging` / `.gitem.refused` / `.gitem:hover`)
+ *  20. a release on the day the bar started writes NOTHING, and a refused day
+ *      never reaches the wire (revert: drop either clause from barDragEnd —
+ *      invariant 10 logs changes, not attempts)
+ *  21. the drag's window listeners come down on EVERY exit, and Escape alone
+ *      cancels (revert: remove the `barDragStop()` from barDragCancel, from
+ *      the finally-free early return, or from `resetForProjectSwitch`)
  */
 
 import { expect } from 'vitest';

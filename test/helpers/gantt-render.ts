@@ -264,8 +264,20 @@ export interface SprintScheduleState {
   collapsedBlocks?: Record<string, boolean>;
   /** single selection — the checkbox toggles it; null = nothing selected */
   sprintSel?: string | null;
-  /** the week the pointer is over on the SELECTED unplotted row's track */
-  plotWeek?: string | null;
+  /** the WORKDAY the pointer is over on an unplotted row's track — null both
+      when the pointer is elsewhere and when the day under it is one this row
+      may not have (block 7: `plotDay` carries the OFFER, not the pointer) */
+  plotDay?: string | null;
+  /** the PLACED row whose coloured run is under the button, mid-drag */
+  dragRow?: string | null;
+  /** the workday the pointer names mid-drag — `placeable` decides its dress */
+  dragDay?: string | null;
+  /** that day's left edge as a track %: the bar's preview offset mid-drag */
+  dragLeft?: string | null;
+  /** the affordance guard. Stubbed TRUE by default so the ordinary render is
+      the placeable one; the truth table itself is EXECUTED from the shipped
+      source in test/sprint-schedule-deadline.test.ts (rule 2). */
+  placeable?: (row: SprintScheduleRow, day: string | null) => boolean;
   /** each sprint's search text (PLAN.md block 2, B10) — sprintId → query.
       Only the two-way binding and the `.typed` class read it; whether a panel
       is OPEN is `addPanels`, never this. */
@@ -332,7 +344,11 @@ export function renderSprintSchedule(state: SprintScheduleState = {}): string {
       leftCollapsed: state.leftCollapsed ?? false,
       collapsedBlocks: state.collapsedBlocks ?? {},
       sprintSel: state.sprintSel ?? null,
-      plotWeek: state.plotWeek ?? null,
+      plotDay: state.plotDay ?? null,
+      dragRow: state.dragRow ?? null,
+      dragDay: state.dragDay ?? null,
+      dragLeft: state.dragLeft ?? null,
+      placeable: state.placeable ?? (() => true),
       // the RESTING search row is the default: no query anywhere, no panel,
       // nothing in flight (833:68629) — every suite that does not care about
       // the add flow renders it at rest
@@ -353,9 +369,9 @@ export function renderSprintSchedule(state: SprintScheduleState = {}): string {
             ? [{ left: '0.00', width: '11.67', cls: 'render', title: `${row.startsOn} → ${row.finish}` }]
             : []),
       deadlineTick: state.deadlineTick ?? (() => null),
-      // left edge of the hovered column as a track % — the shipped arithmetic
-      // is `plusLeft` in 50-gantt-geometry.js, executed by the geometry suite
-      plusLeft: () => '8.33',
+      // left edge of the hovered DAY as a track % — the shipped arithmetic is
+      // `plusLeft` in 50-gantt-geometry.js, executed by the geometry suite
+      plusLeft: (day: unknown) => (day ? '8.33' : null),
       fmtLongIso: (iso: unknown) => (iso ? `long:${String(iso)}` : '—'),
       sprintFootText: state.sprintFootText ?? (() => '—'),
       sprintFootCls: state.sprintFootCls ?? (() => 'empty'),

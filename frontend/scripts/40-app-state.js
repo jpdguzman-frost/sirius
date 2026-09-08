@@ -95,12 +95,26 @@ const app = new Ractive({
        (owl jp→miles #60); it gates nothing in placement */
     sprintSel: null,
     /* the hover pair (node 731:100277): `plotRow` is the committed row whose
-       track the pointer is on, and `plotWeek` the week column under it, where
-       the cell tints and the violet + renders. Both null whenever the pointer
-       is elsewhere. Only committed rows have a live track: the search row and
-       its results draw no + (owl #77 §0, node 840:31630; PLAN.md B5). */
+       track the pointer is on, and `plotDay` the WORKDAY under it, where the
+       cell tints and the violet + renders. `plotDay` is null whenever the
+       pointer is elsewhere — and also whenever the day under it is one this
+       row may not be placed on (outside its sprint, or after its deadline):
+       one key carries both "no hover" and "no offer", which is what keeps the
+       + and the tint from ever advertising a write the server would refuse.
+       Only committed rows have a live track: the search row and its results
+       draw no + (owl #77 §0, node 840:31630; PLAN.md B5). */
     plotRow: null,
-    plotWeek: null,
+    plotDay: null,
+    /* the bar drag (block seven, JP 2026-09-08): `dragRow` is the PLACED row
+       whose coloured run is under the button, `dragDay` the workday the
+       pointer currently names, and `dragLeft` that day's left edge as a track
+       percentage — the preview offset the bar renders at while the gesture
+       runs, its width unchanged. All three null at rest, and cleared together
+       on release, on cancel and on a refusal, which is what makes the bar
+       snap back to the start the server still holds. */
+    dragRow: null,
+    dragDay: null,
+    dragLeft: null,
     /* owl #77 §0 (PLAN.md B10): sprintId → the text in that sprint's search
        field, two-way bound. A MAP, not one string: every sprint has its own
        always-visible field and several may hold text at once. Survives a
