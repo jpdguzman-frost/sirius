@@ -16,6 +16,7 @@ import {
   cssRule,
   decl,
   fnBody,
+  handlerBody,
   method,
 } from './helpers/gantt-render.ts';
 import { type Sort, facet, recipe, row } from './helpers/pipeline-sortfilter.ts';
@@ -36,7 +37,7 @@ describe('the panels can actually open, and stay open', () => {
     const keys = decl(APP_JS, 'OVERLAY_KEYS');
     /* block 5 swapped the Requests select's `reqMenu` for that table's own
        two panels — the same door, twice as many overlays through it. */
-    for (const key of ['pipeSortMenu', 'pipeFilterMenu', 'warnPop', 'reqSortMenu', 'reqFilterMenu', 'duePopover', 'urgencyMenu', 'diffMenu']) {
+    for (const key of ['pipeSortMenu', 'pipeFilterMenu', 'reqSortMenu', 'reqFilterMenu', 'duePopover', 'urgencyMenu', 'diffMenu']) {
       expect(keys, `${key} is an overlay`).toContain(key);
       expect(shields, `${key} has no shield — its own click would dismiss it`).toContain(`${key}:`);
     }
@@ -107,7 +108,9 @@ describe('the panels are ANCHORED to their trigger, never measured (JP, 2026-08-
     const opener = fnBody('openOverlay');
     expect(opener).toContain('opts.posKey');
     expect(opener).toContain('placeBox(');
-    expect(fnBody('showWarnPop')).toContain('posKey');
+    // 2026-09-08: showWarnPop left with the §4.4 withdrawal (owl #81); the due
+    // popover is the surviving caller of the shared posKey placement.
+    expect(handlerBody('openDuePopover')).toContain('posKey');
   });
 });
 
@@ -215,7 +218,6 @@ describe('the panels sit on the frame’s own geometry (JP, 2026-08-21)', () => 
        them off it. Same reasoning that gave the card-issue popover the heavier
        value in owl #53 — and the two must not drift apart again. */
     expect(cssRule('.pipemenu', PIPELINE_CSS)).toContain('box-shadow: var(--shadow-card)');
-    expect(cssRule('.warnpop', PIPELINE_CSS)).toContain('box-shadow: var(--shadow-card)');
   });
 });
 
