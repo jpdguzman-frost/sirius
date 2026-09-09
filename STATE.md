@@ -65,7 +65,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   for the channel, never write the port down.
 - **File drop `../owl/` (ARES agent)** — **ALIVE AGAIN 2026-08-25**: they
   replied (#01; our #10 back) and **`hLL7WW2V` push is live** — first events
-  03:41:50Z, drained ~1s. **`../ares/` is a sibling repo — read it rather than wait.** **Sirius→Ares #11 sent 2026-09-08**: open the board lists to the read key (or `/api/v1/trello/boards/:id/lists`); **#12 sent 2026-09-08** (JP's word): add each done card's list timeline (`segments`, `labels` array, `historyComplete`) to `/api/v1/trello/cycle-time` — phase 19's T180 becomes a reader of that route; both unanswered (files still in the drop).
+  03:41:50Z, drained ~1s. **`../ares/` is a sibling repo — read it rather than wait.** **#11/#12 (2026-09-08) answered by Ares #01 2026-09-09 — VERIFIED LIVE**: `/boards/:id/lanes` (Apollo's table, by list ID) and `cycle-time?include=segments` (`segments`, `labelNames`, `historyComplete`). `rtProjectId` is NUMERIC (`837`; `rt-837` answers an empty page); `historyComplete` is stale-true on pre-fix cards, moot on 837. **#02** (20:08): lane pairs per PROJECT, cache re-synced 11:33Z; nothing to re-pull. **#13 drafted for both, held for JP**; their files stay until it goes. **Whose model** (Ares's new firm-wide cells vs our grid) = JP's question.
 
 ## Still open
 
@@ -73,10 +73,8 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   shipped reference snapshot; the refreshed grid is held, not used, and the
   nightly job keeps collecting. Unfreeze only after phase 19's sanity gate.
 - **JP gates**: **`writes_enabled` on rt-837 stays OFF — JP 2026-08-21, "don't
-  switch live write yet"**. ⚠️ **Blocker found 2026-08-25: `staleGuard` compares
-  our write against the instant we ISSUED the ARES read, never against when ARES
-  actually fetched, so a reconcile could revert a user's edit. **FIXED + LIVE
-  2026-08-25**; the TEST-board edit-and-reconcile check is what remains.**
+  switch live write yet"**. The `staleGuard` reconcile bug is FIXED + LIVE (2026-08-25, state-log
+  08-25); the TEST-board edit-and-reconcile check is what remains.
   Security review also precedes · `GOOGLE_SHEETS_CREDENTIALS` (lights up
   Requests + requestor/type on real data) · ALT-9 sheet-row link · ALT-1 (dead
   server `?filter=`) · OD-4's non-capacity remainder (`decisions/0019`) ·
@@ -90,7 +88,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
 - **Block 7 residuals** (`docs/history/state-log/2026-09-09.md`): **sprint-shrink** — **RULED 2026-09-09: REFUSE** a sprint-date edit that would leave any plotted row outside; the notice LISTS the affected activities. Next build, with T179 · visual calls: the 18.4px `+` reads as a dot, a refused preview on a late bar differs only by wash, the `+` covers the deadline tick on the deadline day, no START column on the tab · Escape held mid-drag is unit-proven only (no tool holds a mouse button) · batch placement never existed (D1).
-- **Block 6 residuals**: `warn*` names on the shared hover scheduler (pinned by three suites + eslint; one-commit rename) · sprint membership follows the START day after a roll (supersedes #75 §2; Miles to confirm) · the model refresh re-runs nightly after the classifier swap (model stays frozen) · one vacuous ordering guard in `status-rules.test.ts` (recorded) · a new lane is invisible until a card sits in it (ARES #11).
+- **Block 6 residuals**: `warn*` names on the shared hover scheduler (pinned by three suites + eslint; one-commit rename) · sprint membership follows the START day after a roll (supersedes #75 §2; Miles to confirm) · the model refresh re-runs nightly after the classifier swap (model stays frozen) · one vacuous ordering guard in `status-rules.test.ts` (recorded) · a new lane is invisible until a card sits in it (lanes route live — Ares #01, block 8).
 - **Block 5 residuals**: see `docs/history/state-log/2026-09-06.md` (panel cap offset · units unflagged · chips per axis vs value · `.sfbtn` 40 vs 38 · rejects-only state unseen live).
 - **Agent backlog**: the split candidates + the long tail rotated to `docs/history/state-log/2026-09-09.md` §"Agent backlog" (unchanged by block 7).
 
@@ -102,4 +100,4 @@ line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
 - 2026-09-09 — **Block 7 built + deployed** (JP's four rulings; `98aaff4`…`dd1ec29`): the three plot guards + the strict sprint move, day-grain placement, the pointer bar drag with grab offset, rulebooks re-aligned, `weekAtX` retired. Review 20 → 13 fixed; VALIDATE ×2; E2E green (12/13 real pointer). ≈4.0M subagent tokens, 82 agents. Narrative: `docs/history/state-log/2026-09-09.md`; plan+drift: `2026-09-09-plan-block7.md`.
-- 2026-09-08 — **Block 6 built** (spec v1.3 §7a/§6.2, owls #81/#82/#86/#87; JP yes ×3 + five rulings): lane-state table with `excluded` (names from ARES), start-day Deadlines, plain DEADLINE cell + amber bar + §4.4 withdrawn, acknowledgement half deleted (migration 011, invariant 13), spec v1.3 held. Review 24 → 14 fixed; E2E green. `28b6080` · `547effd` · `81000d0` · `fe1089f`. Narrative: `docs/history/state-log/2026-09-08.md`.
+- 2026-09-09 (eve) — **Ares #01 received**: the lanes route + cycle-time `segments` are live and verified read-only (4,397 done rows on 837); T180 confirmed over HTTP with a numeric project id; reply #13 held for JP; block 8 = phase 19 + sprint-shrink + lane reconcile. Log: `docs/history/state-log/2026-09-09.md`.
