@@ -65,7 +65,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   for the channel, never write the port down.
 - **File drop `../owl/` (ARES agent)** — **ALIVE AGAIN 2026-08-25**: they
   replied (#01; our #10 back) and **`hLL7WW2V` push is live** — first events
-  03:41:50Z, drained ~1s. **`../ares/` is a sibling repo — read it rather than wait.** **Sirius→Ares #11 sent 2026-09-08**: open the board lists to the read key (or `/api/v1/trello/boards/:id/lists`); unanswered.
+  03:41:50Z, drained ~1s. **`../ares/` is a sibling repo — read it rather than wait.** **Sirius→Ares #11 sent 2026-09-08**: open the board lists to the read key (or `/api/v1/trello/boards/:id/lists`); **#12 sent 2026-09-08** (JP's word): add each done card's list timeline (`segments`, `labels` array, `historyComplete`) to `/api/v1/trello/cycle-time` — phase 19's T180 becomes a reader of that route; both unanswered (files still in the drop).
 
 ## Still open
 
@@ -85,8 +85,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   profile). **Prune it in the commit that records a pass.** Queue: **the white
   background on Schedules + Deadlines** (live 2026-08-22, unseen) · the
   task-due picker by hand · the sub-350px last-resort scroll · the b13 note
-  chip + clarification accent · drag a bar collapsed. *(The Forecast entry
-  left with the tab, 2026-08-27.)*
+  chip + clarification accent · drag a bar collapsed.
 - **Product (Miles)**: #66 (OPEN WORK meaning, W4, §6.2 day capacity) · the 51 lane names §7a counts but never writes — pinned from ARES; `Generation`/`Refinement` + five `Backlog: …` sub-lanes by rule; `For Archive`, `For Client Approval`, `Hard Deadline: Monday Mar. 23`, `NOTE`, `On Hold: Ryse, NBG` unknown on purpose (logged per sync) · the row-controls design pass + Smoke pass ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
