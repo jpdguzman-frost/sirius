@@ -16,7 +16,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12**; T073/T091 ⏸, T075 pending | write-enable on rt-837 = next JP gate |
 | 18j | **Plotting guardrails on Sprint Schedules** (JP's four rulings 2026-09-08): `plotIssue` — `OUT_OF_SPRINT` / `PAST_DEADLINE` / `NOT_A_WORKDAY` (422, rollover exempt), the strict bare sprint move, day-grain placement (`dayAtX`), the pointer bar drag (`barDrag*`, `dragGrab`, `barLeftAt`), rulebooks re-aligned, `weekAtX` retired | **DEPLOYED 2026-09-09** (`98aaff4`…`434ffc1`, JP's "yes / yes"; healthz 200 ×3, bundle markers live, pm2 clean, urgency smoke green): VALIDATE ×2 (43 proofs, none vacuous), review 20 → 13 fixed / 2 refuted, E2E 12/13 real-pointer (Escape-mid-drag unit-proven only), cleanup proven | Miles's reply to #69 · the sprint-shrink ruling |
-| 19 | **The ARES-sourced, tag-classified cycle-time model** (T179–T183, ~3–4d) — replaces the inter-event dwell derivation that produced `Medium/design = 0.13d`. Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
+| 19 | **The ARES-sourced cycle-time model** (T179–T183) — **JP 2026-09-09: Sirius READS Ares's cells**; T180 = model reader, T181 = cells → grid (Apollo groups ui/others/motion new). Replaces the dwell derivation (`Medium/design = 0.13d`). Model is **FROZEN** until this lands (`model_frozen`, default true = invariant 7's gate) | ⬜ **open, JP-directed 2026-08-27** — freeze DEPLOYED (`3a86df0`); collection continues, nothing measured is lost |
 
 **Build health (2026-09-09):** 1566 tests, 0 `it.todo`, 78 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
@@ -65,7 +65,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   for the channel, never write the port down.
 - **File drop `../owl/` (ARES agent)** — **ALIVE AGAIN 2026-08-25**: they
   replied (#01; our #10 back) and **`hLL7WW2V` push is live** — first events
-  03:41:50Z, drained ~1s. **`../ares/` is a sibling repo — read it rather than wait.** **#11/#12 (2026-09-08) answered by Ares #01 2026-09-09 — VERIFIED LIVE**: `/boards/:id/lanes` (Apollo's table, by list ID) and `cycle-time?include=segments` (`segments`, `labelNames`, `historyComplete`). `rtProjectId` is NUMERIC (`837`; `rt-837` answers an empty page); `historyComplete` is stale-true on pre-fix cards, moot on 837. **#02** (20:08): lane pairs per PROJECT, cache re-synced 11:33Z; nothing to re-pull. **#13 drafted for both, held for JP**; their files stay until it goes. **Whose model** (Ares's new firm-wide cells vs our grid) = JP's question.
+  03:41:50Z, drained ~1s. **`../ares/` is a sibling repo — read it rather than wait.** **#11/#12 (2026-09-08) answered by Ares #01 2026-09-09 — VERIFIED LIVE**: `/boards/:id/lanes` (Apollo's table, by list ID) and `cycle-time?include=segments` (`segments`, `labelNames`, `historyComplete`). `rtProjectId` is NUMERIC (`837`; `rt-837` answers an empty page); `historyComplete` is stale-true on pre-fix cards, moot on 837. **#02**: lane pairs per PROJECT, re-synced. **#13 SENT 2026-09-09** (JP's yes) + **JP's ruling: Sirius READS Ares's model cells**; #13 asks for a key-gated model endpoint (cells × difficulty, n, mean, p70/85/95 in working days, source project|firm, window).
 
 ## Still open
 
@@ -79,8 +79,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   Requests + requestor/type on real data) · ALT-9 sheet-row link · ALT-1 (dead
   server `?filter=`) · OD-4's non-capacity remainder (`decisions/0019`) ·
   loopback-listen test hardening (~21 files) · a custom drag image.
-- **Live browser passes owed** (JP's browser is shared — use an isolated
-  profile). **Prune it in the commit that records a pass.** Queue: **the white
+- **Live browser passes owed** (isolated profile; prune in the commit that records a pass). Queue: **the white
   background on Schedules + Deadlines** (live 2026-08-22, unseen) · the
   task-due picker by hand · the sub-350px last-resort scroll · the b13 note
   chip + clarification accent · drag a bar collapsed.

@@ -30,6 +30,7 @@ _last-verified: 2026-08-18_
 |---|---|---|
 | errata Q | Deadlines count basis | ✅ **answered 2026-08-12** (`docs/product/errata-reply-v1.2.md`): §5.4 weight everywhere — built default is final; §6.1 was their doc error |
 | — | Build spec **v1.2** + **AGENTS.md** (now `docs/architecture/agents-guide.md`) | ✅ received 2026-08-12, verified, filed in docs/ (v1.2 now `docs/product/build-spec-v1.2.md`). All 6 errata corrections confirmed in the diff. its §2 already says two writes; its §7/§8/§9 are historical (OD-1/OD-8 shown open, "Postgres") — do not treat as current |
+| model owner | Whose cycle-time model Sirius reads | ✅ **ruled 2026-09-09** (JP: "read Ares") — Sirius reads Ares's model CELLS (work-type × difficulty, 15-min floor, project layer overriding only with two weeks of its own data) instead of bucketing per-card segments itself; owl #13 asks for the key-gated model endpoint; T180/T181 amended. Durable home: `STATE.md` phase 19 row, `specs/001-sirius-v1/tasks.md` |
 
 ## Answered — operational
 
