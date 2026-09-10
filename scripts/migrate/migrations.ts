@@ -358,6 +358,34 @@ export const MIGRATIONS: Migration[] = [
       await db.collection(SOURCE).rename(ARCHIVE);
     },
   },
+  {
+    /**
+     * T179 (2026-09-10): `work_cards.labels` is new and required. Mongoose does
+     * not backfill a default onto STORED documents, so every row written before
+     * the field existed would read `undefined` where the schema promises an
+     * array — and `laneOf(w.labels)` on an `undefined` is a lane decided by
+     * accident rather than by the card.
+     *
+     * `{ labels: { $exists: false } }` makes this idempotent by construction:
+     * the second pass matches nothing, and a row the next sync has already
+     * filled with its real labels is never overwritten with `[]`. The same
+     * shape as 010's `model_frozen` backfill.
+     *
+     * NOT project-scoped, deliberately (invariant 1 governs QUERIES that read
+     * or change a project's state): this adds a missing field to every document
+     * that lacks it, carries no project semantics, and iterating per project
+     * would only be a slower way to visit the same rows. Precedent: 008, 010.
+     *
+     * Nothing is audited — a schema backfill is not a per-project state change
+     * (same reasoning as 010 and 011).
+     */
+    id: '012-work-card-labels',
+    up: async (conn) => {
+      const db = conn.db;
+      if (!db) throw new Error('no database on connection');
+      await db.collection('work_cards').updateMany({ labels: { $exists: false } }, { $set: { labels: [] } });
+    },
+  },
 ];
 
 /** Applies pending migrations in order; records each in `migrations`. */

@@ -30,6 +30,24 @@ bundle, minified identifiers kept, DO NOT EDIT.
 - `model.ts` — verbatim grid-lookup semantics carrying the prototype's
   shipped EMPIRICAL snapshot; the phase-6 refresh replaces the snapshot per
   project, the lookup semantics stay identical.
+
+  **AMENDED 2026-09-10 (JP, block-8 Q3)** — three additive changes, and
+  nothing else in the file moves:
+  1. `Lane` gains `content`. `designCell`'s fallback chain is untouched, so a
+     `content` card with no `content` cell still answers from `design`.
+  2. `WORK_TYPE_LANES` — the ruled fold from the board's work-type label
+     FAMILY (`Asset`, `Ops`, `Content`, …) onto a lane. It lives here because
+     `laneOf` needs it and lib never imports src; `src/services/work-type.ts`
+     re-exports it, with `workTypeOf` and `laneOfWorkType`, for server code.
+     Growing the table is a product ruling, not a code change.
+  3. `laneOf` gains a label-family branch AHEAD of the list/title regex. The
+     regex text is UNCHANGED and remains the fallback for cards with no
+     work-type label. Without the branch a labelled `Asset: Icons` card lands
+     in `assets`, the opposite of the ruled fold.
+
+  Golden parity is unaffected and stays the proof: `test/forecast.test.ts`
+  drives `laneOf`/`designCell` against the oracle with `labels: []`, where the
+  new branch cannot fire.
 - `sheets.ts` (read-only Sheets source) and `trello.ts` (THE write path,
   exactly registry entries W1/W2/W3) are governed by invariants 2 and 8 and
   `specs/001-sirius-v1/contracts/trello-write.md` — pointer only.

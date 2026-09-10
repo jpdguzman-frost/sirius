@@ -8,6 +8,8 @@
  * design and is a bug in the CALLER, never a reason for a bigger key.
  */
 
+import { z } from 'zod';
+
 export interface AresConfig {
   baseUrl: string;
   apiKey: string;
@@ -83,6 +85,133 @@ export interface ReferenceWeeks {
   most: number | null;
   effectiveWeeklyRate: number | null;
 }
+
+/**
+ * The cycle-time model (T180; Ares #03/#04, live 2026-09-10). One cell per
+ * work-type label × difficulty; durations are WORKING DAYS on Ares's own
+ * calendar (weekends + holidays removed, ÷ `workingDayHours`) — already the
+ * unit the grid stores, so nothing here converts. `workingDayHours` is
+ * carried through to provenance and never assumed (24 today, by design).
+ */
+export interface AresCycleTimeCell {
+  workType: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  source: 'project' | 'firm';
+  n: number;
+  meanWorkingDays: number;
+  p70: number;
+  p85: number;
+  p95: number;
+  meanCalendarHours: number;
+}
+
+/**
+ * Q2-A (JP 2026-09-10; Sirius→Ares #15): the grid's cell is lane × difficulty,
+ * and percentiles cannot be pooled from per-work-type cells — only Ares, who
+ * holds the samples, can pool them. `laneCells` is what #15 asked for and is
+ * OPTIONAL until it ships; a model without it maps to no grid cells at all.
+ */
+export interface AresCycleTimeLaneCell {
+  laneKey: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  source: 'project' | 'firm';
+  n: number;
+  meanWorkingDays: number;
+  p70: number;
+  p85: number;
+  p95: number;
+}
+
+export interface AresCycleTimeModel {
+  rtProjectId: number | null;
+  generatedAt: string;
+  window: { from: string; to: string };
+  floorMinutes: number;
+  overrideDays: number;
+  workingDayHours: number;
+  workTypeKeys: string[];
+  historyUnverified: number;
+  dropped: { considered: number; sampled: number; reasons: Record<string, number> };
+  cells: AresCycleTimeCell[];
+  laneCells?: AresCycleTimeLaneCell[];
+}
+
+/** Apollo's id-keyed lane table for one board (`/boards/{id}/lanes`, Ares #01). */
+export interface AresBoardLane {
+  listId: string;
+  name: string;
+  pos: number;
+  type: 'work' | 'process';
+  group: string;
+  isStart: boolean;
+  isDone: boolean;
+}
+
+const difficultySchema = z.enum(['Easy', 'Medium', 'Hard']);
+const cellSourceSchema = z.enum(['project', 'firm']);
+const cycleTimeCellSchema = z.object({
+  workType: z.string(),
+  difficulty: difficultySchema,
+  source: cellSourceSchema,
+  n: z.number(),
+  meanWorkingDays: z.number(),
+  p70: z.number(),
+  p85: z.number(),
+  p95: z.number(),
+  meanCalendarHours: z.number(),
+});
+const laneCellSchema = z.object({
+  laneKey: z.string(),
+  difficulty: difficultySchema,
+  source: cellSourceSchema,
+  n: z.number(),
+  meanWorkingDays: z.number(),
+  p70: z.number(),
+  p85: z.number(),
+  p95: z.number(),
+});
+const sumReasons = (reasons: Record<string, number>) => Object.values(reasons).reduce((a, b) => a + b, 0);
+/**
+ * Plain `z.object` (unknown fields stripped, tolerant of payload growth — the
+ * webhook precedent). The one refinement re-asserts Ares's own identity,
+ * `considered === sampled + Σreasons`: a payload that breaks its own
+ * accounting is not one to build a forecast on (drift item 15).
+ */
+const cycleTimeModelSchema: z.ZodType<AresCycleTimeModel> = z
+  .object({
+    rtProjectId: z.number().nullable(),
+    generatedAt: z.string(),
+    window: z.object({ from: z.string(), to: z.string() }),
+    floorMinutes: z.number(),
+    overrideDays: z.number(),
+    workingDayHours: z.number(),
+    workTypeKeys: z.array(z.string()),
+    historyUnverified: z.number(),
+    dropped: z.object({ considered: z.number(), sampled: z.number(), reasons: z.record(z.number()) }),
+    cells: z.array(cycleTimeCellSchema),
+    laneCells: z.array(laneCellSchema).optional(),
+  })
+  .refine((m) => m.dropped.considered === m.dropped.sampled + sumReasons(m.dropped.reasons), {
+    message: 'dropped.considered must equal dropped.sampled + Σ dropped.reasons',
+    path: ['dropped'],
+  });
+
+const boardLanesSchema = z.object({
+  syncedAt: z.string().nullable().optional(),
+  lanes: z.array(
+    z.object({
+      listId: z.string(),
+      name: z.string(),
+      pos: z.number(),
+      type: z.enum(['work', 'process']),
+      // Ares sends null for a list Apollo put in no group; '' keeps the
+      // frozen `group: string` and still reads as "none" to a consumer.
+      group: z.string().nullable().transform((g) => g ?? ''),
+      isStart: z.boolean(),
+      isDone: z.boolean(),
+    }),
+  ),
+});
 
 export class AresError extends Error {
   code?: string;
@@ -249,6 +378,47 @@ export class AresClient {
       );
       const days = (w?.columns ?? []).map((c) => c.key).filter((k): k is string => !!k);
       return days.length ? days : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The cycle-time model for one RT project (T180, block 8). v1, key-gated;
+   * `rtProjectId` is the BARE integer — `rt-837` is a 400 on their side and a
+   * non-integer never leaves this method. One call per project per night.
+   *
+   * The `referenceWeeks` style: null on ANY failure — transport, 404 for an
+   * unmapped id, a malformed envelope, or a payload whose `dropped` block
+   * does not add up — and never a throw, so one project's bad night is one
+   * `sync_runs` row, not a dead tick. The caller keeps last night's grid.
+   */
+  async cycleTimeModel(rtProjectId: number): Promise<AresCycleTimeModel | null> {
+    if (!Number.isInteger(rtProjectId)) return null;
+    try {
+      const data = await this.get<unknown>(`/api/v1/trello/cycle-time/model?rtProjectId=${rtProjectId}`);
+      const parsed = cycleTimeModelSchema.safeParse(data);
+      if (!parsed.success) {
+        console.warn(`[ares] cycle-time model for ${rtProjectId} rejected: ${parsed.error.issues.map((i) => i.path.join('.') || '(root)').join(', ')}`);
+        return null;
+      }
+      return parsed.data;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Apollo's lane table for a board (block 8 lane reconcile; owl #13). 404
+   * means "never synced", not "no lanes" — null either way, and the caller
+   * records that the check could not run rather than guessing.
+   */
+  async boardLanes(boardId: string): Promise<{ lanes: AresBoardLane[]; syncedAt: string | null } | null> {
+    try {
+      const data = await this.get<unknown>(`/api/v1/trello/boards/${encodeURIComponent(boardId)}/lanes`);
+      const parsed = boardLanesSchema.safeParse(data);
+      if (!parsed.success) return null;
+      return { lanes: parsed.data.lanes, syncedAt: parsed.data.syncedAt ?? null };
     } catch {
       return null;
     }

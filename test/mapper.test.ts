@@ -5,6 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { assignDisplayIds, mapTrello, mcNumberOf } from '../src/services/mapper.ts';
 import type { AresCard } from '../src/services/ares.ts';
+import { laneOf } from '../lib/model.ts';
+import { laneOfWorkType } from '../src/services/work-type.ts';
 import { aresCard } from './helpers/ares-card.ts';
 
 /* Built on the shared factory, so the contract fields — notably
@@ -128,6 +130,50 @@ describe('taxonomy (BRD §5)', () => {
     expect(byId.get('wc-plain')!.urgent).toBe(false);
     // the label is read case-exactly, like the deliverable's (`URGENT_LABEL_NAME`)
     expect(r.deliverables[0]!.urgent).toBe(true);
+  });
+
+  it('a task card keeps its whole label array, not just what the mapper distils (T179)', () => {
+    /* Until T179 the task branch read `difficulty` out of the labels and threw
+       the array away, so the WORK-TYPE label — the thing JP's 2026-09-10 fold
+       classifies a card's lane on — could not be read anywhere downstream. The
+       deliverable branch has carried `labels` since T028; this is the mirror.
+
+       Asserted as the labels ARES sent, in order, so a mapper that filtered or
+       reordered them (and so could drop the one that decides the lane) fails
+       here rather than silently changing a forecast. */
+    const sent = ['Difficulty: Easy', 'Asset: Icons', '\u{1F6D1} Waiting on client'];
+    const r = mapTrello(
+      [
+        card('MC-9 / Main Card: Brand kit', ['Main Card', 'Design: Refinement']),
+        card('Render Asset: MC-9 glyphs', sent, { cardId: 'wc-labels' }),
+        card('Icon Clean Up: MC-9 sweep', [], { cardId: 'wc-nolabels' }),
+      ],
+      null,
+    );
+    const byId = new Map(r.workCards.map((w) => [w.trello_card_id, w]));
+    expect(byId.get('wc-labels')!.labels).toEqual(sent);
+    // a card with no labels maps to an empty array, never undefined — the
+    // schema field is required and `laneOf` must not classify on an absence
+    expect(byId.get('wc-nolabels')!.labels).toEqual([]);
+    // and the deliverable's own array is unchanged by any of it
+    expect(r.deliverables[0]!.labels).toEqual(['Main Card', 'Design: Refinement']);
+  });
+
+  it('the stored work-type label is what decides a card’s lane (T179)', () => {
+    /* The join between this file and `work-type.test.ts`: the mapper keeps the
+       label, `laneOf` reads it. Derived by EXECUTING `laneOf` on the mapped
+       labels rather than pinning a lane string, so the ruled fold stays the one
+       source of truth. The list is deliberately one the verbatim regex reads as
+       `assets`, which is what the label has to override. */
+    const r = mapTrello(
+      [card('Render Asset: MC-9 glyphs', ['Asset: Icons'], { cardId: 'wc-1', currentList: 'Render Assets' })],
+      null,
+    );
+    const w = r.workCards[0]!;
+    expect(laneOf({ currentList: w.current_list ?? '', labels: w.labels })).toBe(
+      laneOfWorkType('Asset: Icons'),
+    );
+    expect(laneOf({ currentList: w.current_list ?? '', labels: [] })).toBe('assets'); // what it was
   });
 
   it('mcNumberOf tolerates MC-57, MC 57 and mc-57 forms', () => {

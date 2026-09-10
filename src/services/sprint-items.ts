@@ -120,7 +120,18 @@ export interface SprintItemsResult {
 }
 
 /**
- * The lane classifier's inputs for a TASK card: its LIST, and nothing else.
+ * The lane classifier's inputs for a TASK card: its own LABELS, then its LIST.
+ *
+ * T179 (2026-09-10) added the labels. `laneOf` now reads the WORK-TYPE label
+ * first (`Asset: Icons` → the ruled lane for the `Asset` family) and falls back
+ * to the list regex below for a card carrying none, so a labelled task card is
+ * classified on a fact about the WORK rather than on where the card happens to
+ * sit. The list stays the fallback, unchanged, and the residual noted below
+ * still applies to the cards that use it.
+ *
+ * `task_prefix` is STILL not fed in, and the reason is unchanged: it is a
+ * naming habit, not a label. The empty array below was the fix for it —
+ * `w.labels` is the card's real Trello labels, which a prefix never enters.
  *
  * `task_prefix` was fed in as a label at first, on the reasoning that it is the
  * same kind of text `laneOf` classifies. It is not, and the effect was severe:
@@ -140,9 +151,9 @@ export interface SprintItemsResult {
  * phase against a whole deliverable — so some divergence is inherent, but which
  * lane a TASK belongs to is a product question nobody has ruled.
  */
-const laneInputs = (w: { current_list?: string | null }) => ({
+const laneInputs = (w: { current_list?: string | null; labels?: string[] | null }) => ({
   currentList: w.current_list ?? '',
-  labels: [] as string[],
+  labels: w.labels ?? [],
 });
 
 /**
@@ -178,7 +189,12 @@ const laneInputs = (w: { current_list?: string | null }) => ({
  * does (agree, or nothing). Raised to product rather than guessed at.
  */
 export function finishOf(
-  card: { difficulty?: string | null; current_list?: string | null; task_prefix?: string | null },
+  card: {
+    difficulty?: string | null;
+    current_list?: string | null;
+    task_prefix?: string | null;
+    labels?: string[] | null;
+  },
   startsOn: string,
   model: EmpiricalModel,
   confidence?: string,

@@ -3,7 +3,14 @@
  * rebuilt from measured movement data; BR-4: design time keyed on
  * difficulty AND lane. Pure functions; the worker orchestrates.
  *
- * Method (documented for the T045 gate):
+ * BLOCK 8 (T181, JP "read Ares" 2026-09-09): the DESIGN cells no longer come
+ * from `card_events` dwell — `cellsFromAresModel` maps Ares's cycle-time
+ * model into the same `GridCell` shape and the worker writes those (after the
+ * gate). `deriveSamples`/`computeModelGrid` stay in place, unused by the
+ * worker, until the simplification pass rules on them; `computeThroughput`
+ * and `gridDelta` are unchanged and still live.
+ *
+ * Method of the retired dwell derivation (kept for the record):
  *  - a card's dwell intervals come from its ordered card_events: it enters
  *    `to_list` at occurred_at and leaves at the next event; open intervals
  *    (still in the list) are excluded — completed dwell only;
@@ -30,6 +37,7 @@
 import { classifyList } from './status-rules.ts';
 import { laneOf } from '../../lib/model.ts';
 import type { ConfidenceKey, Difficulty, Lane } from '../../lib/model.ts';
+import type { AresCycleTimeLaneCell, AresCycleTimeModel } from './ares.ts';
 
 const REVIEW_RE = /sent for client review/i;
 const DAY_MS = 864e5;
@@ -151,6 +159,87 @@ export function computeModelGrid(samples: Sample[]): GridCell[] {
     }
   }
   return cells;
+}
+
+/**
+ * The grid's lane axis, as a runtime set. `satisfies Record<Lane, true>` ties
+ * it to lib/model's union both ways at compile time: a lane added there
+ * without a key here, or a key here the union lacks, fails `tsc`. Ares's
+ * `laneKey` vocabulary is wider (ui / others / motion on 837) — those are
+ * counted, never guessed into a lane (§7a's rule, on this axis).
+ */
+const LANE_KEYS = { design: true, ops: true, assets: true, content: true } satisfies Record<Lane, true>;
+const isLane = (key: string): key is Lane => Object.hasOwn(LANE_KEYS, key);
+
+/** `Design: Refinement` → `Design`; a key with no colon is its own prefix. */
+const workTypePrefix = (key: string): string => key.split(':')[0]!.trim();
+
+/**
+ * T181 — Ares cells → GridCells (Q2-A, JP 2026-09-10).
+ *
+ * GridCells come ONLY from `model.laneCells`: `laneKey` → `Lane` 1:1 when the
+ * key is a member of the union, else the key is counted in `unmapped`. Each
+ * lane cell yields the four confidence cells the loader assembles — Average
+ * from `meanWorkingDays`, 0.7/0.85/0.95 from p70/p85/p95 — with `sample_n`
+ * = `n`. Values are copied, not converted: Ares already reports working days
+ * (test/model.test.ts checks the magnitude against the snapshot).
+ *
+ * When `laneCells` is absent (#15 not shipped yet) there are NO cells:
+ * percentiles cannot be pooled from per-work-type cells, only from samples,
+ * so pooling on our side would be invention. The per-work-type cells are
+ * then summarised into `unmapped` by prefix (`Design`, `Asset`, …) so the
+ * provenance says what Ares sent and that none of it reached the grid.
+ *
+ * No review cells, ever: the client-review wait is a queue, not a cell (JP
+ * via Ares; build-spec §7.1) — the loader keeps serving the snapshot's.
+ *
+ * A key present as both `project` and `firm` (none on 837 today) takes the
+ * project cell — Ares's own override rule — so the upsert never sees two
+ * values for one grid key.
+ *
+ * `projectId` is the frozen signature's; the GridCell carries no project_id
+ * (the worker scopes the write, as it always has), so it is unused here.
+ */
+export function cellsFromAresModel(
+  model: AresCycleTimeModel,
+  projectId: string,
+): { cells: GridCell[]; unmapped: Record<string, number> } {
+  void projectId; // frozen signature; the worker scopes the write
+  const unmapped: Record<string, number> = {};
+  const count = (key: string) => {
+    unmapped[key] = (unmapped[key] ?? 0) + 1;
+  };
+
+  if (!model.laneCells) {
+    for (const c of model.cells) count(workTypePrefix(c.workType));
+    return { cells: [], unmapped };
+  }
+
+  const chosen = new Map<string, AresCycleTimeLaneCell>();
+  for (const lc of model.laneCells) {
+    if (!isLane(lc.laneKey)) {
+      count(lc.laneKey);
+      continue;
+    }
+    const key = `${lc.difficulty}|${lc.laneKey}`;
+    const prev = chosen.get(key);
+    if (!prev || (prev.source === 'firm' && lc.source === 'project')) chosen.set(key, lc);
+  }
+
+  const cells: GridCell[] = [];
+  for (const lc of chosen.values()) {
+    const lane = lc.laneKey as Lane;
+    const values: Array<[ConfidenceKey, number]> = [
+      ['Average', lc.meanWorkingDays],
+      ['0.7', lc.p70],
+      ['0.85', lc.p85],
+      ['0.95', lc.p95],
+    ];
+    for (const [confidence, value] of values) {
+      cells.push({ difficulty: lc.difficulty, lane, metric: 'design', confidence, value, sample_n: lc.n });
+    }
+  }
+  return { cells, unmapped };
 }
 
 export interface ThroughputRow {

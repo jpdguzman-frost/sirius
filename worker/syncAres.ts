@@ -8,7 +8,7 @@
  */
 
 import { Types } from 'mongoose';
-import { AresClient, type AresMovement } from '../src/services/ares.ts';
+import { AresClient, type AresBoardLane, type AresMovement } from '../src/services/ares.ts';
 import { assignDisplayIds, mapTrello, type MappedDeliverable, type MappedWorkCard } from '../src/services/mapper.ts';
 import { classifyList, isKnownList, normalizeListName } from '../src/services/status-rules.ts';
 import { CardEvent, Deliverable, Project, SyncRun, WorkCard } from '../src/models/index.ts';
@@ -53,14 +53,45 @@ export interface SyncStats {
    * signal this array exists for.
    */
   unmappedLists: string[];
+  /**
+   * The same question asked of the BOARD'S OWN LANE TABLE rather than of the
+   * cards — every distinct lane name ARES reports for this board that the §7a
+   * enumeration does not recognise, sorted, deduplicated, verbatim (block 8
+   * item 11; the promise owls #11/#13 exchanged).
+   *
+   * **This is not a duplicate of `unmappedLists`, and the difference is the
+   * whole point.** `unmappedLists` can only see a name once a CARD sits in it —
+   * by which time the app has already classified that card `ongoing` as a
+   * fallback and shown somebody a state nobody ruled. The lane table is
+   * Apollo's id-keyed record of every lane on the board, cards or none, so an
+   * unruled lane surfaces BEFORE the first card lands in it. A lane with no
+   * cards appears here and nowhere else; a busy unruled lane appears in both,
+   * which is not a bug — the two arrays answer two different questions.
+   *
+   * Names only. Apollo's table is keyed by Trello list id and also carries
+   * type/group/isStart/isDone — a SECOND taxonomy, deliberately not consumed
+   * here: §7a's name table stays the only source of STATE (status-rules.ts).
+   */
+  unknownLanes: string[];
+  /**
+   * When ARES last synced the lane table of each board this run read, by board
+   * id — its own `syncedAt`, passed through untouched. `null` means the check
+   * did not run against a live table: ARES has never synced that board's lanes
+   * (the endpoint's documented "never synced", which is NOT "no lanes"), or the
+   * read failed, or it 404'd. So an EMPTY `unknownLanes` beside a `null` here
+   * is "we did not look", never "every lane is ruled" — the two must be read
+   * together, which is why the instant is recorded rather than assumed.
+   */
+  lanesSyncedAt: Record<string, string | null>;
   capacity: Record<string, number | null> | null;
 }
 
 /**
- * Collects the distinct unrecognised list names of one sync run. Empty and
- * absent names are not collected: "the card is in no list" is a different fact
- * from "the card is in a list we cannot classify", and mixing them would put a
- * meaningless `''` in front of product every run.
+ * Collects the distinct unrecognised names of one sync run — list names off the
+ * cards and movements, lane names off the board's lane table, each into its own
+ * collector. Empty and absent names are not collected: "the card is in no list"
+ * is a different fact from "the card is in a list we cannot classify", and
+ * mixing them would put a meaningless `''` in front of product every run.
  */
 function collectUnmapped(): { see: (name: string | null | undefined) => void; names: () => string[] } {
   const seen = new Set<string>();
@@ -71,6 +102,36 @@ function collectUnmapped(): { see: (name: string | null | undefined) => void; na
     },
     names: () => [...seen].sort(),
   };
+}
+
+/**
+ * The board's lane table, or `null` — the lane reconcile check NEVER fails a
+ * sync (block 8 item 11). One extra ARES call per board per run, no retry of
+ * our own: `AresClient.get` already honours one 429 `retryAfter`, and the
+ * pacing of the paged reads around it is unchanged.
+ *
+ * The check is a REPORT about the board, while the sync is the app's whole
+ * dataset; letting a report take the dataset down would be a plainly bad
+ * trade, and a failed read is not silent — it lands as `lanesSyncedAt: null`
+ * plus the warn below. A throw is caught as well as the contract's `null`
+ * because "never throws" is a promise made by another module: if it is ever
+ * broken, this must degrade to "we did not look", not to a whole project
+ * skipping its sync for the day.
+ */
+async function readBoardLanes(
+  client: AresClient,
+  boardId: string,
+  code: string,
+): Promise<{ lanes: AresBoardLane[]; syncedAt: string | null } | null> {
+  try {
+    return await client.boardLanes(boardId);
+  } catch (err) {
+    console.warn(
+      `[syncAres] ${code}: could not read the lane table for board ${boardId} — ` +
+        `no lane check this run (${(err as Error).message}). The card-level list check is unaffected.`,
+    );
+    return null;
+  }
 }
 
 export function makeClient(env: Env): AresClient {
@@ -296,6 +357,7 @@ export async function upsertWorkCard(
         current_list: w.current_list,
         figma_url: w.figma_url ?? null,
         trello_url: w.trello_url ?? null,
+        labels: w.labels, // T179: Trello-owned, not a write-registry target — no stale guard
         active: w.active,
       },
       $setOnInsert: { project_id: projectId },
@@ -482,6 +544,19 @@ export async function syncProject(
   const cards = await client.boardCards(project.trello_board_id);
   const unmapped = collectUnmapped();
   for (const c of cards) unmapped.see(c.currentList);
+
+  /* The lane reconcile check (item 11) — the board's own lane table, read once
+     per board per run, right after its cards. Independent of the cards on
+     purpose: a lane nobody has used yet is exactly the one worth naming. */
+  const laneTable = await readBoardLanes(client, project.trello_board_id, project.code);
+  const lanes = collectUnmapped();
+  for (const lane of laneTable?.lanes ?? []) lanes.see(lane.name);
+  // `null` table and a table ARES has never synced both record `null`: neither
+  // is evidence about the board's lanes, and the array beside it is empty in
+  // both cases (see `SyncStats.lanesSyncedAt`).
+  const lanesSyncedAt: Record<string, string | null> = {
+    [project.trello_board_id]: laneTable ? laneTable.syncedAt : null,
+  };
   const mapped = mapTrello(cards, project.trello_label ?? null);
 
   // Stable display ids: existing assignments never reshuffle (invariant 3).
@@ -564,6 +639,18 @@ export async function syncProject(
     );
   }
 
+  /* The lane check's own ONE line per run, deliberately worded apart from the
+     list line above: these names come from the board's lane table, so most of
+     them have no card in them yet and nothing has been misclassified — the
+     point is that nothing has been misclassified YET. */
+  const unknownLanes = lanes.names();
+  if (unknownLanes.length > 0) {
+    console.warn(
+      `[syncAres] ${project.code}: ${unknownLanes.length} lane name(s) on the board that the §7a enumeration ` +
+        `does not recognise — surfaced before a card sits in one: ${unknownLanes.join(' · ')}`,
+    );
+  }
+
   return {
     cards: cards.length,
     deliverables: mapped.deliverables.length,
@@ -575,6 +662,8 @@ export async function syncProject(
     deactivated: deactivated.modifiedCount,
     unstamped,
     unmappedLists,
+    unknownLanes,
+    lanesSyncedAt,
     capacity: capacity.typical != null ? (capacity as unknown as Record<string, number | null>) : null,
   };
 }

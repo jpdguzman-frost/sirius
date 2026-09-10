@@ -1,73 +1,71 @@
 /**
- * §7a consumer guard, model refresh (block 6, 2026-09-08). The cycle-time
- * model must not measure work Sirius does not own: an EXCLUDED list is neither
- * design dwell nor a completion.
+ * §7a consumer guard, model refresh (block 6, 2026-09-08; retargeted block 8,
+ * 2026-09-10). The cycle-time model must not measure work Sirius does not
+ * own: an EXCLUDED list is neither design dwell nor a completion.
  *
- * These are REAL changes of model input, not tidy-ups. Under the retired
- * keyword classifier `Working on Ops Work` matched neither regex, classified
- * ongoing, and its dwell went into the design percentiles; `Ops Work Complete`
- * matched `\bcomplete\b`, classified done, and ended a card in the throughput
- * counts. Both are now excluded by identity.
+ * Under the retired keyword classifier `Working on Ops Work` matched neither
+ * regex, classified ongoing, and its dwell went into the design percentiles;
+ * `Ops Work Complete` matched `\bcomplete\b`, classified done, and ended a
+ * card in the throughput counts.
  *
- * WHAT MAKES THESE FAIL. Not a branch in `model-refresh.ts` — there is none to
- * remove: `deriveSamples` counts `=== 'ongoing'` and `computeThroughput` counts
- * `=== 'done'`, so a fourth state falls out of both by construction. What these
- * pin is the MAPPING: give `Working on Ops Work` the state `'ongoing'` in
- * `LIST_STATES`, or `Ops Work Complete` the state `'done'` — which is exactly
- * what the retired keyword classifier did — and they fail.
+ * DESIGN CELLS (block 8): lists no longer feed them at all. The worker READS
+ * Ares's model and maps `laneCells` 1:1 (`cellsFromAresModel`); nothing on our
+ * side classifies a list into a cell, so the excluded-dwell regression has no
+ * path back UNLESS the worker imports the dwell derivation again. The first
+ * block pins exactly that — put `deriveSamples` or `computeModelGrid` back
+ * in `worker/refreshModel.ts`'s import and it fails — and that the mapper
+ * takes no list input and yields no review cell.
+ *
+ * THROUGHPUT is still derived locally, so the completion half is unchanged:
+ * `computeThroughput` counts `=== 'done'` and nothing else. What it pins is
+ * the MAPPING — give `Ops Work Complete` the state `'done'` in `LIST_STATES`,
+ * which is exactly what the retired keyword classifier did, and it fails.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { computeThroughput, deriveSamples } from '../src/services/model-refresh.ts';
+import { cellsFromAresModel, computeThroughput } from '../src/services/model-refresh.ts';
 import { classifyList } from '../src/services/status-rules.ts';
+import type { AresCycleTimeModel } from '../src/services/ares.ts';
 
-const at = (h: number) => new Date(Date.UTC(2026, 6, 1, h));
-const MEDIUM = [{ trello_card_id: 'c1', difficulty: 'Medium' as const, lane: 'design' as const }];
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-describe('an excluded list is not design dwell', () => {
-  it('the premise: ops lists are excluded, and a design list is not', () => {
+const MODEL: AresCycleTimeModel = {
+  rtProjectId: 837,
+  generatedAt: '2026-07-01T16:00:03.000Z',
+  window: { from: '2026-01-01', to: '2026-07-01' },
+  floorMinutes: 15,
+  overrideDays: 14,
+  workingDayHours: 24,
+  workTypeKeys: ['Ops: Board'],
+  historyUnverified: 0,
+  dropped: { considered: 10, sampled: 10, reasons: {} },
+  cells: [{ workType: 'Ops: Board', difficulty: 'Medium', source: 'project', n: 20, meanWorkingDays: 0.7, p70: 0.6, p85: 1.0, p95: 1.2, meanCalendarHours: 16 }],
+  laneCells: [{ laneKey: 'ops', difficulty: 'Medium', source: 'project', n: 20, meanWorkingDays: 0.7, p70: 0.6, p85: 1.0, p95: 1.2 }],
+};
+
+describe('design cells no longer come from list dwell (block 8)', () => {
+  it('the premise still holds: ops lists are excluded, and a design list is not', () => {
     expect(classifyList('Working on Ops Work')).toBe('excluded');
     expect(classifyList('Working on Design')).toBe('ongoing');
   });
 
-  it('dwell in `Working on Ops Work` produces no sample', () => {
-    const samples = deriveSamples(
-      [
-        { trello_card_id: 'c1', to_list: 'Working on Ops Work', occurred_at: at(0) },
-        { trello_card_id: 'c1', to_list: 'Design Complete', occurred_at: at(48) },
-      ],
-      MEDIUM,
-    );
-    expect(samples).toEqual([]);
+  it('the worker imports neither deriveSamples nor computeModelGrid — the dwell path is not wired', () => {
+    const src = fs.readFileSync(path.join(HERE, '../worker/refreshModel.ts'), 'utf8');
+    const imported = /import\s*\{([^}]*)\}\s*from\s*'\.\.\/src\/services\/model-refresh\.ts'/.exec(src)?.[1] ?? '';
+    expect(imported, 'the worker must import the mapper from model-refresh').toContain('cellsFromAresModel');
+    expect(imported).not.toMatch(/\bderiveSamples\b/);
+    expect(imported).not.toMatch(/\bcomputeModelGrid\b/);
   });
 
-  it('the identical shape in an ONGOING list does produce one — so the guard is about the state, not the fixture', () => {
-    const samples = deriveSamples(
-      [
-        { trello_card_id: 'c1', to_list: 'Working on Design', occurred_at: at(0) },
-        { trello_card_id: 'c1', to_list: 'Design Complete', occurred_at: at(48) },
-      ],
-      MEDIUM,
+  it('the mapper yields exactly the lane cells Ares pooled — one cell per lane × difficulty × confidence, no review row', () => {
+    const { cells } = cellsFromAresModel(MODEL, 'p1');
+    expect(cells.map((c) => `${c.difficulty}|${c.lane}|${c.metric}|${c.confidence}`).sort()).toEqual(
+      ['Medium|ops|design|0.7', 'Medium|ops|design|0.85', 'Medium|ops|design|0.95', 'Medium|ops|design|Average'],
     );
-    expect(samples).toHaveLength(1);
-    expect(samples[0]!.metric).toBe('design');
-    expect(samples[0]!.days).toBe(2);
-  });
-
-  it('an excluded list contributes nothing while a real review wait beside it still does', () => {
-    /* Two intervals in one card's history: the excluded one must not become a
-       sample of either metric, while the genuine client wait beside it is
-       measured normally — so the guard is about the state, not about
-       `deriveSamples` refusing to sample anything at all. */
-    const samples = deriveSamples(
-      [
-        { trello_card_id: 'c1', to_list: '➜ Process Lane', occurred_at: at(0) },
-        { trello_card_id: 'c1', to_list: 'Sent for Client Review', occurred_at: at(24) },
-        { trello_card_id: 'c1', to_list: 'Design Complete', occurred_at: at(48) },
-      ],
-      MEDIUM,
-    );
-    expect(samples.map((s) => s.metric)).toEqual(['review']); // the real review wait, and nothing from the ops list
+    expect(cells.find((c) => c.confidence === '0.7')?.value).toBe(MODEL.laneCells![0]!.p70);
   });
 });
 

@@ -1,38 +1,91 @@
 /**
- * refreshModel (T041/T042) — nightly per project over model_window_months
- * (default 12; OD-2 open): card_events → samples → model_grid +
- * throughput_grid, delta recorded vs the previous run (§5.4).
+ * refreshModel (T041/T042; block 8 T180/T181) — nightly per project.
+ *
+ * Since block 8 (JP "read Ares", 2026-09-09) the DESIGN cells are READ from
+ * Ares's cycle-time model (`AresClient.cycleTimeModel`, one call per project
+ * per night), mapped 1:1 into GridCells (`cellsFromAresModel`), and passed
+ * through the sanity gate (`gateCells`, T182) at WRITE time — only passed
+ * cells reach `model_grid`, so the loader's absent-cell → snapshot fill is
+ * the fallback for everything else. Throughput is still derived locally
+ * from work-card completions (`computeThroughput`, unchanged), and the delta
+ * vs the previous run is still recorded (§5.4).
+ *
+ * Provenance lives on the `sync_runs` row (source `model`), never in
+ * `model_samples`: the endpoint is aggregate-only, so this path writes no
+ * sample rows (drift item 8; the collection is kept, not dropped).
+ *
+ * `model_frozen` is never read for writing and never written here —
+ * invariant 7; unfreeze is JP's, per project, by hand.
  */
 
 import type { Types } from 'mongoose';
 import {
-  computeModelGrid,
+  cellsFromAresModel,
   computeThroughput,
-  deriveSamples,
   gridDelta,
   type GridCell,
+  type GridDelta,
 } from '../src/services/model-refresh.ts';
-import { CardEvent, Deliverable, ModelGrid, ModelSample, Project, SyncRun, ThroughputGrid, WorkCard } from '../src/models/index.ts';
+import { DEFAULT_GATE, gateCells, type GateFailure } from '../src/services/model-gate.ts';
+import { AresClient } from '../src/services/ares.ts';
+import { validateEnv } from '../src/config/env.ts';
+import { makeClient } from './syncAres.ts';
+import { CardEvent, Deliverable, ModelGrid, Project, SyncRun, ThroughputGrid, WorkCard } from '../src/models/index.ts';
 import type { Difficulty, Lane } from '../lib/model.ts';
 
+/** `sync_runs.stats` for source `model` — the frozen provenance shape (PLAN.md block 8). */
 export interface RefreshStats {
-  events: number;
-  cards: number;
-  samples: number;
-  gridCells: number;
+  generatedAt: string;
+  window: { from: string; to: string };
+  workingDayHours: number;
+  historyUnverified: number;
+  sampled: number;
+  considered: number;
+  droppedReasons: Record<string, number>;
+  /** mapped = GridCells produced (= passed + failed); unmapped = Ares cells that reached no lane. */
+  cells: { mapped: number; unmapped: number; passed: number; failed: number };
+  /** Ares keys that mapped to no lane, with how many cells each carried. */
+  unmappedWorkTypes: Record<string, number>;
+  failures: GateFailure[];
   throughputRows: number;
-  alerts: Array<{ cell: string; before: number; after: number; ratio: number }>;
+  alerts: GridDelta[];
 }
 
-export async function refreshProjectModel(projectId: Types.ObjectId): Promise<RefreshStats> {
+/**
+ * The bare integer the model endpoint wants, from the project code Sirius
+ * mirrors from ARES (`rt-837` → 837). A code in another format (`runn-45`)
+ * has no cycle-time model to read; null, and the caller records why.
+ */
+export function rtProjectIdOf(code: string): number | null {
+  const m = /^rt-(\d+)$/.exec(code);
+  return m ? Number(m[1]) : null;
+}
+
+export async function refreshProjectModel(
+  projectId: Types.ObjectId,
+  deps: { ares?: AresClient } = {},
+): Promise<RefreshStats> {
   const project = await Project.findById(projectId).orFail();
+
+  const rtProjectId = rtProjectIdOf(project.code);
+  if (rtProjectId === null) {
+    throw new Error(`[refreshModel] ${project.code}: no numeric RT project id in the project code — no cycle-time model to read`);
+  }
+  const ares = deps.ares ?? makeClient(validateEnv(process.env));
+  const model = await ares.cycleTimeModel(rtProjectId);
+  if (!model) {
+    // Last good grid stays (FR-8.5): nothing below runs, the row records it.
+    throw new Error(`[refreshModel] ${project.code}: ARES cycle-time model unavailable for rtProjectId ${rtProjectId}`);
+  }
+
+  const { cells: mapped, unmapped } = cellsFromAresModel(model, String(projectId));
+  const { passed, failed } = gateCells(mapped, model, DEFAULT_GATE);
+
+  // Throughput: work-card completions per week, from card_events over the
+  // window, as before. Deliverables AND work cards carry difficulty labels.
   const since = new Date();
   since.setMonth(since.getMonth() - (project.model_window_months ?? 12));
-
   const events = await CardEvent.find({ project_id: projectId, occurred_at: { $gte: since } });
-  // The model measures how ALL work flows through lanes — deliverables AND
-  // work cards (the ARES-built Appendix grid counted every card; sampling
-  // deliverables alone starves the grid). Difficulty labels appear on both.
   const deliverables = await Deliverable.find({ project_id: projectId }).select(
     'trello_card_id difficulty lane',
   );
@@ -50,12 +103,6 @@ export async function refreshProjectModel(projectId: Types.ObjectId): Promise<Re
       lane: null as Lane | null,
     })),
   ];
-
-  const samples = deriveSamples(
-    events.map((e) => ({ trello_card_id: e.trello_card_id, to_list: e.to_list ?? null, occurred_at: e.occurred_at })),
-    cards,
-  );
-  const grid = computeModelGrid(samples);
   const throughput = computeThroughput(
     events.map((e) => ({ trello_card_id: e.trello_card_id, to_list: e.to_list ?? null, occurred_at: e.occurred_at })),
     cards,
@@ -73,29 +120,14 @@ export async function refreshProjectModel(projectId: Types.ObjectId): Promise<Re
         sample_n: c.sample_n,
       }) as GridCell,
   );
-  const alerts = gridDelta(previous, grid);
+  const alerts = gridDelta(previous, passed);
 
   const now = new Date();
-  // Replace, don't accumulate: stale cells from an older methodology or a
-  // shrunken window must not survive a refresh.
+  // Replace, don't accumulate: a cell that failed tonight's gate, or a lane
+  // Ares no longer reports, must not survive from an older run.
   await ModelGrid.deleteMany({ project_id: projectId });
   await ThroughputGrid.deleteMany({ project_id: projectId });
-  // Keep raw samples for audit/inspection (FR-7.7 provenance).
-  await ModelSample.deleteMany({ project_id: projectId });
-  if (samples.length > 0) {
-    await ModelSample.insertMany(
-      samples.map((s) => ({
-        project_id: projectId,
-        trello_card_id: s.trello_card_id,
-        difficulty: s.difficulty,
-        lane: s.lane,
-        metric: s.metric,
-        days: s.days,
-        completed_at: s.completed_at,
-      })),
-    );
-  }
-  for (const cell of grid) {
+  for (const cell of passed) {
     await ModelGrid.updateOne(
       { project_id: projectId, difficulty: cell.difficulty, lane: cell.lane, metric: cell.metric, confidence: cell.confidence },
       { $set: { value: cell.value, sample_n: cell.sample_n, computed_at: now }, $setOnInsert: { project_id: projectId } },
@@ -111,10 +143,21 @@ export async function refreshProjectModel(projectId: Types.ObjectId): Promise<Re
   }
 
   const stats: RefreshStats = {
-    events: events.length,
-    cards: cards.length,
-    samples: samples.length,
-    gridCells: grid.length,
+    generatedAt: model.generatedAt,
+    window: model.window,
+    workingDayHours: model.workingDayHours,
+    historyUnverified: model.historyUnverified,
+    sampled: model.dropped.sampled,
+    considered: model.dropped.considered,
+    droppedReasons: model.dropped.reasons,
+    cells: {
+      mapped: mapped.length,
+      unmapped: Object.values(unmapped).reduce((a, b) => a + b, 0),
+      passed: passed.length,
+      failed: failed.length,
+    },
+    unmappedWorkTypes: unmapped,
+    failures: failed,
     throughputRows: throughput.length,
     alerts,
   };

@@ -54,9 +54,14 @@ async function seedAcks(rows = 2): Promise<void> {
 }
 
 describe('011-archive-conflict-acknowledgements', () => {
-  it('is the last migration, numbered in sequence after 010', () => {
-    expect(MIGRATIONS.at(-1)!.id).toBe('011-archive-conflict-acknowledgements');
-    expect(MIGRATIONS.at(-2)!.id).toBe('010-freeze-model');
+  /* Ordering asserted RELATIVELY, not as a position pin: `.at(-1)` said "011 is
+     last", which is a snapshot of the list rather than the rule (test/CLAUDE.md
+     rule 1) and made every later migration a red. The rule is that 011 runs
+     directly after 010 — 011 archives rows 010 has already stopped anything
+     from reading. */
+  it('is numbered in sequence, directly after 010', () => {
+    const ids = MIGRATIONS.map((m) => m.id);
+    expect(ids.indexOf('011-archive-conflict-acknowledgements')).toBe(ids.indexOf('010-freeze-model') + 1);
   });
 
   it('renames the collection, keeping every stored acknowledgement', async () => {
@@ -143,5 +148,65 @@ describe('011-archive-conflict-acknowledgements', () => {
       '2026-08-17|urgent-overlap|50|c1:render,c2:render', // lifted to the project's capacity
       '2026-08-24|over-capacity|50|c3:sketch', // already amended — untouched
     ]);
+  });
+});
+
+/**
+ * T179 (2026-09-10) — `work_cards.labels` is new and required, and mongoose
+ * does not backfill a default onto STORED documents. 012 makes the state
+ * explicit on rows written before the field existed.
+ */
+describe('012-work-card-labels', () => {
+  const migration012 = MIGRATIONS.find((m) => m.id === '012-work-card-labels')!;
+  const workCards = () => mongoose.connection.db!.collection('work_cards');
+
+  it('is numbered in sequence, directly after 011', () => {
+    const ids = MIGRATIONS.map((m) => m.id);
+    expect(ids.indexOf('012-work-card-labels')).toBe(
+      ids.indexOf('011-archive-conflict-acknowledgements') + 1,
+    );
+  });
+
+  it('backfills an empty array onto every row missing the field, and nothing else', async () => {
+    const projectId = new mongoose.Types.ObjectId();
+    await workCards().insertMany([
+      { project_id: projectId, trello_card_id: 'old-1', mc_number: 'MC-1', name: 'a' },
+      { project_id: projectId, trello_card_id: 'old-2', mc_number: 'MC-1', name: 'b' },
+      { project_id: projectId, trello_card_id: 'new-1', mc_number: 'MC-2', name: 'c', labels: ['Asset: Icons'] },
+    ]);
+
+    await migration012.up(mongoose.connection);
+
+    const rows = await workCards().find({}).sort({ trello_card_id: 1 }).toArray();
+    expect(rows.map((r) => [r.trello_card_id, r.labels])).toEqual([
+      ['new-1', ['Asset: Icons']], // a row that already has labels is NEVER reset to []
+      ['old-1', []],
+      ['old-2', []],
+    ]);
+  });
+
+  it('is idempotent — a second pass matches nothing and rewrites nothing', async () => {
+    const projectId = new mongoose.Types.ObjectId();
+    await workCards().insertOne({ project_id: projectId, trello_card_id: 'w1', mc_number: 'MC-1', name: 'a' });
+
+    await migration012.up(mongoose.connection);
+    // labels arrive from the next sync, between the two passes
+    await workCards().updateOne({ trello_card_id: 'w1' }, { $set: { labels: ['Ops: Board Management'] } });
+    await migration012.up(mongoose.connection);
+
+    expect((await workCards().findOne({ trello_card_id: 'w1' }))!.labels).toEqual([
+      'Ops: Board Management',
+    ]);
+  });
+
+  it('runs from the runner once and is recorded in the ledger', async () => {
+    const projectId = new mongoose.Types.ObjectId();
+    await workCards().insertOne({ project_id: projectId, trello_card_id: 'w1', mc_number: 'MC-1', name: 'a' });
+
+    const first = await runMigrations(mongoose.connection);
+    expect(first).toContain('012-work-card-labels');
+    expect((await workCards().findOne({ trello_card_id: 'w1' }))!.labels).toEqual([]);
+
+    expect(await runMigrations(mongoose.connection)).toEqual([]);
   });
 });

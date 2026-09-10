@@ -241,6 +241,13 @@ const workCardSchema = new Schema(
     current_list: String,
     stage: String,
     figma_url: String,
+    // T179 (2026-09-10): the card's own Trello labels, kept whole — the mirror
+    // of `deliverableSchema.labels`. The mapper used to distil `difficulty` out
+    // of them and drop the array, which left the WORK-TYPE label (`Asset:
+    // Icons`, `Ops: Board Management`) — the thing that decides which lane a
+    // card's design cell comes from — unreadable anywhere downstream.
+    // Migration 012 backfills `[]` on rows written before the field existed.
+    labels: { type: [String], required: true, default: [] },
     // W2 on task cards (JP 2026-08-18, contracts/trello-write.md §W2 scope
     // clarification): the same field pair as the deliverable, down to the
     // DATE_ONLY recipe — the task half must reject the malformed date the

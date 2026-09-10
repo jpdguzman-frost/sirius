@@ -7,7 +7,14 @@
  */
 
 export type Difficulty = 'Easy' | 'Medium' | 'Hard';
-export type Lane = 'design' | 'ops' | 'assets';
+/**
+ * Amended 2026-09-10 (JP, block-8 Q3): `content` joins the union. The board's
+ * work-type label families fold onto lanes (see WORK_TYPE_LANES) and `Content`
+ * has no home among design/ops/assets. Purely additive — `designCell`'s
+ * fallback chain answers a `content` card with no `content` cell exactly as it
+ * answers any other absent lane.
+ */
+export type Lane = 'design' | 'ops' | 'assets' | 'content';
 export type ConfidenceKey = 'Average' | '0.7' | '0.85' | '0.95';
 
 export interface ConfidenceLevel {
@@ -73,8 +80,74 @@ export interface LaneCard {
   labels?: string[];
 }
 
-/** Lane classification from list + labels (source: rp; BR-4 companion). */
+/**
+ * Work-type label FAMILY → lane (JP 2026-09-10, block-8 Q1; data-confirmed
+ * against 4,407 done cards on rt-837). The board labels work as `Family: Kind`
+ * — `Asset: Icons`, `Design: Refinement`, `Ops: Board Management` — and ARES's
+ * cycle-time model keys on exactly the same 12 families. Ten fold here; `Build`
+ * and `Dev` are deliberately ABSENT (unmapped, no lane), never guessed.
+ *
+ * Lives in lib/ because `laneOf` below needs it and lib never imports src;
+ * `src/services/work-type.ts` re-exports it for server code.
+ */
+export const WORK_TYPE_LANES: Record<string, Lane> = {
+  Design: 'design',
+  'Design System': 'design',
+  Components: 'design',
+  Strategy: 'design',
+  Asset: 'design',
+  '3D': 'design',
+  Motion: 'design',
+  Production: 'design',
+  Ops: 'ops',
+  Content: 'content',
+};
+
+/** The board's work-type label shape: `Family: Kind`. */
+const WORK_TYPE_LABEL_RE = /^([^:]+): /;
+/** `Difficulty: Easy` wears the same shape and is never a work type. */
+const DIFFICULTY_FAMILY_RE = /^difficulty$/i;
+
+/**
+ * The card's ONE work-type label, or null when it has none or more than one —
+ * the same discrimination ARES makes when it samples a card (`noWorkTypeLabel`
+ * / `multipleWorkTypeLabels` in its `dropped.reasons`). Ambiguity is reported
+ * as "no work type", never resolved by picking a favourite.
+ */
+export function workTypeOf(labels: string[]): string | null {
+  const found = (labels || []).filter((l) => {
+    const m = WORK_TYPE_LABEL_RE.exec(l);
+    return m !== null && !DIFFICULTY_FAMILY_RE.test(m[1]!.trim());
+  });
+  return found.length === 1 ? found[0]! : null;
+}
+
+/**
+ * Lane for a work-type key — a full label (`Asset: Icons`) or the bare family
+ * (`Asset`). Null means unmapped: a family with no ruled lane (Build, Dev) is
+ * counted and surfaced, never folded into `design` by default.
+ */
+export function laneOfWorkType(key: string): Lane | null {
+  const m = WORK_TYPE_LABEL_RE.exec(key);
+  const family = (m ? m[1]! : key).trim();
+  return WORK_TYPE_LANES[family] ?? null;
+}
+
+/**
+ * Lane classification. The LABEL FAMILY decides where a labelled card belongs
+ * (JP 2026-09-10, invariant-5 amendment): without this branch an `Asset: Icons`
+ * card falls into `assets` on the text regex below — the opposite of the ruled
+ * fold, which puts every asset-producing family in `design`.
+ *
+ * The regex that follows is the VERBATIM port (source: rp; BR-4 companion) and
+ * stays the fallback for the 19% of cards carrying no work-type label at all.
+ */
 export const laneOf = (card: LaneCard): Lane => {
+  const workType = workTypeOf(card.labels || []);
+  if (workType) {
+    const lane = laneOfWorkType(workType);
+    if (lane) return lane;
+  }
   const t = `${card.currentList || ''} ${(card.labels || []).join(' ')}`.toLowerCase();
   return /asset|illustrat|render|icon/.test(t)
     ? 'assets'

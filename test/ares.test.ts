@@ -127,3 +127,116 @@ describe('error surfaces', () => {
     await expect(client.get('/api/unknown')).rejects.toBeInstanceOf(AresError);
   });
 });
+
+/* ------------------------------------------------------------------------ */
+/* Block 8 (T180): the cycle-time model reader and Apollo's lane table.      */
+/* Fixture shape = the live envelope verified 2026-09-10 (state log), plus   */
+/* `laneCells` as asked in Sirius→Ares #15 (optional until it ships).         */
+/* ------------------------------------------------------------------------ */
+
+const MODEL_BODY = {
+  rtProjectId: 837,
+  generatedAt: '2026-09-10T16:00:03.000Z',
+  window: { from: '2025-09-10', to: '2026-09-10' },
+  floorMinutes: 15,
+  overrideDays: 14,
+  workingDayHours: 24,
+  workTypeKeys: ['Asset: Icons', 'Design: Refinement'],
+  historyUnverified: 80,
+  dropped: { considered: 100, sampled: 80, reasons: { noDifficulty: 15, noWorkTypeLabel: 5 } },
+  cells: [
+    { workType: 'Design: Refinement', difficulty: 'Medium', source: 'project', n: 33, meanWorkingDays: 0.9, p70: 0.7, p85: 1.4, p95: 2.8, meanCalendarHours: 21.5 },
+    { workType: 'Asset: Icons', difficulty: 'Easy', source: 'firm', n: 47, meanWorkingDays: 0.2, p70: 0.14, p85: 0.5, p95: 1.1, meanCalendarHours: 4.8 },
+  ],
+  laneCells: [
+    { laneKey: 'design', difficulty: 'Medium', source: 'project', n: 80, meanWorkingDays: 0.9, p70: 0.7, p85: 1.4, p95: 2.8 },
+  ],
+};
+const envelope = (data: unknown) => ({ body: { ok: true, data, meta: {} } });
+
+describe('cycleTimeModel (v1, key-gated — null on any failure, T180)', () => {
+  it('reads the live envelope with the bare integer id and keeps workingDayHours + laneCells', async () => {
+    const { client, calls } = clientWith({ '/api/v1/trello/cycle-time/model': envelope(MODEL_BODY) });
+    const model = await client.cycleTimeModel(837);
+    expect(calls[0]).toBe('/api/v1/trello/cycle-time/model?rtProjectId=837');
+    expect(model).toEqual(MODEL_BODY);
+    expect(model?.workingDayHours).toBe(24); // recorded, never assumed
+  });
+
+  it('accepts a model WITHOUT laneCells (optional until #15 ships)', async () => {
+    const { laneCells: _omitted, ...withoutLanes } = MODEL_BODY;
+    void _omitted;
+    const { client } = clientWith({ '/api/v1/trello/cycle-time/model': envelope(withoutLanes) });
+    const model = await client.cycleTimeModel(837);
+    expect(model?.cells).toHaveLength(2);
+    expect(model?.laneCells).toBeUndefined();
+  });
+
+  it('rejects a malformed envelope with null — a string percentile, a missing block', async () => {
+    const stringP70 = { ...MODEL_BODY, cells: [{ ...MODEL_BODY.cells[0], p70: '0.7' }] };
+    const { dropped: _d, ...noDropped } = MODEL_BODY;
+    void _d;
+    const a = clientWith({ '/api/v1/trello/cycle-time/model': envelope(stringP70) });
+    const b = clientWith({ '/api/v1/trello/cycle-time/model': envelope(noDropped) });
+    const c = clientWith({ '/api/v1/trello/cycle-time/model': envelope({ totallyDifferent: true }) });
+    expect(await a.client.cycleTimeModel(837)).toBeNull();
+    expect(await b.client.cycleTimeModel(837)).toBeNull();
+    expect(await c.client.cycleTimeModel(837)).toBeNull();
+  });
+
+  it('re-asserts Ares\'s own identity: considered ≠ sampled + Σreasons → null (drift item 15)', async () => {
+    const broken = { ...MODEL_BODY, dropped: { considered: 100, sampled: 80, reasons: { noDifficulty: 15, noWorkTypeLabel: 4 } } };
+    const { client } = clientWith({ '/api/v1/trello/cycle-time/model': envelope(broken) });
+    expect(await client.cycleTimeModel(837)).toBeNull();
+    // and the identity holding is exactly what lets the fixture above through
+    const sum = Object.values(MODEL_BODY.dropped.reasons).reduce((x, y) => x + y, 0);
+    expect(MODEL_BODY.dropped.considered).toBe(MODEL_BODY.dropped.sampled + sum);
+  });
+
+  it('404 (unmapped id) and 500 come back null, never a throw', async () => {
+    const notFound = clientWith({});
+    const broken = clientWith({
+      '/api/v1/trello/cycle-time/model': { status: 500, body: { ok: false, error: { code: 'INTERNAL', message: 'boom' } } },
+    });
+    expect(await notFound.client.cycleTimeModel(999999)).toBeNull();
+    expect(await broken.client.cycleTimeModel(837)).toBeNull();
+  });
+
+  it('a non-integer id never reaches the wire (the `rt-837` → 400 trap, closed on our side too)', async () => {
+    const { client, calls } = clientWith({ '/api/v1/trello/cycle-time/model': envelope(MODEL_BODY) });
+    expect(await client.cycleTimeModel(Number.NaN)).toBeNull();
+    expect(await client.cycleTimeModel(837.5)).toBeNull();
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('boardLanes (Apollo\'s id-keyed table — block 8 lane reconcile)', () => {
+  it('returns the lanes and syncedAt (null until Ares stamps it); a null group reads as none', async () => {
+    const { client, calls } = clientWith({
+      '/api/v1/trello/boards/hLL7WW2V/lanes': envelope({
+        boardId: 'hLL7WW2V',
+        projectName: 'Fx',
+        source: 'apollo',
+        syncedAt: null,
+        lanes: [
+          { listId: 'l1', name: 'Working on Design', pos: 0, type: 'work', group: 'Design', isStart: true, isDone: false },
+          { listId: 'l2', name: 'NOTE', pos: 1, type: 'process', group: null, isStart: false, isDone: false },
+        ],
+      }),
+    });
+    const res = await client.boardLanes('hLL7WW2V');
+    expect(calls[0]).toBe('/api/v1/trello/boards/hLL7WW2V/lanes');
+    expect(res?.syncedAt).toBeNull();
+    expect(res?.lanes.map((l) => l.name)).toEqual(['Working on Design', 'NOTE']);
+    expect(res?.lanes[0]).toMatchObject({ listId: 'l1', type: 'work', group: 'Design', isStart: true, isDone: false });
+    expect(res?.lanes[1]?.group).toBe('');
+  });
+
+  it('404 = never synced, not "no lanes" — null, and a malformed table is null too', async () => {
+    const { client } = clientWith({
+      '/api/v1/trello/boards/bad/lanes': envelope({ lanes: [{ listId: 'l1' }] }),
+    });
+    expect(await client.boardLanes('neverSynced')).toBeNull();
+    expect(await client.boardLanes('bad')).toBeNull();
+  });
+});

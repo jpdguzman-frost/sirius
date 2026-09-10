@@ -158,6 +158,16 @@ describe('syncProject', () => {
     expect(stats.unstamped).toBe(0);
   });
 
+  it("persists a task card's labels on the work card (T179), so the label-first lane pick can fire", async () => {
+    const project = await makeProject();
+    const labelled = { ...CARDS[0]!, cardId: 'c-task-labels', labels: [label('Difficulty: Medium'), label('Asset: Icons')] };
+    await syncProject(stubClient({ cards: [labelled] }), project);
+    const w = await WorkCard.findOne({ trello_card_id: 'c-task-labels' });
+    // schema default + mapper alone leave [] on every real row forever — the
+    // upsert's $set is the only thing that carries the array across
+    expect(w?.labels, 'labels did not reach work_cards').toEqual(labelled.labels.map((l) => l.name));
+  });
+
   it('AC-19: a failed sync throws, and last good data stays untouched', async () => {
     const project = await makeProject();
     await syncProject(stubClient({ cards: CARDS, movements: MOVES }), project);

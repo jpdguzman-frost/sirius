@@ -57,6 +57,13 @@ export interface MappedWorkCard {
   difficulty?: string;
   current_list: string | null;
   figma_url?: string;
+  /**
+   * T179 (2026-09-10): the card's labels, kept whole — the same field the
+   * deliverable has carried since T028. Distilling `difficulty` out and
+   * dropping the rest threw away the WORK-TYPE label (`Asset: Icons`), which
+   * is what `laneOf` classifies a card on since JP's 2026-09-10 fold.
+   */
+  labels: string[];
   /** W2 on task cards (2026-08-18): same date-only + instant pair as the deliverable */
   trello_due: string | null;
   trello_due_at: string | null;
@@ -175,6 +182,7 @@ export function mapTrello(cards: AresCard[], projectLabel: string | null): MapRe
         difficulty: difficultyOf(labels),
         current_list: card.currentList,
         figma_url: figmaOf(card),
+        labels, // T179 — the whole array, not just what we distil from it
         trello_due: dateOnly(card.due),
         trello_due_at: card.due ?? null,
         urgent: labels.includes(URGENT_LABEL_NAME), // owl #78 — the card's own label

@@ -18,7 +18,7 @@ import { syncProject } from '../worker/syncAres.ts';
 import { refreshProjectModel } from '../worker/refreshModel.ts';
 import { loadProjectModel } from '../src/services/model-grid.ts';
 import { forecast } from '../lib/forecast.ts';
-import { Deliverable, Project } from '../src/models/index.ts';
+import { Deliverable, ModelGrid, Project, SyncRun } from '../src/models/index.ts';
 import { EMPIRICAL } from '../lib/model.ts';
 
 const env = validateEnv(process.env);
@@ -92,4 +92,59 @@ lines.push(`\n**Gate question for the PM:** do the grid values and these dates m
 
 fs.writeFileSync('docs/gate-t045-model-validation.md', lines.join('\n'));
 console.log('[gate] report written to docs/gate-t045-model-validation.md');
+
+// ---- T182: the sanity gate verdict (block 8) ------------------------------
+// The refresh above already ran the gate at write time: passed cells sit in
+// model_grid, failed cells (with reasons) sit on the latest sync_runs stats
+// for source:'model' (provenance, PLAN.md frozen shape). Print both, exit
+// non-zero when any cell failed or no model run exists.
+type CellRow = Partial<Record<'lane' | 'difficulty' | 'confidence' | 'value' | 'sample_n', unknown>>;
+type StatsFailure = { cell: CellRow | string; reasons: string[] };
+const run = await SyncRun.findOne({ project_id: project._id, source: 'model' }).sort({ at: -1 }).lean();
+const stats = (run?.stats ?? {}) as Record<string, unknown>;
+const failures = (Array.isArray(stats.failures) ? stats.failures : []) as StatsFailure[];
+const written = await ModelGrid.find({ project_id: project._id }).select('lane difficulty confidence value sample_n').lean();
+
+const cellRow = (c: CellRow | string, verdict: string) => {
+  const k: CellRow = typeof c === 'string' ? { lane: c } : c;
+  const f = (x: unknown) => (x === undefined || x === null ? '—' : String(x));
+  return `| ${f(k.lane)} | ${f(k.difficulty)} | ${f(k.confidence)} | ${f(k.value)} | ${f(k.sample_n)} | ${verdict} |`;
+};
+console.log('\n[gate] T182 cells');
+console.log('| lane | difficulty | confidence | value | n | verdict |');
+console.log('|---|---|---|---|---|---|');
+for (const c of written) console.log(cellRow(c, 'passed'));
+for (const x of failures) console.log(cellRow(x.cell, `failed: ${(x.reasons ?? []).join(', ')}`));
+
+const cellStats = (stats.cells ?? {}) as Record<string, unknown>;
+console.log('\n[gate] T182 model envelope');
+console.log(
+  JSON.stringify(
+    {
+      run: run ? { at: run.at, ok: run.ok, error: run.error ?? null } : null,
+      generatedAt: stats.generatedAt ?? null,
+      window: stats.window ?? null,
+      workingDayHours: stats.workingDayHours ?? null,
+      historyUnverified: stats.historyUnverified ?? null,
+      sampled: stats.sampled ?? null,
+      considered: stats.considered ?? null,
+      droppedReasons: stats.droppedReasons ?? null,
+      cells: cellStats,
+      unmappedWorkTypes: stats.unmappedWorkTypes ?? null,
+    },
+    null,
+    2,
+  ),
+);
+
+const failedCount = typeof cellStats.failed === 'number' ? cellStats.failed : failures.length;
 await mongoose.disconnect();
+if (!run || !run.ok) {
+  console.error('[gate] T182 FAIL — no successful model run for the project');
+  process.exit(1);
+}
+if (failedCount > 0) {
+  console.error(`[gate] T182 FAIL — ${failedCount} cell(s) failed the gate (${written.length} passed)`);
+  process.exit(1);
+}
+console.log(`[gate] T182 PASS — ${written.length} cell(s) passed, none failed`);
