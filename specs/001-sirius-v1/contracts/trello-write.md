@@ -13,6 +13,7 @@ to any source system exists; Google Sheets has no write path, ever.
 | W1 | `Urgent` label | `POST /cards/{id}/idLabels` · `DELETE /cards/{id}/idLabels/{labelId}` | Pipeline urgency control (work-card rows) | `urgency.set` | v1 (FR-4.6) |
 | W2 | Due date | `PUT /cards/{id}` with `{due}`; `{due: null}` clears | The DEADLINE cell on Sprint Schedules (work-card rows; Pipeline read-only since #78 §2) | `due.set` | 2026-08-04 (FR-9.1) |
 | W3 | `Difficulty: …` label | `POST /cards/{id}/idLabels` (new value) · `DELETE /cards/{id}/idLabels/{labelId}` (stale values) | Pipeline difficulty control (work-card rows) | `difficulty.set` | 2026-08-12 (BRD-§9-A1) |
+| W4 | Business-unit classification label (the UNIT field — the intake sheet's Business Unit column) | `POST /cards/{id}/idLabels` with an EXISTING label id · `DELETE /cards/{id}/idLabels/{labelId}` for the stale value — never `POST /boards/{id}/labels` | **UNRULED** — tab and card kind pending product; actor of an ingestion-triggered tag pending JP; nothing writes W4 until both are ruled | `classification.set` (proposed) | authorised 2026-09-10 (JP; BRD v2.9 §9 / FR-4.10–4.11; owls #94–#95) — **unbuilt** |
 
 Interfaces live in `lib/trello.ts` only: `setUrgency(cardId, boardId, urgent)` (§5.3 verbatim
 shape, unchanged), `setDue(cardId, isoDateTimeOrNull)`, and
@@ -126,3 +127,19 @@ three fields, not one. Product's amendment text (BRD-§9-A1, Miles 2026-08-12) s
 incorporation into the BRD document — and the literal BRD v2.2 §9 still says *one* write, so
 the incorporation must go one → three (or land the pending v2.3 "one → two" sweep first).
 Product-owned, tracked in STATE.md.
+
+## W4 semantics — business-unit label (authorised 2026-09-10, UNBUILT)
+
+- **Amendment (JP, 2026-09-10; product owls miles→jp #94/#95, BRD v2.9 §9):** the registry grows
+  to four. W4 tags a card with its BUSINESS UNIT — one field, the sheet's `Business Unit`
+  column (the UI's UNIT field, the renamed Use Case). Pillar and a separate use-case field are
+  OUT until a fresh amendment.
+- **Lookup-only.** Sirius assigns or removes a label that ALREADY EXISTS on the board, matched
+  exactly after trimming and case-folding; never fuzzy; never created (unlike W1/W3, whose
+  `ensureUrgentLabel`/`ensureDifficultyLabel` create the taxonomy label once when a board lacks
+  it — that difference is deliberate and documented to product in #73). An unmatched value is
+  refused and surfaced, never guessed. Re-tagging on a sheet change follows W3's add-then-remove.
+- **Unruled, so unbuilt:** the surface (which tab, which card kind) and whether an
+  ingestion-triggered tag records actor `system` or becomes a person's action. Every rule
+  above binding W1–W3 (optimistic + rollback, audit_log + sync_runs, board guard, reconcile
+  from ARES reads, the integration account) binds W4 the day it is built.

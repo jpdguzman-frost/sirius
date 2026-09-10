@@ -37,6 +37,7 @@ _last-verified: 2026-08-18_
 | lane fold | Which forecast lane an Ares work-type family draws from | ✅ **ruled 2026-09-10** (JP; confirmed on 837 by where the work happens and how long it takes) — Design · Design System · Components · Strategy · Asset · 3D · Motion · Production → `design`; Ops → `ops`; Content → `content` (new lane); Build · Dev unmapped. The snapshot's `assets` lane (Easy 13.88d) is a title-classification artefact; it survives only as the fallback for unlabeled cards. |
 | lane cells | Where a lane × difficulty cell comes from when a lane spans many work types | ✅ **JP yes 2026-09-10** — Ares pools cells per `laneKey` (Sirius→Ares #15); percentiles are never pooled on our side; `laneCells` optional in the reader until it lands, per-work-type cells recorded as provenance only. |
 | lib/model.ts amendment | May the verbatim lane classifier change | ✅ **JP yes 2026-09-10** — `Lane` union may grow with Ares lane keys (`content` now); `laneOf` gains a label-family branch ahead of the prototype regex, whose text stays verbatim as the fallback for unlabeled cards. Recorded in `lib/CLAUDE.md` by block 8. |
+| W4 | A fourth Trello write: the business-unit classification label | ✅ **JP yes 2026-09-10** — into the registry as #95 scopes it (one field, existing board labels only, exact match after normalisation, never fuzzy, never created, unmatched surfaced); surface + ingestion actor UNRULED; unbuilt. Constitution invariant 2 and `contracts/trello-write.md` amended. |
 
 ## Answered — operational
 
