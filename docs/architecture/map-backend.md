@@ -54,6 +54,7 @@ _last-verified: 2026-08-18_
 - `src/services/guard.ts` — refuse prod board ids outside production; assertNotProductionBoards.
 - `src/services/intake-parser.ts` — sheet parser (ragged rows, serial dates, dup Type cols); parseIntake.
 - `src/services/mapper.ts` — Trello taxonomy → deliverables + MC-group work cards; mapTrello.
+- `src/services/model-gate.ts` — T182 sanity gate, pure: ordering (Easy ≤ Medium ≤ Hard per lane), min n, window span, unverified ratio — runs at write time in refreshModel 
 - `src/services/model-grid.ts` — per-project EmpiricalModel with fallback provenance; loadProjectModel.
 - `src/services/model-refresh.ts` — pure BR-2 derivation: card_events → samples → grids + delta; deriveSamples/computeModelGrid.
 - `src/services/pipeline.ts` — db rows → tab payload (deliverables_v + forecast + BR-10); loadPipeline/toMilestones.
@@ -61,6 +62,7 @@ _last-verified: 2026-08-18_
 - `src/services/sprint-items.ts` — hand-placed work-card schedule rows (owl #72); loadSprintItems/finishOf/deadlineFor; `plotIssue` — the OUT_OF_SPRINT/PAST_DEADLINE/NOT_A_WORKDAY placement guard shared by every write route that takes a day from a person (block 7, JP 2026-09-08).
 - `src/services/status-rules.ts` — BR-10 list name → pending/ongoing/done; classifyList.
 - `src/services/sync-status.ts` — the ONE sync_runs latest-read query: READ_SOURCES (ares + ares_push) for the rollover gate, `ares` alone for the FR-8.6 freshness chip (its push-healthy wording is JP's call); latestRead.
+- `src/services/work-type.ts` — T179 work-type helpers over lib/model.ts's WORK_TYPE_LANES: workTypeOf(labels), laneOfWorkType(key) 
 - `src/types/express-session.d.ts` — session returnTo typing.
 - `worker/drainPush.ts` — drains push_events → per-card reconciles; poll fallback; drainPushEvents/pushHealth.
 - `worker/index.ts` — cadence: ares 15 min (hourly while push healthy), intake 15 min, model nightly, calendar.

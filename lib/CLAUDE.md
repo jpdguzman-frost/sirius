@@ -42,8 +42,7 @@ bundle, minified identifiers kept, DO NOT EDIT.
      Growing the table is a product ruling, not a code change.
   3. `laneOf` gains a label-family branch AHEAD of the list/title regex. The
      regex text is UNCHANGED and remains the fallback for cards with no
-     work-type label. Without the branch a labelled `Asset: Icons` card lands
-     in `assets`, the opposite of the ruled fold.
+     work-type label.
 
   Golden parity is unaffected and stays the proof: `test/forecast.test.ts`
   drives `laneOf`/`designCell` against the oracle with `labels: []`, where the
