@@ -86,23 +86,11 @@ export function rtProjectIdOf(code: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/** The Ares half of the stats — everything but the throughput count and the skip marker. */
+type ModelHalf = Omit<RefreshStats, 'modelSkipped' | 'throughputRows'>;
+
 /** Fresh per call — the returned stats must never share inner objects between nights. */
-const modelHalfSkipped = (): Pick<
-  RefreshStats,
-  | 'generatedAt'
-  | 'window'
-  | 'workingDayHours'
-  | 'historyUnverified'
-  | 'sampled'
-  | 'considered'
-  | 'droppedReasons'
-  | 'cells'
-  | 'unmappedWorkTypes'
-  | 'failures'
-  | 'laneSources'
-  | 'laneCellCount'
-  | 'alerts'
-> => ({
+const modelHalfSkipped = (): ModelHalf => ({
   generatedAt: null,
   window: null,
   workingDayHours: null,
@@ -156,7 +144,7 @@ async function refreshAresModel(
   rtProjectId: number,
   ares: AresClient,
   now: Date,
-): Promise<Omit<RefreshStats, 'modelSkipped' | 'throughputRows'>> {
+): Promise<ModelHalf> {
   const model = await ares.cycleTimeModel(rtProjectId);
   if (!model) {
     // Last good grid stays (FR-8.5): nothing below runs, the row records it.

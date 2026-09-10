@@ -159,8 +159,8 @@ const cellSourceSchema = z.enum(['project', 'firm']);
  */
 const count = z.number().nonnegative();
 const workingDays = z.number().nonnegative();
-const cycleTimeCellSchema = z.object({
-  workType: z.string(),
+/** The statistics a work-type cell and a lane cell share; only the key field differs. */
+const cellStats = {
   difficulty: difficultySchema,
   source: cellSourceSchema,
   n: count,
@@ -168,18 +168,9 @@ const cycleTimeCellSchema = z.object({
   p70: workingDays,
   p85: workingDays,
   p95: workingDays,
-  meanCalendarHours: z.number().nonnegative(),
-});
-const laneCellSchema = z.object({
-  laneKey: z.string(),
-  difficulty: difficultySchema,
-  source: cellSourceSchema,
-  n: count,
-  meanWorkingDays: workingDays,
-  p70: workingDays,
-  p85: workingDays,
-  p95: workingDays,
-});
+};
+const cycleTimeCellSchema = z.object({ workType: z.string(), ...cellStats, meanCalendarHours: z.number().nonnegative() });
+const laneCellSchema = z.object({ laneKey: z.string(), ...cellStats });
 const sumReasons = (reasons: Record<string, number>) => Object.values(reasons).reduce((a, b) => a + b, 0);
 /**
  * Plain `z.object` (unknown fields stripped, tolerant of payload growth — the

@@ -122,30 +122,24 @@ export interface SprintItemsResult {
 /**
  * The lane classifier's inputs for a TASK card: its own LABELS, then its LIST.
  *
- * T179 (2026-09-10) added the labels. `laneOf` now reads the WORK-TYPE label
- * first (`Asset: Icons` → the ruled lane for the `Asset` family) and falls back
- * to the list regex below for a card carrying none, so a labelled task card is
+ * T179 (2026-09-10) added the labels. `laneOf` reads the WORK-TYPE label first
+ * (`Asset: Icons` → the ruled lane for the `Asset` family) and falls back to
+ * the list regex for a card carrying none, so a labelled task card is
  * classified on a fact about the WORK rather than on where the card happens to
- * sit. The list stays the fallback — the regex's own text is the verbatim port,
- * and what it is FED is the list plus the card's non-`Family: Kind` labels
- * (review A1-F1/X2), so a work type the fold declines never decides its own
- * lane — and the residual noted below still applies to the cards that use it.
+ * sit. The regex's own text is the verbatim port; what it is FED is the list
+ * plus the card's non-`Family: Kind` labels (review A1-F1/X2), so a work type
+ * the fold declines never decides its own lane.
  *
- * `task_prefix` is STILL not fed in, and the reason is unchanged: it is a
- * naming habit, not a label. The empty array below was the fix for it —
- * `w.labels` is the card's real Trello labels, which a prefix never enters.
- *
- * `task_prefix` was fed in as a label at first, on the reasoning that it is the
- * same kind of text `laneOf` classifies. It is not, and the effect was severe:
- * `laneOf` matches `/asset|illustrat|render|icon/`, and EVERY task prefix the
- * board actually uses — 'Sketch Asset', 'Render Asset', 'Icon Clean Up' —
- * matches it. So the lane was `assets` for every task card regardless of the
- * work, which for an Easy card selects a 13.88-day design cell instead of a
- * 0.94-day one. A fourteen-fold difference chosen by a title convention.
- *
- * The list is a fact about where the card sits on the board; the title prefix
- * is a naming habit. Classifying on the list alone is the same signal the main
- * card is classified on, minus labels a task card does not have.
+ * `task_prefix` is NOT fed in — it is a naming habit, not a label. It was fed
+ * in as a label at first, on the reasoning that it is the same kind of text
+ * `laneOf` classifies. It is not, and the effect was severe: `laneOf` matches
+ * `/asset|illustrat|render|icon/`, and EVERY task prefix the board actually
+ * uses — 'Sketch Asset', 'Render Asset', 'Icon Clean Up' — matches it. So the
+ * lane was `assets` for every task card regardless of the work, which for an
+ * Easy card selects a 13.88-day design cell instead of a 0.94-day one. A
+ * fourteen-fold difference chosen by a title convention. The list and the
+ * labels are facts about the card on the board — the same signals the main
+ * card is classified on.
  *
  * KNOWN RESIDUAL, raised not solved: a task card's list can still classify
  * differently from its MC's main card, so a bar here and the Pipeline forecast
