@@ -19,14 +19,25 @@
  * it (item 11 of the block-8 drift report; the promise owls #11/#13 traded).
  * Both halves are collected by the same `collectUnmapped`, which is why they
  * are proved in one file.
+ *
+ * The block-8 review round (2026-09-10) added the four things the first pass
+ * left un-asserted, each named at its case: the failed read is LOUD and not
+ * only when it throws (A4-F1), the rule tier is exercised by names that are
+ * NOT table rows (A4-F2), the board id in the request is checked and not just
+ * the key it is filed under (A4-F3), the lane count separates "none unknown"
+ * from "none looked at" (A4-F6), lane names are pinned verbatim (A4-F7) — and
+ * the resync push path is proved to carry the same provenance the scheduled
+ * sync does (A4-F5), which is why this file also reaches `worker/drainPush.ts`.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { aresCard, label } from './helpers/ares-card.ts';
 import { syncProject, type SyncStats } from '../worker/syncAres.ts';
+import { drainPushEvents } from '../worker/drainPush.ts';
+import { validateEnv } from '../src/config/env.ts';
 import type { AresBoardLane, AresCard, AresClient, AresMovement } from '../src/services/ares.ts';
-import { Project, SyncRun } from '../src/models/index.ts';
+import { Project, PushEvent, SyncRun } from '../src/models/index.ts';
 
 beforeAll(async () => {
   await startTestDb();
@@ -60,15 +71,20 @@ const lane = (name: string, over: Partial<AresBoardLane> = {}): AresBoardLane =>
 });
 
 /**
- * The lane table defaults to `null` — the shape every OTHER suite's stub
- * client answers with, since none of them defines `boardLanes` at all. That is
- * the contract this suite pins in `a lane table that throws…`: the reconcile
- * check must degrade, never take a sync down.
+ * The lane table defaults to `null` — the contract's "the read failed, however
+ * it failed", which this suite pins in `a null lane table…` and `a lane table
+ * that THROWS…`: the reconcile check must degrade, never take a sync down, and
+ * must say so out loud.
+ *
+ * `boardLanes` takes the board id it is asked for, deliberately: a stub that
+ * ignored its argument let a call for the WRONG board pass every assertion in
+ * this file (review A4-F3, 2026-09-10), because `lanesSyncedAt` is keyed by the
+ * board id we hold rather than by the one we asked ARES about.
  */
 const client = (
   cards: AresCard[],
   movements: AresMovement[] = [],
-  boardLanes: () => Promise<LaneTable> = async () => null,
+  boardLanes: (boardId: string) => Promise<LaneTable> = async () => null,
 ) =>
   ({
     boardCards: async () => cards,
@@ -106,13 +122,21 @@ describe('sync_runs.stats.unmappedLists', () => {
   });
 
   it('is EMPTY when every name resolves — including by rule, not only by the table', async () => {
+    /* Every name below the first is ABSENT from LIST_STATES and resolves only
+       through the rule tier of `isKnownList` (review A4-F2, 2026-09-10: the
+       names this test used to carry — `➜ Ready for Screen Design`,
+       `Backlog: Migration`, `➜ Refinement: Working on it` — are all exact table
+       rows, so replacing the whole rule tier with a table lookup left the suite
+       green and the tier untested). Invented families and stages on purpose:
+       the rule says the STAGE is what puts a card in flight, whichever family
+       is running it, and only a family §7a has never heard of proves that. */
     const p = await project();
     const stats = await syncProject(
       client([
         card('a', 'Working on Design'), // exact table
-        card('b', '➜ Ready for Screen Design'), // Ready-for rule
-        card('c', '➜ Refinement: Working on it'), // family-stage rule, undocumented family
-        card('d', 'Backlog: Migration'), // Backlog rule
+        card('b', '➜ Ready for Anything'), // Ready-for rule — not a table row
+        card('c', '➜ Newfamily: Working on it'), // family-stage rule — invented family
+        card('d', 'Backlog: Brand New'), // Backlog rule — not a table row
         card('e', '-> Render: Sent for Client Approval'), // the ASCII-arrow typo §7a names
       ]),
       p,
@@ -185,8 +209,19 @@ describe('sync_runs.stats.unmappedLists', () => {
  * unruled lane and gets the `ongoing` fallback.
  */
 describe('sync_runs.stats.unknownLanes', () => {
-  const table = (names: string[], syncedAt: string | null = '2026-09-10T02:00:00.000Z') =>
-    async () => ({ lanes: names.map((n) => lane(n)), syncedAt });
+  /**
+   * `asked` collects the board id every call was made for — the request the
+   * stub used to throw away (review A4-F3).
+   */
+  const table = (
+    names: string[],
+    syncedAt: string | null = '2026-09-10T02:00:00.000Z',
+    asked?: string[],
+  ) =>
+    async (boardId: string) => {
+      asked?.push(boardId);
+      return { lanes: names.map((n) => lane(n)), syncedAt };
+    };
 
   it('records the lane no rule recognises, and leaves the ruled ones alone', async () => {
     const p = await project();
@@ -194,14 +229,32 @@ describe('sync_runs.stats.unknownLanes', () => {
       client(
         [card('a', 'Working on Design')],
         [],
-        /* two the §7a enumeration settles — one by the table, one by the
-           Backlog rule, so the check is proved to consult BOTH tiers of
-           `isKnownList` and not just the literal name list. */
-        table(['Working on Design', 'Backlog: Icons', 'For Archive']),
+        /* Three the §7a enumeration settles — one by the table and two only by
+           the rule tier, so the check is proved to consult BOTH tiers of
+           `isKnownList`. `Backlog: Brand New` and `➜ Ready for Anything` are
+           absent from LIST_STATES on purpose (review A4-F2): the names this
+           case used to carry were exact rows, so a table-only lookup passed. */
+        table(['Working on Design', 'Backlog: Brand New', '➜ Ready for Anything', 'For Archive']),
       ),
       p,
     );
     expect(stats.unknownLanes).toEqual(['For Archive']);
+  });
+
+  it('consults the family-stage rule for lane names too, not only the table', async () => {
+    /* The third tier, on its own case so a partial regression is legible: an
+       invented family at a known stage is RULED, the same family at a stage
+       §7a does not list is not. */
+    const p = await project();
+    const stats = await syncProject(
+      client(
+        [card('a', 'Working on Design')],
+        [],
+        table(['➜ Newfamily: Working on it', '➜ Newfamily: Having a Think']),
+      ),
+      p,
+    );
+    expect(stats.unknownLanes).toEqual(['➜ Newfamily: Having a Think']);
   });
 
   it('surfaces a lane NO CARD sits in — the whole reason the table is read', async () => {
@@ -228,10 +281,66 @@ describe('sync_runs.stats.unknownLanes', () => {
     expect(second.unknownLanes).toEqual(first.unknownLanes);
   });
 
-  it('records the lane table’s own syncedAt, per board id', async () => {
+  it('records the lane table’s own syncedAt, per board id — for the board it ASKED about', async () => {
     const p = await project();
-    const stats = await syncProject(client([card('a', 'Working on Design')], [], table(['NOTE'])), p);
+    /* The recorded KEY is the board id we already hold, so it proves nothing
+       about the request: reading another board's lane table and filing it under
+       this one passed every assertion in this file until the stub started
+       keeping its argument (review A4-F3). */
+    const asked: string[] = [];
+    const stats = await syncProject(
+      client([card('a', 'Working on Design')], [], table(['NOTE'], '2026-09-10T02:00:00.000Z', asked)),
+      p,
+    );
     expect(stats.lanesSyncedAt).toEqual({ fxA: '2026-09-10T02:00:00.000Z' });
+    expect(asked).toEqual([p.trello_board_id]);
+  });
+
+  it('records the lane names verbatim — the board’s spelling, not a normalised one', async () => {
+    /* The twin of the list-name case above. Normalisation is for MATCHING; a
+       report that tidied `  For   Archive  ` into `For Archive` would hide the
+       stray whitespace that is the very defect worth surfacing, and until this
+       case existed a collapsing edit passed the whole suite (review A4-F7). */
+    const p = await project();
+    const stats = await syncProject(
+      client([card('a', 'Working on Design')], [], table(['  For   Archive  '])),
+      p,
+    );
+    expect(stats.unknownLanes).toEqual(['  For   Archive  ']);
+  });
+
+  it('records how many lanes it saw — “none unknown” is not “none looked at”', async () => {
+    const p = await project();
+    const stats = await syncProject(
+      client([card('a', 'Working on Design')], [], table(['Working on Design', 'For Archive', 'NOTE'])),
+      p,
+    );
+    expect(stats.lanesSeen).toEqual({ fxA: 3 });
+    expect(stats.unknownLanes).toEqual(['For Archive', 'NOTE']);
+  });
+
+  it('an EMPTY table counts 0, a table that could not be read counts null', async () => {
+    /* The two rows `unknownLanes: []` + a stamped `lanesSyncedAt` cannot tell
+       apart (review A4-F6): a board whose every lane is ruled, and a board that
+       answered with no lanes at all. The count is the only thing between them,
+       and `null` keeps the failed read distinct from both. */
+    const p = await project();
+    const empty = await syncProject(
+      client([card('a', 'Working on Design')], [], table([], '2026-09-10T02:00:00.000Z')),
+      p,
+    );
+    expect(empty.lanesSeen).toEqual({ fxA: 0 });
+    expect(empty.lanesSyncedAt).toEqual({ fxA: '2026-09-10T02:00:00.000Z' });
+    expect(empty.unknownLanes).toEqual([]);
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const none = await syncProject(client([card('a', 'Working on Design')], [], async () => null), p);
+      expect(none.lanesSeen).toEqual({ fxA: null });
+      expect(none.unknownLanes).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('a table ARES has never synced records null, and the check still runs', async () => {
@@ -245,12 +354,50 @@ describe('sync_runs.stats.unknownLanes', () => {
 
   it('a null lane table records null and the sync SUCCEEDS', async () => {
     const p = await project();
-    const stats = await syncProject(client([card('a', 'Working on Design')], [], async () => null), p);
-    expect(stats.lanesSyncedAt).toEqual({ fxA: null });
-    expect(stats.unknownLanes).toEqual([]);
-    // the rest of the run is untouched — the check is a report, not a gate
-    expect(stats.cards).toBe(1);
-    expect(stats.deliverables).toBe(1);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const stats = await syncProject(client([card('a', 'Working on Design')], [], async () => null), p);
+      expect(stats.lanesSyncedAt).toEqual({ fxA: null });
+      expect(stats.unknownLanes).toEqual([]);
+      // the rest of the run is untouched — the check is a report, not a gate
+      expect(stats.cards).toBe(1);
+      expect(stats.deliverables).toBe(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a lane table it could not read is LOUD — the plain null, not only the throw', async () => {
+    /* `boardLanes` answers `null` for 404, 500, network trouble and Zod drift
+       alike and throws for none of them, so a warn that lived only in the catch
+       covered the one path the contract forbids and stayed silent on every path
+       it actually produces (review A4-F1). The whole check could stop working
+       and the only trace would be a `null` in a Mixed field nothing reads. */
+    const p = await project();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await syncProject(client([card('a', 'Working on Design')], [], async () => null), p);
+      const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('lane table'));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('fxA'); // the BOARD, which is what a reader has to go look at
+      expect(lines[0]).toContain('rt-837');
+      expect(lines[0]).toContain('no lane check this run');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('says nothing about the lane table when it read one', async () => {
+    /* The non-vacuity twin of the case above: the warn must be about failure,
+       not about lanes existing, or it is one more line every healthy run. */
+    const p = await project();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await syncProject(client([card('a', 'Working on Design')], [], table(['Working on Design'])), p);
+      expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('lane table'))).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('a lane table that THROWS does not fail the sync either', async () => {
@@ -268,10 +415,14 @@ describe('sync_runs.stats.unknownLanes', () => {
         p,
       );
       expect(stats.lanesSyncedAt).toEqual({ fxA: null });
+      expect(stats.lanesSeen).toEqual({ fxA: null });
       expect(stats.deliverables).toBe(1);
       // failed loudly, not silently: an empty unknownLanes must never be read
-      // as "every lane is ruled" when nothing was actually read.
-      expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('lane table'))).toHaveLength(1);
+      // as "every lane is ruled" when nothing was actually read. ONE line, the
+      // same one the plain-null path prints, and it carries the reason.
+      const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('lane table'));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('Ares HTTP 500');
     } finally {
       warn.mockRestore();
     }
@@ -318,8 +469,63 @@ describe('sync_runs.stats.unknownLanes', () => {
     const row = await SyncRun.findOne({ project_id: p._id, source: 'ares' }).lean<{ stats: SyncStats }>();
     expect(row?.stats.unknownLanes).toEqual(['For Archive']);
     expect(row?.stats.lanesSyncedAt).toEqual({ fxA: '2026-09-10T02:00:00.000Z' });
+    expect(row?.stats.lanesSeen).toEqual({ fxA: 1 });
     // and the row is the WHOLE stats object, not a curated subset — a new
     // counter must never be dropped between the return and the record.
     expect(Object.keys(row?.stats ?? {}).sort()).toEqual(Object.keys(stats).sort());
+  });
+});
+
+/**
+ * The OTHER writer of a full sync's stats (review A4-F5, 2026-09-10). FR-9.6
+ * relaxes the scheduled full sync to hourly while push is healthy, which makes
+ * a `board.resync` push the primary path a whole board gets re-read on — and
+ * that path built its sync_runs row out of its own counters, dropping every
+ * §7a array the sync it just ran had produced. `resync: 1` and nothing else
+ * reads as "checked, clean".
+ */
+describe('a resync push records the full sync’s §7a provenance too', () => {
+  const env = validateEnv({
+    NODE_ENV: 'test',
+    ARES_WEBHOOK_SECRET: 's3cret',
+    ARES_URL: 'http://ares.test',
+    ARES_API_KEY: 'k',
+  });
+
+  it('carries unmappedLists, unknownLanes, lanesSyncedAt and lanesSeen onto the ares_push row', async () => {
+    const p = await project();
+    await PushEvent.create({
+      project_id: p._id,
+      event_id: 'evt-resync-lanes',
+      type: 'board.resync',
+      board_id: 'fxA',
+      card_id: null,
+      occurred_at: new Date(),
+    });
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await drainPushEvents(
+        env,
+        client([card('a', 'For Archive')], [], async () => ({
+          lanes: [lane('NOTE')],
+          syncedAt: '2026-09-10T02:00:00.000Z',
+        })),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+
+    const run = await SyncRun.findOne({ project_id: p._id, source: 'ares_push', ok: true })
+      .lean<{ stats: Record<string, unknown> }>();
+    expect(run?.stats).toMatchObject({
+      resync: 1,
+      // the card-level half, pre-existing and just as absent before this
+      unmappedLists: ['For Archive'],
+      // and the board-level half, which is the whole point of reading the table
+      unknownLanes: ['NOTE'],
+      lanesSyncedAt: { fxA: '2026-09-10T02:00:00.000Z' },
+      lanesSeen: { fxA: 1 },
+    });
   });
 });

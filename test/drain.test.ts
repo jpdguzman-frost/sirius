@@ -43,6 +43,12 @@ const stubClient = (over: Partial<Record<'cardWithMovements' | 'boardCards', unk
     boardCards: async () => [aresCard()],
     boardMovements: async () => [],
     referenceWeeks: async () => ({ least: null, typical: null, most: null, effectiveWeeklyRate: null }),
+    // block 8: the board.resync branch runs the full sync, which reads the
+    // board's lane table. An EMPTY table, not `null` — `null` is the contract's
+    // "the read failed", which syncProject reports at warn, and this suite must
+    // not print a failure it is not testing. The lane provenance the resync row
+    // carries is proved in `test/sync-unmapped-lists.test.ts`.
+    boardLanes: async () => ({ lanes: [], syncedAt: null }),
     ...over,
   }) as unknown as AresClient;
 

@@ -8,6 +8,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_GATE, gateCells } from '../src/services/model-gate.ts';
 import type { GateModel, GateOptions, GateReason } from '../src/services/model-gate.ts';
@@ -49,8 +50,26 @@ const reasonsOf = (failed: { cell: GridCell; reasons: GateReason[] }[]) =>
   Object.fromEntries(failed.map((f) => [key(f.cell), f.reasons]));
 
 describe('DEFAULT_GATE (drift item 5, decided without JP — tunable)', () => {
-  it('is the exported decided values', () => {
-    expect(DEFAULT_GATE).toEqual({ minN: 15, minWindowDays: 60, unverifiedRatioFail: 1.0 });
+  it('is the exported decided values (unverifiedRatioFail 0.5 — review A3-1, 2026-09-10)', () => {
+    expect(DEFAULT_GATE).toEqual({ minN: 15, minWindowDays: 60, unverifiedRatioFail: 0.5 });
+  });
+
+  it("A3-1 — the live rt-837 envelope (8337 of 8376 unverified) fails EVERY cell 'unverified' under the defaults", () => {
+    // The refuters' failing input: a well-ordered, well-sampled grid whose backing history is
+    // 99.5% unverified. At 1.0 the ratio never reached the threshold and the lane shipped.
+    const cells = [...orderedLane('design', 216), ...orderedLane('ops', 150)];
+    const live: GateModel = {
+      window: { from: '2025-09-10', to: '2026-09-10' },
+      historyUnverified: 8337,
+      dropped: { considered: 8376, sampled: 8376, reasons: {} },
+    };
+    const ratio = live.historyUnverified / live.dropped.sampled;
+    expect(ratio, 'fixture: almost all unverified, but NOT all — the 1.0 threshold must miss it').toBeLessThan(1);
+    expect(ratio).toBeGreaterThanOrEqual(DEFAULT_GATE.unverifiedRatioFail);
+    const r = gateCells(cells, live, DEFAULT_GATE);
+    expect(r.passed).toEqual([]);
+    expect(r.failed.map((f) => f.cell)).toEqual(cells);
+    expect(r.failed.every((f) => f.reasons.includes('unverified'))).toBe(true);
   });
 });
 
@@ -223,10 +242,58 @@ describe('gate purity and the freeze (invariant 7)', () => {
     expect(script.includes(token)).toBe(false);
   });
 
-  it('the gate script exits non-zero on a failed cell and on a missing model run', () => {
+  it('the gate script exits non-zero on a failed cell, on a missing model run, and on a refresh that threw (X8)', () => {
     // anchored on the T182 verdict lines, not the pre-existing env-check exit
     const exits = script.match(/T182 FAIL[^\n]*\n\s*process\.exit\(1\);/g) ?? [];
-    expect(exits.length).toBe(2);
+    expect(exits.length).toBe(3);
     expect(script).toMatch(/SyncRun\.findOne\(\{[^}]*source: 'model'/);
+  });
+
+  it('A3-2 — zero cells reaching the gate is NOT a pass: the script prints T182 NO CELLS and exits 1', () => {
+    const noCells = script.match(/T182 NO CELLS[^\n]*\n\s*process\.exit\(1\);/g) ?? [];
+    expect(noCells.length).toBe(1);
+    // the NO CELLS exit sits BEFORE the PASS line, so an empty grid can never reach PASS
+    expect(script.indexOf('T182 NO CELLS')).toBeLessThan(script.indexOf('T182 PASS'));
+  });
+
+  it('X8 — the model refresh runs inside try/catch so an unavailable model reaches the T182 verdict, not a stack trace', () => {
+    // the call is the first statement of a try block that has a catch (the body may hold object literals)
+    expect(script).toMatch(/try \{\s*refresh = await refreshProjectModel\([\s\S]*?\} catch \(/);
+    // and the thrown refresh is one of the T182 FAIL exits
+    expect(script).toMatch(/if \(refreshError\) \{\s*console\.error\([^\n]*T182 FAIL[^\n]*\n\s*process\.exit\(1\);/);
+  });
+
+  it('X8 — the T045 grid table iterates the lanes present in the refreshed model, never a hardcoded lane list', () => {
+    expect(script).toMatch(/Object\.keys\(model\.design\[diff\]/);
+    // the pre-amendment union, in any spacing/quoting, must not be typed into the script
+    expect(script).not.toMatch(/\[\s*['"]design['"]\s*,\s*['"]ops['"]\s*,\s*['"]assets['"]\s*\]/);
+  });
+
+  it("A3-7 — the script's today and its rendered dates are Asia/Manila (invariant 11), never UTC or host-TZ", () => {
+    expect(script).toMatch(/import \{[^}]*\bmanilaToday\b[^}]*\} from '\.\.\/src\/services\/pipeline\.ts'/);
+    expect(script).toMatch(/const today = manilaToday\(\)/);
+    expect(script).toMatch(/timeZone: 'Asia\/Manila'/);
+    // the two host/UTC renderings the finding named
+    expect(script).not.toMatch(/toISOString\(\)\.slice\(0,\s*10\)/);
+    expect(script).not.toMatch(/toDateString\(/);
+  });
+
+  it("A3-6 — cellRow prints '—' for a failure entry without a cell instead of throwing (executed from the shipped text)", () => {
+    // The script cannot be imported (it connects on load), so the helper is cut out of the
+    // shipped source at its declaration, transpiled, and RUN — not compared as text.
+    const start = script.indexOf('const cellRow = ');
+    expect(start, 'cellRow must exist in the script').toBeGreaterThan(-1);
+    const end = script.indexOf('\n};\n', start);
+    const snippet = script.slice(start, end + 3);
+    const js = ts.transpileModule(snippet, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+    const cellRow = new Function(`${js}; return cellRow;`)() as (c: unknown, v: string) => string;
+    const dashes = '| — | — | — | — | — | failed: min_n |';
+    expect(cellRow(undefined, 'failed: min_n')).toBe(dashes);
+    expect(cellRow(null, 'failed: min_n')).toBe(dashes);
+    // the other two shapes still print
+    expect(cellRow('design', 'x')).toBe('| design | — | — | — | — | x |');
+    expect(cellRow({ lane: 'ops', difficulty: 'Easy', confidence: '0.85', value: 1, sample_n: 20 }, 'passed')).toBe(
+      '| ops | Easy | 0.85 | 1 | 20 | passed |',
+    );
   });
 });

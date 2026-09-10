@@ -108,8 +108,10 @@ export interface AresCycleTimeCell {
 /**
  * Q2-A (JP 2026-09-10; Sirius→Ares #15): the grid's cell is lane × difficulty,
  * and percentiles cannot be pooled from per-work-type cells — only Ares, who
- * holds the samples, can pool them. `laneCells` is what #15 asked for and is
- * OPTIONAL until it ships; a model without it maps to no grid cells at all.
+ * holds the samples, can pool them. `laneCells` is what #15 asked for; live
+ * since Ares #05 (2026-09-10), still OPTIONAL in the reader — a model without
+ * it maps to no grid cells at all. Ares's `laneKeys` field is stripped, not
+ * read: the lane vocabulary Sirius honours is `lib/model`'s union.
  */
 export interface AresCycleTimeLaneCell {
   laneKey: string;
@@ -149,26 +151,34 @@ export interface AresBoardLane {
 
 const difficultySchema = z.enum(['Easy', 'Medium', 'Hard']);
 const cellSourceSchema = z.enum(['project', 'firm']);
+/**
+ * A sample count or a duration below zero cannot be a working-day figure;
+ * the boundary rejects it (fail-closed, the `referenceWeeks` style) rather
+ * than letting the gate — which checks tier ordering, not sign — write it
+ * (review A2-5). Within-cell p70 ≤ p85 ≤ p95 is the gate's to consider.
+ */
+const count = z.number().nonnegative();
+const workingDays = z.number().nonnegative();
 const cycleTimeCellSchema = z.object({
   workType: z.string(),
   difficulty: difficultySchema,
   source: cellSourceSchema,
-  n: z.number(),
-  meanWorkingDays: z.number(),
-  p70: z.number(),
-  p85: z.number(),
-  p95: z.number(),
-  meanCalendarHours: z.number(),
+  n: count,
+  meanWorkingDays: workingDays,
+  p70: workingDays,
+  p85: workingDays,
+  p95: workingDays,
+  meanCalendarHours: z.number().nonnegative(),
 });
 const laneCellSchema = z.object({
   laneKey: z.string(),
   difficulty: difficultySchema,
   source: cellSourceSchema,
-  n: z.number(),
-  meanWorkingDays: z.number(),
-  p70: z.number(),
-  p85: z.number(),
-  p95: z.number(),
+  n: count,
+  meanWorkingDays: workingDays,
+  p70: workingDays,
+  p85: workingDays,
+  p95: workingDays,
 });
 const sumReasons = (reasons: Record<string, number>) => Object.values(reasons).reduce((a, b) => a + b, 0);
 /**

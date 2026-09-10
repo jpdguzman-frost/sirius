@@ -83,6 +83,18 @@ export interface SyncStats {
    * together, which is why the instant is recorded rather than assumed.
    */
   lanesSyncedAt: Record<string, string | null>;
+  /**
+   * How many lanes the table actually held, by board id — `null` when there
+   * was no table to count (read failed, threw, or 404'd).
+   *
+   * The third value the pair above cannot express (review A4-F6, 2026-09-10).
+   * `unknownLanes: []` beside a stamped `lanesSyncedAt` reads as "we looked at
+   * every lane and each one is ruled" — but an EMPTY table with a perfectly
+   * good `syncedAt` produces the identical row, and it means the opposite:
+   * nothing was checked. `0` here separates them, and the day 86 lanes become
+   * 3 the count is the only thing that says so.
+   */
+  lanesSeen: Record<string, number | null>;
   capacity: Record<string, number | null> | null;
 }
 
@@ -106,31 +118,32 @@ function collectUnmapped(): { see: (name: string | null | undefined) => void; na
 
 /**
  * The board's lane table, or `null` — the lane reconcile check NEVER fails a
- * sync (block 8 item 11). One extra ARES call per board per run, no retry of
- * our own: `AresClient.get` already honours one 429 `retryAfter`, and the
- * pacing of the paged reads around it is unchanged.
+ * sync (block 8 item 11). One extra ARES call per PROJECT per run (see the
+ * call site: boards shared by several projects are read once per project, not
+ * once per board), no retry of our own: `AresClient.get` already honours one
+ * 429 `retryAfter`, and the pacing of the paged reads around it is unchanged.
  *
  * The check is a REPORT about the board, while the sync is the app's whole
  * dataset; letting a report take the dataset down would be a plainly bad
- * trade, and a failed read is not silent — it lands as `lanesSyncedAt: null`
- * plus the warn below. A throw is caught as well as the contract's `null`
- * because "never throws" is a promise made by another module: if it is ever
- * broken, this must degrade to "we did not look", not to a whole project
- * skipping its sync for the day.
+ * trade. A throw is caught as well as the contract's `null` because "never
+ * throws" is a promise made by another module: if it is ever broken, this must
+ * degrade to "we did not look", not to a whole project skipping its sync for
+ * the day.
+ *
+ * ⚠️ **It does not warn — the CALLER does** (review A4-F1, 2026-09-10). The
+ * contract answers `null` for 404, 500, network and Zod drift alike and throws
+ * for none of them, so a warn that lived only in this `catch` covered the one
+ * path the contract forbids and stayed silent on every path it actually
+ * produces. The reason travels back as `error` so the one warn can name it
+ * when there is one; both shapes of failure reach the same line.
  */
-async function readBoardLanes(
-  client: AresClient,
-  boardId: string,
-  code: string,
-): Promise<{ lanes: AresBoardLane[]; syncedAt: string | null } | null> {
+type LaneRead = { table: { lanes: AresBoardLane[]; syncedAt: string | null } | null; error: string | null };
+
+async function readBoardLanes(client: AresClient, boardId: string): Promise<LaneRead> {
   try {
-    return await client.boardLanes(boardId);
+    return { table: await client.boardLanes(boardId), error: null };
   } catch (err) {
-    console.warn(
-      `[syncAres] ${code}: could not read the lane table for board ${boardId} — ` +
-        `no lane check this run (${(err as Error).message}). The card-level list check is unaffected.`,
-    );
-    return null;
+    return { table: null, error: (err as Error).message };
   }
 }
 
@@ -546,9 +559,32 @@ export async function syncProject(
   for (const c of cards) unmapped.see(c.currentList);
 
   /* The lane reconcile check (item 11) — the board's own lane table, read once
-     per board per run, right after its cards. Independent of the cards on
-     purpose: a lane nobody has used yet is exactly the one worth naming. */
-  const laneTable = await readBoardLanes(client, project.trello_board_id, project.code);
+     per PROJECT per run, right after its cards. Independent of the cards on
+     purpose: a lane nobody has used yet is exactly the one worth naming.
+
+     Once per project, NOT once per board (review A4-F4, 2026-09-10): five of
+     the twenty-six projects share a board with another project through
+     `trello_label`, and each of them reads that board's table on its own tick
+     and records its own copy of the answer. Deliberately not memoised — the
+     per-project row is what makes the record answer "was this project's board
+     checked this run", and one extra read of a small table per shared board is
+     a cheaper thing to own than a cache whose lifetime is a tick. */
+  const laneRead = await readBoardLanes(client, project.trello_board_id);
+  const laneTable = laneRead.table;
+  /* ONE line per run when there was no table to check, at warn (review A4-F1).
+     Every failure the contract actually produces — 404, 500, network, Zod
+     drift — arrives here as a plain `null`, so without this line the whole
+     check could stop working and the only trace would be a `null` in a Mixed
+     field that no route and no screen reads. The `unstamped` counter in this
+     same file set the precedent: a silent skip is not acceptable, even a safe
+     one. */
+  if (!laneTable) {
+    console.warn(
+      `[syncAres] ${project.code}: could not read the lane table for board ${project.trello_board_id} — ` +
+        `no lane check this run${laneRead.error ? ` (${laneRead.error})` : ''}. ` +
+        'The card-level list check is unaffected.',
+    );
+  }
   const lanes = collectUnmapped();
   for (const lane of laneTable?.lanes ?? []) lanes.see(lane.name);
   // `null` table and a table ARES has never synced both record `null`: neither
@@ -556,6 +592,11 @@ export async function syncProject(
   // both cases (see `SyncStats.lanesSyncedAt`).
   const lanesSyncedAt: Record<string, string | null> = {
     [project.trello_board_id]: laneTable ? laneTable.syncedAt : null,
+  };
+  // …and how many lanes that table held, which is the only thing that tells an
+  // empty `unknownLanes` apart from an empty TABLE (see `SyncStats.lanesSeen`).
+  const lanesSeen: Record<string, number | null> = {
+    [project.trello_board_id]: laneTable ? laneTable.lanes.length : null,
   };
   const mapped = mapTrello(cards, project.trello_label ?? null);
 
@@ -664,6 +705,7 @@ export async function syncProject(
     unmappedLists,
     unknownLanes,
     lanesSyncedAt,
+    lanesSeen,
     capacity: capacity.typical != null ? (capacity as unknown as Record<string, number | null>) : null,
   };
 }

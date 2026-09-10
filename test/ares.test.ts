@@ -193,6 +193,28 @@ describe('cycleTimeModel (v1, key-gated — null on any failure, T180)', () => {
     expect(MODEL_BODY.dropped.considered).toBe(MODEL_BODY.dropped.sampled + sum);
   });
 
+  it('a negative count or duration is rejected at the boundary — it cannot be a working-day figure (review A2-5)', async () => {
+    const lane = MODEL_BODY.laneCells[0]!;
+    const cell = MODEL_BODY.cells[0]!;
+    const bad = [
+      { laneCells: [{ ...lane, p70: -1 }] }, // the finding's own input: a sane Average, a negative 0.7
+      { laneCells: [{ ...lane, n: -1 }] },
+      { laneCells: [{ ...lane, meanWorkingDays: -0.1 }] },
+      { laneCells: [{ ...lane, p95: -3 }] },
+      { cells: [{ ...cell, p85: -1 }] },
+      { cells: [{ ...cell, n: -5 }] },
+      { cells: [{ ...cell, meanCalendarHours: -1 }] },
+    ];
+    for (const patch of bad) {
+      const { client } = clientWith({ '/api/v1/trello/cycle-time/model': envelope({ ...MODEL_BODY, ...patch }) });
+      expect(await client.cycleTimeModel(837), JSON.stringify(patch)).toBeNull();
+    }
+    // zero is a legitimate figure (an empty pool, a floor-clamped duration) and still parses
+    const zero = { ...MODEL_BODY, laneCells: [{ ...lane, n: 0, meanWorkingDays: 0, p70: 0, p85: 0, p95: 0 }] };
+    const { client } = clientWith({ '/api/v1/trello/cycle-time/model': envelope(zero) });
+    expect((await client.cycleTimeModel(837))?.laneCells?.[0]?.n).toBe(0);
+  });
+
   it('404 (unmapped id) and 500 come back null, never a throw', async () => {
     const notFound = clientWith({});
     const broken = clientWith({

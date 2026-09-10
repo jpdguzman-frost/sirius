@@ -238,6 +238,80 @@ describe('a late row walks forward one working day at a time until its finish re
 });
 
 /* ---------------------------------------------------------------------- */
+/* one finish per card — the rollover reads what the bar reads (review X1)  */
+/* ---------------------------------------------------------------------- */
+
+describe('the rollover classifies a card exactly as the schedule does (T179, review X1)', () => {
+  /**
+   * The header's promise is that the rollover's finish is "the same number the
+   * bar" shows. The bar comes from `loadSprintItems`, which hands `finishOf`
+   * whole work-card documents; the rollover projects the card down to the
+   * fields it reads. Leave `labels` out of that projection and the two run on
+   * DIFFERENT lanes for the same card — the schedule on the work-type label,
+   * the rollover on the list — so a row whose bar has plainly ended is left
+   * where it is (or, mirrored, walked while its bar is still running).
+   *
+   * The card below is the disagreement in its sharpest form: an `Asset: Icons`
+   * label (the ruled fold → design, fast) in a list the verbatim regex reads as
+   * `assets` (slow). Both finishes are EXECUTED, never typed.
+   */
+  const LABELLED = {
+    difficulty: 'Easy',
+    current_list: 'Render Assets',
+    labels: ['Difficulty: Easy', 'Asset: Icons'],
+  };
+  const finishBy = (labels: string[], start: string) => {
+    const f = finishOf({ ...LABELLED, labels }, start, EMPIRICAL);
+    if (!f) throw new Error('the fixture card must carry a difficulty');
+    return f;
+  };
+
+  it('rolls on the LABEL lane’s finish — the one the sprint schedule drew', async () => {
+    const byLabel = finishBy(LABELLED.labels, MONDAY);
+    const byList = finishBy([], MONDAY);
+    // the scenario: the two lanes disagree, and the list's bar is still running
+    expect(byLabel < byList).toBe(true);
+    const today = nextWorkday(byLabel);
+    expect(today <= byList).toBe(true);
+
+    const { result, after, audits } = await lateRow(MONDAY, today, LABELLED);
+
+    expect(result).toEqual(counts({ moved: 1 }));
+    expect(after.starts_on).toBe(nextWorkday(MONDAY));
+    expect(audits).toHaveLength(1);
+    // the rule: the row stopped where the SCHEDULE's engine says it is no longer late
+    expect(finishBy(LABELLED.labels, after.starts_on!) >= today).toBe(true);
+    expect(finishBy(LABELLED.labels, MONDAY) < today).toBe(true);
+  });
+
+  it('and leaves a row alone whose label lane is still running, though its list lane has ended', async () => {
+    /* The mirror image, so the guard cannot pass by rolling everything: a
+       `Design: …` label (the slower cell on Medium) on a card sitting in an
+       ops-named list (the faster one). Whichever way the two disagree, the
+       rollover has to be reading the LABEL. */
+    const SLOW_LABEL = {
+      difficulty: 'Medium',
+      current_list: 'Ops / Process',
+      labels: ['Design: Refinement'],
+    };
+    const engine = (labels: string[], start: string) =>
+      finishOf({ ...SLOW_LABEL, labels }, start, EMPIRICAL)!;
+    expect(classifyList(SLOW_LABEL.current_list)).toBe('ongoing'); // the premise: this row CAN roll
+    const byLabel = engine(SLOW_LABEL.labels, MONDAY);
+    const byList = engine([], MONDAY);
+    expect(byLabel > byList).toBe(true); // the scenario
+
+    const today = nextWorkday(byList); // past the LIST's finish, not past the label's
+    expect(today <= byLabel).toBe(true);
+
+    const { result, after, audits } = await lateRow(MONDAY, today, SLOW_LABEL);
+    expect(result).toEqual(counts());
+    expect(after.starts_on).toBe(MONDAY);
+    expect(audits).toEqual([]);
+  });
+});
+
+/* ---------------------------------------------------------------------- */
 /* what does not roll                                                      */
 /* ---------------------------------------------------------------------- */
 

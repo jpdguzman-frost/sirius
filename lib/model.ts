@@ -103,34 +103,57 @@ export const WORK_TYPE_LANES: Record<string, Lane> = {
   Content: 'content',
 };
 
-/** The board's work-type label shape: `Family: Kind`. */
-const WORK_TYPE_LABEL_RE = /^([^:]+): /;
-/** `Difficulty: Easy` wears the same shape and is never a work type. */
-const DIFFICULTY_FAMILY_RE = /^difficulty$/i;
+/**
+ * The board's work-type label shape, MIRRORED from ARES (review X3/A1-F2):
+ * `ares/src/utils/cycleTimeMath.js` — `WORK_TYPE_PATTERN` and
+ * `DIFFICULTY_PREFIX_PATTERN`, both applied to the TRIMMED label name in
+ * `extractWorkTypeLabels`. `[^:]+` keeps a label with no family out; `\s*\S`
+ * keeps a bare `Design:` out while accepting `Asset:Icons` (no space) and the
+ * tab/multi-space variants the board really carries.
+ *
+ * The shapes must agree with ARES's exactly: a card ARES samples into its
+ * `Asset` cell has to price off OUR asset-family lane, or the two halves of one
+ * model disagree about which cards they are describing. A stricter shape here
+ * put `Asset:Icons` on the 13.88-day assets cell while ARES had it in design.
+ */
+const WORK_TYPE_LABEL_RE = /^[^:]+:\s*\S/;
+/** `Difficulty: Easy` wears the same shape and is the cell's OTHER axis, never a work type. */
+const DIFFICULTY_LABEL_RE = /^Difficulty:/i;
+
+/** Does the label wear the board's `Family: Kind` shape at all? (`Difficulty:` included.) */
+function isFamilyShaped(label: string): boolean {
+  return WORK_TYPE_LABEL_RE.test((label || '').trim());
+}
 
 /**
- * The card's ONE work-type label, or null when it has none or more than one —
- * the same discrimination ARES makes when it samples a card (`noWorkTypeLabel`
- * / `multipleWorkTypeLabels` in its `dropped.reasons`). Ambiguity is reported
- * as "no work type", never resolved by picking a favourite.
+ * The card's ONE work-type label — trimmed, as ARES reports it — or null when
+ * it has none or more than one: the same discrimination ARES makes when it
+ * samples a card (`noWorkTypeLabel` / `multipleWorkTypeLabels` in its
+ * `dropped.reasons`). Ambiguity is reported as "no work type", never resolved
+ * by picking a favourite.
  */
 export function workTypeOf(labels: string[]): string | null {
-  const found = (labels || []).filter((l) => {
-    const m = WORK_TYPE_LABEL_RE.exec(l);
-    return m !== null && !DIFFICULTY_FAMILY_RE.test(m[1]!.trim());
-  });
+  const found = (labels || [])
+    .map((l) => (l || '').trim())
+    .filter((l) => isFamilyShaped(l) && !DIFFICULTY_LABEL_RE.test(l));
   return found.length === 1 ? found[0]! : null;
 }
 
 /**
  * Lane for a work-type key — a full label (`Asset: Icons`) or the bare family
- * (`Asset`). Null means unmapped: a family with no ruled lane (Build, Dev) is
- * counted and surfaced, never folded into `design` by default.
+ * (`Asset`). The family is the text before the FIRST colon, trimmed, as ARES
+ * keys its cells. Null means unmapped: a family with no ruled lane (Build, Dev)
+ * is counted and surfaced, never folded into `design` by default.
+ *
+ * `Object.hasOwn`, not a bare index (review A1-F3): the table is an object
+ * literal, so `constructor: x` used to answer with a Function and `__proto__: x`
+ * with `Object.prototype` — both typed as `Lane`, and the second makes the
+ * Mongoose cast of the stored lane throw and fail the project's sync run.
  */
 export function laneOfWorkType(key: string): Lane | null {
-  const m = WORK_TYPE_LABEL_RE.exec(key);
-  const family = (m ? m[1]! : key).trim();
-  return WORK_TYPE_LANES[family] ?? null;
+  const colon = key.indexOf(':');
+  const family = (colon === -1 ? key : key.slice(0, colon)).trim();
+  return Object.hasOwn(WORK_TYPE_LANES, family) ? (WORK_TYPE_LANES[family] ?? null) : null;
 }
 
 /**
@@ -141,14 +164,25 @@ export function laneOfWorkType(key: string): Lane | null {
  *
  * The regex that follows is the VERBATIM port (source: rp; BR-4 companion) and
  * stays the fallback for the 19% of cards carrying no work-type label at all.
+ *
+ * WHAT THE FALLBACK SEES (review A1-F1/X2, ruled by the main thread
+ * 2026-09-10): the list, plus the card's labels MINUS every `Family: Kind`-
+ * shaped one. When the branch declines — an unmapped family, or two work-type
+ * labels — the decision belongs to the list, which is the pre-T179 behaviour
+ * and JP's fold; letting the declined label's own TEXT through would put
+ * `Dev: Render Pipeline` on the 13.88-day assets cell while its list plainly
+ * reads design. Free-text labels are not the board's shape and still reach the
+ * regex, exactly as they did before the amendment; the regex text is byte-
+ * identical to the port.
  */
 export const laneOf = (card: LaneCard): Lane => {
-  const workType = workTypeOf(card.labels || []);
+  const labels = card.labels || [];
+  const workType = workTypeOf(labels);
   if (workType) {
     const lane = laneOfWorkType(workType);
     if (lane) return lane;
   }
-  const t = `${card.currentList || ''} ${(card.labels || []).join(' ')}`.toLowerCase();
+  const t = `${card.currentList || ''} ${labels.filter((l) => !isFamilyShaped(l)).join(' ')}`.toLowerCase();
   return /asset|illustrat|render|icon/.test(t)
     ? 'assets'
     : /ops|process|board management/.test(t)

@@ -23,7 +23,7 @@ import {
   percentile,
 } from '../src/services/model-refresh.ts';
 import { DEFAULT_GATE, gateCells } from '../src/services/model-gate.ts';
-import { refreshProjectModel, rtProjectIdOf } from '../worker/refreshModel.ts';
+import { refreshProjectModel, rtProjectIdOf, runModelRefresh } from '../worker/refreshModel.ts';
 import { loadProjectModel } from '../src/services/model-grid.ts';
 import { createApp } from '../src/app.ts';
 import { validateEnv } from '../src/config/env.ts';
@@ -114,9 +114,11 @@ const expectedGrid = (model: AresCycleTimeModel, projectId: string) =>
 
 describe('cellsFromAresModel (pure, T181)', () => {
   it('maps every lane cell to the four confidence cells, values copied from the fixture', () => {
-    const { cells, unmapped } = cellsFromAresModel(MODEL, 'p1');
+    const { cells, unmapped, laneSources } = cellsFromAresModel(MODEL, 'p1');
     expect(cells).toHaveLength(MODEL.laneCells!.length * 4);
     expect(unmapped).toEqual({});
+    // every fixture lane cell is the project's own pool
+    expect(laneSources).toEqual(Object.fromEntries(MODEL.laneCells!.map((c) => [c.laneKey, 'project'])));
     for (const lc of MODEL.laneCells!) {
       const mine = cells.filter((c) => c.lane === lc.laneKey && c.difficulty === lc.difficulty);
       expect(mine.map((c) => c.metric)).toEqual(['design', 'design', 'design', 'design']);
@@ -143,16 +145,50 @@ describe('cellsFromAresModel (pure, T181)', () => {
     expect(cells.some((c) => (c.lane as string) === 'ui' || (c.lane as string) === 'others')).toBe(false);
   });
 
-  it('laneCells ABSENT → no cells at all; the per-work-type cells are summarised by prefix (never pooled here)', () => {
-    const { cells, unmapped } = cellsFromAresModel(withLaneCells(undefined), 'p1');
-    expect(cells).toEqual([]);
+  /** The per-work-type cells summarised by prefix — what provenance must say when nothing pooled reached the grid. */
+  const prefixSummary = (m: AresCycleTimeModel) => {
     const byPrefix: Record<string, number> = {};
-    for (const c of MODEL.cells) {
+    for (const c of m.cells) {
       const prefix = c.workType.slice(0, c.workType.indexOf(':'));
       byPrefix[prefix] = (byPrefix[prefix] ?? 0) + 1;
     }
-    expect(Object.values(byPrefix).reduce((a, b) => a + b, 0)).toBe(MODEL.cells.length); // the fixture has ≥1 prefix per cell
-    expect(unmapped).toEqual(byPrefix);
+    expect(Object.values(byPrefix).reduce((a, b) => a + b, 0)).toBe(m.cells.length); // the fixture has ≥1 prefix per cell
+    return byPrefix;
+  };
+
+  it('laneCells ABSENT → no cells at all; the per-work-type cells are summarised by prefix (never pooled here)', () => {
+    const { cells, unmapped, laneSources } = cellsFromAresModel(withLaneCells(undefined), 'p1');
+    expect(cells).toEqual([]);
+    expect(unmapped).toEqual(prefixSummary(MODEL));
+    expect(laneSources).toEqual({});
+  });
+
+  it('laneCells PRESENT BUT EMPTY takes the same summarise branch — an empty pooled table is not "Ares sent nothing" (review A2-3)', () => {
+    const { cells, unmapped } = cellsFromAresModel(withLaneCells([]), 'p1');
+    expect(cells).toEqual([]);
+    expect(MODEL.cells.length, 'the fixture must carry per-work-type cells or the summary is vacuous').toBeGreaterThan(0);
+    expect(unmapped).toEqual(prefixSummary(MODEL));
+  });
+
+  it('a prototype-named laneKey is counted like any other — `unmapped` is data, not an object with methods (review A2-4)', () => {
+    const keys = ['__proto__', 'constructor', 'hasOwnProperty'];
+    const m = withLaneCells(keys.map((k) => laneCell(k, 'Easy', [1, 1, 1, 1], 1)));
+    const { cells, unmapped } = cellsFromAresModel(m, 'p1');
+    expect(cells).toEqual([]);
+    expect(Object.entries(unmapped).sort()).toEqual(keys.map((k) => [k, 1]).sort());
+    expect(Object.values(unmapped).reduce((a, b) => a + b, 0)).toBe(keys.length);
+    for (const v of Object.values(unmapped)) expect(typeof v).toBe('number');
+  });
+
+  it('laneSources: a lane is `project` only when every chosen tier is the project\'s pool; one firm-backed tier marks it `firm` (review A2-1)', () => {
+    const content = laneCell('content', 'Easy', [1, 1, 1, 1], 40, 'firm'); // the live case: content falls back to firm whole
+    const m = withLaneCells([...MODEL.laneCells!, content, laneCell('ops', 'Hard', [2, 2, 2, 2], 40, 'firm')]);
+    const { cells, laneSources } = cellsFromAresModel(m, 'p1');
+    expect(laneSources).toEqual({ design: 'project', ops: 'firm', content: 'firm' });
+    expect(cells.filter((c) => c.lane === 'content')).toHaveLength(4); // firm cells still map — the marker is the point
+    // the project-over-firm pick still wins per tier: a firm duplicate of a project tier leaves the lane `project`
+    const dup = withLaneCells([...MODEL.laneCells!, { ...findLane(MODEL, 'design', 'Medium'), source: 'firm', p70: 9 }]);
+    expect(cellsFromAresModel(dup, 'p1').laneSources.design).toBe('project');
   });
 
   it('a key sent as BOTH project and firm takes the project cell (Ares\'s own override rule) — one value per grid key', () => {
@@ -200,9 +236,9 @@ describe('derivation still in use (pure)', () => {
       { trello_card_id: 'c3', to_list: 'Design Complete', occurred_at: new Date('2026-07-14T10:00:00Z') },
     ];
     const rows = computeThroughput(events, [
-      { trello_card_id: 'c1', difficulty: 'Easy', lane: 'design' },
-      { trello_card_id: 'c2', difficulty: 'Easy', lane: 'design' },
-      { trello_card_id: 'c3', difficulty: 'Easy', lane: 'design' },
+      { trello_card_id: 'c1', difficulty: 'Easy' },
+      { trello_card_id: 'c2', difficulty: 'Easy' },
+      { trello_card_id: 'c3', difficulty: 'Easy' },
     ]);
     expect(rows[0]?.difficulty).toBe('Easy');
     expect(rows[0]?.weeks).toBe(2); // weeks with 2 and 1 completions
@@ -220,11 +256,26 @@ describe('derivation still in use (pure)', () => {
     expect(alerts[0]?.ratio).toBe(1);
   });
 
+  it('gridDelta reports a VANISHED cell — served before, absent after — regardless of threshold; a new cell is not a shift (review A2-2)', () => {
+    const cell = (confidence: '0.7' | '0.85', value: number) => ({
+      difficulty: 'Medium' as const, lane: 'design' as const, metric: 'design' as const, confidence, value, sample_n: 5,
+    });
+    const before = [cell('0.7', 1), cell('0.85', 2)];
+    expect(gridDelta(before, [])).toEqual([
+      { cell: 'Medium|design|design|0.7', before: 1, after: null, ratio: 1 },
+      { cell: 'Medium|design|design|0.85', before: 2, after: null, ratio: 1 },
+    ]);
+    expect(gridDelta(before, [], 5)).toHaveLength(2); // louder than any threshold
+    expect(gridDelta(before, [cell('0.7', 1)])).toEqual([{ cell: 'Medium|design|design|0.85', before: 2, after: null, ratio: 1 }]);
+    expect(gridDelta([], before)).toEqual([]); // first night: nothing to vanish
+  });
+
   it('rtProjectIdOf: the bare integer from `rt-<n>`, null for every other code format', () => {
     expect(rtProjectIdOf('rt-837')).toBe(837);
     expect(rtProjectIdOf('runn-45')).toBeNull();
     expect(rtProjectIdOf('837')).toBeNull();
     expect(rtProjectIdOf('rt-')).toBeNull();
+    expect(rtProjectIdOf('rt-test')).toBeNull(); // staging: throughput only, the Ares half skipped
   });
 });
 
@@ -277,13 +328,19 @@ describe('refresh + loader (integration)', () => {
     const stats = await refreshProjectModel(p._id, deps(MODEL));
     const run = await SyncRun.findOne({ project_id: p._id, source: 'model' }).lean();
     expect(run?.ok).toBe(true);
-    const FROZEN_KEYS = ['alerts', 'cells', 'considered', 'droppedReasons', 'failures', 'generatedAt', 'historyUnverified', 'sampled', 'throughputRows', 'unmappedWorkTypes', 'window', 'workingDayHours'];
+    const FROZEN_KEYS = ['alerts', 'cells', 'considered', 'droppedReasons', 'failures', 'generatedAt', 'historyUnverified', 'laneCellCount', 'laneSources', 'modelSkipped', 'sampled', 'throughputRows', 'unmappedWorkTypes', 'window', 'workingDayHours'];
     expect(Object.keys(stats).sort()).toEqual(FROZEN_KEYS);
-    /* Persisted through a Mixed path, so Mongoose's `minimize` drops an EMPTY
-       object — on a night where every key mapped, `unmappedWorkTypes` is
-       absent from the row, not `{}`. Readers use `?? {}`; the non-empty case
-       is proven persisted in the unknown-laneKey test below. */
-    expect(FROZEN_KEYS.filter((k) => !(k in (run!.stats as object)))).toEqual(['unmappedWorkTypes']);
+    /* The RULE (test/CLAUDE.md rule 1): every frozen key reads back from the
+       row as what the refresh returned, with an empty object tolerated as
+       absence — the row goes through a Mixed path and readers use `?? {}`.
+       Whether Mongoose persists `{}` or drops it is not law (review X10). */
+    const persisted = run!.stats as Record<string, unknown>;
+    for (const k of FROZEN_KEYS) {
+      const value = stats[k as keyof typeof stats];
+      const fromRow = typeof value === 'object' && value !== null && !Array.isArray(value) ? (persisted[k] ?? {}) : persisted[k];
+      expect(fromRow, k).toEqual(value);
+    }
+    expect(persisted.unmappedWorkTypes ?? {}).toEqual({});
     expect(stats).toMatchObject({
       generatedAt: MODEL.generatedAt,
       window: MODEL.window,
@@ -294,8 +351,58 @@ describe('refresh + loader (integration)', () => {
       droppedReasons: MODEL.dropped.reasons,
       unmappedWorkTypes: {},
       failures: [],
+      laneSources: { design: 'project', ops: 'project' },
+      laneCellCount: MODEL.laneCells!.length,
+      modelSkipped: null,
       throughputRows: 1,
     });
+  });
+
+  it('a firm-sourced lane is distinguishable from a measured one — `firm` is recorded in the persisted provenance (review A2-1)', async () => {
+    const p = await seedProject();
+    const m = withLaneCells([...MODEL.laneCells!, laneCell('content', 'Easy', [1, 1, 1, 1], 40, 'firm')]);
+    const stats = await refreshProjectModel(p._id, deps(m));
+    expect(stats.laneSources).toEqual({ design: 'project', ops: 'project', content: 'firm' });
+    const row = await SyncRun.findOne({ project_id: p._id, source: 'model' }).lean();
+    expect(JSON.stringify(row!.stats)).toContain('firm');
+    expect((row!.stats as { laneSources: unknown }).laneSources).toEqual(stats.laneSources);
+    expect(await ModelGrid.countDocuments({ project_id: p._id, lane: 'content' })).toBe(4); // written — only the marker says whose number it is
+  });
+
+  it('an all-fail night empties the grid LOUDLY: every served cell vanishes into alerts (review A2-2)', async () => {
+    const p = await seedProject();
+    const first = await refreshProjectModel(p._id, deps(MODEL));
+    expect(first.alerts).toEqual([]);
+    const served = await ModelGrid.countDocuments({ project_id: p._id });
+    expect(served, 'nothing served — nothing can vanish').toBeGreaterThan(0);
+
+    const tooFew = withLaneCells(MODEL.laneCells!.map((c) => ({ ...c, n: 3 })));
+    const s = await refreshProjectModel(p._id, deps(tooFew));
+    expect(s.cells.passed).toBe(0);
+    expect(await ModelGrid.countDocuments({ project_id: p._id })).toBe(0); // replaced — a failed cell falls back by absence
+    expect(s.alerts).toHaveLength(served);
+    for (const a of s.alerts) expect(a).toMatchObject({ after: null, ratio: 1 });
+    const row = await SyncRun.findOne({ project_id: p._id, source: 'model' }).sort({ at: -1 }).lean();
+    expect((row!.stats as { alerts: unknown[] }).alerts).toHaveLength(served);
+  });
+
+  it('`laneCells: []` is recorded as what Ares sent (laneCellCount 0, prefixes in provenance) and still vanishes the grid loudly (review A2-3 / A2-2)', async () => {
+    const p = await seedProject();
+    await refreshProjectModel(p._id, deps(MODEL));
+    const served = await ModelGrid.countDocuments({ project_id: p._id });
+    expect(served).toBeGreaterThan(0);
+
+    const empty = await refreshProjectModel(p._id, deps(withLaneCells([])));
+    expect(empty.laneCellCount).toBe(0);
+    expect(empty.cells).toEqual({ mapped: 0, unmapped: MODEL.cells.length, passed: 0, failed: 0 });
+    expect(Object.keys(empty.unmappedWorkTypes).sort()).toEqual(['Asset', 'Build', 'Design', 'Ops']);
+    expect(empty.alerts.filter((a) => a.after === null)).toHaveLength(served);
+    const row = await SyncRun.findOne({ project_id: p._id, source: 'model' }).sort({ at: -1 }).lean();
+    expect((row!.stats as { unmappedWorkTypes: unknown }).unmappedWorkTypes).toEqual(empty.unmappedWorkTypes); // persisted, non-empty
+    expect((row!.stats as { laneCellCount: unknown }).laneCellCount).toBe(0);
+    // and the three states are told apart by laneCellCount alone
+    expect((await refreshProjectModel(p._id, deps(withLaneCells(undefined)))).laneCellCount).toBeNull();
+    expect((await refreshProjectModel(p._id, deps(MODEL))).laneCellCount).toBe(MODEL.laneCells!.length);
   });
 
   it('writes NO model_samples — the source is aggregate-only; the collection is kept, not touched', async () => {
@@ -356,13 +463,30 @@ describe('refresh + loader (integration)', () => {
     expect(provenance.source).toContain('from snapshot');
   });
 
-  it('a project code with no numeric RT id is refused before anything is read or written', async () => {
-    const p = await seedProject({ code: 'runn-45' });
+  it('a project code with no numeric RT id skips the Ares half — nothing read, the grid untouched, throughput still refreshed, an ok row (review A2-8 / X4)', async () => {
+    const p = await seedProject({ code: 'rt-test' });
     await ModelGrid.create({ project_id: p._id, difficulty: 'Easy', lane: 'design', metric: 'design', confidence: '0.7', value: 1, sample_n: 20 });
+    await ThroughputGrid.create({ project_id: p._id, difficulty: 'Easy', p25: 9, p50: 9, p70: 9 }); // stale: the fixture completes one Medium card, no Easy
     const { ares, asked } = aresWith(MODEL);
-    await expect(refreshProjectModel(p._id, { ares })).rejects.toThrow(/no numeric RT project id/);
+    const stats = await refreshProjectModel(p._id, { ares });
     expect(asked).toEqual([]);
+    expect(stats.modelSkipped).toBe('non-rt-code');
+    expect(stats).toMatchObject({ generatedAt: null, window: null, laneCellCount: null, cells: { mapped: 0, unmapped: 0, passed: 0, failed: 0 }, alerts: [], throughputRows: 1 });
     expect(await ModelGrid.countDocuments({ project_id: p._id })).toBe(1); // last good grid kept
+    expect((await ThroughputGrid.find({ project_id: p._id }).lean()).map((r) => r.difficulty)).toEqual(['Medium']); // recomputed from local completions
+    const run = await SyncRun.findOne({ project_id: p._id, source: 'model' }).lean();
+    expect(run?.ok).toBe(true);
+    expect((run!.stats as { modelSkipped: unknown }).modelSkipped).toBe('non-rt-code');
+  });
+
+  it('the nightly runner gives `rt-test` an ok row, not an error row — no client is built for a project with no model to read', async () => {
+    const p = await seedProject({ code: 'rt-test' });
+    await runModelRefresh(); // no injected client: an Ares call here would reach for env it does not have
+    const runs = await SyncRun.find({ project_id: p._id, source: 'model' }).lean();
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ ok: true });
+    expect(runs[0]!.error).toBeUndefined();
+    expect(await ThroughputGrid.countDocuments({ project_id: p._id })).toBe(1);
   });
 
   it('a model Ares cannot serve keeps last night\'s grid (FR-8.5) and surfaces as the thrown error the runner records', async () => {

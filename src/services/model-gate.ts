@@ -15,6 +15,12 @@
  *  - 'min_n'      — sample_n below opts.minN.
  *  - 'window'     — the model window spans fewer than opts.minWindowDays
  *                   calendar days (or is unparseable): every cell fails.
+ *                   NOTE (review A3-4/X5, 2026-09-10): Ares's `window` is the
+ *                   REQUEST window — 12 months by default, and Sirius never
+ *                   passes dates — not the span of the samples behind a cell.
+ *                   So on a live read this rule only catches a malformed or
+ *                   short window; T182's "samples actually span the window"
+ *                   waits on an Ares field (per-cell span; owl ask, not code).
  *  - 'unverified' — historyUnverified / dropped.sampled ≥ opts.unverifiedRatioFail
  *                   (Ares: "treat the model as provisional"): every cell fails.
  */
@@ -26,7 +32,7 @@ import type { Difficulty } from '../../lib/model.ts';
 export interface GateOptions {
   minN: number;
   minWindowDays: number;
-  unverifiedRatioFail: number; // 1.0 = fail only when every sample is unverified
+  unverifiedRatioFail: number; // share of sampled history that is unverified at which every cell fails
 }
 
 export type GateReason = 'ordering' | 'min_n' | 'window' | 'unverified';
@@ -39,12 +45,15 @@ export interface GateFailure {
 /** The slice of the Ares envelope the gate reads (PLAN.md frozen interface). */
 export type GateModel = Pick<AresCycleTimeModel, 'window' | 'historyUnverified' | 'dropped'>;
 
-export const DEFAULT_GATE: GateOptions = { minN: 15, minWindowDays: 60, unverifiedRatioFail: 1.0 };
+// unverifiedRatioFail 0.5 (review A3-1, 2026-09-10): at 1.0 the live rt-837 read — 8337 of
+// 8376 samples unverified — cleared the gate and the design lane would have been written.
+export const DEFAULT_GATE: GateOptions = { minN: 15, minWindowDays: 60, unverifiedRatioFail: 0.5 };
 
 const DAY_MS = 864e5;
 const TIERS: Difficulty[] = ['Easy', 'Medium', 'Hard'];
 const ORDERED_KEYS = ['0.85', 'Average'] as const;
 
+/** Calendar days of the envelope's (request) window — see the 'window' note above. */
 function windowDays(model: GateModel): number {
   return (Date.parse(model.window.to) - Date.parse(model.window.from)) / DAY_MS;
 }

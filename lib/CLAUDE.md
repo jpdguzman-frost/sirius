@@ -31,22 +31,23 @@ bundle, minified identifiers kept, DO NOT EDIT.
   shipped EMPIRICAL snapshot; the phase-6 refresh replaces the snapshot per
   project, the lookup semantics stay identical.
 
-  **AMENDED 2026-09-10 (JP, block-8 Q3)** — three additive changes, and
-  nothing else in the file moves:
-  1. `Lane` gains `content`. `designCell`'s fallback chain is untouched, so a
-     `content` card with no `content` cell still answers from `design`.
-  2. `WORK_TYPE_LANES` — the ruled fold from the board's work-type label
-     FAMILY (`Asset`, `Ops`, `Content`, …) onto a lane. It lives here because
-     `laneOf` needs it and lib never imports src; `src/services/work-type.ts`
-     re-exports it, with `workTypeOf` and `laneOfWorkType`, for server code.
-     Growing the table is a product ruling, not a code change.
-  3. `laneOf` gains a label-family branch AHEAD of the list/title regex. The
-     regex text is UNCHANGED and remains the fallback for cards with no
-     work-type label.
+  **AMENDED 2026-09-10 (JP, block-8 Q3)** — FIVE additive edits; nothing else
+  moves:
+  1. `Lane` gains `content`; `designCell`'s fallback chain is untouched, so a
+     `content` card with no cell of its own prices off `design`.
+  2. `WORK_TYPE_LANES` — the board's label FAMILY folded onto a lane; growing
+     it is a product ruling.
+  3. `workTypeOf(labels)` — the ONE work-type label, else null; ARES's
+     `extractWorkTypeLabels` shape exactly (X3).
+  4. `laneOfWorkType(key)` — family → lane via `Object.hasOwn` (A1-F3);
+     unmapped (Build, Dev) is null, never `design`.
+  5. `laneOf` gains a label-family branch AHEAD of the list/title regex, whose
+     TEXT is unchanged but is FED the list plus non-family-shaped labels only
+     (A1-F1/X2): a declined work type falls to the list.
 
-  Golden parity is unaffected and stays the proof: `test/forecast.test.ts`
-  drives `laneOf`/`designCell` against the oracle with `labels: []`, where the
-  new branch cannot fire.
+  2–5 live here (lib never imports src); `src/services/work-type.ts` re-exports
+  them. Golden parity is unaffected — `test/forecast.test.ts` drives it against
+  the oracle with `labels: []`, where the branch cannot fire.
 - `sheets.ts` (read-only Sheets source) and `trello.ts` (THE write path,
   exactly registry entries W1/W2/W3) are governed by invariants 2 and 8 and
   `specs/001-sirius-v1/contracts/trello-write.md` — pointer only.

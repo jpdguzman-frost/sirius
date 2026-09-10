@@ -40,6 +40,11 @@ const stubClient = (cards: AresCard[]): AresClient =>
     boardCards: async () => cards,
     boardMovements: async () => [],
     referenceWeeks: async () => ({ least: null, typical: null, most: null, effectiveWeeklyRate: null }),
+    // block 8: syncProject reads the board's lane table too. An EMPTY table,
+    // not `null` — `null` is the contract's "the read failed", which
+    // syncProject reports at warn, and this suite must not print a failure it
+    // is not testing (`test/sync-unmapped-lists.test.ts` owns both shapes).
+    boardLanes: async () => ({ lanes: [], syncedAt: null }),
   }) as unknown as AresClient;
 
 async function makeProject() {
@@ -382,6 +387,7 @@ describe('stale reconcile cannot revert a registry write (owl #50)', () => {
       },
       boardMovements: async () => [],
       referenceWeeks: async () => ({ least: null, typical: null, most: null, effectiveWeeklyRate: null }),
+      boardLanes: async () => ({ lanes: [], syncedAt: null }), // block 8, see stubClient
     } as unknown as AresClient;
     await syncProject(racing, project);
 
@@ -396,6 +402,7 @@ describe('stale reconcile cannot revert a registry write (owl #50)', () => {
       })],
       boardMovements: async () => [],
       referenceWeeks: async () => ({ least: null, typical: null, most: null, effectiveWeeklyRate: null }),
+      boardLanes: async () => ({ lanes: [], syncedAt: null }), // block 8, see stubClient
     } as unknown as AresClient;
     await syncProject(fresh, project);
     expect((await Deliverable.findOne({ project_id: project._id, trello_card_id: 'c1' }))?.difficulty).toBe('Easy');

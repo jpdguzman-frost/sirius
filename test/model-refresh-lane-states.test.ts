@@ -11,10 +11,12 @@
  * DESIGN CELLS (block 8): lists no longer feed them at all. The worker READS
  * Ares's model and maps `laneCells` 1:1 (`cellsFromAresModel`); nothing on our
  * side classifies a list into a cell, so the excluded-dwell regression has no
- * path back UNLESS the worker imports the dwell derivation again. The first
- * block pins exactly that — put `deriveSamples` or `computeModelGrid` back
- * in `worker/refreshModel.ts`'s import and it fails — and that the mapper
- * takes no list input and yields no review cell.
+ * path back UNLESS the dwell derivation comes back. It was DELETED in the
+ * 2026-09-10 review-fix round (X7), so the first block pins its absence at
+ * the module surface — export `deriveSamples` or `computeModelGrid` from
+ * `model-refresh.ts` again, or put the review-list regex back, and it fails —
+ * plus that the worker imports the mapper, and that the mapper takes no list
+ * input and yields no review cell.
  *
  * THROUGHPUT is still derived locally, so the completion half is unchanged:
  * `computeThroughput` counts `=== 'done'` and nothing else. What it pins is
@@ -26,6 +28,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import * as modelRefresh from '../src/services/model-refresh.ts';
 import { cellsFromAresModel, computeThroughput } from '../src/services/model-refresh.ts';
 import { classifyList } from '../src/services/status-rules.ts';
 import type { AresCycleTimeModel } from '../src/services/ares.ts';
@@ -52,12 +55,20 @@ describe('design cells no longer come from list dwell (block 8)', () => {
     expect(classifyList('Working on Design')).toBe('ongoing');
   });
 
-  it('the worker imports neither deriveSamples nor computeModelGrid — the dwell path is not wired', () => {
+  it('the dwell derivation is gone: model-refresh exports no deriveSamples/computeModelGrid and carries no review-list regex (X7)', () => {
+    expect(modelRefresh).not.toHaveProperty('deriveSamples');
+    expect(modelRefresh).not.toHaveProperty('computeModelGrid');
+    // rule 3: raw text, comments included — the classifier text must not survive even as prose
+    const src = fs.readFileSync(path.join(HERE, '../src/services/model-refresh.ts'), 'utf8');
+    expect(src).not.toMatch(/sent for client review/i);
+    expect(typeof modelRefresh.percentile, 'percentile stays — computeThroughput uses it').toBe('function');
+  });
+
+  it('the worker imports the mapper from model-refresh — the Ares-read path is what is wired', () => {
     const src = fs.readFileSync(path.join(HERE, '../worker/refreshModel.ts'), 'utf8');
     const imported = /import\s*\{([^}]*)\}\s*from\s*'\.\.\/src\/services\/model-refresh\.ts'/.exec(src)?.[1] ?? '';
-    expect(imported, 'the worker must import the mapper from model-refresh').toContain('cellsFromAresModel');
-    expect(imported).not.toMatch(/\bderiveSamples\b/);
-    expect(imported).not.toMatch(/\bcomputeModelGrid\b/);
+    expect(imported).toContain('cellsFromAresModel');
+    expect(imported).not.toMatch(/\bderiveSamples\b|\bcomputeModelGrid\b/);
   });
 
   it('the mapper yields exactly the lane cells Ares pooled — one cell per lane × difficulty × confidence, no review row', () => {
@@ -74,7 +85,7 @@ describe('an excluded list is not a completion', () => {
     expect(classifyList('Ops Work Complete')).toBe('excluded');
     const rows = computeThroughput(
       [{ trello_card_id: 'c1', to_list: 'Ops Work Complete', occurred_at: new Date('2026-07-06T10:00:00Z') }],
-      [{ trello_card_id: 'c1', difficulty: 'Easy', lane: 'design' }],
+      [{ trello_card_id: 'c1', difficulty: 'Easy' }],
     );
     expect(rows).toEqual([]);
   });
@@ -82,7 +93,7 @@ describe('an excluded list is not a completion', () => {
   it('a real Done list still counts — the same fixture, one name apart', () => {
     const rows = computeThroughput(
       [{ trello_card_id: 'c1', to_list: 'Design Complete', occurred_at: new Date('2026-07-06T10:00:00Z') }],
-      [{ trello_card_id: 'c1', difficulty: 'Easy', lane: 'design' }],
+      [{ trello_card_id: 'c1', difficulty: 'Easy' }],
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.weeks).toBe(1);
@@ -92,7 +103,7 @@ describe('an excluded list is not a completion', () => {
     for (const list of ['Passed QA', '➜ Development: Pushed to Production', '➜ Development: Released']) {
       const rows = computeThroughput(
         [{ trello_card_id: 'c1', to_list: list, occurred_at: new Date('2026-07-06T10:00:00Z') }],
-        [{ trello_card_id: 'c1', difficulty: 'Easy', lane: 'design' }],
+        [{ trello_card_id: 'c1', difficulty: 'Easy' }],
       );
       expect(rows, list).toHaveLength(1);
     }

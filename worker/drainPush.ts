@@ -102,6 +102,10 @@ export async function drainPushEvents(env: Env, clientOverride?: AresClient): Pr
 
     try {
       const outcomes: Record<string, number> = {};
+      /* The full sync's §7a provenance, carried onto this row when the resync
+         branch runs (review A4-F5, 2026-09-10). Separate from `outcomes`
+         because these are arrays and maps, not counters. */
+      let provenance: Record<string, unknown> = {};
       if (resync) {
         // The full sync's own stats are the only place the unstamped count
         // exists on this branch — discarding them meant a resync-triggered
@@ -112,6 +116,19 @@ export async function drainPushEvents(env: Env, clientOverride?: AresClient): Pr
         const full = await syncProject(client, project);
         outcomes.resync = 1;
         if (full.unstamped > 0) outcomes.unstamped = full.unstamped;
+        /* Same reasoning as the `unstamped` count above, on the other half of
+           the sync's report: this branch runs a FULL sync — it reads the whole
+           board and the board's lane table, warns about both — and then threw
+           the answers away, so an `ares_push` row said `resync: 1` and nothing
+           about the names §7a does not recognise. A reader could take that for
+           "checked, clean". The keys are the full sync's own, verbatim, so the
+           two row shapes stay comparable. */
+        provenance = {
+          unmappedLists: full.unmappedLists,
+          unknownLanes: full.unknownLanes,
+          lanesSyncedAt: full.lanesSyncedAt,
+          lanesSeen: full.lanesSeen,
+        };
       } else {
         for (const cardId of cardIds) {
           const outcome = await reconcileCard(client, project, cardId);
@@ -145,7 +162,7 @@ export async function drainPushEvents(env: Env, clientOverride?: AresClient): Pr
         project_id: project._id,
         source: 'ares_push',
         ok: true,
-        stats: { events: pending.length, cards: cardIds.length, ...outcomes },
+        stats: { events: pending.length, cards: cardIds.length, ...outcomes, ...provenance },
       });
     } catch (err) {
       const message = (err as Error).message;

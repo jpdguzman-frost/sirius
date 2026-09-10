@@ -332,7 +332,12 @@ async function rollRows(projectId: Types.ObjectId, today: string, counts: Rollov
   const [{ model }, cards, sprints] = await Promise.all([
     loadProjectModel(projectId, { provenance: false }),
     WorkCard.find({ project_id: projectId, active: true, trello_card_id: { $in: ids } })
-      .select({ trello_card_id: 1, difficulty: 1, current_list: 1, task_prefix: 1 })
+      /* `labels` is part of the finish, not decoration (T179, review X1): since
+         the mapper started storing them, `finishOf` classifies the card on its
+         WORK-TYPE label and falls back to the list. Project them away and this
+         pass runs on a different lane from the bar the schedule drew for the
+         same card — the header's promise, broken by an omission. */
+      .select({ trello_card_id: 1, difficulty: 1, current_list: 1, task_prefix: 1, labels: 1 })
       .lean(),
     Sprint.find({ project_id: projectId }).select({ starts_on: 1, ends_on: 1 }).lean(),
   ]);

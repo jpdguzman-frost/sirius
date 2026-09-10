@@ -126,8 +126,10 @@ export interface SprintItemsResult {
  * first (`Asset: Icons` → the ruled lane for the `Asset` family) and falls back
  * to the list regex below for a card carrying none, so a labelled task card is
  * classified on a fact about the WORK rather than on where the card happens to
- * sit. The list stays the fallback, unchanged, and the residual noted below
- * still applies to the cards that use it.
+ * sit. The list stays the fallback — the regex's own text is the verbatim port,
+ * and what it is FED is the list plus the card's non-`Family: Kind` labels
+ * (review A1-F1/X2), so a work type the fold declines never decides its own
+ * lane — and the residual noted below still applies to the cards that use it.
  *
  * `task_prefix` is STILL not fed in, and the reason is unchanged: it is a
  * naming habit, not a label. The empty array below was the fix for it —

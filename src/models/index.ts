@@ -155,7 +155,7 @@ const deliverableSchema = new Schema(
     name: { type: String, required: true },
     current_list: String,
     difficulty: { type: String, enum: ['Easy', 'Medium', 'Hard'] },
-    lane: String, // design | ops | assets
+    lane: String, // lib/model Lane: design | ops | assets | content
     blocker: String, // from 🛑 labels
     figma_url: String,
     labels: { type: [String], required: true, default: [] },

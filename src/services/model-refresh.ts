@@ -1,46 +1,26 @@
 /**
- * Model refresh derivation (T040/T041) — BR-2: the forecast is empirical,
- * rebuilt from measured movement data; BR-4: design time keyed on
+ * Model refresh derivation (T040/T041; block 8 T181) — BR-2: the forecast is
+ * empirical, rebuilt from measured movement data; BR-4: design time keyed on
  * difficulty AND lane. Pure functions; the worker orchestrates.
  *
- * BLOCK 8 (T181, JP "read Ares" 2026-09-09): the DESIGN cells no longer come
- * from `card_events` dwell — `cellsFromAresModel` maps Ares's cycle-time
- * model into the same `GridCell` shape and the worker writes those (after the
- * gate). `deriveSamples`/`computeModelGrid` stay in place, unused by the
- * worker, until the simplification pass rules on them; `computeThroughput`
- * and `gridDelta` are unchanged and still live.
+ * BLOCK 8 (T181, JP "read Ares" 2026-09-09): the DESIGN cells are READ from
+ * Ares's cycle-time model — `cellsFromAresModel` maps its lane-pooled cells
+ * into the `GridCell` shape and the worker writes those (after the gate).
+ * The list-dwell derivation that used to build them here (`deriveSamples`,
+ * `computeModelGrid`, the review-list regex) was DELETED in the 2026-09-10
+ * review-fix round (X7): nothing on our side classifies a list into a design
+ * cell any more, and `test/model-refresh-lane-states.test.ts` pins that it
+ * does not come back. Its method is recorded in the 2026-09-08 state log.
  *
- * Method of the retired dwell derivation (kept for the record):
- *  - a card's dwell intervals come from its ordered card_events: it enters
- *    `to_list` at occurred_at and leaves at the next event; open intervals
- *    (still in the list) are excluded — completed dwell only;
- *  - review time = dwell in lists matching /sent for client review/i,
- *    pooled GLOBALLY (the Appendix review row is one pool — the client is
- *    the client regardless of lane);
- *  - design time = dwell in lists classified `ongoing` by BR-10 that are not
- *    review lists, keyed by the LANE OF THE LIST DWELLED IN
- *    (BR-2 "working-lane dwell" — not the card's current list);
- *  - dwell in an EXCLUDED list is not measured at all (§7a, 2026-09-08): ops
- *    work and discarded work are real time on a real board, but they are not
- *    the work this model forecasts, and feeding them in would move every
- *    percentile the PM reads. This is a REAL change of input, not a
- *    rearrangement — under the retired keyword classifier `Working on Ops
- *    Work` counted as design time and `Ops Work Complete` counted as a
- *    completion. The model must be refreshed after this ships;
- *  - dwell is fractional days (§1.4 — coarser data would break comparability);
- *  - percentiles: Average = mean; 0.7/0.85/0.95 by linear interpolation on
- *    the sorted sample;
- *  - throughput = cards completed per ISO week (entered a `done`-classified
- *    list), percentiled p25/p50/p70 across weeks with activity.
+ * Still derived locally, unchanged: throughput = cards completed per ISO
+ * week (entered a `done`-classified list), percentiled p25/p50/p70 across
+ * weeks with activity — `computeThroughput`; and the overnight delta check
+ * `gridDelta` (§5.4 step 5).
  */
 
 import { classifyList } from './status-rules.ts';
-import { laneOf } from '../../lib/model.ts';
 import type { ConfidenceKey, Difficulty, Lane } from '../../lib/model.ts';
 import type { AresCycleTimeLaneCell, AresCycleTimeModel } from './ares.ts';
-
-const REVIEW_RE = /sent for client review/i;
-const DAY_MS = 864e5;
 
 export interface EventLike {
   trello_card_id: string;
@@ -48,59 +28,10 @@ export interface EventLike {
   occurred_at: Date;
 }
 
+/** What throughput needs of a card: its id and its difficulty label. */
 export interface CardMeta {
   trello_card_id: string;
   difficulty?: Difficulty | null;
-  lane?: Lane | null;
-}
-
-export interface Sample {
-  trello_card_id: string;
-  difficulty: Difficulty;
-  lane: Lane;
-  metric: 'design' | 'review';
-  days: number;
-  completed_at: Date;
-}
-
-/** Dwell samples from a card's ordered events + its difficulty/lane. */
-export function deriveSamples(events: EventLike[], cards: CardMeta[]): Sample[] {
-  const meta = new Map(cards.map((c) => [c.trello_card_id, c]));
-  const byCard = new Map<string, EventLike[]>();
-  for (const e of events) {
-    if (!byCard.has(e.trello_card_id)) byCard.set(e.trello_card_id, []);
-    byCard.get(e.trello_card_id)!.push(e);
-  }
-
-  const samples: Sample[] = [];
-  for (const [cardId, list] of byCard) {
-    const m = meta.get(cardId);
-    if (!m?.difficulty) continue; // difficulty is required for the key (BR-4)
-    const ordered = [...list].sort((a, b) => a.occurred_at.getTime() - b.occurred_at.getTime());
-    for (let i = 0; i < ordered.length - 1; i++) {
-      const cur = ordered[i]!;
-      const next = ordered[i + 1]!;
-      const listName = cur.to_list ?? '';
-      const days = (next.occurred_at.getTime() - cur.occurred_at.getTime()) / DAY_MS;
-      if (days <= 0) continue;
-      if (REVIEW_RE.test(listName)) {
-        samples.push({ trello_card_id: cardId, difficulty: m.difficulty, lane: 'design', metric: 'review', days, completed_at: next.occurred_at });
-        /* `=== 'ongoing'` and nothing else, which is what keeps EXCLUDED dwell
-           out: ops work and discarded work are real hours on a real board, but
-           they are not the work this model forecasts. No separate excluded
-           branch — one was written and removed the same day (2026-09-08)
-           because no input could reach it: the only way an excluded list could
-           escape this test is by ALSO matching the review regex above, and
-           none of the eight is named anything like a client review. A guard
-           that cannot fail is worse than none, and the mapping itself is what
-           test/model-refresh-lane-states.test.ts pins. */
-      } else if (classifyList(listName) === 'ongoing') {
-        const lane = laneOf({ currentList: listName, labels: [] }); // the list dwelled in
-        samples.push({ trello_card_id: cardId, difficulty: m.difficulty, lane, metric: 'design', days, completed_at: next.occurred_at });
-      }
-    }
-  }
-  return samples;
 }
 
 /** Linear-interpolation percentile on an unsorted sample. */
@@ -123,49 +54,11 @@ export interface GridCell {
   sample_n: number;
 }
 
-const CONFIDENCES: Array<{ key: ConfidenceKey; p: number | 'mean' }> = [
-  { key: 'Average', p: 'mean' },
-  { key: '0.7', p: 0.7 },
-  { key: '0.85', p: 0.85 },
-  { key: '0.95', p: 0.95 },
-];
-
-/** Group samples by difficulty × lane × metric and percentile each cell (BR-2/BR-4). */
-export function computeModelGrid(samples: Sample[]): GridCell[] {
-  const groups = new Map<string, { difficulty: string; lane: string; metric: 'design' | 'review'; days: number[] }>();
-  for (const s of samples) {
-    // review dwell is a property of the client, not the lane or difficulty:
-    // one global pool, stored as all/all (the Appendix review row).
-    const key = s.metric === 'review' ? 'all|all|review' : `${s.difficulty}|${s.lane}|design`;
-    if (!groups.has(key)) {
-      const [d, l] = key.split('|');
-      groups.set(key, { difficulty: d!, lane: l!, metric: s.metric, days: [] });
-    }
-    groups.get(key)!.days.push(s.days);
-  }
-  const cells: GridCell[] = [];
-  for (const g of groups.values()) {
-    for (const c of CONFIDENCES) {
-      const value =
-        c.p === 'mean' ? g.days.reduce((a, b) => a + b, 0) / g.days.length : percentile(g.days, c.p);
-      cells.push({
-        difficulty: g.difficulty as GridCell['difficulty'],
-        lane: g.lane as GridCell['lane'],
-        metric: g.metric,
-        confidence: c.key,
-        value: Number(value.toFixed(2)),
-        sample_n: g.days.length,
-      });
-    }
-  }
-  return cells;
-}
-
 /**
  * The grid's lane axis, as a runtime set. `satisfies Record<Lane, true>` ties
  * it to lib/model's union both ways at compile time: a lane added there
  * without a key here, or a key here the union lacks, fails `tsc`. Ares's
- * `laneKey` vocabulary is wider (ui / others / motion on 837) — those are
+ * `laneKey` vocabulary is wider (dev / working-on-design on 837) — those are
  * counted, never guessed into a lane (§7a's rule, on this axis).
  */
 const LANE_KEYS = { design: true, ops: true, assets: true, content: true } satisfies Record<Lane, true>;
@@ -173,6 +66,21 @@ const isLane = (key: string): key is Lane => Object.hasOwn(LANE_KEYS, key);
 
 /** `Design: Refinement` → `Design`; a key with no colon is its own prefix. */
 const workTypePrefix = (key: string): string => key.split(':')[0]!.trim();
+
+export type CellSource = AresCycleTimeLaneCell['source'];
+
+export interface MappedCells {
+  cells: GridCell[];
+  /** Ares keys that reached no lane → how many source cells each carried. */
+  unmapped: Record<string, number>;
+  /**
+   * Per mapped lane, where its numbers came from: `project` only when every
+   * chosen tier of the lane is the project's own pool; one firm-backed tier
+   * marks the whole lane `firm`, so a firm-wide number written under a
+   * project is never mistaken for a measured one (review A2-1).
+   */
+  laneSources: Record<string, CellSource>;
+}
 
 /**
  * T181 — Ares cells → GridCells (Q2-A, JP 2026-09-10).
@@ -184,11 +92,13 @@ const workTypePrefix = (key: string): string => key.split(':')[0]!.trim();
  * = `n`. Values are copied, not converted: Ares already reports working days
  * (test/model.test.ts checks the magnitude against the snapshot).
  *
- * When `laneCells` is absent (#15 not shipped yet) there are NO cells:
- * percentiles cannot be pooled from per-work-type cells, only from samples,
- * so pooling on our side would be invention. The per-work-type cells are
- * then summarised into `unmapped` by prefix (`Design`, `Asset`, …) so the
- * provenance says what Ares sent and that none of it reached the grid.
+ * When `laneCells` is absent OR EMPTY there are NO cells: percentiles cannot
+ * be pooled from per-work-type cells, only from samples, so pooling on our
+ * side would be invention. The per-work-type cells are then summarised into
+ * `unmapped` by prefix (`Design`, `Asset`, …) so the provenance says what
+ * Ares sent and that none of it reached the grid (review A2-3: an empty
+ * pooled table is not "Ares sent nothing" — the worker also records
+ * `laneCellCount`).
  *
  * No review cells, ever: the client-review wait is a queue, not a cell (JP
  * via Ares; build-spec §7.1) — the loader keeps serving the snapshot's.
@@ -197,22 +107,22 @@ const workTypePrefix = (key: string): string => key.split(':')[0]!.trim();
  * project cell — Ares's own override rule — so the upsert never sees two
  * values for one grid key.
  *
+ * `unmapped` is prototype-free: Ares's keys are data, and a key named
+ * `constructor` or `__proto__` must count like any other (review A2-4).
+ *
  * `projectId` is the frozen signature's; the GridCell carries no project_id
  * (the worker scopes the write, as it always has), so it is unused here.
  */
-export function cellsFromAresModel(
-  model: AresCycleTimeModel,
-  projectId: string,
-): { cells: GridCell[]; unmapped: Record<string, number> } {
+export function cellsFromAresModel(model: AresCycleTimeModel, projectId: string): MappedCells {
   void projectId; // frozen signature; the worker scopes the write
-  const unmapped: Record<string, number> = {};
+  const unmapped = Object.create(null) as Record<string, number>;
   const count = (key: string) => {
     unmapped[key] = (unmapped[key] ?? 0) + 1;
   };
 
-  if (!model.laneCells) {
+  if (!model.laneCells?.length) {
     for (const c of model.cells) count(workTypePrefix(c.workType));
-    return { cells: [], unmapped };
+    return { cells: [], unmapped, laneSources: {} };
   }
 
   const chosen = new Map<string, AresCycleTimeLaneCell>();
@@ -227,8 +137,10 @@ export function cellsFromAresModel(
   }
 
   const cells: GridCell[] = [];
+  const laneSources: Record<string, CellSource> = {};
   for (const lc of chosen.values()) {
     const lane = lc.laneKey as Lane;
+    if (lc.source === 'firm' || laneSources[lane] === undefined) laneSources[lane] = lc.source;
     const values: Array<[ConfidenceKey, number]> = [
       ['Average', lc.meanWorkingDays],
       ['0.7', lc.p70],
@@ -239,7 +151,7 @@ export function cellsFromAresModel(
       cells.push({ difficulty: lc.difficulty, lane, metric: 'design', confidence, value, sample_n: lc.n });
     }
   }
-  return { cells, unmapped };
+  return { cells, unmapped, laneSources };
 }
 
 export interface ThroughputRow {
@@ -293,20 +205,34 @@ export function computeThroughput(events: EventLike[], cards: CardMeta[]): Throu
 export interface GridDelta {
   cell: string;
   before: number;
-  after: number;
+  /** null = the cell was served last night and is absent tonight (vanished). */
+  after: number | null;
   ratio: number;
 }
 
-/** §5.4 step 5 — a grid that shifts sharply overnight means the input changed. */
+/**
+ * §5.4 step 5 — a grid that shifts sharply overnight means the input changed.
+ * A cell present before and ABSENT after is reported too (`after: null`,
+ * ratio 1), regardless of threshold: a night on which every cell fails the
+ * gate empties the grid, and that must be as loud as a doubled number
+ * (review A2-2). New cells (absent before) are not a shift and are not
+ * reported.
+ */
 export function gridDelta(before: GridCell[], after: GridCell[], threshold = 0.3): GridDelta[] {
   const key = (c: GridCell) => `${c.difficulty}|${c.lane}|${c.metric}|${c.confidence}`;
   const prev = new Map(before.map((c) => [key(c), c.value]));
+  const seen = new Set<string>();
   const alerts: GridDelta[] = [];
   for (const c of after) {
-    const b = prev.get(key(c));
+    const k = key(c);
+    seen.add(k);
+    const b = prev.get(k);
     if (b === undefined || b === 0) continue;
     const ratio = Math.abs(c.value - b) / b;
-    if (ratio > threshold) alerts.push({ cell: key(c), before: b, after: c.value, ratio: Number(ratio.toFixed(2)) });
+    if (ratio > threshold) alerts.push({ cell: k, before: b, after: c.value, ratio: Number(ratio.toFixed(2)) });
+  }
+  for (const [k, b] of prev) {
+    if (!seen.has(k)) alerts.push({ cell: k, before: b, after: null, ratio: 1 });
   }
   return alerts;
 }

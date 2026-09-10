@@ -29,6 +29,12 @@ function stubClient(over: Partial<Record<'cards' | 'movements', unknown[]>> & { 
       return (over.cards ?? []) as AresCard[];
     },
     boardMovements: async () => (over.movements ?? []) as AresMovement[],
+    // block 8: the lane reconcile check calls this on every sync. Answering an
+    // EMPTY TABLE rather than `null` on purpose — `null` is the contract's "the
+    // read failed", which syncProject reports at warn, and a suite about upsert
+    // ownership must not print a failure it is not testing. `test/sync-unmapped-
+    // lists.test.ts` owns both the empty and the failed shapes.
+    boardLanes: async () => ({ lanes: [], syncedAt: null }),
     referenceWeeks: async () =>
       over.refWeeks ?? { least: 1, typical: 116, most: 367, effectiveWeeklyRate: 89.2 },
   } as unknown as AresClient;
