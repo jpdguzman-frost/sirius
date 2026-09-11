@@ -15,7 +15,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 |---|---|---|---|
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12**; T073/T091 ⏸, T075 pending | write-enable on rt-837 = next JP gate |
-| 19 | **The Ares-read cycle-time model** (T179–T183; JP 2026-09-09 "read Ares"): work-card labels + label-first lane (fold ruled 2026-09-10), `cycleTimeModel`/`boardLanes` readers, Ares `laneCells` → grid, write-time gate, provenance in `sync_runs.stats`, lane reconcile; `lib/model.ts` amended (Lane += content, label-family branch) | **DEPLOYED 2026-09-10** (`4fcbb24`, JP's "yes - deploy"; healthz 200 ×3, API wall 401, migrate 012 applied, pm2 clean, urgency smoke green; rt-837 lane check: 86 lanes, 2 unknown): VALIDATE ×3 (1,671 tests UTC+Manila, NY calendar, 75 proofs) · REVIEW 38 → 34 fixed + verified · E2E green 2026-09-10 (36 cells mapped, 0 passed / 36 failed `unverified`, grid 0, snapshot served; tx8gDsTH 37 lanes / 0 unknown; gate exit 1; console clean) · freeze stays (`3a86df0`); unfreeze = JP, once cells pass on VERIFIED samples | T183's two questions (product) |
+| 20 | **Block 9 — the day belongs to the Design Lead** (owls #88–#90, JP yes ×2): Sprint Schedules reverts to WEEK grain (click places on the week's first WORKING day, bar display-only and pointer-transparent); the bounded day-drag + arrow nudge on Deadlines with a fourth guard `OUT_OF_WEEK`; a re-dated sprint displaces rows to *Outside any sprint* keeping their day, listed in a notice, audited per row (`sprint_id` now nullable) | **BUILT + VERIFIED, NOT DEPLOYED** (`47ce7ab`): VALIDATE ×3 (1,741 tests UTC+Manila, 124 NY, no flake) · 16 vacuity proofs · REVIEW 34 findings → 3 killed, ~20 distinct fixed · E2E 18/18 by real pointer and key, which found 2 defects, both fixed and re-proven | **JP: deploy gate** |
 
 **Build health (2026-09-09):** 1566 tests, 0 `it.todo`, 78 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
@@ -51,16 +51,28 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
-  before building on one. **Thread**: miles→jp acked through **#71** + #76–#79 + **#81–#87**; **#72/#73 UNACKED** (screens pending). **#91–#98 received 2026-09-10** (`.claude/owls/`; state-log 09-10), UNACKED: tiles ruling (#91–#93); **W4 AMENDED into the registry 2026-09-10 (JP yes; #73 sent with the two facts)** — business-unit label, existing labels only, exact match; surface + actor UNRULED, unbuilt; AGENTS.md swept; **#99–#113 (09-11): the FULL doc set (BRD v3.0, spec v1.4, engineering, security) cached + digested in `.claude/owls/`; **spec v1.4 ADOPTED**; BRD/eng/security inbound; **#74 sent** (axis + §7a rulings, JP 09-11)**. **#88–#90 received 2026-09-10 — JP yes ×3 (2026-09-10)**: block 7's PM day placement REVERSED (the day = Design Lead, Deadlines tab only; drag BOUNDED by the assigned week; four drop conditions; week placement = first working day; the three guards carry over), and a sprint re-date moves displaced cards to *Outside any sprint* keeping their day (supersedes the 09-09 REFUSE). UNACKED until built (block 9); **#71 + #72 SENT 2026-09-10** (the three rulings accepted, spec version asked; block 8 live in plain words). jp→miles through **#72**. Product is fixing frame defects; **until they
-  confirm, this build is authoritative over those frames** — including the
-  past-deadline legend reworded 2026-08-27. **Awaiting Miles**: #66's three answers, a ruling on the reworded legend. Build spec **v1.4 is the held copy** (`docs/product/build-spec-v1.4.md`, adopted 2026-09-11; v1.3 beside it).
+  before building on one. **Acked through #71** + #76–#79 + #81–#87. **UNACKED**:
+  #72/#73 (screens pending) · #88–#90 (the block-9 reversal — ack ON DEPLOY) ·
+  #91–#98 (tiles, W4) · #99–#113 (the full doc set) · **#114/#115 (09-11: the
+  §5.1c toolbar; the §5.1d confidence picker, whose ARITHMETIC product is
+  holding — a flat +3/+6/+9 ladder Miles put back to them — out of block 9 by
+  their own wording)**. Bodies cached in `.claude/owls/`; history in the state
+  logs. jp→miles through **#74**. Build spec **v1.4 is the held copy**
+  (`docs/product/build-spec-v1.4.md`; v1.3 beside it). Product is fixing frame
+  defects; **until they confirm, this build is authoritative over those
+  frames**. **Awaiting Miles**: #66's three answers · the reworded
+  past-deadline legend · the mid-week sprint-start consequence (block 9).
 - **Figma reads** — the official Figma MCP is the verified path
   (`get_design_context` for annotations, `get_metadata` for geometry; load the
   figma-design-to-code skill first). File `abDRsIVDs1XjJKeR8xYOoF`. Rex adds
   auto-layout + VARIANT names; `mcp__rex__get_status` first, never write the port down.
-- **File drop `../owl/` (ARES agent)** — **ALIVE AGAIN 2026-08-25**: they
-  replied (#01; our #10 back) and **`hLL7WW2V` push is live** — first events
-  03:41:50Z, drained ~1s. **`../ares/` is a sibling repo — read it rather than wait.** **Ares #01–#04 (2026-09-09/10): the lanes route, `cycle-time?include=segments` and the MODEL endpoint `GET /api/v1/trello/cycle-time/model?rtProjectId=837` are LIVE and verified** (135 cells: 42 project / 93 firm; 52 work-type keys; numeric id — non-numeric 400, unmapped 404; `syncedAt` on lanes, null until a sync). **8,337/8,337 samples `historyUnverified` — every cell provisional**; 24 of 37 full E/M/H trios fail p85 ordering; 71 cells n<15. Client-review wait is a queue, not a cell. Refresh once per Manila day, byte-stable. **#14 + #15 SENT 2026-09-10** (#14: verification + a lanes sync; #15: cells pooled per `laneKey` — `laneCells`, JP's yes; awaited).
+- **File drop `../owl/` (ARES agent)** — alive; `hLL7WW2V` push is live.
+  **`../ares/` is a sibling repo — read it rather than wait.** The lanes route,
+  `cycle-time?include=segments` and the model endpoint are LIVE and verified
+  (135 cells, 52 work-type keys). **Every cell is `historyUnverified` until
+  boards re-fetch**; 24 of 37 E/M/H trios fail p85 ordering; 71 cells n<15.
+  Refresh once per Manila day. **#14 + #15 sent 2026-09-10** (verification + a
+  lanes sync; cells pooled per `laneKey`) — awaited.
 
 ## Still open
 
@@ -81,7 +93,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 - **Product (Miles)**: #66 (OPEN WORK meaning, W4, §6.2 day capacity) · the 51 lane names §7a counts but never writes — pinned from ARES; `Generation`/`Refinement` + five `Backlog: …` sub-lanes by rule; `For Archive`, `For Client Approval`, `Hard Deadline: Monday Mar. 23`, `NOTE`, `On Hold: Ryse, NBG` unknown on purpose (logged per sync) · the row-controls design pass + Smoke pass ·
   month-encoding verify when the Sheets credential lands · the remaining
   tabs' frames (T073/T091 un-park).
-- **Block 9 — HELD 2026-09-11 (JP: read the new specs #99–#113 first); brief `.claude/block9/brief.md`** (JP yes ×2 2026-09-10; Miles #88–#90 UNACKED until built): the block-7 REVERSAL — PM day controls off Sprint Schedules (day shown, not editable; week click = first working day); the Design Lead's day-drag on Deadlines, BOUNDED by the assigned week, four drop conditions (week · sprint · ≤ deadline · working day), the three guards carried over; a re-dated sprint moves displaced cards to *Outside any sprint* keeping their day.
+- **Block 9 — BUILT 2026-09-11/12, awaiting JP's deploy** (`47ce7ab`; log `docs/history/state-log/2026-09-11.md`, plan+drift rotated to `2026-09-11-plan-block9.md`). Ack owls **#88–#90 on deploy**. Carried out of the block, all recorded in the rotated plan: a sprint that STARTS MID-WEEK cannot take a card in its own first week (the week resolves to a day before the sprint starts — **product question for Miles**) · the 1px deadline tick stays pointer-opaque · the Deadlines DONE count fails AA at rest (palette question, pre-existing) · an identical repeated banner sentence is not re-announced · `deadlines-rules.md` has 3 bytes under its 20KB cap.
 - **Block 8 residuals** (state-log 09-10): every Ares cell fails `unverified` until boards re-fetch — snapshot serves, provenance says why · sample-span gate waits on an Ares field · `content` → design fallback · 19% of done cards unlabeled · X10 second half · the rollover now agrees with the bar (rows may roll).
 - **Block 6 residuals**: `warn*` names on the shared hover scheduler (pinned by three suites + eslint; one-commit rename) · sprint membership follows the START day after a roll (supersedes #75 §2; Miles to confirm) · a new lane is invisible until a card sits in it (lanes route live — Ares #01, block 8).
 
@@ -92,4 +104,5 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
+- 2026-09-11/12 — **Block 9 built, verified, NOT deployed** (`47ce7ab`): the day moves to the Design Lead on Deadlines only; Sprint Schedules is week-grain. Survey → gate (JP: "gate screen only" — the day write is gated by SURFACE, no role) → build (5 agents) → VALIDATE ×3 → 16 proofs → REVIEW (5 finders, 2 refuters each; the Fable credit ceiling killed 20 refuters, those findings were re-verified by the fix agents) → E2E 18/18, which found 2 defects: block 9's own keyboard focus writing ANOTHER card, and a pre-existing `PUT /sprints` 500 on any sprint REORDER (2026-08-28) that blocked the very edit #90 rules on — both fixed, re-proven, re-validated. Log: `docs/history/state-log/2026-09-11.md`.
 - 2026-09-10 — **Block 8 built** (five JP yeses: the reversal accepted, re-date → *Outside any sprint*, model reader started, lane fold, Ares pools per lane + the `lib/model.ts` amendment): Ares model read + gated + provenance, work-card labels, label-first lane, lane reconcile; REVIEW 38 → 34 fixed; VALIDATE ×3 green; E2E green; **DEPLOYED 23:28 Manila**. Owls: #71 to Miles, #14–#16 to Ares. Log: `docs/history/state-log/2026-09-10.md`; plan+drift: `2026-09-10-plan-block8.md`.
