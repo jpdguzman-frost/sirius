@@ -9,14 +9,21 @@
  */
 
 import { laneOf } from '../../lib/model.ts';
-import { URGENT_LABEL_NAME } from '../../lib/trello.ts';
+import {
+  BLOCKER_LABEL_PREFIX as BLOCKER_PREFIX,
+  DIFFICULTY_LABEL_RE,
+  MAIN_CARD_LABEL,
+  URGENT_LABEL_NAME,
+} from '../../lib/trello.ts';
 import type { AresCard } from './ares.ts';
 import { manilaDate } from './pipeline.ts';
 
-export const MAIN_CARD_LABEL = 'Main Card';
+/* The taxonomy names live in lib/trello.ts (one home: the W4 reserved-label
+   filter derives from the same constants — review F1, 2026-09-11); re-exported
+   so this module stays the mapper's public face for `Main Card`. */
+export { MAIN_CARD_LABEL };
 const MC_RE = /\bMC[-\s]?(\d+)\b/i;
-const DIFFICULTY_RE = /^Difficulty:\s*(Easy|Medium|Hard)$/i;
-const BLOCKER_PREFIX = '🛑';
+const DIFFICULTY_RE = new RegExp(`${DIFFICULTY_LABEL_RE.source}(Easy|Medium|Hard)$`, 'i');
 const FIGMA_RE = /https:\/\/(?:www\.)?figma\.com\/[^\s)"']+/;
 const TASK_PREFIX_RE = /^([A-Za-z][A-Za-z /&-]{1,39}):\s/;
 

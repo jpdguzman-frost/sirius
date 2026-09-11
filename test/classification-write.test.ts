@@ -25,9 +25,20 @@
  * (there is no route to `supertest`).
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
-import { TrelloClient, UnknownClassificationLabel, resolveLabelIds } from '../lib/trello.ts';
+import {
+  BLOCKER_LABEL_PREFIX,
+  DIFFICULTY_LABEL_PREFIX,
+  MAIN_CARD_LABEL,
+  TrelloClient,
+  URGENT_LABEL_NAME,
+  UnknownClassificationLabel,
+  isReservedLabelName,
+  resolveLabelIds,
+} from '../lib/trello.ts';
+import { mapTrello } from '../src/services/mapper.ts';
+import { aresCard } from './helpers/ares-card.ts';
 import { applyClassificationWrite } from '../src/services/classification-write.ts';
 import { AuditLog, Deliverable, Project, SyncRun, WorkCard } from '../src/models/index.ts';
 
@@ -37,19 +48,26 @@ import { AuditLog, Deliverable, Project, SyncRun, WorkCard } from '../src/models
 
 /**
  * A board with a clean business-unit label, one that only matches after
- * trim + case-fold, an AMBIGUOUS pair (two labels that normalise to the same
- * name), the W1/W3 taxonomy beside them, and a nameless colour-only label —
- * Trello boards carry those, and a blank tag must never land on one.
+ * trim + case-fold, a second clean one no card wears, an AMBIGUOUS pair (two
+ * labels that normalise to the same name), the RESERVED taxonomy beside them
+ * (W1's Urgent, W3's Difficulty pair, the Main Card kind label, a 🛑 blocker —
+ * every name read out of lib/trello.ts, never spelled here), and a nameless
+ * colour-only label — Trello boards carry those, and a blank tag must never
+ * land on one.
  */
 const BOARD = {
   id: 'b1',
   labels: [
     { id: 'l-cs', name: 'Client Services' },
     { id: 'l-mk', name: '  Marketing ' },
+    { id: 'l-people', name: 'People' },
     { id: 'l-ops-a', name: 'Operations' },
     { id: 'l-ops-b', name: 'operations ' },
-    { id: 'l-easy', name: 'Difficulty: Easy' },
-    { id: 'l-urgent', name: 'Urgent' },
+    { id: 'l-easy', name: `${DIFFICULTY_LABEL_PREFIX}Easy` },
+    { id: 'l-hard', name: `${DIFFICULTY_LABEL_PREFIX}Hard` },
+    { id: 'l-urgent', name: URGENT_LABEL_NAME },
+    { id: 'l-main', name: MAIN_CARD_LABEL },
+    { id: 'l-blocked', name: `${BLOCKER_LABEL_PREFIX} Blocked` },
     { id: 'l-blank', name: '' },
   ],
 };
@@ -58,13 +76,28 @@ const labelId = (name: string) => {
   if (!hit) throw new Error(`fixture has no label named ${JSON.stringify(name)}`);
   return hit.id;
 };
+/** the board's canonical spelling of a label, trimmed — what W4 stores (review F2) */
+const canonicalOf = (id: string) => BOARD.labels.find((l) => l.id === id)!.name.trim();
 const CS = labelId('Client Services');
 const MK = labelId('  Marketing ');
 const OPS_A = labelId('Operations');
 const OPS_B = labelId('operations ');
+const HARD = labelId(`${DIFFICULTY_LABEL_PREFIX}Hard`);
+const URGENT = labelId(URGENT_LABEL_NAME);
 
-/** the card `c1` wears Client Services (the value a re-tag moves away from) plus Urgent */
-const CARD = { id: 'c1', labels: [{ id: CS, name: 'Client Services' }, { id: labelId('Urgent'), name: 'Urgent' }] };
+/**
+ * the card `c1` wears Client Services (the value a re-tag moves away from)
+ * plus Urgent and Difficulty: Hard — both ON the card, so only the reserved
+ * filter stands between a reserved previousTag and a DELETE
+ */
+const CARD = {
+  id: 'c1',
+  labels: [
+    { id: CS, name: 'Client Services' },
+    { id: URGENT, name: URGENT_LABEL_NAME },
+    { id: HARD, name: `${DIFFICULTY_LABEL_PREFIX}Hard` },
+  ],
+};
 
 /**
  * fetch stub over BOARD and CARD, recording every call as `METHOD path`.
@@ -199,9 +232,16 @@ describe('TrelloClient.setClassification — lookup-only label assign/swap', () 
 
   it('a previousTag that resolves but is NOT on the card is skipped — nothing to remove', async () => {
     const { ops, client } = makeFetch();
-    // Difficulty: Easy resolves on the board; the card wears Client Services + Urgent only
-    await client.setClassification(CARD.id, BOARD.id, 'Marketing', 'Difficulty: Easy');
+    // People resolves on the board (cleanly, not reserved); the card does not wear it
+    expect(isReservedLabelName('People')).toBe(false);
+    await client.setClassification(CARD.id, BOARD.id, 'Marketing', 'People');
     expect(writesOf(ops)).toEqual([`POST /cards/${CARD.id}/idLabels`]);
+  });
+
+  it('resolves to the board label\'s CANONICAL name, trimmed — the tag\'s own spelling is never what gets stored', async () => {
+    const { client } = makeFetch();
+    await expect(client.setClassification(CARD.id, BOARD.id, ' marketing ')).resolves.toBe(canonicalOf(MK));
+    await expect(client.setClassification(CARD.id, BOARD.id, 'CLIENT SERVICES')).resolves.toBe(canonicalOf(CS));
   });
 
   it('idempotent: a tag already on the card makes no POST, and a same-value previousTag makes no DELETE', async () => {
@@ -238,6 +278,63 @@ describe('TrelloClient.setClassification — lookup-only label assign/swap', () 
 });
 
 /* ---------------------------------------------------------------------- */
+/* reserved taxonomy — W4 writes the business-unit label and NOTHING else   */
+/* (review F1, 2026-09-11; invariant 2)                                     */
+/* ---------------------------------------------------------------------- */
+
+describe('setClassification — reserved taxonomy is refused, never assigned or stripped through W4', () => {
+  /**
+   * The finding's own inputs, DERIVED from the constants the mapper and the
+   * W1/W3 setters use — each is a tag a sheet cell could carry. Every one
+   * resolves to EXACTLY ONE board label, so the refusal below can only be the
+   * reserved filter (not unmatched, not ambiguous).
+   */
+  const RESERVED_TAGS = [
+    URGENT_LABEL_NAME.toLowerCase(),
+    ` ${DIFFICULTY_LABEL_PREFIX.toLowerCase()}easy `,
+    MAIN_CARD_LABEL.toLowerCase(),
+    `${BLOCKER_LABEL_PREFIX} blocked`,
+  ];
+
+  it('the reserved set is the mapper\'s taxonomy — executed against mapTrello, not compared as strings', () => {
+    const taxonomy = [MAIN_CARD_LABEL, `${DIFFICULTY_LABEL_PREFIX}Hard`, URGENT_LABEL_NAME, `${BLOCKER_LABEL_PREFIX} awaiting brief`];
+    const r = mapTrello(
+      [aresCard({ cardId: 'k1', name: 'MC-1 / Main Card: x', labels: taxonomy.map((name, i) => ({ id: `l${i}`, name })) })],
+      null,
+    );
+    // kind, difficulty, urgency and blocker are all READ from these names by the mapper
+    expect(r.deliverables).toHaveLength(1);
+    expect(r.deliverables[0]).toMatchObject({ difficulty: 'Hard', urgent: true, blocker: 'awaiting brief' });
+    for (const l of taxonomy) expect(isReservedLabelName(l)).toBe(true);
+    expect(isReservedLabelName('Client Services')).toBe(false);
+    expect(isReservedLabelName('Marketing')).toBe(false);
+  });
+
+  for (const tag of RESERVED_TAGS) {
+    it(`tag ${JSON.stringify(tag)} resolves to one board label yet is REFUSED with reason \`reserved\`; no POST`, async () => {
+      expect(resolveLabelIds(BOARD.labels, tag)).toHaveLength(1);
+      const { ops, client } = makeFetch();
+      const err = await client.setClassification(CARD.id, BOARD.id, tag).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(UnknownClassificationLabel);
+      expect(err).toMatchObject({ boardId: BOARD.id, tag, reason: 'reserved' });
+      expect(writesOf(ops)).toEqual([]);
+      expect(ops).not.toContain(CREATE_LABEL);
+    });
+  }
+
+  for (const previousTag of [`${DIFFICULTY_LABEL_PREFIX}Hard`, URGENT_LABEL_NAME]) {
+    it(`previousTag ${JSON.stringify(previousTag)} — resolves, ON the card — is skipped silently: no DELETE of a registry label`, async () => {
+      const id = labelId(previousTag);
+      expect(CARD.labels.some((l) => l.id === id)).toBe(true); // on the card: only the reserved filter prevents the DELETE
+      const { ops, client } = makeFetch();
+      await client.setClassification(CARD.id, BOARD.id, 'Marketing', previousTag);
+      expect(writesOf(ops)).toEqual([`POST /cards/${CARD.id}/idLabels`]);
+      expect(ops).not.toContain(`DELETE /cards/${CARD.id}/idLabels/${id}`);
+    });
+  }
+});
+
+/* ---------------------------------------------------------------------- */
 /* applyClassificationWrite — the commit half                              */
 /* ---------------------------------------------------------------------- */
 
@@ -250,6 +347,9 @@ describe('applyClassificationWrite — Trello-first, audit + sync_runs both ways
   });
   beforeEach(async () => {
     await clearCollections();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   const ACTOR = 'jp@frostdesigngroup.com';
@@ -278,14 +378,15 @@ describe('applyClassificationWrite — Trello-first, audit + sync_runs both ways
         cardId: CARD.id,
         entity,
         doc,
-        tag: 'Marketing',
+        tag: ' marketing ', // the raw tag; the CANONICAL board name is what lands (review F2)
         actor: ACTOR,
       });
-      expect(res).toEqual({ ok: true, noop: false, before: 'Client Services', after: 'Marketing' });
+      expect(res).toEqual({ ok: true, noop: false, before: 'Client Services', after: canonicalOf(MK) });
       expect(writesOf(ops)).toEqual([`POST /cards/${CARD.id}/idLabels`, `DELETE /cards/${CARD.id}/idLabels/${CS}`]);
 
       const after = await reload(entity);
-      expect(after?.unit_label).toBe('Marketing');
+      expect(after?.unit_label).toBe(canonicalOf(MK));
+      expect(after?.unit_label).not.toBe(' marketing ');
       expect(after?.registry_written_at).toBeInstanceOf(Date);
 
       const row = await AuditLog.findOne({ action: 'classification.set' });
@@ -294,13 +395,13 @@ describe('applyClassificationWrite — Trello-first, audit + sync_runs both ways
       expect(row?.entity).toBe(entity);
       expect(row?.entity_id).toBe(CARD.id);
       expect(row?.before).toEqual({ unit_label: 'Client Services' });
-      expect(row?.after).toEqual({ unit_label: 'Marketing' });
+      expect(row?.after).toEqual({ unit_label: canonicalOf(MK) }); // the stored value, not the raw tag
       expect(await AuditLog.countDocuments()).toBe(1);
 
       const run = await SyncRun.findOne({ source: 'trello_write' });
       expect(run?.ok).toBe(true);
       expect(run?.project_id?.toString()).toBe(project._id.toString());
-      expect(run?.stats).toMatchObject({ kind: 'classification', entity, cardId: CARD.id });
+      expect(run?.stats).toMatchObject({ kind: 'classification', entity, cardId: CARD.id, unit_label: canonicalOf(MK) });
       expect(await SyncRun.countDocuments({ source: 'trello_write' })).toBe(1);
     });
   }
@@ -328,6 +429,33 @@ describe('applyClassificationWrite — Trello-first, audit + sync_runs both ways
     expect(await AuditLog.countDocuments()).toBe(0);
     expect(await SyncRun.countDocuments()).toBe(0);
     expect((await reload('work_card'))?.registry_written_at).toBeUndefined();
+  });
+
+  it('no-op guard compares NORMALISED (trim + case-fold), as the resolver matches — a case/whitespace-only change is not an act (review F2)', async () => {
+    const { project, doc } = await seed('work_card', 'Marketing');
+    const { ops, client } = makeFetch();
+    const res = await applyClassificationWrite({
+      trello: client, projectId: project._id, boardId: BOARD.id, cardId: CARD.id, entity: 'work_card', doc, tag: ' marketing', actor: ACTOR,
+    });
+    // `after` is the STORED value — the document keeps its spelling
+    expect(res).toEqual({ ok: true, noop: true, before: 'Marketing', after: 'Marketing' });
+    expect(ops).toEqual([]);
+    const after = await reload('work_card');
+    expect(after?.unit_label).toBe('Marketing');
+    expect(after?.registry_written_at).toBeUndefined(); // no phantom stamp shielding the other registry fields
+    expect(await AuditLog.countDocuments()).toBe(0);
+    expect(await SyncRun.countDocuments()).toBe(0);
+  });
+
+  it('a stored null is never "the same" as a blank tag — that goes to Trello and is refused as unmatched, as before', async () => {
+    const { project, doc } = await seed('deliverable', null);
+    const { ops, client } = makeFetch();
+    const res = await applyClassificationWrite({
+      trello: client, projectId: project._id, boardId: BOARD.id, cardId: CARD.id, entity: 'deliverable', doc, tag: '  ', actor: ACTOR,
+    });
+    expect(res.ok).toBe(false);
+    expect(writesOf(ops)).toEqual([]);
+    expect(await SyncRun.countDocuments({ source: 'trello_write', ok: false })).toBe(1);
   });
 
   it('Trello-first: a failed write leaves the document untouched (no value, no stamp) and records the failure both ways', async () => {
@@ -391,5 +519,50 @@ describe('applyClassificationWrite — Trello-first, audit + sync_runs both ways
     expect(ops).toContain(`DELETE /cards/${CARD.id}/idLabels/${MK}`); // restored
     expect((await reload('deliverable'))?.unit_label).toBe('Client Services');
     expect(await AuditLog.countDocuments({ action: 'classification.set_failed' })).toBe(1);
+  });
+
+  it('a reserved tag is REFUSED AND SURFACED through the commit half like any refusal: no write, no local change, reason in the rows', async () => {
+    const { project, doc } = await seed('deliverable', null);
+    const { ops, client } = makeFetch();
+    const tag = URGENT_LABEL_NAME.toLowerCase();
+    const res = await applyClassificationWrite({
+      trello: client, projectId: project._id, boardId: BOARD.id, cardId: CARD.id, entity: 'deliverable', doc, tag, actor: ACTOR,
+    });
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.error).toMatch(/reserved/);
+    expect(writesOf(ops)).toEqual([]);
+    expect((await reload('deliverable'))?.unit_label).toBeNull();
+    expect((await SyncRun.findOne({ source: 'trello_write' }))?.error).toMatch(/reserved/);
+  });
+
+  /* review F4: the failure branch must not depend on the store that just failed */
+
+  it('audit_log down AFTER Trello + save succeeded: the promise RESOLVES ok:false, and the sync_runs row still lands (run row first)', async () => {
+    const { project, doc } = await seed('work_card', 'Client Services');
+    const { ops, client } = makeFetch();
+    vi.spyOn(AuditLog, 'create').mockRejectedValue(new Error('audit down'));
+    const res = await applyClassificationWrite({
+      trello: client, projectId: project._id, boardId: BOARD.id, cardId: CARD.id, entity: 'work_card', doc, tag: 'Marketing', actor: ACTOR,
+    });
+    expect(res).toMatchObject({ ok: false, error: 'audit down', before: 'Client Services' });
+    expect(writesOf(ops)).toHaveLength(2); // Trello did the swap; the header states this residual
+    const run = await SyncRun.findOne({ source: 'trello_write' });
+    expect(run?.ok).toBe(false);
+    expect(run?.error).toBe('audit down');
+    expect(run?.stats).toMatchObject({ cardId: CARD.id, kind: 'classification', entity: 'work_card' });
+    expect(await SyncRun.countDocuments({ source: 'trello_write' })).toBe(1);
+  });
+
+  it('BOTH stores down: nothing escapes — ok:false, no throw (the residual the header states)', async () => {
+    const { project, doc } = await seed('work_card', 'Client Services');
+    const { client } = makeFetch({ failAdd: true });
+    vi.spyOn(AuditLog, 'create').mockRejectedValue(new Error('audit down'));
+    vi.spyOn(SyncRun, 'create').mockRejectedValue(new Error('runs down'));
+    const res = await applyClassificationWrite({
+      trello: client, projectId: project._id, boardId: BOARD.id, cardId: CARD.id, entity: 'work_card', doc, tag: 'Marketing', actor: ACTOR,
+    });
+    expect(res).toMatchObject({ ok: false, before: 'Client Services' });
+    expect(res.ok === false && res.error).toMatch(/HTTP 500/); // the ORIGINAL failure is what surfaces, not a store's
+    expect((await reload('work_card'))?.unit_label).toBe('Client Services');
   });
 });
