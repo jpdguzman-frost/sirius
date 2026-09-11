@@ -938,6 +938,179 @@ describe('PUT /sprints re-date — displaced rows move to Outside any sprint, ke
     expect((await rowOf(item._id)).starts_on).toBe('2026-08-05');
   });
 });
+/**
+ * D2 — the RENUMBER, and the unique `(project_id, position)` index under it
+ * (block 9 browser pass, `.claude/block9/e2e.md`; pre-existing since
+ * `bd27b67`, 2026-08-28).
+ *
+ * THE BUG THIS PINS: the save writes `position: i + 1` one `updateOne` at a
+ * time, in the payload's start order. Any save that REORDERS two sprints —
+ * re-dating one past another, which is exactly the edit owl #90 rules on —
+ * moves the first sprint onto a position its neighbour still holds. The
+ * unique index refuses the write, the route throws, Express answers HTML,
+ * and the modal shows the reader `Unexpected token '<' … is not valid JSON`.
+ * It failed safe (nothing was written) but a PM could not re-order sprints
+ * at all.
+ *
+ * THE FIX: two phases inside the one request — park every sprint whose
+ * position changes on a temporary position far below every real one, then
+ * write the final 1..N. No intermediate state holds a duplicate.
+ *
+ * NON-VACUITY: the index is asserted present in the first test. Dropped, the
+ * collision could not happen and every case below would pass on any code.
+ */
+describe('PUT /sprints renumber — a save that REORDERS sprints is written, not refused (block 9 E2E D2)', () => {
+  const save = (agent: Agent, pid: unknown, sprints: Array<{ id?: unknown; name: string; start: string; end: string }>) =>
+    agent.put(`/api/projects/${pid}/sprints`).send({
+      sprints: sprints.map((s) => ({ ...(s.id ? { id: String(s.id) } : {}), name: s.name, start: s.start, end: s.end })),
+    });
+  const positions = async (projectId: Types.ObjectId) =>
+    (await Sprint.find({ project_id: projectId }).sort({ position: 1 }).lean())
+      .map((s) => [s.name, s.position, s.starts_on, s.ends_on] as const);
+
+  it('re-dates a sprint PAST its neighbour — 200, positions 1..N in the new order, nothing parked', async () => {
+    const { project, agent } = await setup();
+    // the unique index is the whole reason this case exists — prove it is there
+    const idx = await Sprint.collection.indexes();
+    expect(idx.some((i) => i.name === 'project_id_1_position_1' && i.unique === true)).toBe(true);
+
+    await save(agent, project._id, [
+      { name: 'S1', start: '2026-08-03', end: '2026-08-14' },
+      { name: 'S2', start: '2026-08-17', end: '2026-08-28' },
+    ]).expect(200);
+    const seeded = await Sprint.find({ project_id: project._id }).sort({ position: 1 }).lean();
+    expect(seeded.map((s) => [s.name, s.position])).toEqual([['S1', 1], ['S2', 2]]);
+
+    // S1 moves AFTER S2 — the reorder that used to answer 500 with an HTML body
+    const res = await save(agent, project._id, [
+      { id: seeded[0]!._id, name: 'S1', start: '2026-09-07', end: '2026-09-18' },
+      { id: seeded[1]!._id, name: 'S2', start: '2026-08-17', end: '2026-08-28' },
+    ]);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true });
+    expect(await positions(project._id)).toEqual([
+      ['S2', 1, '2026-08-17', '2026-08-28'],
+      ['S1', 2, '2026-09-07', '2026-09-18'],
+    ]);
+    // ids survive the reorder (review 2026-08-28, finding 1 — membership hangs off them)
+    const after = await Sprint.find({ project_id: project._id }).sort({ position: 1 }).lean();
+    expect(after.map((s) => String(s._id))).toEqual([String(seeded[1]!._id), String(seeded[0]!._id)]);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(2);
+  });
+
+  it('reverses THREE sprints in one save — a cycle no single-pass renumber can write', async () => {
+    const { project, agent } = await setup();
+    await save(agent, project._id, [
+      { name: 'A', start: '2026-08-03', end: '2026-08-07' },
+      { name: 'B', start: '2026-08-10', end: '2026-08-14' },
+      { name: 'C', start: '2026-08-17', end: '2026-08-21' },
+    ]).expect(200);
+    const [a, b, c] = await Sprint.find({ project_id: project._id }).sort({ position: 1 }).lean();
+    await save(agent, project._id, [
+      { id: a!._id, name: 'A', start: '2026-08-17', end: '2026-08-21' },
+      { id: b!._id, name: 'B', start: '2026-08-10', end: '2026-08-14' },
+      { id: c!._id, name: 'C', start: '2026-08-03', end: '2026-08-07' },
+    ]).expect(200);
+    expect(await positions(project._id)).toEqual([
+      ['C', 1, '2026-08-03', '2026-08-07'],
+      ['B', 2, '2026-08-10', '2026-08-14'],
+      ['A', 3, '2026-08-17', '2026-08-21'],
+    ]);
+  });
+
+  it('renumbers a hand-seeded 0-based list, and inserts a NEW sprint ahead of the one holding its position', async () => {
+    /* Two shapes the browser pass hit: a fixture numbered from 0 (every save
+       500'd on it), and a new sprint whose start puts it first, taking the
+       position a live sprint still holds. */
+    const { project, agent } = await setup();
+    const zero = await Sprint.create({ project_id: project._id, name: 'Z0', starts_on: '2026-08-10', ends_on: '2026-08-14', position: 0 });
+    const one = await Sprint.create({ project_id: project._id, name: 'Z1', starts_on: '2026-08-17', ends_on: '2026-08-21', position: 1 });
+    await save(agent, project._id, [
+      { name: 'NEW', start: '2026-08-03', end: '2026-08-07' }, // no id — an insert at position 1
+      { id: zero._id, name: 'Z0', start: '2026-08-10', end: '2026-08-14' },
+      { id: one._id, name: 'Z1', start: '2026-08-17', end: '2026-08-21' },
+    ]).expect(200);
+    expect(await positions(project._id)).toEqual([
+      ['NEW', 1, '2026-08-03', '2026-08-07'],
+      ['Z0', 2, '2026-08-10', '2026-08-14'],
+      ['Z1', 3, '2026-08-17', '2026-08-21'],
+    ]);
+    expect(await Sprint.countDocuments({ project_id: project._id, position: { $lt: 1 } })).toBe(0);
+  });
+
+  it('leaves no sprint parked on a temporary position, and renumbers ONLY this project (invariant 1)', async () => {
+    const { project, user, agent } = await setup();
+    const other = await Project.create({ code: 'rt-2', name: 'Second', trello_board_id: 'fxB', weekly_capacity: 3 });
+    await UserProject.create({ user_id: user._id, project_id: other._id });
+    await save(agent, other._id, [{ name: 'OTHER', start: '2026-08-03', end: '2026-08-07' }]).expect(200);
+
+    await save(agent, project._id, [
+      { name: 'S1', start: '2026-08-03', end: '2026-08-07' },
+      { name: 'S2', start: '2026-08-10', end: '2026-08-14' },
+    ]).expect(200);
+    const [s1, s2] = await Sprint.find({ project_id: project._id }).sort({ position: 1 }).lean();
+    await save(agent, project._id, [
+      { id: s1!._id, name: 'S1', start: '2026-08-10', end: '2026-08-14' },
+      { id: s2!._id, name: 'S2', start: '2026-08-03', end: '2026-08-07' },
+    ]).expect(200);
+    // every row, in both projects, on a real position
+    expect(await Sprint.countDocuments({ position: { $lt: 1 } })).toBe(0);
+    expect(await positions(other._id)).toEqual([['OTHER', 1, '2026-08-03', '2026-08-07']]);
+  });
+
+  it('a reorder that ALSO displaces a row still displaces it, once, with the day kept (#90 survives the renumber)', async () => {
+    const { project, agent } = await setup();
+    const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-12' }); // Sprint 46, 3–14 Aug, position 1
+    const later = await Sprint.create({ project_id: project._id, name: 'Sprint 47', starts_on: '2026-08-17', ends_on: '2026-08-28', position: 2 });
+    // Sprint 46 jumps past Sprint 47: a reorder AND a re-date that leaves the row outside
+    const res = await save(agent, project._id, [
+      { id: later._id, name: 'Sprint 47', start: '2026-08-17', end: '2026-08-28' },
+      { id: sprint._id, name: 'Sprint 46', start: '2026-09-07', end: '2026-09-18' },
+    ]).expect(200);
+    expect(res.body.displaced).toEqual([{
+      id: String(item._id), display_id: 'MC-655', title: 'Sketch Asset: hero', starts_on: '2026-08-12', from_sprint: 'Sprint 46',
+    }]);
+    const row = await rowOf(item._id);
+    expect(row.sprint_id ?? null).toBeNull();
+    expect(row.starts_on).toBe('2026-08-12');
+    expect(await AuditLog.countDocuments({ action: 'sprintItem.displaced' })).toBe(1);
+    expect(await positions(project._id)).toEqual([
+      ['Sprint 47', 1, '2026-08-17', '2026-08-28'],
+      ['Sprint 46', 2, '2026-09-07', '2026-09-18'],
+    ]);
+  });
+
+  it('a save that cannot be written answers JSON, never an HTML 500 the modal cannot read', async () => {
+    /* The surfacing half of D2: whatever refuses the renumber, the reader
+       must get a sentence and not `Unexpected token '<'`. Provoked by making
+       the very first write throw — the class the index used to produce. */
+    const { project, agent } = await setup();
+    await save(agent, project._id, [
+      { name: 'S1', start: '2026-08-03', end: '2026-08-07' },
+      { name: 'S2', start: '2026-08-10', end: '2026-08-14' },
+    ]).expect(200);
+    const [s1, s2] = await Sprint.find({ project_id: project._id }).sort({ position: 1 }).lean();
+    const spy = vi.spyOn(Sprint, 'updateOne').mockImplementation(() => {
+      throw new Error('E11000 duplicate key error collection: sirius.sprints index: project_id_1_position_1');
+    });
+    try {
+      const res = await save(agent, project._id, [
+        { id: s1!._id, name: 'S1', start: '2026-08-10', end: '2026-08-14' },
+        { id: s2!._id, name: 'S2', start: '2026-08-03', end: '2026-08-07' },
+      ]);
+      expect(res.status).toBe(500);
+      expect(res.headers['content-type']).toMatch(/application\/json/);
+      expect(res.body.ok).toBe(false);
+      expect(res.body.error.code).toBe('SPRINTS_NOT_SAVED');
+      expect(res.body.error.message).toBeTruthy();
+      expect(String(res.body.error.message)).not.toMatch(/E11000|position/); // no Mongo internals to the reader
+    } finally {
+      spy.mockRestore();
+    }
+    // nothing was audited for a save that did not happen
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(1);
+  });
+});
 
 /**
  * The refusal copy carries a date, and there are now two pure-string-math

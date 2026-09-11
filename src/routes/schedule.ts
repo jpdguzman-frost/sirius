@@ -432,15 +432,70 @@ export function scheduleRouter(): Router {
         await SprintItem.deleteMany({ project_id: projectId, sprint_id: { $in: removedIds } });
         await Sprint.deleteMany({ project_id: projectId, _id: { $in: removedIds } });
       }
-      for (const [i, sp] of sorted.entries()) {
-        if (sp.id) {
-          await Sprint.updateOne(
-            { _id: sp.id, project_id: projectId },
-            { $set: { name: sp.name, starts_on: sp.start, ends_on: sp.end, position: i + 1 } },
-          );
-        } else {
-          await Sprint.create({ project_id: projectId, name: sp.name, starts_on: sp.start, ends_on: sp.end, position: i + 1 });
+      /* THE RENUMBER IS TWO PHASES, because `(project_id, position)` is UNIQUE
+         (models/index.ts) — block 9's browser pass, defect D2. Written one row
+         at a time in start order, a save that REORDERS two sprints moves the
+         first onto a position its neighbour still holds: Mongo refuses that
+         write with E11000, the route threw, Express answered HTML, and the
+         modal showed the reader `Unexpected token '<' … is not valid JSON`.
+         Nothing was written — it failed safe — but a PM could not re-date a
+         sprint past another one, which is exactly the edit owl #90 rules on.
+
+         So every sprint whose position actually CHANGES is parked first, and
+         only then does the loop write the final 1..N. After the park, the only
+         real positions still standing belong to sprints already sitting on
+         their final number, and no other row wants one of those — a final
+         position is unique in `sorted` — so neither an update nor the insert
+         of a new sprint can duplicate a key at any point in between.
+
+         THE PARK BLOCK collides with nothing. It is a run of at most
+         `sorted.length` slots (the payload's own `.max(100)`) strictly BELOW
+         the lowest position this project holds, so no real row of this project
+         is inside it — and positions are per project, so no other project's
+         row can be either (invariant 1). Its base is drawn per request in
+         steps of a whole block, so two saves racing on one project park in
+         different blocks unless they draw the same number out of a million. */
+      const PARK_BLOCK = 100; // the payload's `.max(100)`: one block holds any one save
+      const parkBase = before.reduce((low, b) => Math.min(low, b.position), 1)
+        - 1 - PARK_BLOCK * (1 + Math.floor(Math.random() * 1_000_000));
+      const wasById = new Map(before.map((b) => [String(b._id), b] as const));
+      const parked = new Set<string>();
+      try {
+        for (const [i, sp] of sorted.entries()) {
+          if (!sp.id || wasById.get(sp.id)?.position === i + 1) continue;
+          await Sprint.updateOne({ _id: sp.id, project_id: projectId }, { $set: { position: parkBase - i } });
+          parked.add(sp.id);
         }
+        for (const [i, sp] of sorted.entries()) {
+          if (sp.id) {
+            await Sprint.updateOne(
+              { _id: sp.id, project_id: projectId },
+              { $set: { name: sp.name, starts_on: sp.start, ends_on: sp.end, position: i + 1 } },
+            );
+            parked.delete(sp.id);
+          } else {
+            await Sprint.create({ project_id: projectId, name: sp.name, starts_on: sp.start, ends_on: sp.end, position: i + 1 });
+          }
+        }
+      } catch (err) {
+        /* A THROW BETWEEN THE PHASES would leave a sprint parked below zero,
+           where it sorts ahead of every real sprint on the next read. Its
+           final position is free by the argument above, so FINISHING the
+           renumber is the repair — best-effort, because whatever refused the
+           write may refuse this too, and a row left parked is renumbered from
+           start order by the next successful save anyway. Either way the
+           reader gets a sentence instead of the HTML page Express answers an
+           uncaught throw with (the surfacing half of D2), and this route
+           answers it itself: the shared error path is not block 9's to touch. */
+        for (const [i, sp] of sorted.entries()) {
+          if (!sp.id || !parked.has(sp.id)) continue;
+          try {
+            await Sprint.updateOne({ _id: sp.id, project_id: projectId, position: { $lt: 1 } }, { $set: { position: i + 1 } });
+          } catch { /* best effort: the next save renumbers from start order */ }
+        }
+        console.error(`[sprints] ${String(projectId)} save failed: ${(err as Error).message}`);
+        res.status(500).json({ ok: false, error: { code: 'SPRINTS_NOT_SAVED', message: 'The sprint list could not be saved — reload and try the edit again.' } });
+        return;
       }
       /* THE RE-DATE DISPLACEMENT (owl #90, JP 2026-09-10; PLAN.md block 9).
          A sprint whose dates moved can leave a plotted row's day outside its
@@ -475,7 +530,8 @@ export function scheduleRouter(): Router {
          the renamer as the actor of a consequence rollover had caused
          (invariant 10 records the act, so it must record the right one). */
       const kept = sorted.filter((sp): sp is typeof sp & { id: string } => sp.id !== undefined);
-      const wasById = new Map(before.map((b) => [String(b._id), b] as const));
+      // `wasById` is the same map the renumber above reads — the state BEFORE
+      // this request, which is what "dates actually moved" has to be judged on
       const redated = kept.filter((sp) => {
         const was = wasById.get(sp.id);
         return was === undefined || was.starts_on !== sp.start || was.ends_on !== sp.end;

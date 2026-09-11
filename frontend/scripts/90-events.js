@@ -410,14 +410,31 @@ function dlRefuse(row, weekKey, dayIso) {
 }
 /* After a nudge's reload the card that held focus is a NEW element in
    another column, and the browser has dropped focus to <body> — the next
-   arrow would go nowhere. Focus is RETURNED to the same row's card, never
-   stolen: only when nothing else holds it (the addRefocus discipline,
-   review 2026-09-05, B2-R7). The card is found by its row id; a template
-   without that hook simply leaves focus where the browser put it. */
+   arrow would go nowhere. Focus is RETURNED to the same row's card.
+
+   BY ROW, NOT BY PRESENCE (block 9 E2E, defect D1). Asking only whether
+   anything still holds focus was wrong whenever the origin column kept a
+   second card: Ractive REUSES the focused <article> for the row that stayed,
+   so focus is never lost — it silently becomes that row's, and the reader's
+   next arrow moves a card they never touched and banks an audit row naming
+   them for it. So the element holding focus is asked WHOSE it is: a card of
+   another row gives it back to the row just moved; nothing at all does too
+   (the <body> case this always handled). Focus is still never STOLEN from
+   outside the cards — a reader who tabbed away mid-write keeps it (the
+   addRefocus discipline, review 2026-09-05, B2-R7).
+
+   And if the moved row's card cannot be found — a template without the
+   `data-row` hook, a row the reload dropped — the wrongly-focused card is
+   BLURRED rather than left aimed at the wrong row: the next arrow then does
+   nothing, which is the safe half of the same rule. */
 function dlRefocus(rowId) {
-  if (document.activeElement && document.activeElement !== document.body) return;
+  const at = document.activeElement;
+  const held = at && at.closest ? at.closest('.dlcard[data-row]') : null;
+  if (held && held.dataset.row === rowId) return; // the moved row still has it
+  if (at && at !== document.body && !held) return; // something outside the cards has it
   const card = document.querySelector(`.dlcard[data-row="${rowId}"]`);
   if (card && card.focus) card.focus();
+  else if (held && held.blur) held.blur();
 }
 
 /* HOW AN ADD FAILS — one owner for both adds, because the policy is one
@@ -1368,8 +1385,14 @@ app.on({
       app.set({ sprintModal: false, sprintDeleteConfirm: null, sprintDisplaced: displaced });
       await loadAll();
     } catch (err) {
+      /* The refusals that carry a LIST speak through it; every other refusal
+         speaks through the server's own sentence, which is what `errText`
+         prefers — `api.send` puts the CODE in `err.message`, so reading that
+         first printed `SPRINTS_STALE` (and, once this route stopped answering
+         an uncaught throw with an HTML page, `SPRINTS_NOT_SAVED`) at a person.
+         Block 9 E2E, D2's second half. */
       const issues = err.detail && err.detail.issues;
-      app.set('sprintError', issues && issues.length ? issues[0].text : err.message);
+      app.set('sprintError', issues && issues.length ? issues[0].text : errText(err));
     }
   },
 

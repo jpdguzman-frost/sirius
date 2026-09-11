@@ -336,6 +336,18 @@ interface Harness {
   lost(): void;
   /** a keydown as the DOM delivers one: window CAPTURE listeners first, then the focused card's own handler */
   press(key: string, focusedRowId: string | null, opts?: { from?: 'card' | 'link'; mods?: Partial<Record<'altKey' | 'metaKey' | 'ctrlKey' | 'shiftKey', boolean>> }): Promise<KeyEvent>;
+  /** put focus on a row's card, or (null) drop it to `<body>` */
+  focusOn(rowId: string | null): void;
+  /** the `data-row` of whatever holds focus — null when nothing card-shaped does */
+  focusedRow(): string | null;
+  /** what the NEXT reload's re-render does with the focused `<article>`: hand
+      it to this row (Ractive reuse), drop focus to `<body>` (null), or leave
+      it on something outside the cards entirely ('elsewhere') */
+  reuseFocusAs(rowId: string | null | 'elsewhere'): void;
+  /** this row's card is not in the document at all */
+  unrenderCard(rowId: string): void;
+  /** a keydown delivered to whatever holds focus, bound to THAT card's row */
+  pressFocused(key: string): Promise<KeyEvent>;
   weekPlace(rowId: string, weekIdx: number): Promise<void>;
   weekHover(rowId: string, weekIdx: number): void;
   saving(on: boolean): void;
@@ -415,6 +427,7 @@ const harness = (rows: Row[], sprints: Array<{ id: string; name: string; start: 
     let hitAt = null;
     let failWith = null;
     let answerWith = null;
+    let reuse = undefined;
     const getPath = (k) => k.split('.').reduce((o, p) => (o == null ? o : o[p]), state);
     const setPath = (k, v) => {
       const parts = k.split('.');
@@ -446,6 +459,16 @@ const harness = (rows: Row[], sprints: Array<{ id: string; name: string; start: 
     const loadAll = async () => {
       fired.push('loadAll');
       seen.push(state.sprintItems.rows.map((r) => ({ id: r.id, startsOn: r.startsOn, sprintId: r.sprintId })));
+      /* THE RE-RENDER THE RELOAD CAUSES, as far as focus is concerned (block
+         9 E2E, defect D1). Ractive re-renders the lane from the new rows and
+         REUSES DOM elements: the <article> that held focus is handed to
+         whichever row now renders in its place, or — when its column emptied
+         — focus falls to <body>. A test says which of the two happened with
+         reuseFocusAs(); nothing is assumed by default. */
+      if (reuse !== undefined) {
+        document.activeElement = reuse === null ? document.body : reuse === 'elsewhere' ? foreignNode : cardFor(reuse);
+        reuse = undefined;
+      }
     };
     const flashBanner = (t) => { banners.push(t); };
     const errText = (e) => (e && e.message) || String(e);
@@ -463,15 +486,43 @@ const harness = (rows: Row[], sprints: Array<{ id: string; name: string; start: 
        (No backticks in here: this whole harness is a template literal.) */
     const cardNode = { focus() { fired.push('focus'); }, closest: () => null };
     const linkNode = { focus() {}, closest: (sel) => (/\ba\b|button/.test(sel) ? linkNode : null) };
+    /* ONE <article> PER ROW, as 20-deadline-card.html renders them: the
+       data-row hook (amendment 1), a browser-shaped closest(), and a
+       focus()/blur() pair that MOVES activeElement the way a real one does.
+       These are what document.querySelector answers with, so dlRefocus is
+       executed against nodes that can tell whose card they are. */
+    const cards = new Map();
+    const gone = new Set();
+    const cardFor = (rowId) => {
+      if (!cards.has(rowId)) {
+        const node = {
+          dataset: { row: rowId },
+          closest: (sel) => (sel.indexOf('.dlcard') === 0 ? node : null),
+          focus() { fired.push('focus:' + rowId); document.activeElement = node; },
+          blur() { fired.push('blur:' + rowId); document.activeElement = document.body; },
+        };
+        cards.set(rowId, node);
+      }
+      return cards.get(rowId);
+    };
+    // something with no card above it at all: the month navigator, the tab strip
+    const foreignNode = { closest: () => null, focus() {}, blur() { fired.push('blur:foreign'); } };
     const lane = (weekKey) => ({ dataset: { week: weekKey } });
     const column = (at) => ({
       dataset: { day: at.day },
       closest: (sel) => (sel.startsWith('.dllane') ? lane(at.week) : null),
     });
     const document = {
-      body: {},
+      body: { closest: () => null },
       activeElement: null,
-      querySelector: () => null,
+      querySelector: (sel) => {
+        /* '.dlcard[data-row="r3"]' -> 'r3', by hand: this whole harness is a
+           template literal, and a backslash inside one is eaten before the
+           generated source ever sees it — so no regex may be written here. */
+        const at = sel.indexOf('="');
+        const rowId = at < 0 ? '' : sel.slice(at + 2, sel.indexOf('"', at + 2));
+        return rowId && !gone.has(rowId) ? cardFor(rowId) : null;
+      },
       elementFromPoint: () => (hitAt ? { closest: (sel) => (sel.startsWith('.dlday') ? column(hitAt) : null) } : null),
     };
     ${harnessSrc}
@@ -480,6 +531,16 @@ const harness = (rows: Row[], sprints: Array<{ id: string; name: string; start: 
     const deliver = (type, ev) => listeners.filter((l) => l.type === type).map((l) => l.fn(ev));
     return {
       state, sent, banners, fired, listeners, seen,
+      /* THE FOCUS HALF (block 9 E2E, defect D1): who holds focus now, who the
+         reload's re-render hands the focused <article> to, and a row whose
+         card the template does not render at all. */
+      focusOn: (rowId) => { document.activeElement = rowId === null ? document.body : cardFor(rowId); },
+      focusedRow: () => {
+        const at = document.activeElement;
+        return at && at.dataset ? at.dataset.row : null;
+      },
+      reuseFocusAs: (rowId) => { reuse = rowId; },
+      unrenderCard: (rowId) => { gone.add(rowId); },
       hit: (at) => { hitAt = at; },
       failNext: (message) => { failWith = new Error(message); },
       answerNext: (bodyOut) => { answerWith = bodyOut; },
@@ -502,6 +563,24 @@ const harness = (rows: Row[], sprints: Array<{ id: string; name: string; start: 
         };
         for (const l of listeners.filter((l) => l.type === 'keydown' && isCapture(l))) l.fn(e);
         if (!e.stopped && focusedRowId) handlers.dlKey({ event: e, node: cardNode }, focusedRowId);
+        await new Promise((r) => setTimeout(r, 0));
+        return e;
+      },
+      /* A KEY PRESSED AT WHATEVER HOLDS FOCUS, which is the only honest way
+         to ask defect D1's question: the browser delivers the press to the
+         focused <article>, and the row id the handler gets is the one THAT
+         article is bound to — its data-row and its on-keydown argument are
+         one and the same context, so a press cannot be aimed by hand. */
+      pressFocused: async (key) => {
+        const node = document.activeElement;
+        const rowId = node && node.dataset ? node.dataset.row : null;
+        const e = {
+          key, stopped: false, prevented: false, target: node,
+          altKey: false, metaKey: false, ctrlKey: false, shiftKey: false,
+          stopPropagation() { this.stopped = true; }, preventDefault() { this.prevented = true; },
+        };
+        for (const l of listeners.filter((l) => l.type === 'keydown' && isCapture(l))) l.fn(e);
+        if (!e.stopped && rowId) handlers.dlKey({ event: e, node }, rowId);
         await new Promise((r) => setTimeout(r, 0));
         return e;
       },
@@ -996,6 +1075,117 @@ describe('dlKey — ArrowLeft / ArrowRight route to dlNudge; Escape cancels; eve
     // what the card was WEARING when the request left
     expect(h.sent[0]!.dragAt, 'a legal write went out dressed refused').toBeNull();
     expect(h.state.dlDrag).toBeNull();
+  });
+});
+/**
+ * D1 — WHOSE CARD HOLDS FOCUS AFTER A NUDGE (block 9's browser pass,
+ * `.claude/block9/e2e.md`).
+ *
+ * THE DEFECT THIS PINS: two cards on one Monday. The reader focuses one and
+ * presses ArrowRight; it moves, correctly. But the reload re-renders the lane
+ * and Ractive REUSES the focused `<article>` for the card that stayed — so
+ * focus is never "lost", `dlRefocus`'s old test ("does anything hold it?")
+ * says yes, and focus has silently become the OTHER row's. The natural second
+ * press — "move it two days" — then moved a card the reader never touched and
+ * banked an audit row naming them for it.
+ *
+ * THE RULE: focus is compared BY ROW. It goes back to the row that moved
+ * whenever the element holding it is another row's card or nothing at all,
+ * and is never taken from something outside the cards. A press cannot be
+ * aimed by hand here (`pressFocused`): the row id the handler receives is the
+ * one the FOCUSED article is bound to, exactly as the template binds it —
+ * which is why a guard inside `dlNudge` comparing the two could not have
+ * caught this. Ractive re-stamps `data-row` and the `on-keydown` argument
+ * from the same context, so on the reused article they AGREE, both naming
+ * the wrong row.
+ */
+describe('dlRefocus — a nudge leaves focus on the row that MOVED (block 9 E2E, defect D1)', () => {
+  /** Two cards on the same Monday of Sprint B — the shape that produced it. */
+  const TWO_ON_MONDAY = (): Row[] => [
+    ...ROWS(),
+    { id: 'r7', sprintId: 's2', startsOn: '2026-08-10', finish: '2026-08-11', deadline: null, late: false },
+  ];
+
+  it('takes focus back from the card Ractive reused, so the NEXT arrow moves the row the reader moved', async () => {
+    const h = harness(TWO_ON_MONDAY(), SPRINTS);
+    h.focusOn('r3');
+    // the reload hands the focused <article> to r7, the card that stayed on
+    // Monday — the browser reports no lost focus at any point
+    h.reuseFocusAs('r7');
+    h.answerNext({ ok: true, starts_on: '2026-08-11', sprint_id: 's2' });
+    await h.pressFocused('ArrowRight');
+    expect(h.sent.map((s) => s.url)).toEqual([URL_OF('r3')]);
+    expect(h.row('r3').startsOn).toBe('2026-08-11');
+    expect(h.focusedRow(), 'focus stayed on the card that did not move').toBe('r3');
+
+    // the second press: the gesture the defect turned into someone else's edit
+    h.answerNext({ ok: true, starts_on: '2026-08-12', sprint_id: 's2' });
+    await h.pressFocused('ArrowRight');
+    expect(h.sent.map((s) => s.url)).toEqual([URL_OF('r3'), URL_OF('r3')]);
+    expect(h.row('r3').startsOn).toBe('2026-08-12');
+    expect(h.row('r7').startsOn, 'the card that stayed was written by a press meant for another row').toBe('2026-08-10');
+    expect(h.focusedRow()).toBe('r3');
+  });
+
+  it('still returns focus when the origin column emptied and the browser dropped it to <body>', async () => {
+    // the half that always worked, and must keep working
+    const h = harness(TWO_ON_MONDAY(), SPRINTS);
+    h.focusOn('r3');
+    h.reuseFocusAs(null);
+    h.answerNext({ ok: true, starts_on: '2026-08-11', sprint_id: 's2' });
+    await h.pressFocused('ArrowRight');
+    expect(h.focusedRow()).toBe('r3');
+    expect(h.fired).toContain('focus:r3');
+  });
+
+  it('leaves focus alone when the moved row still holds it — no needless re-focus', async () => {
+    const h = harness(TWO_ON_MONDAY(), SPRINTS);
+    h.focusOn('r3');
+    h.answerNext({ ok: true, starts_on: '2026-08-11', sprint_id: 's2' });
+    await h.pressFocused('ArrowRight');
+    expect(h.focusedRow()).toBe('r3');
+    expect(h.fired, 'focus was taken and given back for nothing').not.toContain('focus:r3');
+  });
+
+  it('never STEALS focus from something outside the cards (the addRefocus discipline, B2-R7)', async () => {
+    const h = harness(TWO_ON_MONDAY(), SPRINTS);
+    h.focusOn('r3');
+    // the reader tabbed to the month navigator while the write was in the air
+    h.reuseFocusAs('elsewhere');
+    h.answerNext({ ok: true, starts_on: '2026-08-11', sprint_id: 's2' });
+    await h.pressFocused('ArrowRight');
+    expect(h.row('r3').startsOn).toBe('2026-08-11'); // the move itself stands
+    expect(h.focusedRow()).toBeNull();
+    expect(h.fired).not.toContain('focus:r3');
+    expect(h.fired).not.toContain('blur:foreign');
+  });
+
+  it('blurs the reused card when the moved row has none to give focus back to — the next arrow then writes NOTHING', async () => {
+    /* The safe half of the same rule: if the moved row's card cannot be
+       found, focus must not be left sitting on another row's card, where the
+       reader's next arrow would move that row. */
+    const h = harness(TWO_ON_MONDAY(), SPRINTS);
+    h.focusOn('r3');
+    h.unrenderCard('r3');
+    h.reuseFocusAs('r7');
+    h.answerNext({ ok: true, starts_on: '2026-08-11', sprint_id: 's2' });
+    await h.pressFocused('ArrowRight');
+    expect(h.fired).toContain('blur:r7');
+    expect(h.focusedRow()).toBeNull();
+
+    await h.pressFocused('ArrowRight');
+    expect(h.sent, 'an arrow with no focused card wrote something').toHaveLength(1);
+    expect(h.row('r7').startsOn).toBe('2026-08-10');
+    expect(h.banners).toEqual([]);
+  });
+
+  it('a REFUSED nudge writes nothing and moves no focus — the card that was pressed keeps it', async () => {
+    const h = harness(TWO_ON_MONDAY(), SPRINTS);
+    h.focusOn('r3');
+    await h.pressFocused('ArrowLeft'); // Monday → the Sunday before: outside the week
+    expect(h.sent).toEqual([]);
+    expect(h.focusedRow()).toBe('r3');
+    expect(h.state.dlDrag).toMatchObject({ rowId: 'r3', refused: true });
   });
 });
 
