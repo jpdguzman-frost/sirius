@@ -461,24 +461,57 @@ export function scheduleRouter(): Router {
          row under the surviving sprints, judged in memory by the same string
          compare `sprintRangeIssue` uses — inclusive at both ends — so a row
          on the new boundary day stays. Unplotted rows have no day to fall
-         outside anything and are not read. */
+         outside anything and are not read.
+
+         …and only sprints whose DATES actually moved in this request are
+         asked (PLAN.md amendment 18a, review 2026-09-12). #90 rules on "a
+         sprint's dates are edited so that already-placed cards fall outside
+         them"; a rename or a reorder is not that edit. The difference is not
+         cosmetic: rollover legitimately leaves a rolled row listed under its
+         sprint with a day past that sprint's range when no sprint covers the
+         new day (§6.2, `rollover.ts` "the row stays listed where it is"), so
+         judging every surviving sprint on every save made the next rename
+         displace that row and — worse — write `sprintItem.displaced` naming
+         the renamer as the actor of a consequence rollover had caused
+         (invariant 10 records the act, so it must record the right one). */
       const kept = sorted.filter((sp): sp is typeof sp & { id: string } => sp.id !== undefined);
-      const rangeOf = new Map(kept.map((sp) => [sp.id, sp] as const));
-      const plotted = kept.length
-        ? await SprintItem.find({ project_id: projectId, sprint_id: { $in: kept.map((sp) => sp.id) }, starts_on: { $ne: null } })
+      const wasById = new Map(before.map((b) => [String(b._id), b] as const));
+      const redated = kept.filter((sp) => {
+        const was = wasById.get(sp.id);
+        return was === undefined || was.starts_on !== sp.start || was.ends_on !== sp.end;
+      });
+      const rangeOf = new Map(redated.map((sp) => [sp.id, sp] as const));
+      const plotted = redated.length
+        ? await SprintItem.find({ project_id: projectId, sprint_id: { $in: redated.map((sp) => sp.id) }, starts_on: { $ne: null } })
             .sort({ position: 1, _id: 1 })
             .lean()
         : [];
-      const displacedRows = plotted.filter((it) => {
+      const candidates = plotted.filter((it) => {
         const sp = rangeOf.get(String(it.sprint_id));
         const day = it.starts_on as string;
         return sp !== undefined && (day < sp.start || day > sp.end);
       });
-      if (displacedRows.length) {
-        await SprintItem.updateMany(
-          { _id: { $in: displacedRows.map((it) => it._id) }, project_id: projectId },
+      /* ONE CONDITIONAL WRITE PER ROW, keyed on exactly what the read above
+         judged — `sprint_id` and `starts_on` — which is `rollover.ts`'s R3-2
+         discipline and is here for R3-2's reason (PLAN.md amendment 18b).
+         The read, the in-memory judgement and the write are three steps, and
+         between them a Deadlines day write (a second person) or a rollover
+         tick (a second process) can move the row: keyed on `_id` alone, the
+         pass nulled a row whose day was by then INSIDE the new range and
+         audited a day the row no longer had. Unmatched means raced, and a
+         raced row is neither listed in `displaced[]` nor audited — it is not
+         a displacement, it is a row that moved on its own and whose current
+         state is already the true one. Per-row rather than one `bulkWrite`
+         because the driver reports only an aggregate `matchedCount`: it
+         cannot say WHICH row raced, and that is the thing this needs. */
+      const displacedRows: typeof candidates = [];
+      for (const it of candidates) {
+        // `write`, not `res`: `res` is the response object this handler answers on
+        const write = await SprintItem.updateOne(
+          { _id: it._id, project_id: projectId, sprint_id: it.sprint_id, starts_on: it.starts_on },
           { $set: { sprint_id: null } },
         );
+        if (write.matchedCount === 1) displacedRows.push(it);
       }
       /* The notice names each card (JP 2026-09-09, the LIST half that #90
          kept): the row's own `mc_number` as the display id — the group the

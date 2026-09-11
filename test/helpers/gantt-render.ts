@@ -296,6 +296,17 @@ export interface SprintScheduleState {
    * `.gitem` assertions have a node to read.
    */
   itemBar?: (row: SprintScheduleRow) => ItemBarStub[];
+  /**
+   * Rule 42's string on the ROW'S TRACK (PLAN.md block 9 amendment 11): the
+   * bar went `pointer-events: none` — a multi-week run swallowed the `.gweek`
+   * click of every week it lay over — and a transparent box shows no tooltip,
+   * so the title moved to the element that still takes a pointer. Stubbed to
+   * the same two dates the default `itemBar` titles with, because
+   * test/sprint-schedule-bars-footer.test.ts EXECUTES the shipped `rowTitle`
+   * and runs it against `itemBar`'s own title; what a render proves is which
+   * element carries the attribute.
+   */
+  rowTitle?: (row: SprintScheduleRow) => string;
   deadlineTick?: (row: SprintScheduleRow) => string | null;
   sprintFootText?: (weekKey: string) => string;
   sprintFootCls?: (weekKey: string) => string;
@@ -361,6 +372,11 @@ export function renderSprintSchedule(state: SprintScheduleState = {}): string {
           row.startsOn && row.finish
             ? [{ left: '0.00', width: '11.67', cls: 'render', title: `${row.startsOn} → ${row.finish}` }]
             : []),
+      rowTitle: state.rowTitle
+        ?? ((row: SprintScheduleRow) =>
+          row.startsOn && row.finish
+            ? `${row.startsOn} → ${row.finish}${row.late ? ' · past the client deadline' : ''}`
+            : ''),
       deadlineTick: state.deadlineTick ?? (() => null),
       fmtLongIso: (iso: unknown) => (iso ? `long:${String(iso)}` : '—'),
       sprintFootText: state.sprintFootText ?? (() => '—'),

@@ -216,6 +216,17 @@
 .dlcard.refused { cursor: not-allowed; opacity: 0.45; outline: 1px dashed var(--red-500); outline-offset: -1px; }
 .dlday.target { background: color-mix(in srgb, var(--indigo-500) 12%, var(--white)); }
 
+/* CONTRAST on the tinted column (review finding, block 9). The day heading's
+   Pending count is slate-500: 4.55:1 on the column's resting slate-50, but
+   4.10:1 once the target tint (#ecedfd) is under it — below the 4.5 AA floor
+   for body text, and below it exactly when the heading matters most, since
+   the tint is what says a card is about to land in THIS column. One step down
+   the ramp clears it: slate-700 on the tint is 8.92:1. Only the label, only
+   under `target`, and only for the length of a gesture — the resting colour
+   is the frame's and is untouched. (The ramp has no slate-600; slate-700 is
+   the next step the palette offers, and a raw hex here would be a defect.) */
+.dlday.target .dlcount .dlc.pending { color: var(--slate-700); }
+
 /* the urgency bar (#74 §3, from the exported path). It belongs to the URGENT
    card alone — a non-urgent card carries no bar at all, pale or otherwise —
    and it is a painted path rather than an edge on the box so it can follow the

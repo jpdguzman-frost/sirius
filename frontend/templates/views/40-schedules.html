@@ -298,17 +298,31 @@
                       to the PM, and the PM's week overwrites (#88). Block
                       seven's day-grain hover slot, its one-unit + and the
                       pointer day-drag on a placed bar are OUT of this tab
-                      (#88): the bar is DISPLAY only, its title is rule 42's
-                      `startsOn → finish` (itemBar's `b.title`, "· past the
-                      client deadline" when late), and the one day control in the product is
-                      the bounded drag on Deadlines (#89 §1). Placement stays
+                      (#88): the bar is DISPLAY only, and the one day control
+                      in the product is the bounded drag on Deadlines (#89
+                      §1).
+
+                      RULE 42'S TITLE IS BOUND ON THE TRACK, not on the bar
+                      (PLAN.md block 9 amendment 11): `startsOn → finish`,
+                      "· past the client deadline" when late — the same string
+                      itemBar puts on `b.title`, read off `rowTitle(row)` in
+                      50-gantt-geometry.js. The bar is pointer-transparent
+                      now (35-gantt.css §6) because a run spanning three weeks
+                      sat over the two .gweek cells AFTER its own and
+                      swallowed their click, so the PM could not re-place a
+                      card into a week its own bar covered — which defeats
+                      the one act this tab has. A transparent box can show no
+                      tooltip, so the string moves to the element that still
+                      takes the pointer; the track is the row, and a row
+                      draws one bar. The start day stays DISPLAYED either way
+                      (#88). Placement stays
                       a SECOND act: nothing below this loop offers a week,
                       and the search rows draw inert grid (owl #77 §0, node
                       840:31630). No HTML5 drag attribute or directive
                       anywhere on this tab, still. }}
-                  <div class="gtrack{{#if hoverRow === row.id}} placing{{/if}}">
+                  <div class="gtrack{{#if hoverRow === row.id}} placing{{/if}}" title="{{rowTitle(row)}}">
                     <div class="gweeks">{{#each plannerWeeks}}<div class="gweek{{#if hoverRow === row.id && hoverWeek === @index}} hover{{/if}}" on-mouseenter="['weekHover', row.id, @index]" on-mouseleave="['weekLeave']" on-click="['weekPlace', row.id, @index]"></div>{{/each}}</div>
-                    {{#each itemBar(row) as b}}<div class="gitem {{b.cls}}{{#if row.late}} late{{/if}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}"></div>{{/each}}
+                    {{#each itemBar(row) as b}}<div class="gitem {{b.cls}}{{#if row.late}} late{{/if}}" style="left:{{b.left}}%;width:{{b.width}}%;"></div>{{/each}}
                     {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
                   </div>
                 </div>

@@ -31,6 +31,7 @@ import {
   TEMPLATE,
   UI_CSS,
   displacedNoticeName,
+  fnBody,
   handlerBody,
   leakedMustacheText,
   renderDisplacedNotice,
@@ -1080,20 +1081,25 @@ describe('end to end — the shipped validators drive the shipped markup', () =>
 describe('batch semantics — one PUT, nothing per row', () => {
   it('sends the whole draft in a single PUT and never stamps a sprint onto a row', () => {
     expect([...APP_JS.matchAll(/api\.send\('PUT', `\/api\/projects\/\$\{app\.get\('activeProjectId'\)\}\/sprints`/g)]).toHaveLength(1);
-    /* Amended 2026-09-05 (owl #77 §0): the two legitimate `sprint_id` sites
-       are the search flow's two adds — `addOne`'s single POST and `addAll`'s
-       batch POST (the 08-28 dropdown flow's submitAddItem and draftPlace
-       retired with it). Both pair work cards with the sprint list the PM
-       opened. Sprint DEFINITIONS still travel only in the batch PUT, and no
-       client code assigns a sprintId onto a row — the rows arrive from the
-       server already carrying theirs.
-       The count is DERIVED from those two handlers (test/CLAUDE.md rule 2),
-       so the rule under guard is WHICH code names a sprint_id, not how many
-       times: a third site anywhere in the bundle breaks the equality. */
-    const owned = ['addOne', 'addAll']
-      .map((h) => [...handlerBody(h).matchAll(/sprint_id/g)].length)
+    /* Amended 2026-09-05 (owl #77 §0) and again 2026-09-12 (PLAN.md block 9
+       amendment 17). THE RULE: sprint DEFINITIONS travel only in the batch
+       PUT, and the client never DECIDES which sprint a row belongs to. Three
+       sites may name a `sprint_id`, and each one is the rule rather than an
+       exception to it:
+         - `addOne` and `addAll` — the search flow's single and batch POSTs,
+           pairing work cards with the sprint list the PM has open;
+         - `placeRow` — which READS `sprint_id` back off the PATCH's own 200
+           body and re-stamps the row with it. A week click can re-slot a
+           displaced row (#90) and only the server knows into what, so this
+           is the client copying the server's answer, the opposite of
+           inventing one. Nothing here writes a sprint the server did not name.
+       The count is DERIVED from those three (test/CLAUDE.md rule 2), so what
+       is guarded is WHICH code names a sprint_id, never how many times: a
+       fourth site anywhere in the bundle breaks the equality. */
+    const owned = [handlerBody('addOne'), handlerBody('addAll'), fnBody('placeRow')]
+      .map((body) => [...body.matchAll(/sprint_id/g)].length)
       .reduce((a, b) => a + b, 0);
-    expect(owned, 'neither add handler names a sprint_id — the count below would be vacuous').toBeGreaterThan(0);
+    expect(owned, 'none of the three owners names a sprint_id — the count below would be vacuous').toBeGreaterThan(2);
     expect([...APP_JS_CODE.matchAll(/sprint_id/g)]).toHaveLength(owned);
     expect(APP_JS).not.toMatch(/\.sprintId\s*=[^=]/); // no property assignment, anywhere
   });

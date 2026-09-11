@@ -37,6 +37,8 @@ interface GeoHarness {
   barWidthUnits(row: Partial<SprintScheduleRow>): number | null;
   /** the resting bar's left at a day — itemBar's own clamp, factored out (one owner) */
   barLeftAt(row: Partial<SprintScheduleRow> | null, day: string | null): string | null;
+  /** rule 42's string, the ONE owner of it since PLAN.md block 9 amendment 11 */
+  rowTitle(row: Partial<SprintScheduleRow> | null): string;
   dayIndex(iso: string): number;
   unitPct(u: number): string;
   TOTAL_UNITS: number;
@@ -56,7 +58,7 @@ interface GeoHarness {
  */
 const GEO_NAMES = [
   'WEEK_COUNT', 'WEEK_PX', 'WORKDAYS_PER_WEEK', 'TOTAL_UNITS', 'dayIndex', 'clampUnits', 'pctOf', 'unitPct',
-  'MIN_GRAB_PX', 'UNIT_PX', 'MIN_GRAB_UNITS', 'barWidthUnits', 'itemBar', 'itemPhase', 'barLeftAt',
+  'MIN_GRAB_PX', 'UNIT_PX', 'MIN_GRAB_UNITS', 'barWidthUnits', 'rowTitle', 'itemBar', 'itemPhase', 'barLeftAt',
 ];
 let geo: GeoHarness | undefined;
 const G = (): GeoHarness => {
@@ -65,7 +67,7 @@ const G = (): GeoHarness => {
     geo = new Function(`
       const app = { get: (k) => { if (k !== 'weekStart') throw new Error('geometry harness: unstubbed app.get(' + k + ')'); return '2026-08-03'; } };
       ${src}
-      return { itemBar, itemPhase, barWidthUnits, barLeftAt, dayIndex, unitPct, TOTAL_UNITS, WEEK_PX, MIN_GRAB_PX, UNIT_PX, MIN_GRAB_UNITS };
+      return { itemBar, itemPhase, barWidthUnits, barLeftAt, rowTitle, dayIndex, unitPct, TOTAL_UNITS, WEEK_PX, MIN_GRAB_PX, UNIT_PX, MIN_GRAB_UNITS };
     `)() as GeoHarness;
   }
   return geo;
@@ -112,6 +114,28 @@ describe('one row, one bar — start to finish, finish day INCLUSIVE', () => {
     expect(bar('2026-08-17', '2026-08-21')[0]!.title).toBe('2026-08-17 → 2026-08-21');
     expect(bar('2026-08-17', '2026-08-21', { late: true })[0]!.title)
       .toBe('2026-08-17 → 2026-08-21 · past the client deadline');
+  });
+
+  it('spells rule 42’s string ONCE — `rowTitle` owns it and `itemBar` reads it (PLAN.md amendment 11)', () => {
+    /* The string moved: the bar is pointer-transparent now (a multi-week run
+       swallowed the week clicks it lay over), and a transparent box shows no
+       tooltip, so the TRACK carries the title and the bar carries none. Two
+       readers, one owner — asserted by RUNNING the two against each other
+       (test/CLAUDE.md rule 2), never by comparing source text, because the
+       defect this forbids is the two spellings drifting apart. */
+    for (const row of [
+      { startsOn: '2026-08-17', finish: '2026-08-21', late: false },
+      { startsOn: '2026-08-17', finish: '2026-08-21', late: true },
+      { startsOn: '2026-08-03', finish: '2026-08-03', late: true },
+    ]) {
+      expect(G().rowTitle(row), JSON.stringify(row)).toBe(bar(row.startsOn, row.finish, { late: row.late })[0]!.title);
+    }
+    // a row that draws NO bar names no dates — the track then has no tooltip
+    expect(G().rowTitle({ startsOn: null, finish: null })).toBe('');
+    expect(G().rowTitle({ startsOn: '2026-08-17', finish: null })).toBe('');
+    expect(G().rowTitle(null)).toBe('');
+    // …and it is shared with the template, which is how the track can read it
+    expect(appSetArg('rowTitle')).toBe('rowTitle');
   });
 
   it('hands the template finished 2dp strings — no arithmetic in the markup', () => {
@@ -466,17 +490,29 @@ describe('the bar on Sprint Schedules is DISPLAY-ONLY — the day is set on Dead
     expect(/class="([^"]*)"/.exec(tag)?.[1]).toBe('gitem {{b.cls}}{{#if row.late}} late{{/if}}');
   });
 
-  it('DISPLAYS the start day on the bar — rule 42\'s `title="{{b.title}}"` (`startsOn → finish`; #88: displayed, not editable)', () => {
-    /* gantt-rules rule 42 (PLAN.md block 9 amendment 2): the bar's title is
-       itemBar's own `startsOn → finish`, plus "· past the client deadline"
-       when late — the suite above (`itemBar`) pins that string; the view
-       binds `b.title`, never a second spelling of the start day. */
-    expect(barTag()).toContain('title="{{b.title}}"');
+  it('DISPLAYS the start day on the ROW’S TRACK — rule 42’s string, moved off the transparent bar (PLAN.md amendment 11)', () => {
+    /* gantt-rules rule 42 (PLAN.md block 9 amendments 2 and 11): the string is
+       `startsOn → finish`, plus "· past the client deadline" when late, and it
+       is still DISPLAYED (#88: displayed, not editable) — but not by the bar.
+       The bar is `pointer-events: none` now, because a multi-week run lay over
+       the `.gweek` cells after its own and swallowed their click; a box the
+       pointer passes through can never show a tooltip. The track still takes
+       the pointer and is one per row, so the title rides it.
+
+       Both halves are asserted: the bar carries NO title, the track carries
+       the recipe's. Without the first, the two could ship together and the
+       tooltip would be the transparent one on top — the defect, invisible. */
+    expect(barTag()).not.toContain('title=');
     expect(barTag()).not.toContain('Starts ');
-    // rendered: the row's own day at the head of the bar the row draws
+    const trackTag = /<div class="gtrack[^>]*>/.exec(schedulesView());
+    expect(trackTag, 'no .gtrack in the schedules view').not.toBeNull();
+    expect(trackTag![0]).toContain('title="{{rowTitle(row)}}"');
+    // rendered: the row's own two dates, on the track, once
     const html = renderSprintSchedule({ sprintGroups: groupsOf(PLOTTED) });
-    expect(html).toContain('title="2026-08-03 → 2026-08-12"');
-    // and an unplotted row draws no bar, so no title at all
+    expect(html).toContain('class="gtrack" title="2026-08-03 → 2026-08-12"');
+    expect([...html.matchAll(/2026-08-03 →/g)]).toHaveLength(1);
+    // a row that draws no bar draws no dates either — an empty title attribute
+    // is the recipe's own empty string, never a stale one
     const none = renderSprintSchedule({ sprintGroups: groupsOf({ ...PLOTTED, startsOn: null, finish: null }) });
     expect(none).not.toContain('2026-08-03 →');
     expect(none).not.toContain('class="gitem');

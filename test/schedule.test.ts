@@ -9,7 +9,7 @@
  * `PUT /sprints`.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import request, { type Agent } from 'supertest';
 import mongoose, { Types } from 'mongoose';
 import { readFile } from 'node:fs/promises';
@@ -522,10 +522,16 @@ const rowOf = async (id: unknown) => (await SprintItem.findById(id).lean())!;
 describe('PATCH { week } — the PM’s week click lands the bar on the week’s FIRST WORKING day (#89 §2)', () => {
   it('resolves the day on the canonical calendar, audits before/after, and answers the day it chose', async () => {
     const { project, agent } = await setup();
-    const { item } = await seedRow(project._id);
+    const { sprint, item } = await seedRow(project._id);
     const res = await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-10' }).expect(200);
     expect((await rowOf(item._id)).starts_on).toBe('2026-08-10');
-    expect(res.body.ok).toBe(true);
+    /* THE 200 BODY IS FROZEN (PLAN.md amendment 4): `{ ok, starts_on,
+       sprint_id }`. The client draws the bar at the week's MONDAY for the
+       flight and re-stamps the row from THIS answer before its reload
+       (amendment 17), so a body that stopped naming the day the server chose
+       would leave a bar on a day nobody picked — and `expect(res.body.ok)`
+       alone could not see it go. Pinned whole, both keys. */
+    expect(res.body).toEqual({ ok: true, starts_on: '2026-08-10', sprint_id: String(sprint._id) });
     const log = await AuditLog.findOne({ action: 'sprintItem.plot', entity_id: String(item._id) }).lean();
     expect(log!.before).toMatchObject({ starts_on: null });
     expect(log!.after).toMatchObject({ starts_on: '2026-08-10' });
@@ -559,7 +565,12 @@ describe('PATCH { week } — the PM’s week click lands the bar on the week’s
     try {
       setHolidays(['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07']);
       res = await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-03' }).expect(422);
-      expect(res.body.error).toMatchObject({ code: expect.any(String), message: expect.any(String) });
+      /* THE COPY IS FROZEN (PLAN.md block 9 amendment 6). This is the one
+         refusal on this route that is about a WEEK rather than a day, and it
+         says so in the calendar's own words. Pinned whole: `expect.any(String)`
+         took the wrong CODE and a reworded sentence alike, and the sentence is
+         what the banner reads out to the PM. */
+      expect(res.body.error).toEqual({ code: 'NOT_A_WORKDAY', message: 'That week has no working day.' });
     } finally {
       setHolidays(restore);
     }
@@ -589,12 +600,15 @@ describe('PATCH { week } — the PM’s week click lands the bar on the week’s
 
   it('re-places a PLACED row by week — the Design Lead’s day is the PM’s to overwrite by week (drift report §H)', async () => {
     const { project, agent } = await setup();
-    const { item } = await seedRow(project._id, { startsOn: '2026-08-05' });
+    const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-05' });
     await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-10' }).expect(200);
     expect((await rowOf(item._id)).starts_on).toBe('2026-08-10');
     // the same week again is the no-op it is (invariant 10 logs changes)
     const res = await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-10' }).expect(200);
-    expect(res.body.noop).toBe(true);
+    // the no-op answers the SAME shape (PLAN.md amendment 4) — the client
+    // re-stamps from every 200, so a body that went thin on the cheap path
+    // would blank the row it was meant to leave alone
+    expect(res.body).toEqual({ ok: true, noop: true, starts_on: '2026-08-10', sprint_id: String(sprint._id) });
     expect(await AuditLog.countDocuments({ action: 'sprintItem.plot', entity_id: String(item._id) })).toBe(1);
   });
 });
@@ -604,7 +618,13 @@ describe('PATCH { starts_on } — the Design Lead’s day move stays INSIDE the 
     const { project, agent } = await setup();
     const { item } = await seedRow(project._id);
     const res = await agent.patch(itemUrl(project._id, item._id)).send({ starts_on: '2026-08-05' }).expect(422);
-    expect(res.body).toMatchObject({ ok: false, error: { code: 'NOT_PLACED', message: expect.any(String) } });
+    /* Frozen copy (PLAN.md amendment 6): the sentence TELLS the reader where
+       a week comes from, which is the whole of what this refusal is for. The
+       body is pinned whole, so a second field cannot appear unread. */
+    expect(res.body).toEqual({
+      ok: false,
+      error: { code: 'NOT_PLACED', message: 'That card has no week yet — place it on Sprint Schedules first.' },
+    });
     expect((await rowOf(item._id)).starts_on ?? null).toBeNull();
     expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
     // the same body on the SAME row once the PM has given it a week goes through
@@ -629,10 +649,12 @@ describe('PATCH { starts_on } — the Design Lead’s day move stays INSIDE the 
 
   it('takes a day inside the week — 200, the day written, one audit row with before and after', async () => {
     const { project, agent } = await setup();
-    const { item } = await seedRow(project._id, { startsOn: '2026-08-05' });
+    const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-05' });
     for (const day of ['2026-08-03', '2026-08-07', '2026-08-04']) {
-      await agent.patch(itemUrl(project._id, item._id)).send({ starts_on: day }).expect(200);
+      const res = await agent.patch(itemUrl(project._id, item._id)).send({ starts_on: day }).expect(200);
       expect((await rowOf(item._id)).starts_on, day).toBe(day);
+      // the day owner's 200 carries the frozen body too (PLAN.md amendment 4)
+      expect(res.body, day).toEqual({ ok: true, starts_on: day, sprint_id: String(sprint._id) });
     }
     const moves = await AuditLog.find({ action: 'sprintItem.plot', entity_id: String(item._id) }).sort({ _id: 1 }).lean();
     expect(moves.map((m) => [(m.before as { starts_on: string }).starts_on, (m.after as { starts_on: string }).starts_on])).toEqual([
@@ -675,9 +697,12 @@ describe('PUT /sprints re-date — displaced rows move to Outside any sprint, ke
     const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-12' });
     const res = await put(agent, project._id, sprint, '2026-08-03', '2026-08-07').expect(200);
     expect(res.body.displaced).toEqual([{
-      id: String(item._id), display_id: 'MC-655', title: 'Sketch Asset: hero', starts_on: '2026-08-12', from_sprint: expect.any(String),
+      id: String(item._id), display_id: 'MC-655', title: 'Sketch Asset: hero', starts_on: '2026-08-12', from_sprint: 'Sprint 46',
     }]);
-    expect([String(sprint._id), 'Sprint 46']).toContain(res.body.displaced[0].from_sprint);
+    /* the NAME, never the id (PLAN.md amendment 5): the notice is read by a
+       person deciding where to re-slot the card, and an ObjectId names
+       nothing to them. Accepting either spelling let the useless one ship. */
+    expect(res.body.displaced[0].from_sprint).not.toBe(String(sprint._id));
     const row = await rowOf(item._id);
     expect(row.sprint_id ?? null).toBeNull(); // *Outside any sprint*
     expect(row.starts_on).toBe('2026-08-12'); // the exact day, kept
@@ -737,6 +762,158 @@ describe('PUT /sprints re-date — displaced rows move to Outside any sprint, ke
     await agent.put(`/api/projects/${project._id}/sprints`).send({ sprints: [{ name: 'Other', start: '2026-09-07', end: '2026-09-11' }] }).expect(200);
     expect(await SprintItem.countDocuments({ _id: item._id })).toBe(1);
     expect((await rowOf(item._id)).starts_on).toBe('2026-08-12');
+  });
+
+  it('leaves a displaced row OUTSIDE even when its day sits inside ANOTHER kept sprint — never re-filed by the pass (#90)', async () => {
+    /* #90's DISTINGUISHING claim, and the one shape no test held. A re-date
+       that pushes a row out of its own sprint can easily leave its day inside
+       a NEIGHBOURING sprint's range, and "file it there" is the obvious,
+       wrong kindness: it is a membership decision nobody made, on a schedule
+       the PM is in the middle of editing, and #90 gives the row to *Outside
+       any sprint* so the PM sees it and chooses. The re-slot exists — it is
+       the week click, one act later (the test below) — and it is the PM's.
+
+       The neighbour is created in the SAME save, so this is the live shape:
+       one modal apply that shortens one sprint and adds another. */
+    const { project, agent } = await setup();
+    const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-12', sprint: { starts_on: '2026-08-03', ends_on: '2026-08-14' } });
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { id: String(sprint._id), name: 'Sprint 46', start: '2026-08-03', end: '2026-08-07' },
+        { name: 'Sprint 47', start: '2026-08-10', end: '2026-08-14' },
+      ],
+    }).expect(200);
+    // the neighbour really does cover the kept day — without this the test
+    // would pass on a sprint that was never a candidate (rule 1)
+    const neighbour = await Sprint.findOne({ project_id: project._id, name: 'Sprint 47' }).lean();
+    expect(neighbour).not.toBeNull();
+    expect(neighbour!.starts_on <= '2026-08-12' && '2026-08-12' <= neighbour!.ends_on).toBe(true);
+    // …and the row went OUTSIDE all the same, day intact, named in the notice
+    const row = await rowOf(item._id);
+    expect(row.sprint_id ?? null).toBeNull();
+    expect(String(row.sprint_id ?? '')).not.toBe(String(neighbour!._id));
+    expect(row.starts_on).toBe('2026-08-12');
+    expect(res.body.displaced.map((d: { id: string }) => d.id)).toEqual([String(item._id)]);
+    const logs = await AuditLog.find({ action: 'sprintItem.displaced', project_id: project._id }).lean();
+    expect(logs).toHaveLength(1);
+    expect((logs[0]!.after as { sprint_id: unknown }).sprint_id).toBeNull();
+    // the PM's own act still files it there — so the row is parked, not stranded
+    await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-10' }).expect(200);
+    expect(String((await rowOf(item._id)).sprint_id)).toBe(String(neighbour!._id));
+  });
+
+  it('names the sprint by the name SAVED IN THIS REQUEST — a rename in the same apply is the name the notice prints', async () => {
+    /* PLAN.md amendment 5. One modal apply can rename AND re-date a sprint,
+       and the notice is read after the save: printing the OLD name would send
+       the PM looking for a sprint the screen behind the banner no longer has. */
+    const { project, agent } = await setup();
+    const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-12', sprint: { starts_on: '2026-08-03', ends_on: '2026-08-14' } });
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [{ id: String(sprint._id), name: 'Sprint 46 revised', start: '2026-08-03', end: '2026-08-07' }],
+    }).expect(200);
+    expect(res.body.displaced).toEqual([{
+      id: String(item._id), display_id: 'MC-655', title: 'Sketch Asset: hero', starts_on: '2026-08-12', from_sprint: 'Sprint 46 revised',
+    }]);
+    expect(res.body.displaced[0].from_sprint).not.toBe('Sprint 46'); // the name it had on the way in
+  });
+
+  it('judges ONLY the sprints whose dates changed in this request — a row already outside an untouched sprint is left alone (PLAN.md amendment 18a)', async () => {
+    /* A row can sit outside its sprint's range without anything being wrong:
+       rollover walks an unfinished card past its sprint's end BY DESIGN
+       (§6.2), and that row keeps its membership until someone re-plans it.
+       A sweep over every kept sprint would displace those rows on the next
+       unrelated sprint save — a rename, a date change three sprints away —
+       and audit each one as if the editor had done it. The pass is about
+       what THIS request moved, so it asks only the sprints it moved. */
+    const { project, agent } = await setup();
+    const { sprint: sprintA, item: rolled } = await seedRow(project._id, { sprint: { starts_on: '2026-08-03', ends_on: '2026-08-07' } });
+    // the rolled row: past its sprint's end, written the way rollover writes it
+    await SprintItem.updateOne({ _id: rolled._id }, { $set: { starts_on: '2026-08-12' } });
+    const sprintB = await Sprint.create({ project_id: project._id, name: 'Sprint 47', starts_on: '2026-08-10', ends_on: '2026-08-14', position: 2 });
+    await WorkCard.create({
+      project_id: project._id, trello_card_id: 'wc-b', mc_number: 'MC-700',
+      name: 'Sketch Asset: second', current_list: 'Design', active: true,
+    });
+    const moved = await SprintItem.create({
+      project_id: project._id, sprint_id: sprintB._id, mc_number: 'MC-700', trello_card_id: 'wc-b',
+      position: 0, added_by: 'pm@frostdesigngroup.com', starts_on: '2026-08-14',
+    });
+    // the rolled row IS outside its sprint — the premise, asserted, so the
+    // test cannot pass because nothing was ever a candidate
+    expect('2026-08-12' > (await Sprint.findById(sprintA._id).lean())!.ends_on!).toBe(true);
+
+    // ONE sprint re-dated: B. A is sent back byte-identical.
+    const res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { id: String(sprintA._id), name: 'Sprint 46', start: '2026-08-03', end: '2026-08-07' },
+        { id: String(sprintB._id), name: 'Sprint 47', start: '2026-08-10', end: '2026-08-12' },
+      ],
+    }).expect(200);
+    expect(res.body.displaced.map((d: { id: string }) => d.id)).toEqual([String(moved._id)]);
+    expect(String((await rowOf(rolled._id)).sprint_id)).toBe(String(sprintA._id)); // untouched
+    expect((await rowOf(moved._id)).sprint_id ?? null).toBeNull();
+    const logs = await AuditLog.find({ action: 'sprintItem.displaced', project_id: project._id }).lean();
+    expect(logs.map((l) => l.entity_id)).toEqual([String(moved._id)]);
+
+    // IS NOT VACUOUS: re-date A itself and the same rolled row DOES go out
+    const second = await agent.put(`/api/projects/${project._id}/sprints`).send({
+      sprints: [
+        { id: String(sprintA._id), name: 'Sprint 46', start: '2026-08-03', end: '2026-08-06' },
+        { id: String(sprintB._id), name: 'Sprint 47', start: '2026-08-10', end: '2026-08-12' },
+      ],
+    }).expect(200);
+    expect(second.body.displaced.map((d: { id: string }) => d.id)).toEqual([String(rolled._id)]);
+    expect((await rowOf(rolled._id)).sprint_id ?? null).toBeNull();
+  });
+
+  it('writes each displacement CONDITIONALLY — a row whose day moved under the pass is neither displaced nor audited (PLAN.md amendment 18b)', async () => {
+    /* R3-2's discipline, borrowed from rollover: the pass reads the rows,
+       then writes. Between those two moments the Design Lead can drop the
+       card on another day — the day write is a different route on the same
+       collection — and a blind `updateMany` would null the membership of a
+       row that, as it now stands, is inside the new range. Worse, the notice
+       and the audit row would both claim a move that did not happen.
+
+       Each write is keyed on the `starts_on` and `sprint_id` the pass READ;
+       a row that no longer matches is left exactly as the other writer left
+       it, and drops out of `displaced[]` and out of the log with it. The
+       second row proves the pass carried on rather than bailing. */
+    const { project, agent } = await setup();
+    const { sprint, item: raced } = await seedRow(project._id, { startsOn: '2026-08-12', sprint: { starts_on: '2026-08-03', ends_on: '2026-08-14' } });
+    await WorkCard.create({
+      project_id: project._id, trello_card_id: 'wc-b', mc_number: 'MC-700',
+      name: 'Sketch Asset: second', current_list: 'Design', active: true,
+    });
+    const stays = await SprintItem.create({
+      project_id: project._id, sprint_id: sprint._id, mc_number: 'MC-700', trello_card_id: 'wc-b',
+      position: 1, added_by: 'pm@frostdesigngroup.com', starts_on: '2026-08-13',
+    });
+    /* slip the Design Lead's day write under the pass's FIRST conditional
+       update — the same seam test/rollover.test.ts uses for R3-2. The raced
+       row is position 0, so it is the row the pass reaches first. */
+    const original = SprintItem.updateOne.bind(SprintItem) as unknown as (...a: unknown[]) => unknown;
+    const spy = vi.spyOn(SprintItem, 'updateOne').mockImplementationOnce((async (...args: unknown[]) => {
+      await SprintItem.collection.updateOne({ _id: raced._id }, { $set: { starts_on: '2026-08-05' } });
+      return original(...args);
+    }) as never);
+    let res;
+    try {
+      res = await agent.put(`/api/projects/${project._id}/sprints`).send({
+        sprints: [{ id: String(sprint._id), name: 'Sprint 46', start: '2026-08-03', end: '2026-08-07' }],
+      }).expect(200);
+    } finally {
+      spy.mockRestore();
+    }
+    // the raced row keeps the OTHER writer's day AND its membership — on that
+    // day it belongs in the sprint, and nothing claims otherwise
+    const rowA = await rowOf(raced._id);
+    expect(rowA.starts_on).toBe('2026-08-05');
+    expect(String(rowA.sprint_id)).toBe(String(sprint._id));
+    // …and the pass went on to the row it really did move
+    expect(res!.body.displaced.map((d: { id: string }) => d.id)).toEqual([String(stays._id)]);
+    expect((await rowOf(stays._id)).sprint_id ?? null).toBeNull();
+    const logs = await AuditLog.find({ action: 'sprintItem.displaced', project_id: project._id }).lean();
+    expect(logs.map((l) => l.entity_id)).toEqual([String(stays._id)]);
   });
 
   it('a displaced row re-slots by the PM’s week click — into the sprint that covers the day, else it stays outside (invariant 12)', async () => {

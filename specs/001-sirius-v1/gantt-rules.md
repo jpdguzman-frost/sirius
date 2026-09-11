@@ -28,7 +28,7 @@ contract (four conditions, keyboard, audit) is documented in full in
 the parts (Escape, no ghost, no HTML5 DnD) that bind both surfaces.
 
 1. **A drag source must stay hit-testable in every state, on whichever tab
-   owns the gesture.** Source is `.gitem` here (rule 2), `.dlcard` on
+   owns the gesture.** Source is `.gweek` here (rule 2), `.dlcard` on
    Deadlines (deadlines-rules.md §1a, R-d2-t). `pointer-events: none`,
    `visibility: hidden` or `display: none` on the source or an ancestor
    must never make it unclickable, in any state. Each tab's own suite
@@ -36,16 +36,20 @@ the parts (Escape, no ghost, no HTML5 DnD) that bind both surfaces.
    `test/deadlines-drag.test.ts` there. [R-g-1, batch 7; principle
    carried, wording generalised block 9]
 2. **The placement source is `.gweek`, not `.gitem`.** `.gitem` is
-   DISPLAY-ONLY from block 9 on — it still draws the row's placed bar
-   (`itemBar`, colour, `late`, a `title`, rule 42) but takes no pointer
+   DISPLAY-ONLY and, since PLAN amendment 11 (REVIEW 2026-09-12),
+   TRANSPARENT TO THE POINTER — `pointer-events: none`, not merely
+   unbound: a bar spanning more than one week sat over its later weeks'
+   `.gweek` cells and, left hit-testable, ate their click. It still draws
+   the placed bar (`itemBar`, colour, `late`) but carries no `title` of
+   its own any more — moved to `.gtrack`, rule 42 — and takes no pointer
    handler: no `mousedown`, no `dragging`/`refused` class, `cursor:
    default`. The gesture lives on every row's `.gweek` track cells
    (placed rows included): `weekHover`/`weekLeave` light `.gweek.hover`;
    `weekPlace` on click PATCHes `{ week }` (rule 6). **(reversed
-   2026-09-11 by owl #88; was: "The drag source is `.gitem`" — picked up
-   by `barDragStart` on `mousedown`, driven day-grain by
-   `barDragMove`/`barDragEnd`, block 7.)** [`90-events.js
-   weekHover/weekLeave/weekPlace`; `40-schedules.html`]
+   2026-09-11, owl #88; was: `barDragStart`/`Move`/`End` on `.gitem`,
+   block 7. Made pointer-transparent 2026-09-12, amendment 11 — REVIEW
+   found native pointer events, kept "for its title", let a multi-week
+   bar swallow its own later weeks' clicks.)** [`90-events.js`; `35-gantt.css`]
 3. **No HTML5 drag-and-drop, on either surface.** `draggable` stays
    absent from shipped source on both tabs — swept as an EMPTY set.
    Pointer events were chosen because HTML5 DnD fails inside sticky and
@@ -61,15 +65,18 @@ the parts (Escape, no ghost, no HTML5 DnD) that bind both surfaces.
    lane, not a track) — deadlines-rules.md §1a, R-d2-t. **(reversed
    2026-09-11 by owls #88/#89; was: `barDragMove` read the day via
    `dayAtX`, block 7.)**
-5. **A week click either lands or is a no-op — no drag preview to
-   refuse.** `weekPlace` always resolves to a day inside the clicked week
-   (rule 6); this tab carries no per-day guard (sprint-rules.md R10-a) and
-   so nothing to preview refused. The refused-preview idiom (pale wash,
-   snap-back) moves whole to Deadlines, where a drop CAN fail —
-   deadlines-rules.md §1a, R-d2-v, reusing this tab's visual treatment.
-   **(reversed 2026-09-11 by owls #88/#89; was: the bar previewed
-   `refused` via `dragLeft`/`barLeftAt`, gated by `placeable`, block 7 —
-   all retired.)**
+5. **A week click can still be refused — only no PREVIEW exists.** No
+   drag means no per-week wash to fail before the click, but the click's
+   own PATCH can still 422 — `OUT_OF_SPRINT` (the resolved day falls
+   outside the row's own sprint, rule 30) or `PAST_DEADLINE` (the week's
+   first working day is after the deadline) — rolled back through
+   `placeRow`'s existing banner. `weekOffered(row, week)` (PLAN amendment
+   16) is the client-side courtesy, not the authority: a week is offered
+   only when its FIRST WORKING DAY could land inside the sprint and
+   on/before the deadline; a holiday-Monday edge it cannot resolve
+   without the calendar is the 422 above. **(corrected REVIEW 2026-09-12
+   — was: "no per-day guard … nothing to preview refused", true only of
+   the retired PREVIEW.)** [`90-events.js weekOffered/weekPlace`]
 6. **Commit is `weekPlace`'s click** — PATCHes `{ week }` (the clicked
    week's Monday ISO); the server resolves `starts_on` to that week's
    FIRST WORKING DAY (`firstWorkdayOfWeek`, owl #89 §2 — never a bare
@@ -226,12 +233,13 @@ the parts (Escape, no ghost, no HTML5 DnD) that bind both surfaces.
 41. **The bar's vertical band is deliberate and unchanged by block 7** —
     affordance and target agree on both axes; nothing widens it back. [JP
     2026-08-18, batch 9]
-42. **The bar DOES carry a `title`** — `` `${startsOn} → ${finish}` ``, plus
-    "· past the client deadline" when `late` — this is the resting state;
-    block 7 blanks it to an empty attribute only for the duration of a drag
-    so the native tooltip cannot fight the gesture, and restores it after.
-    [supersedes the retired no-title rule that named `.grun`/rule 15 — that
-    rule and its numbering no longer exist; `itemBar`]
+42. **The title lives on the row's `.gtrack`, not the bar** (amendment 11,
+    REVIEW 2026-09-12) — `` `${startsOn} → ${finish}` ``, plus "· past the
+    client deadline" when `late`, exported as `rowTitle(row)` beside
+    `itemBar`, bound on the track so the start day stays DISPLAYED (ruling
+    3) now `.gitem` takes no pointer at all (rule 2). **(was: on `.gitem`,
+    blanked for block 7's retired drag and restored after.)** [supersedes
+    the retired no-title rule (`.grun`/old rule 15); `50-gantt-geometry.js`]
 43. **No ghost, no `setDragImage()`** — there is no HTML5 drag to snapshot a
     ghost from (§1 rule 3); the bar's own box is the only thing that moves.
     [supersedes batch 9 §honest-line]
@@ -260,24 +268,29 @@ the parts (Escape, no ghost, no HTML5 DnD) that bind both surfaces.
 
 ## 5. Verification law
 
-46. **A drag interaction ships only after a real-pointer pass.** There is no
-    jsdom and no browser runner in this repo; every planner test is Ractive
-    `toHTML()` or a read/execution of shipped source — none of it proves a
-    pointer gesture can start and drive `.gitem`. [batch 7 §why-no-test;
-    state-log 2026-08-18]
-47. **No synthetic mouse events, ever, for a drag test.** Calling
-    `barDragStart`/`barDragMove`/`barDragEnd` directly proves wiring, not
-    that a real pointer down-move-up sequence drives them — say so in test
-    names and file headers. (The retired contract said this of synthetic
-    `DragEvent`s; block 7 has no HTML5 drag left to avoid, but the same gap
-    exists for MouseEvents and the same rule applies.) [supersedes batch
-    7–9; state-log 2026-08-18]
-48. **Real-pointer procedure**: chrome-devtools MCP — `take_snapshot` for
-    uids, then a real down/move/up sequence over the `.gitem` source and the
-    target day (`drag(from_uid, to_uid)` where the tool's drag maps to that,
-    else discrete pointer calls covering the same path). Attach event
-    listeners BEFORE dragging; read back only summarised counts. [supersedes
-    batch 7 root-cause pass; test/CLAUDE.md rule 4]
+46. **A drag or a click interaction ships only after a real-pointer pass.**
+    There is no jsdom and no browser runner in this repo; every planner
+    test is Ractive `toHTML()` or a read/execution of shipped source —
+    none of it proves a pointer can reach a `.gweek` cell or drive a
+    `.dlcard` drag. [batch 7 §why-no-test; state-log 2026-08-18]
+47. **`barDragStart`/`barDragMove`/`barDragEnd` no longer exist to call —
+    no drag is left to fake.** The no-synthetic-event rule they
+    anchored moved to the surface that still drags: Deadlines'
+    `dlDragStart`/`dlDragMove`/`dlDragEnd` (deadlines-rules.md §5,
+    R-d2-s). What remains is a plain CLICK — `weekPlace` on `.gweek` —
+    and calling it directly still only proves wiring, never that a real
+    click reaches the cell (rule 25's sweep is that half). **(corrected
+    REVIEW 2026-09-12; was: barDragStart/Move/End, block 7.)**
+    [supersedes batch 7–9; state-log 2026-08-18]
+48. **Real-pointer procedure, this tab**: chrome-devtools MCP —
+    `take_snapshot` for uids, then a real click over the target `.gweek`
+    cell — no move needed, a click not a drag (rule 6). Attach listeners
+    BEFORE clicking; read back only summarised counts. Deadlines' own
+    down/move/up procedure, over `.dlcard` and its target `.dlday`, is
+    deadlines-rules.md §5 (R-d2-s) — a drag is still real there.
+    **(corrected REVIEW 2026-09-12; was: a drag over `.gitem`, block 7 —
+    no such source remains here.)** [supersedes batch 7 root-cause pass;
+    test/CLAUDE.md rule 4]
 49. **Live verification writes are real**: passes run against the deployed
     site on rt-test (`tx8gDsTH`, synthetic fixtures only). Record every
     touched row's `starts_on` before touching anything and restore it after —

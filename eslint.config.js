@@ -44,7 +44,7 @@ const FRONTEND_SHARED = [
   // callers); `dlDayPlaceable` is the Deadlines day-drag's client-side bounds
   // check. Block 7's `dayAtX`, `placeable`, `plusLeft` are deleted with the
   // day-grain placement they served.
-  'barLeftAt', 'dayIndex', 'dlDayPlaceable',
+  'barLeftAt', 'dayIndex', 'dlDayPlaceable', 'weekFirstWorkday',
   'WEEK_COUNT', 'WEEK_PX', 'withRouterSuppressed', 'WORKDAYS_PER_WEEK', 'workingDaysBetween',
   'writeCapacity', 'writeDeadline',
 ];

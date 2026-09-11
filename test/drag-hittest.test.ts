@@ -32,7 +32,12 @@
  *    cells, placed rows included (the PM owns the week and re-places by week).
  *    A `pointer-events: none` anywhere on that chain refuses every placement
  *    while nothing else in the suite notices, exactly as it once refused every
- *    drop. The bar (`.gitem`) is DISPLAY-ONLY here and is no longer a source.
+ *    drop. The bar (`.gitem`) is DISPLAY-ONLY here and is no longer a source —
+ *    and since PLAN.md block 9 amendment 11 it must be pointer-TRANSPARENT, the
+ *    one inversion of this file's law: the bar is absolutely positioned across
+ *    the cells, so a multi-week run swallowed the click of every week it ran
+ *    through. A transparent overlay and an un-hit-testable target are the same
+ *    property pointed opposite ways, and both live in the same sweep below.
  *
  * 3. THE INLINE-STYLE LAW, verbatim — including the `noteGrow` exact-text
  *    allow-list and its length-2 pin. It never was about the drag: a CSS
@@ -467,6 +472,24 @@ const declaresAuto = (rules: CssRule[], src: { classes: string[] }): boolean =>
   );
 
 /**
+ * `declaresAuto`'s mirror: does `rules` take an element OUT of hit-testing,
+ * unconditionally and in every state? Used for the one element this file wants
+ * transparent — the display-only bar laid over the week cells (PLAN.md block 9
+ * amendment 11). Same reading of a selector's SUBJECT, so a respelling counts
+ * and a `:hover`- or media-scoped rule does not: a transparency that evaporates
+ * mid-interaction is the defect, not the cure.
+ */
+const declaresNone = (rules: CssRule[], src: { classes: string[] }): boolean =>
+  rules.some(
+    (r) =>
+      !r.conditional
+      && HIT_TEST_OFF.test(r.body)
+      && r.selector
+        .split(',')
+        .some((sel) => !hasSubjectState(sel) && isSubsetOf(subjectClasses(sel), src.classes)),
+  );
+
+/**
  * The ancestor sweep, PER SOURCE. A source that re-enables itself drops out of
  * the sweep entirely; every other source keeps its whole chain.
  *
@@ -773,10 +796,54 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     expect(fixture('.gantt .gtrack { pointer-events: none; }').length).toBeGreaterThan(0);
     // a cell may cure an ancestor for itself, exactly as a drag source does
     expect(fixture('.gantt .gtrack { pointer-events: none; } .gweek { pointer-events: auto; }')).toEqual([]);
-    // the bar is a SIBLING of the cells, not an ancestor — a rule on it says
-    // nothing about the click (and there is no such rule: the bar is inert
-    // by having no binding, never by being transparent)
+    /* the bar is a SIBLING of the cells, not an ancestor, so a rule on it
+       never makes a CELL un-hit-testable — the sweep stays quiet about it.
+       That is a statement about this sweep's scope, not about the bar: the
+       bar's own rule is now `pointer-events: none` and the test below is
+       where that law lives (PLAN.md block 9 amendment 11). */
     expect(fixture('.gitem { pointer-events: none; }')).toEqual([]);
+  });
+
+  it('keeps the BAR pointer-TRANSPARENT — a multi-week run must not swallow the weeks it covers (PLAN.md amendment 11)', () => {
+    /* THE DEFECT, found at REVIEW. `.gitem` is absolutely positioned and as
+       wide as the run, so it lies OVER the `.gweek` cells of every week it
+       passes through, not merely its own. While it took the pointer, those
+       cells never saw a click — and the PM could not re-place a card into any
+       week its own bar covered, which is most of the act #88 leaves this tab.
+
+       This is the file's own law, inverted for one element: everything a
+       person aims at stays hit-testable, and anything laid OVER those things
+       that takes no act of its own must get out of the way. The bar qualifies
+       on both counts — it binds nothing and it overlaps. The cure is read
+       through the same parsers the sweeps use, so a respelling
+       (`.gantt .gitem`, `.gitem.late`) still counts and a `:hover`- or
+       media-scoped one still does not. */
+    const BARS = TEMPLATE_ELEMENTS.filter((e) => e.classes.includes('gitem'));
+    expect(BARS.length, 'the schedules view lost its bar').toBeGreaterThanOrEqual(1);
+    for (const bar of BARS) {
+      // it lies ACROSS the track: absolutely placed, as wide as the run
+      expect(bar.source, 'the bar stopped being an inline-placed overlay').toMatch(/style="left:[^"]*width:[^"]*"/);
+      expect(bar.ancestors.flatMap((a) => a.classes)).toContain('gtrack');
+      // …and it is a SIBLING of the cells, never one of their ancestors —
+      // an ancestor would be the OTHER bug, and the sweep above owns that one
+      expect(WEEK_CELLS.some((c) => c.ancestors.some((a) => a.classes.includes('gitem')))).toBe(false);
+      // it asks for no pointer act, so giving the pointer up costs it nothing
+      expect(bar.source, 'a bar that binds a handler cannot be transparent').not.toMatch(/\son-[a-z]+=/);
+      // the shipped rule, unconditional and un-stated, on the bar itself
+      expect(declaresNone(ALL_RULES, bar), 'the bar takes the pointer back from the cells it covers').toBe(true);
+    }
+  });
+
+  it('the transparency check IS NOT VACUOUS — it reads a real `none` and refuses a cure that is not one', () => {
+    const bar = TEMPLATE_ELEMENTS.find((e) => e.classes.includes('gitem'))!;
+    const rules = (css: string) => cssRules('fixture.css', css);
+    expect(declaresNone(rules('.gitem { pointer-events: none; }'), bar)).toBe(true);
+    expect(declaresNone(rules('.gantt .gitem { pointer-events: none; }'), bar)).toBe(true);
+    // …and what does NOT satisfy it
+    expect(declaresNone(rules('.gitem { pointer-events: auto; }'), bar)).toBe(false);
+    expect(declaresNone(rules('.gitem:hover { pointer-events: none; }'), bar)).toBe(false);
+    expect(declaresNone(rules('@media (max-width: 600px) { .gitem { pointer-events: none; } }'), bar)).toBe(false);
+    expect(declaresNone(rules('.gdl { pointer-events: none; }'), bar)).toBe(false); // the tick is not the bar
   });
 
   it('leaves the deliberate transparencies alone — the guard must not have been met by deleting rules', () => {

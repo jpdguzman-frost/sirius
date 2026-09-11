@@ -25,8 +25,13 @@ Route groups are fixed by the repository layout (plan.md, ARES conventions). Exa
 
 Two owners, one route (§6.2's two-owner model). The **PM owns the week**, on
 Sprint Schedules: a `week` (its Monday) places the bar on that week's FIRST
-WORKING DAY, resolved server-side on the canonical calendar (the browser holds
-no holiday set). The **Design Lead owns the day**, on Deadlines: a non-null
+WORKING DAY, resolved server-side on the canonical calendar. The client's own
+holiday list (`80-loaders.js`, used for the sprints-modal gap banner and,
+since PLAN amendment 13, the Deadlines keyboard nudge) is a display/stepping
+copy, never a judge — the server's ARES calendar is the sole authority
+everywhere a day is accepted or refused, on either owner's write. **(reworded
+REVIEW 2026-09-12; was "the browser holds no holiday set" — the payload
+carries one.)** The **Design Lead owns the day**, on Deadlines: a non-null
 `starts_on` moves the bar within the week the row already has, never past
 either edge. Only rollover crosses a week, as a system action (§6.2). The
 Deadlines day write is gated by SURFACE only (JP 2026-09-11) — any project
@@ -51,7 +56,7 @@ thing wrong with it, the narrowest bound first.
 
 | Route | Guarded when |
 |---|---|
-| `PATCH /api/projects/:projectId/sprint-items/:itemId` | body `{ starts_on?: DATE\|null, week?: DATE, sprint_id?: OBJECT_ID }`, `.strict()`. **`week`** (must be its own Monday, else 400 `INVALID_BODY`; with `starts_on` in the same body → 400): the server sets `starts_on = firstWorkdayOfWeek(week)` and asks the three non-week checks against the TARGET sprint — `sprint_id` given → that sprint (bare-move semantics); the row's own otherwise; a row with `sprint_id: null` and none given → the sprint whose dates cover the resolved day, else it stays outside (invariant 12: gaps are legal). **Non-null `starts_on`** (the Deadlines day write): all FOUR checks, `assignedWeek` = the row's current week, against the target sprint when the same request moves the row. A row with no `starts_on` → 422 `NOT_PLACED` (`That card has no week yet — place it on Sprint Schedules first.`): there is no week to stay inside. `starts_on: null` un-plots and is never judged. A bare `sprint_id` move is judged too, on the RANGE alone — see below. The 200 body carries the resolved `starts_on` and `sprint_id` (the week click draws at the Monday until this answer names the day) |
+| `PATCH /api/projects/:projectId/sprint-items/:itemId` | body `{ starts_on?: DATE\|null, week?: DATE, sprint_id?: OBJECT_ID }`, `.strict()`. **`week`** (must be its own Monday, else 400 `INVALID_BODY`; with `starts_on` in the same body → 400): the server sets `starts_on = firstWorkdayOfWeek(week)` and asks the three non-week checks against the TARGET sprint — `sprint_id` given → that sprint (bare-move semantics); the row's own otherwise; a row with `sprint_id: null` and none given → the sprint whose dates cover the resolved day, else it stays outside (invariant 12: gaps are legal). **Non-null `starts_on`** (the Deadlines day write): all FOUR checks, `assignedWeek` = the row's current week, against the target sprint when the same request moves the row. A row with no `starts_on` → 422 `NOT_PLACED` (`That card has no week yet — place it on Sprint Schedules first.`): there is no week to stay inside. `starts_on: null` un-plots and is never judged. A bare `sprint_id` move is judged too, on the RANGE alone — see below. The 200 body carries the resolved `starts_on` and `sprint_id` (the week click draws at the Monday until this answer names the day) — the client re-stamps the row from THIS body before its own reload runs (PLAN amendment 17), so a reload that silently fails can never leave a day the server did not give (invariant 8) |
 | `POST /api/projects/:projectId/sprint-items` | the optional `starts_on` is present — the three non-week checks (a fresh placement has no week to stay inside). The card-state refusals (409 `CARD_COMPLETE` / `CARD_EXCLUDED`) answer first — a card that cannot be scheduled at all is not a question about a day |
 | `POST /api/projects/:projectId/sprint-items/batch` | **never** — the batch body has no `starts_on` and `.strict()` refuses one (400 `INVALID_BODY`), so its rows land unplotted by construction (#72 §6) and its skip list (`NOT_FOUND`, `CARD_COMPLETE`, `CARD_EXCLUDED`, `ALREADY_SCHEDULED`) carries no placement code |
 
@@ -83,8 +88,13 @@ writes through Mongo, never through this route, so nothing above binds it.
 
 ### The sprint re-date (`PUT /api/projects/:projectId/sprints`) — displacement, never refusal (owl #90, JP 2026-09-10)
 
-After the list is saved, every sprint that REMAINS is asked which of its
-plotted rows now sit outside its dates. Each such row **keeps its exact day**
+After the list is saved, every sprint whose dates actually CHANGED this
+request is asked which of its plotted rows now sit outside its dates — a
+sprint saved unchanged, or newly created, displaces nothing (PLAN amendment
+18); each row's update is its own conditional write keyed on the `starts_on`/
+`sprint_id` the pass read, the same discipline rollover's R3-2 uses, so a row
+a person edited in between is left alone rather than overwritten blind. Each
+such row **keeps its exact day**
 and leaves the sprint for *Outside any sprint* (`sprint_id: null`, nullable
 since block 9) — not re-placed, not pushed to the next sprint, not unslotted.
 The save is never refused for it. The 200 body carries

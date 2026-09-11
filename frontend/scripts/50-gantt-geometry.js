@@ -80,6 +80,24 @@ const barWidthUnits = (row) => {
   return r <= l ? null : Math.max(r - l, MIN_GRAB_UNITS);
 };
 
+/* RULE 42'S STRING, and its ONE owner (PLAN.md block nine amendment 11):
+   `startsOn → finish`, plus the late words when the row runs past the date it
+   was promised for. The bar carried this as its own tooltip until the bar was
+   made pointer-transparent — a run spanning several weeks sat over the
+   `.gweek` cells after its own and swallowed the click that places a card
+   there, which defeats the one act this tab has (#88) — and a transparent box
+   shows no tooltip. So the template reads it off the ROW'S TRACK, which still
+   takes the pointer, and the start day stays DISPLAYED either way (#88:
+   displayed, not editable). `itemBar` below builds its `title` from this same
+   function rather than spelling the string a second time.
+
+   Empty for a row that draws no bar: an unplotted row has no dates to name,
+   and the track then carries no tooltip at all. */
+const rowTitle = (row) => (row && row.startsOn && row.finish
+  ? `${row.startsOn} → ${row.finish}${row.late ? ' · past the client deadline' : ''}`
+  : '');
+app.set('rowTitle', rowTitle);
+
 const itemBar = (row) => {
   if (!row.startsOn || !row.finish) return [];
   const width = barWidthUnits(row);
@@ -92,7 +110,7 @@ const itemBar = (row) => {
     left: barLeftAt(row, row.startsOn),
     width: unitPct(width),
     cls: itemPhase(row),
-    title: `${row.startsOn} → ${row.finish}${row.late ? ' · past the client deadline' : ''}`,
+    title: rowTitle(row),
   }];
 };
 app.set('itemBar', itemBar);
@@ -160,9 +178,14 @@ const barLeftAt = (row, day) => {
         promised for);
      4. it is a working day, and the weekday half of that is free: the lane
         draws Monday through Friday only, so a pointer can name no weekend,
-        and the week bound above keeps an arrow-key nudge off one too.
-        Holidays are the server's — the ARES working-day calendar is
-        canonical and the client holds no copy of it (invariant 11).
+        and the week bound above keeps an arrow-key nudge off one too. The
+        closed-day half is NOT asked here and the signature says so (PLAN.md
+        block nine amendment 13): the ARES working-day calendar is canonical
+        and the server is its authority, which is what refuses a pointer
+        dropped on a closed day. The keyboard never offers the reader one —
+        `dlNudge` walks past closed days, inside the same week, using the
+        calendar the payload ships (90-events.js) — so the two paths reach
+        the same set of days by different roads.
 
    This is the AFFORDANCE, never the authority. The server re-checks all four
    on the write (`plotIssue`, src/services/sprint-items.ts — OUT_OF_WEEK,

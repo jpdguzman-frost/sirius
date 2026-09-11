@@ -39,5 +39,14 @@ body {
   font-size: 0.85rem;
 }
 
+/* The shell's announcing region — visually nothing, one line of text
+   off-screen, carrying whatever sentence the banner is flashing (PLAN.md
+   block 9 amendment 14; the always-present region, main thread 2026-09-12).
+   The gantt sheet's own hidden-status recipe, declaration for declaration,
+   unscoped because the shell is every screen. It has to stay laid out and
+   rendered: a region removed from the box tree is announced by nothing, which
+   is the silence this exists to end. */
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
 a { color: var(--blue-700); }
 h3 { margin: 1.4rem 0 0.5rem; font-size: 1rem; font-weight: 600; }

@@ -44,12 +44,19 @@
  * E2E). A synthetic `DragEvent` is never used and never may be.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import RactiveModule from 'ractive';
 import { describe, expect, it } from 'vitest';
 import {
   APP_JS_CODE,
   DEADLINES_CSS,
+  GANTT_CSS,
+  TEMPLATE,
   cssRule,
   dlCardPartial,
+  fnBody,
   handlerBody,
   renderDeadlines,
   topDecl,
@@ -200,7 +207,7 @@ describe('the card in an EXPANDED lane is the drag source — bound, focusable, 
        it — the same card in a collapsed lane has nothing to press. */
     const partial = dlCardPartial();
     const gate = /\{\{#if expandedWeek === w\.key\}\}([\s\S]*?)\{\{\/if\}\}/.exec(partial)?.[1] ?? '';
-    for (const bound of ['tabindex="0"', 'role="button"', 'aria-label=', "'dlDragStart'", "'dlKey'"]) {
+    for (const bound of ['tabindex="0"', 'role="group"', 'aria-label=', "'dlDragStart'", "'dlKey'"]) {
       expect(gate, `${bound} is not inside the expanded-lane gate`).toContain(bound);
     }
     const collapsed = renderDeadlines({ dlWeeks: [LANE], expandedWeek: null });
@@ -212,11 +219,30 @@ describe('the card in an EXPANDED lane is the drag source — bound, focusable, 
     }
   });
 
-  it('renders the card focusable as a BUTTON, named with its label and the day it starts (v1.4 §8)', () => {
-    const [mine] = cardTags(open());
+  it('renders the card focusable as a GROUP, named with its label and the day it starts (v1.4 §8; PLAN.md amendment 15)', () => {
+    /* THE ROLE IS `group`, NOT `button` (PLAN.md block 9 amendment 15). An
+       ARIA button's children are PRESENTATIONAL: the Trello and Figma links
+       inside the card would vanish from the accessibility tree, so the reader
+       who most needs the keyboard path would lose two links to gain one. And
+       a button promises Enter and Space, which this card does not answer —
+       its keys are Left and Right, which the accessible name says out loud.
+       `group` keeps the name, the tab stop and both links.
+
+       Both halves are asserted, because dropping `role` altogether would also
+       pass a bare "is not a button" check while losing the grouping the name
+       is attached to. */
+    const html = open();
+    const [mine] = cardTags(html);
     expect(mine).toContain('tabindex="0"');
-    expect(mine).toContain('role="button"');
+    expect(mine).toContain('role="group"');
+    expect(mine).not.toContain('role="button"');
     expect(mine).toContain('aria-label="MC-655: Sketch Asset: Hero render, starts 2026-08-04; use left and right arrows to move the day within the week"');
+    // …and the two links the role exists to protect are really in the card
+    const withLinks = renderDeadlines({
+      dlWeeks: [week({ '2026-08-04': [card({ trelloUrl: 'https://trello.com/c/w1', figmaUrl: 'https://figma.com/f/1' })] })],
+      expandedWeek: '2026-08-03',
+    });
+    expect([...withLinks.matchAll(/<a [^>]*aria-label="Open MC-655 in (Trello|Figma)"/g)]).toHaveLength(2);
   });
 
   it('carries the drop bound in the markup — the lane its week, each column its day', () => {
@@ -258,22 +284,50 @@ describe('the card in an EXPANDED lane is the drag source — bound, focusable, 
  * C — the gesture, EXECUTED out of the shipped client
  * ====================================================================== */
 
-interface Sent { method: string; url: string; body: Record<string, unknown>; stagedStart: string | null }
+interface Sent {
+  method: string;
+  url: string;
+  body: Record<string, unknown>;
+  stagedStart: string | null;
+  /** the row's sprint AT SEND — a week click can re-slot it (#90) */
+  stagedSprint: string | null | undefined;
+  /** what the card was WEARING when the request left — a legal write must not
+      go out dressed `refused` (review 2026-09-12, L13) */
+  dragAt: DlDrag | null;
+}
 interface Listener { type: string; fn: (e: unknown) => unknown; opts: unknown }
-interface KeyEvent { key: string; stopped: boolean; prevented: boolean; stopPropagation(): void; preventDefault(): void }
+interface KeyEvent {
+  key: string;
+  stopped: boolean;
+  prevented: boolean;
+  altKey?: boolean;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  shiftKey?: boolean;
+  stopPropagation(): void;
+  preventDefault(): void;
+}
 interface Row { id: string; sprintId: string | null; startsOn: string | null; finish: string | null; deadline: string | null; late: boolean }
 interface Harness {
-  state: { sprintItems: { rows: Row[] }; dlDrag: DlDrag | null; expandedWeek: string | null; hoverRow: string | null; hoverWeek: number | null };
+  state: { sprintItems: { rows: Row[] }; dlDrag: DlDrag | null; expandedWeek: string | null; hoverRow: string | null; hoverWeek: number | null; holidays: string[] };
   sent: Sent[];
   banners: string[];
   fired: string[];
   listeners: Listener[];
+  /** every row, as `loadAll` found it — the state the reload would have replaced */
+  seen: Array<Array<{ id: string; startsOn: string | null; sprintId: string | null }>>;
   /** what `document.elementFromPoint` answers next: a day column in a lane, or nothing */
   hit(at: { day: string; week: string } | null): void;
   /** make the next PATCH fail with the server's sentence */
   failNext(message: string): void;
+  /** what the next PATCH RESOLVES with — the server's 200 body (PLAN.md amendment 4) */
+  answerNext(body: Record<string, unknown> | null): void;
+  /** the ARES working-day calendar the payload ships (80-loaders.js) */
+  holidays(days: string[]): void;
   row(id: string): Row;
-  start(rowId: string, ev?: Record<string, unknown>): void;
+  /** `ev.target` defaults to the card node itself; `link: true` starts the
+      press on one of the card's own anchors instead (PLAN.md amendment 12) */
+  start(rowId: string, ev?: Record<string, unknown>, from?: 'card' | 'link'): void;
   /** a pointermove delivered by the WINDOW listener */
   move(ev?: Record<string, unknown>): void;
   /** a pointerup delivered by the WINDOW listener — resolves when the write path has settled */
@@ -281,7 +335,7 @@ interface Harness {
   /** pointercancel from the window */
   lost(): void;
   /** a keydown as the DOM delivers one: window CAPTURE listeners first, then the focused card's own handler */
-  press(key: string, focusedRowId: string | null): Promise<KeyEvent>;
+  press(key: string, focusedRowId: string | null, opts?: { from?: 'card' | 'link'; mods?: Partial<Record<'altKey' | 'metaKey' | 'ctrlKey' | 'shiftKey', boolean>> }): Promise<KeyEvent>;
   weekPlace(rowId: string, weekIdx: number): Promise<void>;
   weekHover(rowId: string, weekIdx: number): void;
   saving(on: boolean): void;
@@ -313,12 +367,17 @@ const letDecl = (name: string): string => {
 let harnessSrc: string | undefined;
 const harness = (rows: Row[], sprints: Array<{ id: string; name: string; start: string; end: string }>): Harness => {
   harnessSrc ??= [
-    ...['WORKDAYS_PER_WEEK', 'isoOf', 'isoAddDays', 'mondayIso', 'dlDayPlaceable'].map((n) => topDecl(n)),
+    /* `MONTHS_SHORT`/`fmtLongIso` come along because the refusal sentences
+       are written with them (PLAN.md amendment 14) — sliced, never retyped,
+       so the client's '4 Aug 2026' is the shipped one. `weekFirstWorkday` is
+       the week-offer mirror of the server's resolver (amendment 16). */
+    ...['WORKDAYS_PER_WEEK', 'MONTHS_SHORT', 'fmtLongIso', 'isoOf', 'isoAddDays', 'mondayIso', 'weekFirstWorkday', 'dlDayPlaceable'].map((n) => topDecl(n)),
     letDecl('sprintItemSaving'),
     ...['sprintRow', 'sprintOf', 'calendarDaysBetween', 'stageStart', 'unstageStart'].map((n) => topDecl(n)),
     asyncFn('placeRow'),
     topDecl('weekOffered'),
-    ...['dlDragMoveWin', 'dlDragUpWin', 'dlDragLost', 'dlDragKeyWin', 'dlDragStop', 'dlHitDay', 'DL_REFUSE_MS'].map((n) => topDecl(n)),
+    letDecl('dlDragPointer'),
+    ...['dlOtherPointer', 'dlDragMoveWin', 'dlDragUpWin', 'dlDragLost', 'dlDragKeyWin', 'dlDragStop', 'dlHitDay', 'dlRefusalText', 'DL_REFUSE_MS'].map((n) => topDecl(n)),
     letDecl('dlRefuseTimer'),
     ...['dlRefuse', 'dlRefocus'].map((n) => topDecl(n)),
     `const handlers = {
@@ -345,13 +404,17 @@ const harness = (rows: Row[], sprints: Array<{ id: string; name: string; start: 
       ],
       expandedWeek: '2026-08-03',
       dlDrag: null, hoverRow: null, hoverWeek: null,
+      // the ARES-canonical calendar, shipped on the payload (80-loaders.js)
+      holidays: [],
     };
     const sent = [];
     const banners = [];
     const fired = [];
     const listeners = [];
+    const seen = [];
     let hitAt = null;
     let failWith = null;
+    let answerWith = null;
     const getPath = (k) => k.split('.').reduce((o, p) => (o == null ? o : o[p]), state);
     const setPath = (k, v) => {
       const parts = k.split('.');
@@ -367,11 +430,23 @@ const harness = (rows: Row[], sprints: Array<{ id: string; name: string; start: 
     const api = {
       send: async (method, url, body) => {
         const row = state.sprintItems.rows.find((r) => url.endsWith('/' + r.id));
-        sent.push({ method, url, body, stagedStart: row ? row.startsOn : null });
+        sent.push({
+          method, url, body,
+          stagedStart: row ? row.startsOn : null,
+          stagedSprint: row ? row.sprintId : null,
+          dragAt: state.dlDrag,
+        });
         if (failWith) { const err = failWith; failWith = null; throw err; }
+        const answer = answerWith; answerWith = null;
+        return answer;
       },
     };
-    const loadAll = async () => { fired.push('loadAll'); };
+    /* the reload the write awaits — it records what it FOUND, which is how a
+       test can say a re-stamp happened BEFORE it rather than after */
+    const loadAll = async () => {
+      fired.push('loadAll');
+      seen.push(state.sprintItems.rows.map((r) => ({ id: r.id, startsOn: r.startsOn, sprintId: r.sprintId })));
+    };
     const flashBanner = (t) => { banners.push(t); };
     const errText = (e) => (e && e.message) || String(e);
     const window = {
@@ -381,6 +456,13 @@ const harness = (rows: Row[], sprints: Array<{ id: string; name: string; start: 
         if (i >= 0) listeners.splice(i, 1);
       },
     };
+    /* the card's own nodes: the article the handlers are bound to, and one of
+       the two links inside it. closest() answers the way a browser's does —
+       the link finds itself, the card finds nothing — which is what lets a
+       press that began on a link be told from one that began on the card.
+       (No backticks in here: this whole harness is a template literal.) */
+    const cardNode = { focus() { fired.push('focus'); }, closest: () => null };
+    const linkNode = { focus() {}, closest: (sel) => (/\ba\b|button/.test(sel) ? linkNode : null) };
     const lane = (weekKey) => ({ dataset: { week: weekKey } });
     const column = (at) => ({
       dataset: { day: at.day },
@@ -394,21 +476,32 @@ const harness = (rows: Row[], sprints: Array<{ id: string; name: string; start: 
     };
     ${harnessSrc}
     const isCapture = (l) => l.opts === true || !!(l.opts && l.opts.capture);
-    const pointer = (ev) => ({ clientX: 10, clientY: 10, button: 0, buttons: 1, preventDefault() {}, ...ev });
+    const pointer = (ev) => ({ clientX: 10, clientY: 10, button: 0, buttons: 1, pointerId: 1, preventDefault() {}, ...ev });
     const deliver = (type, ev) => listeners.filter((l) => l.type === type).map((l) => l.fn(ev));
     return {
-      state, sent, banners, fired, listeners,
+      state, sent, banners, fired, listeners, seen,
       hit: (at) => { hitAt = at; },
       failNext: (message) => { failWith = new Error(message); },
+      answerNext: (bodyOut) => { answerWith = bodyOut; },
+      holidays: (days) => { state.holidays = days; },
       row: (id) => state.sprintItems.rows.find((r) => r.id === id),
-      start: (rowId, ev) => handlers.dlDragStart({ event: pointer(ev), node: { focus() {} } }, rowId),
+      start: (rowId, ev, from) => {
+        const node = from === 'link' ? linkNode : cardNode;
+        return handlers.dlDragStart({ event: pointer({ target: node, ...ev }), node: cardNode }, rowId);
+      },
       move: (ev) => { deliver('pointermove', pointer(ev)); },
       up: async (ev) => { await Promise.all(deliver('pointerup', pointer(ev))); },
       lost: () => { deliver('pointercancel', {}); },
-      press: async (key, focusedRowId) => {
-        const e = { key, stopped: false, prevented: false, stopPropagation() { this.stopped = true; }, preventDefault() { this.prevented = true; } };
+      press: async (key, focusedRowId, opts) => {
+        const o = opts || {};
+        const node = o.from === 'link' ? linkNode : cardNode;
+        const e = {
+          key, stopped: false, prevented: false, target: node,
+          altKey: false, metaKey: false, ctrlKey: false, shiftKey: false, ...(o.mods || {}),
+          stopPropagation() { this.stopped = true; }, preventDefault() { this.prevented = true; },
+        };
         for (const l of listeners.filter((l) => l.type === 'keydown' && isCapture(l))) l.fn(e);
-        if (!e.stopped && focusedRowId) handlers.dlKey({ event: e }, focusedRowId);
+        if (!e.stopped && focusedRowId) handlers.dlKey({ event: e, node: cardNode }, focusedRowId);
         await new Promise((r) => setTimeout(r, 0));
         return e;
       },
@@ -478,6 +571,48 @@ describe('dlDragStart — arms the gesture on a PLACED card in the OPEN lane, an
     h.start('r6');
     expect(h.state.dlDrag).toMatchObject({ rowId: 'r6', fromDay: '2026-08-05', weekKey: '2026-08-03' });
   });
+
+  it('leaves the card’s own LINKS their pointer — a press that begins on one arms nothing (PLAN.md amendment 12)', () => {
+    /* The card holds a Trello mark and a Figma mark, and a press on one
+       bubbles out to this handler. Armed from there, the gesture cancelled
+       the link's own click (`preventDefault`) and, on release, wrote a day
+       AND opened the tab — two acts from one press, neither asked for.
+       The whole card is still the drag source (#89 §1) minus the two things
+       that have a pointer act of their own. */
+    const h = harness(ROWS(), SPRINTS);
+    let prevented = false;
+    h.start('r1', { preventDefault() { prevented = true; } }, 'link');
+    expect(h.state.dlDrag, 'a press on a link armed the drag').toBeNull();
+    expect(h.listeners).toEqual([]);
+    expect(prevented, 'the link’s own click was cancelled').toBe(false);
+    // IS NOT VACUOUS — the same press on the CARD arms it
+    const g = harness(ROWS(), SPRINTS);
+    g.start('r1');
+    expect(g.state.dlDrag).toMatchObject({ rowId: 'r1' });
+  });
+
+  it('lets ONE pointer own the gesture — a second finger cannot take it over, and the first hand still lands it', async () => {
+    /* `touch-action: none` on the card means two fingers can be on this tab
+       at once. Without an owner, a second pointerdown on ANOTHER card re-armed
+       `dlDrag` behind the first, and the FIRST finger's release then wrote the
+       second card to the day the first hand was over — a write on a card
+       nobody dragged. Both halves are here: the second press arms nothing, and
+       a release carrying the other pointer's id is not the drop. */
+    const h = harness(ROWS(), SPRINTS);
+    h.start('r1', { pointerId: 1 });
+    h.start('r2', { pointerId: 2 });
+    expect(h.state.dlDrag).toMatchObject({ rowId: 'r1', fromDay: '2026-08-04' });
+    h.hit({ day: '2026-08-03', week: '2026-08-03' });
+    h.move({ pointerId: 1 });
+    // the other hand's release is not this gesture's
+    await h.up({ pointerId: 2 });
+    expect(h.sent, 'a stray pointer ended the drag').toEqual([]);
+    expect(h.state.dlDrag, 'a stray pointer cleared the gesture').not.toBeNull();
+    // …and the hand that started it still lands the drop
+    await h.up({ pointerId: 1 });
+    expect(h.sent.map((x) => x.body)).toEqual([{ starts_on: '2026-08-03' }]);
+    expect(h.state.dlDrag).toBeNull();
+  });
 });
 
 describe('dlDragMove — names the column under the pointer INSIDE the lane, and dresses the card', () => {
@@ -543,7 +678,10 @@ describe('dlDragEnd — a valid drop writes `{ starts_on }` optimistically; ever
     h.hit({ day: '2026-08-03', week: '2026-08-03' });
     h.move();
     await h.up();
-    expect(h.sent).toEqual([{ method: 'PATCH', url: URL_OF('r1'), body: { starts_on: '2026-08-03' }, stagedStart: '2026-08-03' }]);
+    expect(h.sent).toEqual([{
+      method: 'PATCH', url: URL_OF('r1'), body: { starts_on: '2026-08-03' },
+      stagedStart: '2026-08-03', stagedSprint: 's1', dragAt: null,
+    }]);
     expect(h.row('r1').startsOn).toBe('2026-08-03'); // the optimistic stamp stays on success
     expect(h.state.dlDrag).toBeNull();
     expect(h.listeners).toEqual([]); // the listeners come down FIRST, on every path
@@ -737,13 +875,138 @@ describe('dlKey — ArrowLeft / ArrowRight route to dlNudge; Escape cancels; eve
     expect(h.row('r1').startsOn).toBe('2026-08-04');
     expect(h.banners).toEqual(["That day is outside the card's assigned week (Mon 3 Aug 2026 – Fri 7 Aug 2026)."]);
   });
+
+  it('STEPS OVER a holiday — the keyboard reaches every day the pointer reaches (PLAN.md amendment 13; v1.4 §8)', async () => {
+    /* THE DEFECT, found at REVIEW. The nudge moved one CALENDAR day, so a
+       holiday in the middle of the week was a wall: the arrow sent the
+       holiday, the server refused it as NOT_A_WORKDAY, the row rolled back,
+       and pressing again sent the same closed day for ever. The day beyond it
+       was reachable by pointer and unreachable by key — which is NFR-9 failing
+       exactly where v1.4 §8 says it may not ("not optional decoration").
+
+       The calendar is the payload's own ARES set (80-loaders.js), which is the
+       set the server judges by, so the two cannot disagree about which day the
+       key meant. */
+    const h = harness(ROWS(), SPRINTS);
+    h.holidays(['2026-08-13']); // the Thursday of Sprint B's week
+    await h.press('ArrowLeft', 'r4'); // Fri 14 → Thu 13 is closed → Wed 12
+    await h.press('ArrowLeft', 'r4'); // Wed 12 → Tue 11
+    expect(h.sent.map((x) => x.body)).toEqual([{ starts_on: '2026-08-12' }, { starts_on: '2026-08-11' }]);
+    expect(h.row('r4').startsOn).toBe('2026-08-11');
+    // IS NOT VACUOUS — with the Thursday open, the same first press lands on it
+    const g = harness(ROWS(), SPRINTS);
+    await g.press('ArrowLeft', 'r4');
+    expect(g.sent.map((x) => x.body)).toEqual([{ starts_on: '2026-08-13' }]);
+  });
+
+  it('STOPS at the week’s edge even with the rest of the week closed — a step over never wraps (#89 §1)', async () => {
+    /* The bound is the week, and stepping over holidays must not reach past
+       it: a Monday whose Tue–Fri are all closed has nowhere to go RIGHT, and
+       the answer is the refusal, never next Monday. The two halves together
+       are what say "skip, don't wander". */
+    const h = harness(ROWS(), SPRINTS);
+    h.holidays(['2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14']);
+    await h.press('ArrowRight', 'r3'); // Mon 10 Aug, the rest of its week closed
+    expect(h.sent, 'the nudge wandered out of the week').toEqual([]);
+    expect(h.row('r3').startsOn).toBe('2026-08-10');
+    expect(h.state.dlDrag).toMatchObject({ rowId: 'r3', refused: true });
+    // IS NOT VACUOUS — open one of those days and the same press lands on it
+    const g = harness(ROWS(), SPRINTS);
+    g.holidays(['2026-08-11', '2026-08-12', '2026-08-14']);
+    await g.press('ArrowRight', 'r3');
+    expect(g.sent.map((x) => x.body)).toEqual([{ starts_on: '2026-08-13' }]);
+  });
+
+  it('ignores an arrow whose target is one of the card’s own LINKS (PLAN.md amendment 12)', async () => {
+    /* The links are inside the card, so a keydown on a focused link bubbles to
+       the card's handler. Left and Right belong to the link while it holds
+       focus — a reader moving through the card's contents must not move the
+       card's DAY by doing so. */
+    const h = harness(ROWS(), SPRINTS);
+    const e = await h.press('ArrowRight', 'r1', { from: 'link' });
+    expect(e.prevented, 'the link lost its own arrow key').toBe(false);
+    expect(h.sent).toEqual([]);
+    expect(h.fired).not.toContain('dlNudge');
+    expect(h.row('r1').startsOn).toBe('2026-08-04');
+    // IS NOT VACUOUS — the same press from the CARD moves the day
+    const g = harness(ROWS(), SPRINTS);
+    await g.press('ArrowRight', 'r1');
+    expect(g.sent.map((x) => x.body)).toEqual([{ starts_on: '2026-08-05' }]);
+  });
+
+  it('ignores a MODIFIER chord — Alt, Meta and Ctrl arrows belong to the browser (PLAN.md amendment 12)', async () => {
+    /* Alt+Left is Back, Cmd+Left is Home on a Mac, Ctrl+Left steps a word:
+       every one of them is a chord the browser or the OS owns. Swallowing
+       them moved the card's day AND cancelled a navigation the reader asked
+       for. Shift is not in the list: it modifies nothing here, so a stray
+       Shift+Arrow is an ordinary nudge rather than a dead key. */
+    const h = harness(ROWS(), SPRINTS);
+    for (const mod of ['altKey', 'metaKey', 'ctrlKey'] as const) {
+      const e = await h.press('ArrowRight', 'r1', { mods: { [mod]: true } });
+      expect(e.prevented, `${mod} was swallowed`).toBe(false);
+    }
+    expect(h.sent).toEqual([]);
+    expect(h.row('r1').startsOn).toBe('2026-08-04');
+    // IS NOT VACUOUS — the same press with no chord writes
+    const plain = await h.press('ArrowRight', 'r1');
+    expect(plain.prevented).toBe(true);
+    expect(h.sent.map((x) => x.body)).toEqual([{ starts_on: '2026-08-05' }]);
+  });
+
+  it('SAYS why a refused nudge was refused, and says nothing on one that lands (PLAN.md amendment 14; NFR-9)', async () => {
+    /* The pointer's refusal shows itself — the column under the hand never
+       tints, the card washes pale. A key press has no column under it, so the
+       refusal has to be SAID, and in the same voice as the server's for the
+       same bound (#89 §3). Nothing is flashed when the nudge lands: a banner
+       on success would teach the reader to ignore banners. */
+    const edge = harness(ROWS(), SPRINTS);
+    await edge.press('ArrowLeft', 'r3'); // Mon → Sunday: outside the assigned week
+    expect(edge.sent).toEqual([]);
+    expect(edge.banners).toHaveLength(1);
+    expect(edge.banners[0], 'the week refusal does not name the week').toMatch(/assigned week/i);
+    expect(edge.banners[0]).toContain('10 Aug 2026'); // the week's Monday, in the server's register
+    expect(edge.banners[0]).toContain('14 Aug 2026'); // …and its Friday
+
+    const late = harness(ROWS(), SPRINTS);
+    await late.press('ArrowRight', 'r1'); // Tue → Wed, the deadline day: lands
+    expect(late.banners, 'a nudge that landed flashed a sentence').toEqual([]);
+    await late.press('ArrowRight', 'r1'); // Wed → Thu, past the deadline
+    expect(late.banners).toHaveLength(1);
+    expect(late.banners[0], 'the deadline refusal does not name the deadline').toMatch(/deadline/i);
+
+    const out = harness(ROWS(), SPRINTS);
+    await out.press('ArrowRight', 'r2'); // Tue → Wed
+    await out.press('ArrowRight', 'r2'); // Wed → Thu, the sprint's last day
+    await out.press('ArrowRight', 'r2'); // Thu → Fri, outside the sprint
+    expect(out.banners).toHaveLength(1);
+    expect(out.banners[0], 'the sprint refusal does not name the sprint').toMatch(/sprint/i);
+  });
+
+  it('does not dress a LEGAL nudge as refused — the wash belongs to the press that earned it (review 2026-09-12)', async () => {
+    /* The refused marker clears itself after a beat. Press the other arrow
+       inside that beat and the write went out while `dlDrag` still held the
+       marker, so the card wore the pale `refused` wash for the whole flight of
+       a move that was perfectly legal — the screen saying "no" to something it
+       was in the middle of doing. */
+    const h = harness(ROWS(), SPRINTS);
+    await h.press('ArrowLeft', 'r3'); // Mon → Sunday: refused, marker up
+    expect(h.state.dlDrag).toMatchObject({ rowId: 'r3', refused: true });
+    await h.press('ArrowRight', 'r3'); // Mon → Tue: legal, inside the same beat
+    expect(h.sent.map((x) => x.body)).toEqual([{ starts_on: '2026-08-11' }]);
+    // what the card was WEARING when the request left
+    expect(h.sent[0]!.dragAt, 'a legal write went out dressed refused').toBeNull();
+    expect(h.state.dlDrag).toBeNull();
+  });
 });
 
 describe('the OTHER owner — the PM’s week click sends `{ week }`, through the same write path (#88; PLAN.md handlers)', () => {
   it('weekPlace PATCHes the WEEK key, never a day, with the bar staged on the Monday for the flight', async () => {
     const h = harness(ROWS(), SPRINTS);
     await h.weekPlace('r5', 1); // an unplotted row into Sprint B's week
-    expect(h.sent).toEqual([{ method: 'PATCH', url: URL_OF('r5'), body: { week: '2026-08-10' }, stagedStart: '2026-08-10' }]);
+    expect(h.sent).toEqual([{
+      method: 'PATCH', url: URL_OF('r5'), body: { week: '2026-08-10' },
+      stagedStart: '2026-08-10', stagedSprint: 's2', dragAt: null,
+    }]);
   });
 
   it('re-places a PLACED row by week too — the day is the PM’s to overwrite by week (drift report §H)', async () => {
@@ -761,6 +1024,120 @@ describe('the OTHER owner — the PM’s week click sends `{ week }`, through th
     expect(h.sent).toEqual([]);
     h.weekHover('r2', 0);
     expect(h.state.hoverWeek).toBe(0);
+  });
+
+  it('judges the offer on the week’s FIRST WORKING DAY, exactly as the route does (PLAN.md amendment 16)', async () => {
+    /* THE DEFECT, found at REVIEW. A week placement lands on the week's first
+       WORKING day (#89 §2), so that day is what the route judges — but the
+       offer was judged on the week's SPAN. A sprint beginning mid-week (a
+       Wednesday start) therefore tinted its own first week, the PM clicked,
+       and the server refused on Monday, which is not a day the PM chose or
+       could see. The tint now asks the same question the route will.
+
+       Mirrored, not duplicated: `weekFirstWorkday` reads the payload's own
+       ARES calendar, which is the calendar the server resolves with, and the
+       server re-judges regardless — this only decides what to OFFER. */
+    const midWeek = [{ id: 's1', name: 'Sprint A', start: '2026-08-05', end: '2026-08-14' }];
+    const rows: Row[] = [{ id: 'x1', sprintId: 's1', startsOn: '2026-08-05', finish: '2026-08-06', deadline: null, late: false }];
+    const h = harness(rows, midWeek);
+    h.weekHover('x1', 0); // week 1 is 3–7 Aug; its Monday is before the sprint
+    expect(h.state.hoverWeek, 'a week whose first working day is outside the sprint was offered').toBeNull();
+    await h.weekPlace('x1', 0);
+    expect(h.sent, 'a week the route would refuse on every day was sent').toEqual([]);
+
+    /* …and the SAME week IS offered once its Monday and Tuesday are closed:
+       the first working day is then the Wednesday the sprint starts on. That
+       is the half a span test can never show, and it is why this is the first
+       WORKING day and not merely the Monday. */
+    const g = harness(rows, midWeek);
+    g.holidays(['2026-08-03', '2026-08-04']);
+    g.weekHover('x1', 0);
+    expect(g.state.hoverWeek).toBe(0);
+    await g.weekPlace('x1', 0);
+    expect(g.sent.map((x) => x.body)).toEqual([{ week: '2026-08-03' }]);
+
+    // a week closed end to end has no day to offer, whatever the sprint says
+    const dead = harness(rows, [{ id: 's1', name: 'Sprint A', start: '2026-08-03', end: '2026-08-14' }]);
+    dead.holidays(['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07']);
+    dead.weekHover('x1', 0);
+    expect(dead.state.hoverWeek).toBeNull();
+    await dead.weekPlace('x1', 0);
+    expect(dead.sent).toEqual([]);
+  });
+
+  it('re-stamps the row from the SERVER’S answer before the reload (PLAN.md amendment 17; invariant 8)', async () => {
+    /* A week click stages the bar on the week's MONDAY, because only the
+       server knows which day of that week is open. The 200 carries the day it
+       chose — and the sprint the row landed in, which a re-slot can change
+       (#90) — and the row takes both BEFORE `loadAll` runs. It has to be
+       before: `loadAll` swallows its own failure into a banner, so a reload
+       that never landed would have left the optimistic Monday standing as a
+       day the server never gave, which is the one thing invariant 8 forbids. */
+    const h = harness(ROWS(), SPRINTS);
+    h.answerNext({ ok: true, starts_on: '2026-08-11', sprint_id: 's2' });
+    await h.weekPlace('r5', 1); // an unplotted row, staged on Mon 10 Aug
+    expect(h.sent.map((x) => [x.body, x.stagedStart])).toEqual([[{ week: '2026-08-10' }, '2026-08-10']]);
+    // the reload FOUND the server's day, which is what says "before"
+    expect(h.seen).toHaveLength(1);
+    expect(h.seen[0]!.find((r) => r.id === 'r5')).toEqual({ id: 'r5', startsOn: '2026-08-11', sprintId: 's2' });
+    expect(h.row('r5').startsOn).toBe('2026-08-11');
+    expect(h.row('r5').sprintId).toBe('s2');
+
+    /* IS NOT VACUOUS about the sprint half: an answer that names no sprint
+       leaves the membership the row already had — a day move on Deadlines
+       never re-files a card. */
+    const g = harness(ROWS(), SPRINTS);
+    g.answerNext({ ok: true, starts_on: '2026-08-03' });
+    g.start('r1');
+    g.hit({ day: '2026-08-03', week: '2026-08-03' });
+    g.move();
+    await g.up();
+    expect(g.row('r1').startsOn).toBe('2026-08-03');
+    expect(g.row('r1').sprintId).toBe('s1');
+  });
+
+  it('leaves the optimistic day standing when the answer names none — and rolls it back on a refusal', async () => {
+    // the re-stamp is a CORRECTION, not the only writer: a 200 with no day
+    // (an older server, a noop shape that lost its fields) must not blank the
+    // bar, and a 4xx still rolls the whole stage back with the sentence
+    const h = harness(ROWS(), SPRINTS);
+    h.answerNext(null);
+    await h.weekPlace('r5', 1);
+    expect(h.row('r5').startsOn).toBe('2026-08-10'); // the staged Monday, kept
+    const g = harness(ROWS(), SPRINTS);
+    g.failNext('That week has no working day.');
+    await g.weekPlace('r5', 1);
+    expect(g.row('r5').startsOn).toBeNull();
+    expect(g.banners).toEqual(['That week has no working day.']);
+  });
+});
+
+/* ====================================================================== *
+ * C2 — what a PROJECT SWITCH must take down with it
+ * ====================================================================== */
+
+describe('a project switch ends the gesture and clears block 9’s keys (the block 7 guard, re-pointed)', () => {
+  it('stops the drag FIRST, then clears hoverRow, hoverWeek, dlDrag and sprintDisplaced', () => {
+    /* Block 7 proved this for its own bar drag; that test went with the
+       gesture and nothing replaced it. The hazard is unchanged and it is the
+       LISTENERS: a Deadlines drag cannot survive a project switch — the
+       pointer is held on a card that is about to stop existing — but the four
+       window listeners it bound would, and a later release would then fire
+       handlers against another project's rows. So `dlDragStop()` runs BEFORE
+       the keys are cleared, which is the order asserted here.
+
+       The keys go for the ordinary reason every per-project key goes: they
+       name rows, weeks and sprints of the project being left. */
+    const body = fnBody('resetForProjectSwitch');
+    expect(body).toContain('dlDragStop()');
+    for (const cleared of ['hoverRow: null', 'hoverWeek: null', 'dlDrag: null', 'sprintDisplaced: null']) {
+      expect(body, `\`${cleared}\` is not cleared on a project switch`).toContain(cleared);
+    }
+    // the listeners come down before the state they belong to goes
+    expect(body.indexOf('dlDragStop()')).toBeLessThan(body.indexOf('dlDrag: null'));
+    // IS NOT VACUOUS — the reader preference this block deliberately KEEPS is
+    // absent from the same body, so "contains" is doing real work here
+    expect(body).not.toContain('leftCollapsed');
   });
 });
 
@@ -799,5 +1176,175 @@ describe('40-deadlines.css dresses the gesture the way the rulings say (PLAN.md 
     // prose, so the read is of declarations only
     const code = DEADLINES_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
     expect(code).not.toMatch(/pointer-events\s*:\s*none/i);
+  });
+});
+
+/* ====================================================================== *
+ * E — the live region: a refusal reaches assistive technology
+ * ====================================================================== */
+
+/**
+ * The shell, rendered the way the browser renders it. `40-app-state.js` hands
+ * Ractive `template: '#tpl-app'`, so what runs is the script element's INNER
+ * html — the wrapper tag is never part of the template (the same slice
+ * test/template-partials.test.ts takes, for the same reason).
+ *
+ * The WHOLE composed template goes in, not a subtree chosen by hand: the claim
+ * under test is that the region is there with NO view state at all, and a
+ * slice picked by a human could only beg that question. With no `activeTab`
+ * every view guard is false, so what comes back is the chrome alone.
+ */
+const Ractive = RactiveModule as unknown as {
+  new (opts: { template: string; data: Record<string, unknown> }): { toHTML(): string };
+};
+
+const SHELL_TEMPLATE = (() => {
+  const inner = /<script id="tpl-app"[^>]*>([\s\S]*)<\/script>/.exec(TEMPLATE);
+  if (!inner) throw new Error('deadlines-drag: no <script id="tpl-app"> wrapper in the composed template');
+  return inner[1]!;
+})();
+
+const renderShell = (banner: string | null): string =>
+  new Ractive({ template: SHELL_TEMPLATE, data: { banner } }).toHTML();
+
+/**
+ * Every live region in a rendered fragment, with the text it would announce.
+ * Text-only elements by design: a region announces a SENTENCE, and both of the
+ * nodes this section is about hold nothing else. Read as "live region", not as
+ * `role="status"`, so a rewrite to `aria-live` is still seen.
+ */
+const liveRegions = (html: string): { tag: string; text: string }[] =>
+  [...html.matchAll(/<(span|div)\b([^>]*)>([^<]*)<\/\1>/g)]
+    .filter((m) => /\brole="(?:status|alert|log)"|\baria-live=/.test(m[2]!))
+    .map((m) => ({ tag: m[1]!, text: m[3]! }));
+
+/** The region's own open tag — identity, for the "same node" read. */
+const regionTag = (html: string): string | null => /<span[^>]*\brole="status"[^>]*>/.exec(html)?.[0] ?? null;
+
+/**
+ * Every shipped stylesheet as one string, in build.js's own order. The helper
+ * in gantt-render.ts reads sheets ONE at a time because its guards are each
+ * about one sheet; this one is about all of them — the shell's hidden-region
+ * rule must be declared exactly once in what the page actually loads, and
+ * naming its home file would pin the guard to today's split.
+ */
+const ALL_CSS = (() => {
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'frontend', 'styles');
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.css'))
+    .sort()
+    .map((f) => fs.readFileSync(path.join(dir, f), 'utf8'))
+    .join('\n');
+})();
+
+/** `{ selector, body }` for every rule in a corpus, comments stripped (rule 3). */
+const rulesOf = (css: string): { selector: string; body: string }[] =>
+  /* One match per `selector { … }`. Neither group can cross a brace, so each
+     selector starts where the previous rule's `}` left off and an `@media`
+     wrapper never matches as a rule of its own. */
+  [...css.replace(/\/\*[\s\S]*?\*\//g, ' ').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+    selector: m[1]!.trim(),
+    body: m[2]!,
+  }));
+
+/** A rule's declarations, normalised and sorted — for comparing two recipes. */
+const decls = (body: string): string[] =>
+  body
+    .split(';')
+    .map((d) => d.trim().replace(/\s*:\s*/, ': '))
+    .filter(Boolean)
+    .sort();
+
+/** The body of a `cssRule()` slice, which carries its selector line. */
+const bodyOf = (rule: string): string => rule.slice(rule.indexOf('{') + 1, rule.lastIndexOf('}'));
+
+describe('a flashed sentence reaches a screen reader (PLAN.md amendment 14; the always-present region, main thread 2026-09-12)', () => {
+  /* WHY THE REGION IS NOT THE VISIBLE BANNER. The four refusals are FLASHED,
+     and a flashed sentence nothing announces is not the accessible path v1.4
+     §8 asks for — it is the same silence, moved. The amber node cannot be the
+     announcer: Ractive creates it together with its text, and a region that
+     arrives already populated is announced unreliably — the FIRST sentence,
+     the one a refusal most needs heard, is the one most often dropped. So the
+     region is always in the document, empty at rest, and a flash is a text
+     CHANGE inside something the screen reader is already watching.
+
+     Asserted by rendering the shell rather than by reading the template, and
+     at rest as well as populated: "present when there is nothing to say" is
+     the whole of the ruling, and no source regex can state it. */
+  const SENTENCE = 'That day is outside the card’s week.';
+
+  it('carries the region AT REST — it is in the shell before any sentence exists', () => {
+    const rest = renderShell(null);
+    const regions = liveRegions(rest);
+    expect(regions, 'the shell has no live region until a sentence exists — the first one will be missed').toHaveLength(
+      1,
+    );
+    expect(regions[0]!.text, 'the region at rest is not empty').toBe('');
+    // and nothing visible was added by it: the amber node still exists only
+    // when there is something to show
+    expect(rest, 'the visible banner renders with no sentence to carry').not.toContain('class="banner"');
+  });
+
+  it('flashes into that SAME node — the region is never created with its text', () => {
+    const flashed = renderShell(SENTENCE);
+    const regions = liveRegions(flashed);
+    expect(regions).toHaveLength(1);
+    expect(regions[0]!.text).toBe(SENTENCE);
+    // identity: the same open tag is already there with `banner` null, so the
+    // sentence arrives as a change inside an existing region, not with one
+    expect(regionTag(renderShell(null))).not.toBeNull();
+    expect(regionTag(flashed)).toBe(regionTag(renderShell(null)));
+  });
+
+  it('announces it ONCE — the visible banner keeps the text and is no longer a region', () => {
+    const flashed = renderShell(SENTENCE);
+    const visible = /<div class="banner"[^>]*>([^<]*)<\/div>/.exec(flashed);
+    expect(visible, 'the shell lost its visible banner').not.toBeNull();
+    expect(visible![1], 'the eye no longer gets the sentence').toBe(SENTENCE);
+    expect(visible![0], 'the sentence is announced twice').not.toContain('role=');
+    expect(visible![0]).not.toContain('aria-live');
+    // exactly one element carries the sentence in a live region…
+    expect(liveRegions(flashed).filter((r) => r.text === SENTENCE)).toHaveLength(1);
+    // …and the shell ships exactly one region, politely
+    expect(flashed.match(/role="status"/g) ?? []).toHaveLength(1);
+    expect(flashed).not.toContain('role="alert"'); // polite, never assertive
+  });
+
+  it('and the render WOULD see the arrangement this replaced (negative control)', () => {
+    /* The region created together with its text: at rest there is nothing for
+       a screen reader to be watching. If the reads above could not tell the
+       two apart they would pass on either, which is how this shipped. */
+    const old = (banner: string | null): string =>
+      new Ractive({
+        template: '{{#if banner}}<div class="banner" role="status">{{banner}}</div>{{/if}}',
+        data: { banner },
+      }).toHTML();
+    expect(liveRegions(old(null))).toHaveLength(0);
+    expect(liveRegions(old(SENTENCE))).toHaveLength(1);
+  });
+
+  it('hides the region OFF-SCREEN, never out of the box tree — the house recipe, unscoped for the shell', () => {
+    const tag = regionTag(renderShell(null));
+    expect(tag, 'the region is not a span any more — re-point this read').not.toBeNull();
+    const cls = /class="([^"]*)"/.exec(tag!)?.[1]?.trim();
+    expect(cls, 'the region carries no class, so nothing hides it').toBeTruthy();
+
+    const rules = rulesOf(ALL_CSS);
+    // non-vacuous: the corpus read really did parse the shell's own sheet
+    expect(rules.filter((r) => r.selector === '.banner'), 'the stylesheet read found nothing').toHaveLength(1);
+
+    const hiding = rules.filter((r) => r.selector === `.${cls}`);
+    expect(hiding, `the app ships no unscoped rule for \`${cls}\` — the region is visible on every screen`).toHaveLength(
+      1,
+    );
+    // derive, don't copy: the recipe IS the gantt sheet's hidden status line,
+    // declaration for declaration, with the tab scope taken off
+    expect(decls(hiding[0]!.body)).toEqual(decls(bodyOf(cssRule('.gantt .gvh', GANTT_CSS))));
+    expect(hiding[0]!.body).toMatch(/position:\s*absolute/);
+    expect(hiding[0]!.body).toMatch(/clip:\s*rect\(/);
+    // a region taken out of the box tree is announced by nothing at all
+    expect(hiding[0]!.body).not.toMatch(/display\s*:\s*none/i);
+    expect(hiding[0]!.body).not.toMatch(/visibility\s*:\s*hidden/i);
   });
 });

@@ -86,16 +86,24 @@ the card the Design Lead drags is no longer read-only or derived (R-d2-o,
 above, is reversed to match). This section is deadlines-rules.md's own
 version of gantt-rules.md §1: the drag contract for THIS surface.
 
-- **R-d2-t Source and hit-test.** The drag source is the `.dlcard` itself
-  (`on-pointerdown="['dlDragStart', c.rowId]"`, `20-deadline-card.html`) —
-  Deadlines has no bar to pick up (R-d2-j: fixed cards, not gantt bars).
-  Hit-testing is `document.elementFromPoint` → the closest
-  `.dlday[data-day]` cell INSIDE the same `.dllane[data-week]` the card's
-  own week lane renders — a hit anywhere else (a different week's lane,
-  empty space, another card, no `.dlday` at all) is `refused`, same as
-  failing a bounds check. Collapsed lanes carry no drag at all — a card
-  must be in its EXPANDED week to be dragged. [`frontend/scripts/
-  90-events.js dlDragStart/dlDragMove`; `50-deadlines.html`]
+- **R-d2-t Source and hit-test.** The drag source is `.dlcard` itself
+  (`on-pointerdown="['dlDragStart', c.rowId]"`) — Deadlines has no bar to
+  pick up (R-d2-j: fixed cards, not gantt bars). `dlDragStart`/`dlKey`
+  ignore an event whose target is not the card node itself (amendment
+  12) — a link inside keeps its own click and keys. Hit-testing is
+  `document.elementFromPoint` → the closest `.dlday[data-day]` cell
+  INSIDE the same `.dllane[data-week]` the card's own week lane renders;
+  `.closest()` walks UP from wherever the pointer is, so landing on
+  ANOTHER card resolves to that card's own column — accepted when the
+  day is legal, refused only by the four conditions (R-d2-u), never by
+  what else was there. A hit outside the lane (a different week, no
+  `.dlday` ancestor) is `refused`, same as failing a bounds check.
+  Collapsed lanes carry no drag — a card must be EXPANDED to be dragged.
+  **(corrected REVIEW 2026-09-12; was: "another card" among refused
+  hits — `.closest()` finds the same column regardless of which card
+  sits on it.)** The card's `role` is `group`, not `button` (amendment
+  15 — an ARIA button may not contain its own Trello/Figma links).
+  [`frontend/scripts/90-events.js dlDragStart/dlDragMove`]
 - **R-d2-u A valid drop satisfies FOUR conditions at once, checked in this
   order** — the Design Lead is told the first thing wrong with the day in
   the order they would fix it:
@@ -106,9 +114,11 @@ version of gantt-rules.md §1: the drag contract for THIS surface.
   2. `OUT_OF_SPRINT` — inside the target sprint's own dates;
   3. `PAST_DEADLINE` — no later than the card's own deadline;
   4. `NOT_A_WORKDAY` — a working day on the ARES calendar
-     (`lib/calendar.ts`, invariant 11) — never checked client-side; the
-     server is the sole backstop for holidays (sprint-rules.md R10-e's
-     replacement, `dlDayPlaceable`).
+     (`lib/calendar.ts`, invariant 11) — the DROP never judges this
+     client-side, the server is its sole backstop (sprint-rules.md
+     R10-e's replacement, `dlDayPlaceable`); the keyboard nudge is the
+     one client-side use of the loaded calendar (R-d2-x, amendment 13) —
+     the drop still declines it.
   All four must hold; failing any one refuses with that condition's own
   frozen message, in the same voice as the other three (sprint-rules.md
   R10-b's replacement). [owl #89 §1/§3, v1.4 §6.5]
@@ -130,17 +140,19 @@ version of gantt-rules.md §1: the drag contract for THIS surface.
   capture discipline applies to whatever had focus when the drag started),
   snaps the card back to its last saved day and sends no write.
 - **R-d2-x The keyboard path is the same instrument, not a separate one**
-  (v1.4 §8: "NFR-9 is not optional decoration" — the day-drag is the
-  Design Lead's ONLY instrument and must not be pointer-only). A focused
-  `.dlcard` (`tabindex="0"`, `role="button"`, an `aria-label` naming the
-  card and the arrow-key affordance) answers ArrowLeft/ArrowRight with
-  `dlNudge`, moving the day one working day earlier/later through the SAME
-  write and the SAME four conditions as the pointer drag (R-d2-u, one
-  validator, no separate path); Escape cancels; every other key is
-  ignored. Nudging past a legal day at either end of the week (or past the
-  sprint, the deadline, or onto a holiday) refuses exactly as a pointer
-  drop would, same message. [v1.4 §8; `frontend/scripts/90-events.js
-  dlKey/dlNudge`]
+  (v1.4 §8: "NFR-9 is not optional decoration"). A focused `.dlcard`
+  (`tabindex="0"`, `role="group"` — R-d2-t) answers ArrowLeft/ArrowRight
+  with `dlNudge`; an Alt/Meta/Ctrl chord and every other key are ignored
+  (amendment 12). **The nudge steps OVER a holiday** (amendment 13) — it
+  walks the loaded calendar rather than landing on one and refusing, so
+  the keyboard reaches every day the pointer's drop can (R-d2-u still
+  declines the calendar for the DROP itself). Nudging past the week, the
+  sprint or the deadline still refuses through the SAME write and
+  conditions as the pointer (R-d2-u, one validator), same message — now
+  flashed on the card too (`dlRefuse`, amendment 14), the shell's
+  `.banner` carrying `role="status"` so a refusal reaches assistive
+  technology by key and by pointer alike. Escape cancels. [v1.4 §8;
+  `frontend/scripts/90-events.js dlKey/dlNudge/dlRefuse`]
 - **R-d2-y Audited on success, silent on refusal; gated by SURFACE only.**
   One `audit_log` row per committed day-drag or nudge (before/after
   `starts_on`), same shape as any other schedule move (invariant 10); a

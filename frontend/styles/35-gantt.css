@@ -353,21 +353,34 @@
    placement is inline percentages out of itemBar (50-gantt-geometry.js);
    the template does no arithmetic and this rule repeats none of itemBar's.
    Radius is the node's own 2 (731:98682 — agent C's Rex read overruled the
-   plan's drafted 4, main-thread ruling 2026-08-28). The box keeps native
-   pointer events for its title, which states the start day. DISPLAY ONLY
-   since block 9 (owl #88, JP 2026-09-10; PLAN.md R1): the PM places a week
+   plan's drafted 4, main-thread ruling 2026-08-28). DISPLAY ONLY since
+   block 9 (owl #88, JP 2026-09-10; PLAN.md R1): the PM places a week
    by clicking a cell, the Design Lead sets the day on Deadlines, and nobody
    drags this bar — so the cursor is the default, not a grab that promises a
    gesture the tab no longer has. Block seven's `dragging` / `refused`
    states left with the gesture; their treatment lives on again on the
-   Deadlines card (40-deadlines.css §E2), the one drag source now. The week
-   under the bar still takes the click through the cell beside it: the bar
-   covers its own week's cell, which is fine — re-placing a row means
-   clicking a DIFFERENT week. */
+   Deadlines card (40-deadlines.css §E2), the one drag source now.
+
+   POINTER-TRANSPARENT (PLAN.md block 9 amendment 11). The bar is absolutely
+   positioned across the cells, so it took the pointer for every week it RUNS
+   THROUGH and not merely its own: a three-week run sat over the two .gweek
+   cells after its start and swallowed their click, and the PM could not
+   re-place a card into a week its own bar covered — which defeats the one
+   act this tab has (#88, R1). `pointer-events: none` hands every cell its
+   click back. The bar is the ONE element here allowed to say it, and it is
+   allowed because it takes no pointer act of its own: the cells, the cell
+   row, the track and everything above them stay hit-testable, exactly as
+   rule 17 and the week-cell sweep in test/drag-hittest.test.ts require (that
+   sweep reads the SUBJECT of a rule, and the subject here is the bar, which
+   is neither a target nor an ancestor of one). The title it used to carry is
+   a tooltip a transparent box can never show, so rule 42's `startsOn →
+   finish` moved with it onto `.gtrack` (40-schedules.html, `rowTitle(row)`)
+   — the start day is still DISPLAYED, on the element that still takes a
+   pointer. */
 .gantt .gitem {
   position: absolute; top: 50%; transform: translateY(-50%);
   height: var(--gbar-h); border-radius: var(--radius-xs);
-  cursor: default; user-select: none;
+  cursor: default; user-select: none; pointer-events: none;
 }
 
 /* the client-deadline tick — the frame's hairline (731:98733; owl #72's

@@ -129,9 +129,10 @@ describe('sprintGroups — one group per sprint, empty sprints included, plus Ou
   });
 
   it("renders the 'Outside any sprint' group LAST, with its rows, through the same group markup", () => {
-    // the render half: the synthetic group is an ordinary group to the
-    // template — header, rows, search row — so nothing here can special-case
-    // it into a different shape
+    /* the render half: the synthetic group takes the ordinary group HEADER
+       and the ordinary row markup, so nothing here can special-case it into a
+       different shape. Its ONE difference — no add controls — is the test
+       below (PLAN.md block 9 amendment 3). */
     const html = renderSprintSchedule({
       sprintGroups: [
         { id: 's1', name: 'Sprint A', meta: 'Aug 24 - Aug 28', count: '· 1 items', rows: [PLOTTED] },
@@ -143,6 +144,46 @@ describe('sprintGroups — one group per sprint, empty sprints included, plus Ou
     expect(html).toContain('MC-712'); // the displaced row's MC, in the second group
     // and the fixture's ordinary two-group render never says it
     expect(renderSprintSchedule()).not.toContain('Outside any sprint');
+  });
+
+  it("gives the 'Outside any sprint' group NO search field and NO Add links — there is no sprint to add INTO (PLAN.md amendment 3)", () => {
+    /* THE RULE (owl #90 + PLAN.md amendment 3): the synthetic group is a
+       PARKING BAY, not a sprint. `addOne`/`addAll` post to
+       `/sprint-items` with a sprint id, and `'outside'` is not one — a field
+       there would offer a click that can only 404, and Add All would offer it
+       in bulk. The PM's way back in is the WEEK CLICK on the row's own track,
+       which the group keeps.
+
+       NON-VACUOUS BY CONSTRUCTION: both pieces of add state are forced ON for
+       the group id — a typed query and an open panel with a match — so the
+       template has everything it needs to draw the field, the Add All link
+       and a result row, and draws none of them. The real sprint beside it,
+       given the same state, draws all three. */
+    const outside = { id: 'outside', name: 'Outside any sprint', meta: 'no sprint dates', count: '· 1 items', rows: [{ ...OFF_BOARD, sprintId: null }] };
+    const real = { id: 's1', name: 'Sprint A', meta: 'Aug 24 - Aug 28', count: '· 1 items', rows: [PLOTTED] };
+    const panel = { items: [{ cardId: 'w9', mc: 'MC-999', name: 'Sketch Asset: parked', label: 'MC-999: Sketch Asset: parked' }] };
+    const html = renderSprintSchedule({
+      sprintGroups: [real, outside],
+      addQ: { outside: 'MC-999', s1: 'MC-999' },
+      addPanels: { outside: panel, s1: panel },
+    });
+    // the POSITIVE control first — with this state a real sprint draws all three
+    expect(html).toContain('id="gaddq-s1"');
+    expect(html).toContain('aria-label="Add every listed work card to Sprint A"');
+    expect(html).toContain('aria-label="Add MC-999: Sketch Asset: parked to Sprint A"');
+    // …and the parking bay draws none of them
+    expect(html).not.toContain('id="gaddq-outside"');
+    expect(html).not.toContain('Add every listed work card to Outside any sprint');
+    expect(html).not.toContain('to Outside any sprint"'); // no `Add … to …` label of either kind
+    expect(html).not.toContain('Search work cards to add to Outside any sprint');
+    // one search row on the page, and it belongs to the real sprint
+    expect([...html.matchAll(/growr gsearch/g)]).toHaveLength(1);
+    expect([...html.matchAll(/growr gresult/g)]).toHaveLength(1);
+    expect(html.indexOf('growr gsearch')).toBeLessThan(html.indexOf('Outside any sprint'));
+    // the group still HAS its header, its count and its row — it is hidden from
+    // nothing, only unaddable
+    expect(html).toContain('Outside any sprint');
+    expect(html).toContain('MC-712');
   });
 
   it('renders an empty group as header + search row with zero rows', () => {

@@ -33,6 +33,23 @@
   </div>
 </header>
 
+{{! The shell banner — where a flashed sentence lands, including the four
+    refusals of the Deadlines day write (#89 §3, by pointer AND by arrow key).
+    A refusal must reach assistive technology and not only the eye (PLAN.md
+    block 9 amendment 14), and the announcement is NOT the visible amber node:
+    Ractive creates that one together with its text, and a region inserted
+    with its content already in it is announced unreliably — the first
+    sentence, the one a refusal most needs heard, is the one most often
+    dropped.
+    So the announcing region is the visually-hidden span below. It is in the
+    document from first paint, empty, on every screen, and each flashed
+    sentence arrives as a text change inside a region the screen reader is
+    already watching — including the first. The amber node keeps the text and
+    the colour and is no longer a region of any kind, so one sentence is
+    announced exactly once. The main thread ruled the always-present region on
+    2026-09-12; the span is the house recipe the add-search count already
+    uses, unscoped here because the shell is every screen. }}
+<span class="vh" role="status">{{banner}}</span>
 {{#if banner}}<div class="banner">{{banner}}</div>{{/if}}
 
 {{! The grey wash marks a tab that has NOT been rebuilt to its frames — that

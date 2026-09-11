@@ -214,13 +214,20 @@ const sprintOf = (row) => (row && row.sprintId ? (app.get('sprints') || []).find
    stamped pair so the red bar follows the move. */
 const calendarDaysBetween = (fromIso, toIso) =>
   Math.round((new Date(toIso + 'T00:00:00') - new Date(fromIso + 'T00:00:00')) / 864e5);
-function stageStart(rowId, day) {
+function stageStart(rowId, day, sprintId) {
   const rows = app.get('sprintItems.rows') || [];
   const i = rows.findIndex((r) => r.id === rowId);
   if (i < 0) return null;
   const was = rows[i];
   const finish = was.finish && was.startsOn ? isoAddDays(was.finish, calendarDaysBetween(was.startsOn, day)) : day;
-  const staged = { ...was, startsOn: day, finish, late: !!(was.deadline && finish > was.deadline) };
+  /* The sprint half rides along only when the caller was TOLD one (the
+     server's answer below): a row re-slotted by a week click joins the
+     sprint covering the day it landed on, and a row that joined none stays
+     outside (#90). Omitted, the row keeps the membership it has. */
+  const staged = {
+    ...was, startsOn: day, finish, late: !!(was.deadline && finish > was.deadline),
+    ...(sprintId === undefined ? {} : { sprintId }),
+  };
   app.set(`sprintItems.rows.${i}`, staged);
   return { was, staged };
 }
@@ -241,7 +248,18 @@ async function placeRow(rowId, day, body) {
   if (!token) return false;
   sprintItemSaving = true;
   try {
-    await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/sprint-items/${rowId}`, body);
+    const res = await api.send('PATCH', `/api/projects/${app.get('activeProjectId')}/sprint-items/${rowId}`, body);
+    /* THE SERVER NAMES THE DAY, AND THE CLIENT TAKES IT (PLAN.md block nine
+       amendment 17; invariant 8). A week click is staged on the week's
+       Monday, but the day is the week's first WORKING day and only the
+       server knows the calendar — so the answer carries `starts_on` and
+       `sprint_id` back, and the row is re-stamped from them before the
+       reload rather than after it. The reload is not a second chance at
+       this: `loadAll` catches its own failures into a banner, so a reload
+       that never lands would have left the Monday standing as a day nobody
+       gave. Same stage-and-replace as the optimistic stamp — a new row
+       object, never a mutation — so every computed re-runs on it. */
+    if (res && res.starts_on) stageStart(rowId, res.starts_on, res.sprint_id);
     await loadAll();
     return true;
   } catch (err) {
@@ -254,20 +272,31 @@ async function placeRow(rowId, day, body) {
 }
 
 /* THE WEEK-GRAIN AFFORDANCE (block nine, owl #88; PLAN.md "Client
-   handlers"): may this row be offered this week at all? The server picks
-   the DAY — the week's first working day (#89 §2) — so the client cannot
-   know which day it will judge, and refuses only what EVERY day of the week
-   would fail: a week wholly outside the row's sprint, or one whose Monday
-   is already past the deadline. Everything finer (a holiday Monday pushing
-   the day past the deadline, a sprint that ends mid-week) is the server's
-   422, rolled back and read out. A row outside any sprint (#90) has no
-   sprint half: the server derives its membership from the day it lands on. */
+   handlers", amendment 16): may this row be offered this week at all?
+
+   THE OFFER IS JUDGED ON THE DAY THE WEEK RESOLVES TO, exactly as the route
+   judges it: a week placement lands on the week's FIRST WORKING DAY (#89
+   §2), so that day — not the week's span, and not its Monday — is what has
+   to be inside the sprint and on or before the deadline. Judged on the span,
+   the tint offered a sprint's own first week whenever the sprint began
+   mid-week, and the server then refused every day of it; judged on the bare
+   Monday, a holiday Monday moved the real day past a deadline the offer had
+   already cleared. `weekFirstWorkday` (30-dates.js) is the mirror of the
+   server's own resolver, over the payload's ARES-canonical calendar.
+
+   Still the AFFORDANCE and never the authority: the server re-resolves and
+   re-judges, and a 422 rolls the stamp back with its own sentence. A row
+   outside any sprint (#90) has no sprint half — the server derives its
+   membership from the day it lands on — and a row naming a sprint the list
+   no longer has is offered nothing, the safe direction. */
 const weekOffered = (row, week) => {
   if (!row || !week) return false;
   const s = sprintOf(row);
   if (row.sprintId && !s) return false;
-  if (s && (!s.start || !s.end || week.fridayIso < s.start || week.key > s.end)) return false;
-  return !(row.deadline && week.key > row.deadline);
+  const day = weekFirstWorkday(week.key, app.get('holidays'));
+  if (!day) return false; // a week that is closed end to end has no day to offer
+  if (s && (!s.start || !s.end || day < s.start || day > s.end)) return false;
+  return !(row.deadline && day > row.deadline);
 };
 
 /* ---- the Deadlines day drag: pointer events, and no ghost (block nine,
@@ -289,8 +318,19 @@ const weekOffered = (row, week) => {
    project switch — so nothing listens at rest. The handlers are fired by
    name with the event folded into the context, the shape every template-
    bound handler already reads. */
-const dlDragMoveWin = (e) => app.fire('dlDragMove', { event: e });
-const dlDragUpWin = (e) => app.fire('dlDragEnd', { event: e });
+/* ONE POINTER OWNS THE GESTURE (review 2026-09-12, finding 2). The card
+   turns the browser's own touch gestures off, so two fingers can be on the
+   tab at once: without this, a second finger landing on another card re-armed
+   `dlDrag` behind the first, and the FIRST finger's release then wrote the
+   second card to a day nobody chose. The id is the pointer's own, kept here
+   rather than on `dlDrag` because nothing renders it — the template reads the
+   gesture, the window listeners read the pointer — and it is dropped with the
+   listeners in `dlDragStop`, on every exit. An event carrying no id is
+   nothing a browser fires, and is left alone rather than filtered out. */
+let dlDragPointer = null;
+const dlOtherPointer = (e) => dlDragPointer !== null && e && e.pointerId !== undefined && e.pointerId !== dlDragPointer;
+const dlDragMoveWin = (e) => { if (!dlOtherPointer(e)) app.fire('dlDragMove', { event: e }); };
+const dlDragUpWin = (e) => { if (!dlOtherPointer(e)) app.fire('dlDragEnd', { event: e }); };
 const dlDragLost = () => app.fire('dlDragCancel');
 /* ESCAPE IS THE DRAG'S WHILE IT IS LIVE (review 2026-09-09, finding 3, kept
    from block seven): CAPTURE puts this first, on the way down, and
@@ -302,6 +342,7 @@ const dlDragKeyWin = (e) => {
   app.fire('dlDragCancel');
 };
 function dlDragStop() {
+  dlDragPointer = null;
   window.removeEventListener('pointermove', dlDragMoveWin);
   window.removeEventListener('pointerup', dlDragUpWin);
   window.removeEventListener('pointercancel', dlDragLost);
@@ -323,17 +364,45 @@ const dlHitDay = (ev, weekKey) => {
   const lane = col.closest('.dllane[data-week]');
   return lane && lane.dataset.week === weekKey ? col.dataset.day || null : null;
 };
+/* WHY THE KEY WAS REFUSED, IN THE SERVER'S OWN WORDS (PLAN.md block nine
+   amendment 14). The pointer's refusal SHOWS itself — the column under the
+   hand never tints and the card washes pale — but a key press has no column
+   under it, so the refusal has to be said, and said in the same voice the
+   route would have used for the same day (`plotIssue`,
+   src/services/sprint-items.ts): the assigned week, the sprint's dates, the
+   deadline, the calendar, asked in that order. Same order, same sentences,
+   so a refusal reads identically whether the client caught it or the server
+   did — and `fmtLongIso` is the same '4 Aug 2026' the server's `longDate`
+   writes.
+
+   The one sentence with no twin on the wire is the missing sprint: the route
+   answers that stale row a bare not-found, having no copy for a list the
+   reader can no longer see. */
+const dlRefusalText = (row, dayIso, weekKey, sprint) => {
+  if (!dayIso || dayIso < weekKey || dayIso > isoAddDays(weekKey, WORKDAYS_PER_WEEK - 1)) {
+    return `That day is outside the card's assigned week (Mon ${fmtLongIso(weekKey)} – Fri ${fmtLongIso(isoAddDays(weekKey, WORKDAYS_PER_WEEK - 1))}).`;
+  }
+  if (row.sprintId && (!sprint || !sprint.start || !sprint.end)) return "That card's sprint is no longer on the schedule.";
+  if (sprint && (dayIso < sprint.start || dayIso > sprint.end)) return `That day is outside the sprint's dates (${fmtLongIso(sprint.start)} – ${fmtLongIso(sprint.end)}).`;
+  if (row.deadline && dayIso > row.deadline) return `That day is after the card's deadline (${fmtLongIso(row.deadline)}).`;
+  return 'That day is not a working day.';
+};
+
 /* THE KEYBOARD'S NO (v1.4 §8, NFR-9): a nudge onto a day the row may not
    have shows the same pale `refused` wash the pointer drag shows, for a
-   beat, and writes nothing. The marker is a `dlDrag` with no pointer behind
-   it, told apart from a live gesture by this timer; it clears itself, and
-   only itself — a real drag armed in the meantime is left alone. */
+   beat, says why, and writes nothing. The marker is a `dlDrag` with no
+   pointer behind it, told apart from a live gesture by this timer; it clears
+   itself, and only itself — a real drag armed in the meantime is left alone.
+   `dayIso` is the day the KEY ASKED FOR — one step, before any holiday the
+   nudge would have skipped — because that is the day the reader pressed
+   towards and the day the sentence has to be about. */
 const DL_REFUSE_MS = 400;
 let dlRefuseTimer = 0;
-function dlRefuse(row, weekKey) {
+function dlRefuse(row, weekKey, dayIso) {
   const marker = { rowId: row.id, fromDay: row.startsOn, day: null, refused: true, weekKey };
   clearTimeout(dlRefuseTimer);
   app.set('dlDrag', marker);
+  flashBanner(dlRefusalText(row, dayIso, weekKey, sprintOf(row)));
   dlRefuseTimer = setTimeout(() => {
     dlRefuseTimer = 0;
     if (app.get('dlDrag') === marker) app.set('dlDrag', null);
@@ -932,9 +1001,24 @@ app.on({
     /* a placement or a previous drop is still in the air: this card is
        about to be replaced by the reload, so the gesture would drag a corpse */
     if (sprintItemSaving) return;
+    /* ONE GESTURE AT A TIME (review 2026-09-12, finding 2): a second pointer
+       landing on another card while one is held must not take the gesture
+       over — the first pointer's release would then write THIS card to the
+       day the first hand was over. The refused marker is not a live gesture,
+       told apart by its timer, exactly as `dlNudge` tells them apart. */
+    if (app.get('dlDrag') && !dlRefuseTimer) return;
     /* the PRIMARY button only: a right-click opens the context menu, and its
        own pointerup would then end a drag the user never started */
     if (ctx.event && ctx.event.button) return;
+    /* THE CARD'S OWN LINKS KEEP THEIR POINTER (PLAN.md block nine amendment
+       12): the Trello and Figma marks are links, and a press that starts on
+       one bubbles out to this handler — which cancelled the link's click,
+       armed a drag from it, and on release both wrote a day and opened the
+       tab. A press anywhere else on the card is still the drag: the whole
+       card is the drag source (#89 §1), minus the two things that have a
+       pointer act of their own. */
+    const from = ctx.event && ctx.event.target;
+    if (from && from.closest && from.closest('a, button')) return;
     const row = sprintRow(rowId);
     if (!row || !row.startsOn) return; // only a PLACED row is on this tab at all
     /* THE ASSIGNED WEEK is derived, never stored: the local Monday of the
@@ -953,6 +1037,8 @@ app.on({
        arrow keys then work on the card the pointer just held. */
     if (ctx.event && ctx.event.preventDefault) ctx.event.preventDefault();
     if (ctx.node && ctx.node.focus) ctx.node.focus();
+    // the hand that armed it is the only one the window listeners will hear
+    dlDragPointer = ctx.event && ctx.event.pointerId !== undefined ? ctx.event.pointerId : null;
     window.addEventListener('pointermove', dlDragMoveWin);
     window.addEventListener('pointerup', dlDragUpWin);
     window.addEventListener('pointercancel', dlDragLost);
@@ -1017,7 +1103,19 @@ app.on({
      the same four refusals as the pointer. Escape cancels a live pointer
      drag; every other key is left to the browser. */
   dlKey(ctx, rowId) {
-    const key = ctx.event && ctx.event.key;
+    /* THE CARD'S OWN KEYS ONLY (PLAN.md block nine amendment 12, the same
+       read `pipeRowKey` makes): the card holds two links, and a key pressed
+       with one of them focused bubbles here — an arrow then wrote a day
+       while the reader was tabbing through the card's links. The card is the
+       tab stop for the gesture; anything focused inside it keeps its own
+       keys. */
+    if (ctx.event.target !== ctx.node) return;
+    /* A CHORD IS THE BROWSER'S (same amendment): Alt+Left is Back, and
+       cancelling it to move a card by one day is a key the reader did not
+       press. Shift is not listed — it selects, and selection is already
+       cancelled on the gesture. */
+    if (ctx.event.altKey || ctx.event.metaKey || ctx.event.ctrlKey) return;
+    const key = ctx.event.key;
     if (key === 'Escape') {
       if (app.get('dlDrag')) app.fire('dlDragCancel');
       return;
@@ -1033,17 +1131,35 @@ app.on({
     const row = sprintRow(rowId);
     if (!row || !row.startsOn || !delta) return;
     const weekKey = mondayIso(row.startsOn);
-    /* one CALENDAR day per press, and the week bound does the rest: a
-       Monday nudged left names Sunday, a Friday nudged right names
-       Saturday, and both fall outside Monday..Friday of `weekKey` — so the
-       nudge can never skip a holiday or wrap into the next week, which is
-       exactly the bound (#89 §1). The server's calendar still has the last
-       word on a holiday (NOT_A_WORKDAY, rolled back). */
-    const day = isoAddDays(row.startsOn, delta);
+    /* ONE WORKING DAY PER PRESS, HOLIDAYS STEPPED OVER (PLAN.md block nine
+       amendment 13; v1.4 §8 — "NFR-9 is not optional decoration"). A single
+       calendar step stopped dead at a closed day: the pointer could drop a
+       card on the Thursday after a closed Wednesday, and the keyboard could
+       not reach it at all — it sent the closed day, the server refused it,
+       and the card came back. So the press walks on in the direction it was
+       given until it finds an open day, and the WEEK is still the stop: a
+       Monday nudged left names Sunday, a Friday nudged right names Saturday,
+       and both fall outside Monday to Friday of `weekKey`, which is the
+       bound the whole gesture lives inside (#89 §1). The calendar is the
+       payload's own, the ARES-canonical set the server resolves weeks with;
+       the server is still the authority on the day that leaves here. */
+    const holiday = new Set(app.get('holidays') || []);
+    const weekEnd = isoAddDays(weekKey, WORKDAYS_PER_WEEK - 1);
+    const asked = isoAddDays(row.startsOn, delta);
+    let day = asked;
+    while (holiday.has(day) && day >= weekKey && day <= weekEnd) day = isoAddDays(day, delta);
     if (!dlDayPlaceable(row, day, weekKey, sprintOf(row))) {
-      dlRefuse(row, weekKey);
+      dlRefuse(row, weekKey, asked);
       return;
     }
+    /* A REFUSAL IS NOT THIS PRESS'S STATE (review 2026-09-12, finding 6):
+       the wash from a press a beat ago outlived its own refusal and dressed
+       the card `refused` right through a write that succeeded — a treatment
+       whose whole meaning is "nothing was written". It comes off, with its
+       timer, before the write goes out. */
+    clearTimeout(dlRefuseTimer);
+    dlRefuseTimer = 0;
+    app.set('dlDrag', null);
     await placeRow(rowId, day, { starts_on: day });
     dlRefocus(rowId);
   },

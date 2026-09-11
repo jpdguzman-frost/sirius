@@ -36,30 +36,33 @@ _last-verified: 2026-09-11_
     `Math.round(hardCeiling * 100)`, never retyped. [R9]
 30. **Sprint membership is STORED, not derived**: `sprint_id` rides the row
     on the wire (v1.4 §5.3), now NULLABLE — `required: false`, default
-    `null` (owl #90; a Mongoose flip, no migration). Placing onto a week
-    in a DIFFERENT sprint's range IS the sprint move (`weekPlace` resolves
-    the target from the week's day, gantt-rules.md rule 6); no day-grain
-    drag remains to carry `sprint_id` by accident (cross-sprint stays
-    excluded, gantt-rules §1 rule 11). Group order: sprints by `position`
-    → Outside any sprint (non-empty only) → Unscheduled, empty dropped.
+    `null` (owl #90; a Mongoose flip, no migration). **A week click stays
+    inside the row's OWN sprint**, refusing `OUT_OF_SPRINT` outside it; a
+    move to another sprint needs an explicit `sprint_id` in the same
+    PATCH. Only a row *Outside any sprint* self-assigns by week alone, to
+    whichever sprint covers the resolved day, else stays outside
+    (invariant 12). No day-grain drag carries `sprint_id` by accident
+    (gantt-rules §1 rule 11). Group order: sprints by `position` →
+    Outside any sprint (non-empty only) → Unscheduled, empty dropped.
     Rollover changes `sprint_id` without a click (R9-d), guards skipped
-    (§10).
+    (§10). **(corrected REVIEW 2026-09-12 — was: a week click onto
+    another sprint's range "IS the sprint move".)**
 
-    **A re-dated sprint is the second such path** (owl #90, new): a
-    sprint-date edit pushing a placed row's ASSIGNED WEEK outside the new
-    range does not strand, re-place or unslot it (the unslot-to-pool
-    branch is WITHDRAWN) — `sprint_id` clears to `null`, `starts_on`
-    untouched, rendering under *Outside any sprint*. Never refused for
-    this (JP 2026-09-09's "refuse and notify" half-withdraws — the REFUSE
-    half; rule 31 is unedited). Response carries `displaced: [{ id,
-    display_id, title, starts_on, from_sprint }]`; the client shows a
-    dismissible notice naming each — the LIST half of JP's 2026-09-09
-    ruling survives. One `audit_log` row per displaced row
+    **A re-dated sprint is the second such path** (owl #90): an edit
+    pushing a placed row's DAY (`starts_on`), inclusive at both ends,
+    outside the new range does not strand, re-place or unslot it (WITHDRAWN
+    unslot-to-pool) — `sprint_id` clears to `null`, `starts_on` untouched,
+    under *Outside any sprint*. Never refused for this (JP 2026-09-09's
+    "refuse and notify" half-withdraws — the REFUSE half; rule 31
+    unedited). Response carries `displaced: [{ id, display_id, title,
+    starts_on, from_sprint }]`; the client shows a dismissible notice
+    naming each. One `audit_log` row per displaced row
     (`sprintItem.displaced`, before/after `sprint_id`, `starts_on`
-    unchanged), actor = the editor, never `system` (rollover's, R-d2-r).
-    Re-slots by the ordinary week click (rule 6) once a sprint covers its
-    day again. **(new, owl #90 — flagged "pre-existing; JP to rule later"
-    at block 7.)** [R5; invariant 12; `schedule.ts PUT /sprints`]
+    unchanged), actor = the editor, never `system` (R-d2-r). Re-slots by
+    the ordinary week click once a sprint covers its day again.
+    **(corrected REVIEW 2026-09-12 — was: judged by the row's "ASSIGNED
+    WEEK", not its stored day.)** [R5; invariant 12; `schedule.ts PUT
+    /sprints`]
 31. **Sprints modal — blocking (red) classes, both sides, byte-identical
     copy where both speak**: duplicate names (trimmed/case-insensitive, 422
     `SPRINT_CONFLICT`), blank/whitespace-only names (one banner per blank
@@ -208,21 +211,18 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
   row with no deadline reads `Select Date` (writes on) / `No Due Date`
   (writes off) — the em-dash left this cell. A row whose card has LEFT the
   board is read-only whatever the switch says: nothing to write to (review
-  R4-1). Pipeline only REFLECTS the date.
-  [#78 §2;
-  PLAN block 3 B12/B13; `test/sprint-schedule-deadline.test.ts`]
-- **R9-b** A row's deadline is the card's OWN Trello due date or none. The MC
+  R4-1). Pipeline only REFLECTS the date. [#78 §2; PLAN block 3 B12/B13]
+- **R9-b** A row's deadline is the card's own Trello due date or none. The MC
   group's deliverable dates are never inherited (#78 §2 retired jp→miles
   #58's judgement — main cards have no deadline; the Pipeline work row and
   this cell must agree about one card). No deadline → no tick, `late` false.
-  [`src/services/sprint-items.ts deadlineFor`; `test/sprint-items.test.ts`]
-- **R9-c** The write's reload is what re-derives the tick and `late`; nothing
-  client-side recomputes either. The cell wears the `missing` dress only — no
-  overdue tint here, because the tick and the red bar already say late.
-  Known, kept for parity with Pipeline: a scroll outside the popover — the
-  gantt's sideways scroll included, although the sticky trigger does not move —
-  dismisses it and discards a staged date (the shared dismisser; review R4-2,
-  backlog).
+  [`src/services/sprint-items.ts deadlineFor`]
+- **R9-c** The write's reload re-derives the tick and `late`; nothing
+  client-side recomputes either. The cell wears the `missing` dress only —
+  no overdue tint, because the tick and the red bar already say late.
+  Known, kept for parity with Pipeline: a scroll outside the popover (the
+  gantt's sideways scroll included) dismisses it and discards a staged
+  date (the shared dismisser; review R4-2, backlog).
 - **R9-d** Rollover (deadlines-rules.md §4) moves `starts_on` server-side; the
   bar translates whole and the FORECASTED cell moves with it by construction;
   sprint membership follows the card's new START day — the day rollover just
@@ -233,16 +233,16 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
 ## 10. The plot guards (block 9, JP 2026-09-11, owls #88/#89/#90 —
     supersedes block 7, JP 2026-09-08)
 
-- **R10-a** A row is placed or dragged at WEEK grain on Sprint Schedules,
-  never day grain: `weekHover`/`weekPlace` track the pointer by `.gweek`
-  column; a click PATCHes `{ week }` and the server resolves `starts_on`
-  to that week's FIRST WORKING DAY (`firstWorkdayOfWeek`, owl #89 §2 —
-  never a bare Monday), judged against the target sprint (rule 30). The
-  day is set exclusively by the Design Lead's drag on Deadlines
-  (deadlines-rules.md §1a). **(reversed by owls #88/#89; was: JP
-  2026-09-08's day-grain extension — reinstates v1.4 §5.1b/§5.2's
-  week-grain prose, corrected for the first-working-day default over its
-  literal "Monday".)** [gantt-rules.md §1]
+- **R10-a** A row is placed at WEEK grain on Sprint Schedules by a CLICK,
+  never a drag or a day grain: `weekHover`/`weekPlace` track the pointer
+  by `.gweek` column; the click PATCHes `{ week }` and the server resolves
+  `starts_on` to that week's FIRST WORKING DAY (`firstWorkdayOfWeek`, owl
+  #89 §2 — never a bare Monday), judged against the row's own sprint
+  (rule 30). The day is set exclusively by the Design Lead's drag on
+  Deadlines (deadlines-rules.md §1a). **(reversed by owls #88/#89; was: JP
+  2026-09-08's day-grain drag — reinstates v1.4 §5.1b/§5.2's week-grain
+  prose, corrected for the first-working-day default over its literal
+  "Monday".)** [gantt-rules.md §1]
 - **R10-b** A manual DAY-drag exists only on Deadlines now (Sprint
   Schedules takes a week, never a day — R10-a). Refused, 422, before any
   write or audit row, in this order:
@@ -275,8 +275,8 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
 - **R10-c** `POST /sprint-items/batch` never carries a day — its body is
   `.strict()` with no `starts_on` field, so a batch add always lands
   UNPLOTTED and no skip entry in that route ever carries a plot code. A
-  batch is the two-act add (rule in §6 above); placing a row is always a
-  separate, later act through R10-a's single-row paths.
+  batch is the two-act add (§6 above); placing a row is a separate, later
+  act through R10-a's single-row paths.
 - **R10-d** The guards bind ONLY a person's own click or drag. Rollover
   (deadlines-rules.md §4; R9-d) never calls `plotIssue()` and is exempt by
   construction: a card that never completes moves indefinitely, landing
@@ -288,12 +288,14 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
   mirrors R10-b's four conditions client-side — assigned week, sprint
   dates, deadline, Mon–Fri by construction — gating `.dlday` drop cells;
   a failing day previews `.dlcard.refused` (deadlines-rules.md §1a), a
-  release there a no-op. The server stays the sole backstop for holidays
-  (deliberately not checked client-side — ARES is canonical); its 422
-  rolls the card's optimistic move back through the existing banner.
-  Sprint Schedules loses this guard entirely. **(reversed by owls
-  #88/#89; was: `placeable(row, day)` gating the `+`/hover tint, block 7
-  — deleted.)**
+  release there a no-op. The DROP alone declines holidays client-side —
+  the server's ARES calendar is its sole judge; its 422 rolls the
+  optimistic move back through the existing banner. Sprint Schedules
+  loses this guard entirely. **(reversed by owls #88/#89; was:
+  `placeable(row, day)` gating the `+`/hover tint, block 7 — deleted.
+  Reworded REVIEW 2026-09-12 — "not checked client-side" had drifted into
+  "the app holds no holiday set"; it does, `80-loaders.js`, for the gap
+  banner and the keyboard nudge — only the DROP declines to use it.)**
 - **R10-f** A bare `sprint_id` move — `starts_on` absent from the same write
   — still moves a bar for a PLOTTED row (its existing `starts_on` rides
   across into the new list), so it is judged against the TARGET sprint's
@@ -311,6 +313,5 @@ Nodes 840:31597 · 841:33668 · 841:33689 · 833:68629; retires #73's dropdowns.
   `starts_on` is judged by the full `plotIssue()` against the sprint that
   write targets (R10-b), never by this narrower rule. Un-plotting
   (`starts_on: null`) and re-sending the day a row already sits on are both
-  no-ops that return before either guard runs. Rollover itself
-  (`src/services/rollover.ts`) writes through Mongo directly and never
-  reaches this route — R10-d is unaffected.
+  no-ops that return before either guard runs. Rollover writes through
+  Mongo directly and never reaches this route (R10-d unaffected).

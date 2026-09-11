@@ -89,6 +89,29 @@ function workingDaysBetween(startIso, endIso, holidays) {
   return open;
 }
 
+/* THE FIRST WORKING DAY OF A WEEK — the day a week placement actually lands
+   on (owl #89 §2; PLAN.md block nine amendment 16). The server resolves it
+   (`firstWorkdayOfWeek`, src/services/sprint-items.ts) and is the authority;
+   this mirror exists so the week TINT offers only weeks the route can take —
+   the offer was drawn on the week's Monday, so a sprint starting mid-week
+   tinted a week the server then refused on every one of its days.
+
+   Monday, or the first day after it the calendar counts as open, and `null`
+   when the whole week is closed — the same answer, and the same `null`, the
+   server gives. Only the five weekdays are candidates: a week is its working
+   days on both sides of the wire. The set is the payload's own `holidays`
+   (80-loaders.js), which IS the ARES-canonical calendar the server reads, so
+   this is one calendar mirrored, never a second one kept. */
+function weekFirstWorkday(weekKey, holidays) {
+  if (!weekKey) return null;
+  const holiday = holidays instanceof Set ? holidays : new Set(holidays || []);
+  for (let i = 0; i < WORKDAYS_PER_WEEK; i += 1) {
+    const iso = isoAddDays(weekKey, i);
+    if (!holiday.has(iso)) return iso;
+  }
+  return null;
+}
+
 /* how many Mondays a sprint covers — the '2 wk' in a sprint header. Counted,
    not divided: Aug 3–Aug 14 is 2 weeks even though it spans 12 days, and a
    sprint that starts mid-week owns only the Mondays inside it. */

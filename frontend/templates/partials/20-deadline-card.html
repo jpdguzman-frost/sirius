@@ -30,6 +30,12 @@
     (the caller's `expandedWeek === w.key` — `w` is in scope from either
     caller's each-block): a collapsed lane has no day column to drop on, so
     its cards stay inert (PLAN.md: "Collapsed lanes: no drag").
+    THE ROLE IS `group`, not `button` (PLAN.md block 9 amendment 15): an ARIA
+    button's children are presentational, which would hide the two links
+    below from a screen reader, and it promises an Enter/Space act this card
+    does not have — the keys it answers are Left and Right. `group` takes the
+    accessible name and the arrow-key instruction just the same, and leaves
+    the links in the tree where a reader can still reach them.
     `dragging` and `refused` come off `dlDrag`, the one in-flight gesture,
     matched by the row id A2 puts on the card (`c.rowId`); the same id is
     stamped as `data-row` on every card, expanded or collapsed (inert data),
@@ -46,7 +52,7 @@
 {{#partial dlCard}}
 <article class="dlcard {{#if c.urgent}}urgent{{/if}} {{#if c.done}}done{{/if}}{{#if dlDrag && dlDrag.rowId === c.rowId}} dragging{{#if dlDrag.refused}} refused{{/if}}{{/if}}"
          data-row="{{c.rowId}}"
-         {{#if expandedWeek === w.key}}tabindex="0" role="button" aria-label="{{c.label}}, starts {{c.startsOn}}; use left and right arrows to move the day within the week" on-pointerdown="['dlDragStart', c.rowId]" on-keydown="['dlKey', c.rowId]"{{/if}}>
+         {{#if expandedWeek === w.key}}tabindex="0" role="group" aria-label="{{c.label}}, starts {{c.startsOn}}; use left and right arrows to move the day within the week" on-pointerdown="['dlDragStart', c.rowId]" on-keydown="['dlKey', c.rowId]"{{/if}}>
   {{! The quote bar: the left edge only, curved into the card's own corner
       radius, and drawn ONLY on an urgent card — a non-urgent card carries no
       bar at all, pale or otherwise (#74 §3). The path is the frame's own
