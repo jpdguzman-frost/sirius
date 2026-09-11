@@ -714,12 +714,16 @@ export async function syncProject(
  * Sync every active project; one sync_runs document per project per run.
  * `policy` (FR-9.6, worker/drainPush.ts) may skip a project this tick —
  * while ARES push is healthy the full sync relaxes to an hourly reconcile.
+ * `clientOverride` (X10, 2026-09-11) lets a test drive this exact persistence
+ * path with a stub client; the worker never passes it, so `makeClient(env)`
+ * stays the one real source.
  */
 export async function runAresSync(
   env: Env,
   policy?: (projectId: Types.ObjectId) => Promise<boolean>,
+  clientOverride?: AresClient,
 ): Promise<void> {
-  const client = makeClient(env);
+  const client = clientOverride ?? makeClient(env);
   const projects = await Project.find({ status: 'ongoing' });
   assertNotProductionBoards(env, projects.map((p) => p.trello_board_id)); // invariant 17
 

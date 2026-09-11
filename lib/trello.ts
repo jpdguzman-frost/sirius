@@ -1,10 +1,15 @@
 /**
  * lib/trello.ts — THE write path (invariant 2 as amended 2026-08-04,
- * registry grown 2026-08-12). Sirius writes exactly what the write registry
- * enumerates (specs/001-sirius-v1/contracts/trello-write.md) and nothing else:
+ * registry grown 2026-08-12 and 2026-09-10). Sirius writes exactly what the
+ * write registry enumerates (specs/001-sirius-v1/contracts/trello-write.md)
+ * and nothing else:
  *   W1  add/remove the `Urgent` label — absence means non-urgent
  *   W2  the card due date (set or clear)
  *   W3  the `Difficulty: …` label (swap; BRD-§9-A1)
+ *   W4  the business-unit label (assign/swap an EXISTING board label only;
+ *       lookup-only, never created — BRD v3.0 §9 / FR-4.11). Server half
+ *       only: no route or caller exists until the surface and the ingestion
+ *       actor are ruled (contracts/trello-write.md §W4).
  * Credential: dedicated integration account, server-side env only
  * (TRELLO_API_KEY + TRELLO_TOKEN; TRELLO_WRITE_TOKEN accepted).
  */
@@ -44,6 +49,48 @@ const BASE = 'https://api.trello.com/1';
 export const URGENT_LABEL_NAME = 'Urgent';
 export const DIFFICULTY_LABEL_PREFIX = 'Difficulty: ';
 const DIFFICULTY_LABEL_COLOR: Record<Difficulty, string> = { Easy: 'green', Medium: 'yellow', Hard: 'red' };
+
+/**
+ * W4's refusal (contracts/trello-write.md §W4: "an unmatched value is refused
+ * and surfaced, never guessed"). `reason` says which way the lookup failed:
+ *   unmatched  — no board label normalises to the tag
+ *   ambiguous  — MORE than one does (two labels differing only by case or
+ *                whitespace). Refused rather than "first match": a wrong
+ *                business unit silently misattributes work (BRD v3.0 §9),
+ *                which is worse than a missing one.
+ * The message carries the board id and the tag, never a credential.
+ */
+export class UnknownClassificationLabel extends Error {
+  readonly boardId: string;
+  readonly tag: string;
+  readonly reason: 'unmatched' | 'ambiguous';
+
+  constructor(boardId: string, tag: string, reason: 'unmatched' | 'ambiguous') {
+    super(
+      reason === 'ambiguous'
+        ? `More than one board label matches ${JSON.stringify(tag)} on board ${boardId} — refusing to guess`
+        : `No board label matches ${JSON.stringify(tag)} on board ${boardId}`,
+    );
+    this.name = 'UnknownClassificationLabel';
+    this.boardId = boardId;
+    this.tag = tag;
+    this.reason = reason;
+  }
+}
+
+/**
+ * The W4 resolver, pure: the ids of EVERY board label whose name equals the
+ * tag after trim + case-fold on both sides. Exact only — no prefix, no
+ * substring, no distance; inner whitespace is part of the name. Returning
+ * every match (not the first) is what lets the caller refuse ambiguity. A
+ * blank tag names nothing: Trello boards carry colour-only labels with an
+ * empty name, and a blank value must never land on one.
+ */
+export function resolveLabelIds(labels: Array<{ id: string; name: string }>, tag: string): string[] {
+  const want = tag.trim().toLowerCase();
+  if (want === '') return [];
+  return labels.filter((l) => l.name.trim().toLowerCase() === want).map((l) => l.id);
+}
 
 export class TrelloClient implements TrelloWriter {
   private labelCache = new Map<string, string>();
@@ -141,6 +188,57 @@ export class TrelloClient implements TrelloWriter {
     } catch (err) {
       // restore the original state; if this also fails the card wears two
       // difficulty labels until the next ARES read reconciles it — the local
+      // value still rolls back (invariant 8)
+      if (added) await this.call('DELETE', `/cards/${cardId}/idLabels/${targetId}`).catch(() => {});
+      throw err;
+    }
+  }
+
+  /**
+   * W4 (contracts/trello-write.md §W4): assign the board's EXISTING
+   * business-unit label for `tag`, and — when `previousTag` is given — remove
+   * the label it names, W3's add-then-remove so the card never passes through
+   * an untagged state. LOOKUP ONLY: there is deliberately no
+   * `ensureClassificationLabel()`; the labels are Frost's to manage on the
+   * board, and the absence of that helper is the control. Unmatched and
+   * ambiguous tags both throw `UnknownClassificationLabel` before any write.
+   *
+   * The board's labels are read FRESH on every call — no cache, unlike the
+   * W1/W3 taxonomy helpers: the tag is an open set (every business unit the
+   * sheet may name), and a cached id goes stale the moment a label is renamed.
+   *
+   * `previousTag` is skipped SILENTLY when it does not resolve to exactly one
+   * board label or that label is not on the card — a stale value that is
+   * already gone must not block a legitimate re-tag, and an ambiguous one is
+   * never guessed at. A failed stale removal restores the just-added label
+   * and rethrows, exactly as `setDifficulty`.
+   *
+   * Not on the `TrelloWriter` interface: nothing calls this polymorphically
+   * yet. The caller runs the same refusal checks `writeGuards()` runs for
+   * W1–W3 (production board, `writes_enabled`, local rows) — this primitive
+   * does not.
+   */
+  async setClassification(cardId: string, boardId: string, tag: string, previousTag?: string | null): Promise<void> {
+    const labels = await this.call<Array<{ id: string; name: string }>>('GET', `/boards/${boardId}/labels`);
+    const matches = resolveLabelIds(labels, tag);
+    if (matches.length === 0) throw new UnknownClassificationLabel(boardId, tag, 'unmatched');
+    if (matches.length > 1) throw new UnknownClassificationLabel(boardId, tag, 'ambiguous');
+    const targetId = matches[0]!;
+
+    const current = await this.call<Array<{ id: string; name: string }>>('GET', `/cards/${cardId}/labels`);
+    const added = !current.some((l) => l.id === targetId);
+    if (added) {
+      await this.call('POST', `/cards/${cardId}/idLabels?value=${targetId}`);
+    }
+
+    const previous = previousTag == null ? [] : resolveLabelIds(labels, previousTag);
+    const staleId = previous.length === 1 ? previous[0]! : null;
+    if (staleId === null || staleId === targetId || !current.some((l) => l.id === staleId)) return;
+    try {
+      await this.call('DELETE', `/cards/${cardId}/idLabels/${staleId}`);
+    } catch (err) {
+      // restore the original state; if this also fails the card wears two
+      // business-unit labels until someone fixes it in Trello — the local
       // value still rolls back (invariant 8)
       if (added) await this.call('DELETE', `/cards/${cardId}/idLabels/${targetId}`).catch(() => {});
       throw err;

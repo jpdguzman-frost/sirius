@@ -33,7 +33,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startTestDb, stopTestDb, clearCollections } from './helpers/db.ts';
 import { aresCard, label } from './helpers/ares-card.ts';
-import { syncProject, type SyncStats } from '../worker/syncAres.ts';
+import { runAresSync, syncProject, type SyncStats } from '../worker/syncAres.ts';
 import { drainPushEvents } from '../worker/drainPush.ts';
 import { validateEnv } from '../src/config/env.ts';
 import type { AresBoardLane, AresCard, AresClient, AresMovement } from '../src/services/ares.ts';
@@ -459,20 +459,26 @@ describe('sync_runs.stats.unknownLanes', () => {
   });
 
   it('lands on the sync_runs document whole — no key lost to the Mixed schema', async () => {
+    /* Through the REAL persistence path (X10, 2026-09-11): `runAresSync` with
+       the fixture client injected, so the row asserted is the one the worker
+       writes — `Project.find({status:'ongoing'})` picking the fixture up, the
+       board guard, `lastGoodRun`, the create — not a hand copy of its one
+       line. The env has no ARES_URL on purpose: the override must be what is
+       used, or `makeClient` throws and the case is red. */
     const p = await project();
-    const stats = await syncProject(
-      client([card('a', 'Working on Design')], [], table(['For Archive'])),
-      p,
-    );
-    // exactly what runAresSync persists for a good run
-    await SyncRun.create({ project_id: p._id, source: 'ares', ok: true, stats });
-    const row = await SyncRun.findOne({ project_id: p._id, source: 'ares' }).lean<{ stats: SyncStats }>();
+    const stub = client([card('a', 'Working on Design')], [], table(['For Archive']));
+    await runAresSync(validateEnv({ NODE_ENV: 'test' }), undefined, stub);
+    const row = await SyncRun.findOne({ project_id: p._id, source: 'ares' }).lean<{ ok: boolean; stats: SyncStats }>();
+    expect(row?.ok).toBe(true);
     expect(row?.stats.unknownLanes).toEqual(['For Archive']);
     expect(row?.stats.lanesSyncedAt).toEqual({ fxA: '2026-09-10T02:00:00.000Z' });
     expect(row?.stats.lanesSeen).toEqual({ fxA: 1 });
     // and the row is the WHOLE stats object, not a curated subset — a new
-    // counter must never be dropped between the return and the record.
-    expect(Object.keys(row?.stats ?? {}).sort()).toEqual(Object.keys(stats).sort());
+    // counter must never be dropped between the return and the record. The
+    // reference key set is what the sync itself returns for the same board.
+    const reference = await syncProject(stub, p);
+    expect(Object.keys(row?.stats ?? {}).sort()).toEqual(Object.keys(reference).sort());
+    expect(await SyncRun.countDocuments({ source: 'ares' })).toBe(1);
   });
 });
 
