@@ -41,6 +41,7 @@ _last-verified: 2026-08-18_
 | forecast axis | Does the forecast key on the work-type label (BRD v3.0) or on lane × difficulty (block 8) | ✅ **JP 2026-09-11** — lane × difficulty stands: the lane is folded from the label family (JP's 09-10 fold) and the figures are ARES's per-lane cells; product's BR-2/BR-4/FR-7.3 wording to be corrected (jp→miles #74). Per-work-type cells stay in provenance only. |
 | lane-state source | Does §7a's name table stay the source of a list's STATE, or the ARES lanes endpoint (v1.4 §7a "superseded") | ✅ **JP 2026-09-11: option 1** — the name table stays the source (the 8 Sept ruling); the lanes endpoint is read only for the reconcile check and Apollo's type/group; at most a fallback for unknown names if product asks (jp→miles #74). |
 | build spec v1.4 | Adopt v1.4 as the held copy | ✅ **JP yes 2026-09-11** — `docs/product/build-spec-v1.4.md`, assembled verbatim from #103–#108; v1.3 kept beside it. BRD v3.0 / engineering / security inbound, not adopted. |
+| Deadlines day write — who | Gate the Design Lead's day move by USER (needs a role) or by SURFACE only | ✅ **JP 2026-09-11: "gate screen only"** — any project member may move the day from the Deadlines screen; the route keeps invariant 9's session + membership checks and adds no role. Block 9 PLAN.md carries it. |
 
 ## Answered — operational
 
