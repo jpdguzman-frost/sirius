@@ -29,11 +29,10 @@
 
 .gantt {
   --gw: 92px; /* one week column — mirrors WEEK_PX in 10-constants-core.js */
-  /* one WORKDAY column: the placement grain since block seven (JP
-     2026-09-08). Derived from the week rather than shipped as a second pixel
-     number, so a zoom or a retuned column keeps the day and the week exact
-     halves of one another — the divisor mirrors WORKDAYS_PER_WEEK. */
-  --gu: calc(var(--gw) / 5);
+  /* the one-WORKDAY column unit of block seven is withdrawn with the day
+     grain (owl #88; PLAN.md block 9): the + and the hover cell were its
+     only wearers, and the bar's own day geometry is inline percentages out
+     of itemBar, which never read it. The week is the only CSS unit here. */
   --gleft: 952px; /* 122 + 262 + 163 + 142 + 263 — mirrors LEFT_PANE_PX. No gutter: the checkbox replaced the grip */
   --gbar-h: 31px; /* the bar band (frame 731:98682) */
   font-family: var(--font-sans);
@@ -306,20 +305,35 @@
 .gantt .gact[disabled]:hover { background: none; color: var(--slate-400); }
 
 /* ---- 6. the timeline track + the bar ---- */
-/* the track takes the placement click on an unplotted row; `placing` is the
-   template's word for "the pointer is on a day this row may actually have",
-   so the pointer cursor is the affordance and its ABSENCE is the refusal —
-   a day outside the sprint or past the deadline never gets one. */
+/* `placing` is the template's word for "the pointer is on this row's track",
+   so the pointer cursor says a click will do something here. Placement is a
+   WEEK since block 9 (owl #88, JP 2026-09-10; PLAN.md R1): the click lands
+   on a week cell and sends the week, the server picks the first working day
+   (#89 §2), and whether the week is one the row may have is the server's to
+   refuse — the browser has no holiday set and does not pre-judge it. */
 .gantt .gtrack { position: relative; flex: none; display: flex; cursor: default; }
 .gantt .gtrack.placing { cursor: pointer; }
 .gantt .gweeks { display: flex; flex: 1; }
 /* the body gridline is the SAME hairline as the headers' (#e2e8f0 in the frame
    dump's row-weeks and footer Cells), so it runs continuously past the header
-   boundary instead of visibly lightening below it. The cells stay bare of
-   pointer rules ON PURPOSE: a placement CLICK lands on the track and maps to
-   a WORKDAY by arithmetic (dayAtX, 50-gantt-geometry.js), and the hit-test law
-   in test/drag-hittest.test.ts now guards them for that consumer. */
+   boundary instead of visibly lightening below it. The cells are the CLICK
+   TARGETS now (weekHover / weekLeave / weekPlace ride each one, on every
+   committed row's track), so they and their whole ancestor chain must stay
+   hit-testable — none of the cell, the cell row, the track or anything
+   above them is ever made pointer-transparent (gantt-rules rule 17; the
+   week-cell sweep in test/drag-hittest.test.ts guards it). */
 .gantt .gweek { width: var(--gw); flex: none; border-left: 1px solid var(--slate-200); }
+/* the hovered WEEK — the one cell the click would place on. This is block
+   seven's hover cell tint (node 731:100271) grown from one workday to
+   the whole week, and it now carries the affordance alone: the solid + that
+   used to sit on it left with the day grain (#88), so a slate-50 wash on a
+   white sheet would be invisible. The tint is the + circle's own indigo
+   (--indigo-500, the tab's placement colour) washed to a tint from the token
+   rather than a second colour: the palette has no pale indigo step, and a
+   raw hex here is a defect. No z-index: the tint is the cell's background,
+   so the bar and the deadline tick (positioned, later in the DOM) sit over
+   it by construction. */
+.gantt .gweek.hover { background: color-mix(in srgb, var(--indigo-500) 12%, var(--white)); }
 
 /* ONE phase→colour map (R4): the legend swatches and the bars share these
    classes, which carry colour and nothing else — that is what lets a 20×10
@@ -340,67 +354,36 @@
    the template does no arithmetic and this rule repeats none of itemBar's.
    Radius is the node's own 2 (731:98682 — agent C's Rex read overruled the
    plan's drafted 4, main-thread ruling 2026-08-28). The box keeps native
-   pointer events for its title; nothing beneath it wants clicks on a plotted
-   row — placement only exists where no bar does. */
+   pointer events for its title, which states the start day. DISPLAY ONLY
+   since block 9 (owl #88, JP 2026-09-10; PLAN.md R1): the PM places a week
+   by clicking a cell, the Design Lead sets the day on Deadlines, and nobody
+   drags this bar — so the cursor is the default, not a grab that promises a
+   gesture the tab no longer has. Block seven's `dragging` / `refused`
+   states left with the gesture; their treatment lives on again on the
+   Deadlines card (40-deadlines.css §E2), the one drag source now. The week
+   under the bar still takes the click through the cell beside it: the bar
+   covers its own week's cell, which is fine — re-placing a row means
+   clicking a DIFFERENT week. */
 .gantt .gitem {
   position: absolute; top: 50%; transform: translateY(-50%);
   height: var(--gbar-h); border-radius: var(--radius-xs);
-  cursor: grab; user-select: none;
+  cursor: default; user-select: none;
 }
-/* mid-gesture (block seven). The bar IS the thing that moves — there is no
-   follower element to keep in step — so `dragging` only lifts it off the
-   grid a little, and `refused` says the drop will not be taken: a day
-   outside the row's sprint or past its deadline. Neither touches the fill,
-   which stays the one phase→colour map above; a second background here
-   would be a second answer to what colour a bar is. */
-.gantt .gitem.dragging { cursor: grabbing; box-shadow: var(--shadow-card); }
-.gantt .gitem.refused { cursor: not-allowed; opacity: 0.4; outline: 1px solid var(--red-500); outline-offset: 1px; }
 
 /* the client-deadline tick — the frame's hairline (731:98733; owl #72's
    ruling fixes width and colour, and the legend swatch above inherits both
    by borrowing this recipe rather than declaring its own) */
 .gantt .gdl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--red-500); }
 
-/* the placement + — rides HOVER over any UNPLOTTED row's track, on whichever
-   WORKDAY the pointer is over. plusLeft hands over that day's left edge and
-   the circle IS the column — one unit wide, like the tint under it, so the
-   CSS half never repeats the geometry maths and nothing hangs off either end
-   of the track. It was a fixed 24px circle centred by a negative margin until
-   review 2026-09-09: on the 18.4px day column that margin overhung the unit
-   by 2.8px each side, and at unit 0 the overhang went under the opaque sticky
-   left pane, which paints over it. `pointer-events: none` is load-bearing:
-   the TRACK owns the click (#72 §6), and a solid button under the pointer
-   would swallow the very click it advertises.
-   ONE rule since owl #77 §0: the indigo circle used to be shared with the add
-   affordance of the retired flow (section seven), and with that wearer gone a
-   second block under the same selector would only be a place for the two
-   halves to drift apart. */
-.gantt .gplus {
-  position: absolute; top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  display: inline-flex; align-items: center; justify-content: center;
-  width: var(--gu); height: var(--gu); flex: none; padding: 0; border: none;
-  border-radius: var(--radius-full);
-  background: var(--indigo-500); color: var(--white);
-}
-.gantt .gplus svg { display: block; }
-
-/* the hovered DAY cell — the slate-50 tint under the + (node 731:100271).
-   Placement is hover-gated on any unplotted row — Miles's note on 731:100277;
-   the checkbox gates nothing — so this and the + appear and leave together.
-   One workday wide since block seven; the template stamps that day's left%,
-   so this rule repeats none of the geometry maths. No z-index on
-   purpose: DOM order seats it under the bar, the deadline tick and the +,
-   and being positioned at all lifts it over the static week grid.
-   `pointer-events: none` for the same reason as the +'s: the TRACK owns the
-   click. */
-.gantt .ghovcell {
-  position: absolute; top: 0; bottom: 0;
-  width: var(--gu);
-  background: var(--slate-50);
-  pointer-events: none;
-}
+/* WITHDRAWN 2026-09-11 (owl #88, JP 2026-09-10; PLAN.md block 9): the
+   day-precise placement + circle (node 731:100277) and the one-workday
+   hover cell tint under it (node 731:100271). Both dressed block
+   seven's day grain on this tab, and the day left the tab with it — the PM
+   works here at WEEK grain, and the hovered week's tint is `.gweek.hover`
+   above. Removed rather than parked: a dead selector reads as a live
+   treatment to the next person pricing a change. The pointer transparency
+   both carried was load-bearing for the TRACK's click and is not needed by
+   the cells that take the click themselves. */
 
 /* ---- 7. adding a work card — the search row and its results (owl #77 §0;
    nodes 833:68629 at rest, 840:31597 with matches, 841:33668 + 841:33689 with

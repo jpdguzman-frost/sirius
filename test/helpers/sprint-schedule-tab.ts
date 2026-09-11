@@ -13,6 +13,19 @@
  * backstop), and a PLACED bar drags — by POINTER, on the coloured run, with no
  * HTML5 drag API and no ghost.
  *
+ * BLOCK 9 (2026-09-11; owls #88/#89/#90, JP 2026-09-10) REVERSES block 7 on
+ * this tab: the day belongs to the Design Lead, on Deadlines only. The PM
+ * hovers a WEEK and clicks (`weekHover`/`weekLeave`/`weekPlace` on every
+ * committed row's `.gweek` cells; the server lands the bar on the week's
+ * first WORKING day), the bar is DISPLAY-ONLY, and the day machinery —
+ * `dayAtX`, `plusLeft`, `placeable`, the `+`, the hover cell, the bar drag,
+ * their state keys — is gone whole. Proofs 3, 10, 13 and 17–26 below are
+ * therefore RETIRED with it; their successors are in test/deadlines-drag
+ * .test.ts (the bounded day-drag, executed), test/drag-hittest.test.ts
+ * (the `.dlcard` source sweep and the `.gweek` bindings) and
+ * test/sprint-schedule-bars-footer.test.ts SUITE 7 (the display-only bar).
+ * The list is kept as the record of what block 7 proved.
+ *
  * RETIRED WITH THE FEATURE, 2026-08-28 (the Forecast-tab pattern — the file
  * goes, the reasoning stays where a reader will look):
  *   - test/suggest-counts.test.ts — Suggest is withdrawn (#72); no counts.

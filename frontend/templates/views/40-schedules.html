@@ -47,22 +47,27 @@
         withdrawal guards read raw source, prose included (gantt-rules rule
         50). The hint is the placement instruction, standing text and never
         hover-gated (gantt-rules rule 15's principle outlives the drag it was
-        written for). }}
+        written for). Its wording is PLAN.md's (block 9): the PM places a
+        WEEK here, and the day is Deadlines' business (owl #88). }}
     <div class="fnbox">
       <button class="fnbtn ghost" on-click="['openSprints']"><svg class="i16" aria-hidden="true"><use href="#i-calendar" /></svg>Sprints</button>
-      <span class="fnnote">Hover a day on an unplotted row and click to place its bar; drag a placed bar to move it. The finish is computed.</span>
+      <span class="fnnote">Hover a week and click to place the card on that week; the day is set on Deadlines.</span>
     </div>
   </div>
 
   {{! ==== sprint schedules: the work-card unit (owls #72/#73, frame
       731:98513) ==== LEFT = the pinned work-card columns (952px), RIGHT = the
       weekly timeline. ONE group per sprint — an EMPTY sprint still renders,
-      the add affordance needs a home — and NO 'Outside any sprint', NO
-      'Unscheduled' group: a card on no sprint list simply is not here,
-      absence is the design (#72 §2). Rows arrive position-sorted from the
-      server and are never re-sorted client-side. Ractive renders dynamic
-      member access in a TRIPLE mustache as empty, so every per-row lookup
-      goes through a helper function. }}
+      the add affordance needs a home — and NO 'Unscheduled' group: a card on
+      no sprint list simply is not here, absence is the design (#72 §2). The
+      one exception since owl #90 (JP 2026-09-10; PLAN.md block 9 R3) is
+      'Outside any sprint', which sprintGroups appends LAST and only while a
+      re-dated sprint has left rows behind (sprintId null): those rows keep
+      their exact day and wait here to be re-slotted by the PM's week click —
+      nothing re-places them. Rows arrive position-sorted from the server and
+      are never re-sorted client-side. Ractive renders dynamic member access
+      in a TRIPLE mustache as empty, so every per-row lookup goes through a
+      helper function. }}
   <div class="gantt {{#if leftCollapsed}}lpc{{/if}}">
     {{! Owl #26 / node 262:33342 — a KEY, not a filter: aria-hidden, no
         handler, no focusable child, and a sibling of .gwrap so it sits OUTSIDE
@@ -78,6 +83,12 @@
       <span class="gleg"><span class="gseg late"></span>Past deadline</span>
       <span class="gleg gleg-dl"><span class="gdl"></span>Client deadline</span>
     </div>
+
+    {{! The displaced-cards notice (owl #90; PLAN.md block 9 R3) — above the
+        groups, a sibling of the scroller like the legend so it stays put as
+        the timeline moves. Rationale in the partial's own file; the gate is
+        here so it can read `sprintDisplaced` as non-null. }}
+    {{#if sprintDisplaced}}{{>displacedNotice}}{{/if}}
 
     {{#if sprintGroups.length}}
     <div class="pscrollwrap gwrap">
@@ -140,12 +151,14 @@
               {{#if !collapsedBlocks[g.id]}}
               {{! One row = one WORK CARD = at most one bar (#72 §3): no drag,
                   no drop, no proposal overlay — placement is hover-then-click
-                  on the track. The checkbox highlights the row (.sel) and
-                  gates NOTHING in placement — its semantics are with product
-                  (jp→miles #60), so the control stays while hover owns
-                  placement. Single-select through `sprintSel`. There is no
-                  keyboard path for placement yet — pointer-only, a flagged
-                  gap, not an oversight. }}
+                  on a WEEK cell of the track (owl #88; PLAN.md block 9). The
+                  checkbox highlights the row (.sel) and gates NOTHING in
+                  placement — its semantics are with product (jp→miles #60),
+                  so the control stays while hover owns placement.
+                  Single-select through `sprintSel`. There is no keyboard
+                  path for WEEK placement yet — pointer-only, a flagged gap,
+                  not an oversight; the keyboard path for the DAY lives on
+                  Deadlines (build spec v1.4 §8). }}
               {{#each g.rows as row}}
                 <div class="growr sitem {{#if sprintSel === row.id}}sel{{/if}}">
                   <div class="gpin gdetails">
@@ -269,38 +282,42 @@
                       50-gantt-geometry.js; the template does no arithmetic
                       (gantt-rules rule 19's principle, carried over). An
                       empty itemBar return means unplotted, unforecastable or
-                      fully clipped — nothing draws, and the track offers
-                      placement instead. Placement rides the POINTER (Miles,
-                      node 731:100277 — hover-gated, no checkbox): hovering
-                      ANY unplotted row's track lights the violet + on the
-                      pointer's WORKDAY and tints that one-unit cell slate-50
-                      beneath it (.ghovcell, node 731:100271), and the CLICK
-                      lands on the TRACK — the + itself is pointer-events:
-                      none. Block seven (JP 2026-09-08) moved the grain from
-                      the week to the day and gated the offer: a day outside
-                      the row's own sprint, or after its deadline, names no
-                      day at all, so there is no tint, no + and no writable
-                      click there. Placement stays a SECOND act: nothing below
-                      this loop offers a day, and the search rows draw no + of
-                      their own (owl #77 §0, node 840:31630).
+                      fully clipped — nothing draws.
 
-                      A PLACED row's bar is a pointer DRAG SOURCE instead: the
-                      coloured run alone, never the track, never the label.
-                      The bar itself moves for the gesture and commits on
-                      release — no follower element, and no HTML5 drag
-                      attribute or directive anywhere on this tab. }}
-                  <div class="gtrack{{#if !row.startsOn && plotRow === row.id && plotDay}} placing{{/if}}"
-                       {{#if !row.startsOn}}on-mousemove="['plotHover', row.id]" on-mouseleave="['plotLeave']" on-click="['plotPlace', row.id]"{{else}}on-mousemove="['barDragMove', row.id]"{{/if}}>
-                    <div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div>
-                    {{#if !row.startsOn && plotRow === row.id && plotDay}}<div class="ghovcell" style="left:{{plusLeft(plotDay)}}%;" aria-hidden="true"></div>{{/if}}
-                    {{#each itemBar(row) as b}}<div class="gitem {{b.cls}}{{#if row.late}} late{{/if}}{{#if dragRow === row.id}} dragging{{#if !placeable(row, dragDay)}} refused{{/if}}{{/if}}" style="left:{{ dragRow === row.id ? dragLeft : b.left }}%;width:{{b.width}}%;" title="{{ dragRow === row.id ? '' : b.title }}" on-mousedown="['barDragStart', row.id]"></div>{{/each}}
+                      PLACEMENT IS A WEEK (owl #88, JP 2026-09-10; PLAN.md
+                      block 9 R1): the PM works this tab at week grain and
+                      nothing smaller. Every .gweek cell of every committed
+                      row's track — placed rows included — takes the pointer:
+                      hovering tints that one week (.hover, from hoverRow +
+                      hoverWeek), and the CLICK sends the WEEK; the server
+                      lands the bar on that week's first WORKING day (#89
+                      §2 — a holiday Monday is never the answer, and the
+                      browser holds no holiday set, so lib/calendar decides
+                      on the server). A click on a placed row re-places it
+                      by week: the day belongs to the Design Lead, the week
+                      to the PM, and the PM's week overwrites (#88). Block
+                      seven's day-grain hover slot, its one-unit + and the
+                      pointer day-drag on a placed bar are OUT of this tab
+                      (#88): the bar is DISPLAY only, its title is rule 42's
+                      `startsOn → finish` (itemBar's `b.title`, "· past the
+                      client deadline" when late), and the one day control in the product is
+                      the bounded drag on Deadlines (#89 §1). Placement stays
+                      a SECOND act: nothing below this loop offers a week,
+                      and the search rows draw inert grid (owl #77 §0, node
+                      840:31630). No HTML5 drag attribute or directive
+                      anywhere on this tab, still. }}
+                  <div class="gtrack{{#if hoverRow === row.id}} placing{{/if}}">
+                    <div class="gweeks">{{#each plannerWeeks}}<div class="gweek{{#if hoverRow === row.id && hoverWeek === @index}} hover{{/if}}" on-mouseenter="['weekHover', row.id, @index]" on-mouseleave="['weekLeave']" on-click="['weekPlace', row.id, @index]"></div>{{/each}}</div>
+                    {{#each itemBar(row) as b}}<div class="gitem {{b.cls}}{{#if row.late}} late{{/if}}" style="left:{{b.left}}%;width:{{b.width}}%;" title="{{b.title}}"></div>{{/each}}
                     {{#if deadlineTick(row) !== null}}<div class="gdl" style="left:{{deadlineTick(row)}}%;" title="deadline {{fmt(row.deadline)}}"></div>{{/if}}
-                    {{#if !row.startsOn && plotRow === row.id && plotDay}}
-                      <button class="gplus" type="button" tabindex="-1" style="left:{{plusLeft(plotDay)}}%;" aria-label="Place the bar on {{fmtLongIso(plotDay)}}"><svg class="i16" aria-hidden="true"><use href="#i-plus" /></svg></button>
-                    {{/if}}
                   </div>
                 </div>
               {{/each}}
+              {{! The 'Outside any sprint' group (id 'outside', #90; PLAN.md
+                  block 9 amendment 3) is not a sprint: there is nothing to add
+                  INTO, so it draws no search field and no Add links — header,
+                  count and rows only. Every real sprint keeps them. }}
+              {{#if g.id !== 'outside'}}
               {{! Adding, rebuilt on SEARCH (owl #77 §0; nodes 833:68629
                   resting, 840:31597 results, 841:33668 and 841:33689 no
                   matches). The field is ALWAYS visible at the end of every
@@ -353,6 +370,7 @@
                     <div class="gtrack"><div class="gweeks">{{#each plannerWeeks}}<div class="gweek"></div>{{/each}}</div></div>
                   </div>
                 {{/each}}
+              {{/if}}
               {{/if}}
               {{/if}}
               </div>
@@ -487,7 +505,9 @@
                         deliverables would "move to Outside any sprint" — a group #72
                         removed, in a unit this tab no longer schedules. The cascade is
                         now real (the save removes the sprint's scheduled rows with it),
-                        so the banner states exactly that, in work cards. }}
+                        so the banner states exactly that, in work cards. Owl #90 (block
+                        9) brought the group back for RE-DATED sprints only — deletion
+                        stays destructive and confirmed, so this copy stands. }}
                     <p class="sbdesc">{{sprintDeleteConfirm.count}} scheduled work card{{sprintDeleteConfirm.count === 1 ? '' : 's'}} will be removed from the schedule with it.</p>
                     <div class="sbctas">
                       <button class="smbtn ghost" type="button" on-click="['cancelRemoveSprint']">Cancel</button>

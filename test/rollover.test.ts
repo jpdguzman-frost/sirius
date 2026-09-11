@@ -488,6 +488,70 @@ describe('sprint membership follows the NEW START day (spec v1.3 §6.2)', () => 
     expect(row!.after).toEqual({ starts_on: after.starts_on, sprint_id: String(sprintA._id) });
   });
 
+  /* Owl #90 (PLAN.md block 9 amendment 8): a sprint re-date nulls the
+     membership of a row whose day left the range — `sprint_id: null`, listed
+     under *Outside any sprint*. Such a row is still a placed card (§6.2:
+     every placed card rolls), so the pass moves its day too; before the
+     null-tolerant rewrite the row threw on `new ObjectId(String(null))` and
+     was counted `failed` every tick, never rolled. Both cases assert the DAY
+     moved AND the membership outcome — a pass that skipped null rows would
+     fail the first line of each. */
+  it('a row OUTSIDE any sprint rolls its day and STAYS outside when no sprint covers the new day (#90)', async () => {
+    // sprint A is the week BEFORE: the row's Friday is already outside it, and the next Monday is a gap
+    const { project } = await setup({ starts_on: '2026-07-27', ends_on: '2026-07-31' });
+    await mkWorkCard(project._id, 'w1');
+    const item = await SprintItem.create({
+      project_id: project._id, sprint_id: null, mc_number: 'MC-07', trello_card_id: 'w1',
+      starts_on: FRIDAY, position: 3, added_by: 'ops@frostdesigngroup.com',
+    });
+    expect((await SprintItem.findById(item._id).orFail()).sprint_id ?? null).toBeNull();
+
+    const today = crossing();
+    const result = await rollUnfinished({ today, projectId: project._id });
+    const after = await SprintItem.findById(item._id).orFail();
+
+    expect(result).toEqual(counts({ moved: 1 })); // moved — not failed, not skipped
+    expect(after.starts_on).toBe(nextWorkday(FRIDAY)); // the day moved
+    expect(after.starts_on).not.toBe(FRIDAY);
+    expect(after.sprint_id ?? null).toBeNull(); // still outside any sprint
+    expect(after.position).toBe(3);
+
+    const audits = await AuditLog.find({ project_id: project._id });
+    expect(audits).toHaveLength(1);
+    expect(audits[0]!.action).toBe('sprintItem.rollover');
+    expect(audits[0]!.actor).toBe('system');
+    expect(audits[0]!.before).toEqual({ starts_on: FRIDAY, sprint_id: null });
+    expect(audits[0]!.after).toEqual({ starts_on: after.starts_on, sprint_id: null });
+  });
+
+  it('a row OUTSIDE any sprint rolls INTO the sprint whose range covers the new day, at its TAIL (#90, R10-d)', async () => {
+    const { project } = await setup({ starts_on: '2026-07-27', ends_on: '2026-07-31' });
+    const sprintB = await Sprint.create({ project_id: project._id, ...SPRINT_B }); // covers the next Monday
+    await mkWorkCard(project._id, 'w1');
+    await mkWorkCard(project._id, 'b1');
+    await mkItem(project._id, sprintB._id, 'b1', null, { position: 4 }); // B's list already ends at four
+    const item = await SprintItem.create({
+      project_id: project._id, sprint_id: null, mc_number: 'MC-07', trello_card_id: 'w1',
+      starts_on: FRIDAY, position: 3, added_by: 'ops@frostdesigngroup.com',
+    });
+
+    const today = crossing();
+    const result = await rollUnfinished({ today, projectId: project._id });
+    const after = await SprintItem.findById(item._id).orFail();
+
+    expect(result).toEqual(counts({ moved: 1 }));
+    expect(after.starts_on).toBe(SPRINT_B.starts_on); // the day moved, onto B's first day
+    expect(after.sprint_id ?? null).not.toBeNull();
+    expect(String(after.sprint_id)).toBe(String(sprintB._id)); // adopted by the covering sprint
+    expect(after.position).toBe(5); // the tail of B's list, never the old slot
+
+    const audits = await AuditLog.find({ project_id: project._id });
+    expect(audits).toHaveLength(1);
+    expect(audits[0]!.action).toBe('sprintItem.rollover');
+    expect(audits[0]!.before).toEqual({ starts_on: FRIDAY, sprint_id: null });
+    expect(audits[0]!.after).toEqual({ starts_on: SPRINT_B.starts_on, sprint_id: String(sprintB._id) });
+  });
+
   it('the same sprint still covers the start → the row keeps its position', async () => {
     const { project, sprintA } = await setup({ ends_on: SPRINT_B.ends_on }); // one two-week sprint
     await mkWorkCard(project._id, 'w1');

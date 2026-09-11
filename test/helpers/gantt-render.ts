@@ -249,8 +249,10 @@ export const OFF_BOARD: SprintScheduleRow = {
 /**
  * The default groups: one sprint with rows and one EMPTY sprint — empty
  * renders too (the always-visible search row needs a home, owl #77 §0), and
- * NO 'outside', NO 'unscheduled' group exists any more (#72 §2: absence is
- * the design).
+ * NO 'unscheduled' group exists (#72 §2: absence is the design). The one
+ * synthetic group since owl #90 (block 9) is 'Outside any sprint', which
+ * `sprintGroups()` appends LAST and only while a row has `sprintId === null`
+ * — a fixture that wants it says so (test/sprint-schedule-groups.test.ts).
  * `count` uses the shipped `itemCount` format ('· N items').
  */
 export const SPRINT_GROUPS: SprintGroup[] = [
@@ -264,20 +266,14 @@ export interface SprintScheduleState {
   collapsedBlocks?: Record<string, boolean>;
   /** single selection — the checkbox toggles it; null = nothing selected */
   sprintSel?: string | null;
-  /** the WORKDAY the pointer is over on an unplotted row's track — null both
-      when the pointer is elsewhere and when the day under it is one this row
-      may not have (block 7: `plotDay` carries the OFFER, not the pointer) */
-  plotDay?: string | null;
-  /** the PLACED row whose coloured run is under the button, mid-drag */
-  dragRow?: string | null;
-  /** the workday the pointer names mid-drag — `placeable` decides its dress */
-  dragDay?: string | null;
-  /** that day's left edge as a track %: the bar's preview offset mid-drag */
-  dragLeft?: string | null;
-  /** the affordance guard. Stubbed TRUE by default so the ordinary render is
-      the placeable one; the truth table itself is EXECUTED from the shipped
-      source in test/sprint-schedule-deadline.test.ts (rule 2). */
-  placeable?: (row: SprintScheduleRow, day: string | null) => boolean;
+  /** the WEEK hover pair (block 9, owls #88/#89, PLAN.md): the committed row
+      whose track the pointer is on, and the INDEX into `plannerWeeks` of the
+      cell under it. The `.gweek` cell wearing both is the one that tints.
+      Block 7's day-grain keys (`plotDay`, `dragRow`, `dragDay`, `dragLeft`,
+      `placeable`) are RETIRED with the day controls — the day is set on
+      Deadlines and nowhere else. */
+  hoverRow?: string | null;
+  hoverWeek?: number | null;
   /** each sprint's search text (PLAN.md block 2, B10) — sprintId → query.
       Only the two-way binding and the `.typed` class read it; whether a panel
       is OPEN is `addPanels`, never this. */
@@ -323,7 +319,7 @@ export interface SprintScheduleState {
 
 /**
  * Renders the rebuilt tab body (`<div class="gantt …">`) for one view state.
- * The per-row helpers (`itemBar`, `plusLeft`, `deadlineTick`, the two foot
+ * The per-row helpers (`itemBar`, `deadlineTick`, the two foot
  * helpers) are stubbed here BECAUSE test/sprint-schedule-bars-footer.test.ts
  * executes each recipe out of the shipped scripts — what a render proves is
  * which nodes the template emits, not what is inside a bar. Every array the
@@ -344,11 +340,8 @@ export function renderSprintSchedule(state: SprintScheduleState = {}): string {
       leftCollapsed: state.leftCollapsed ?? false,
       collapsedBlocks: state.collapsedBlocks ?? {},
       sprintSel: state.sprintSel ?? null,
-      plotDay: state.plotDay ?? null,
-      dragRow: state.dragRow ?? null,
-      dragDay: state.dragDay ?? null,
-      dragLeft: state.dragLeft ?? null,
-      placeable: state.placeable ?? (() => true),
+      hoverRow: state.hoverRow ?? null,
+      hoverWeek: state.hoverWeek ?? null,
       // the RESTING search row is the default: no query anywhere, no panel,
       // nothing in flight (833:68629) — every suite that does not care about
       // the add flow renders it at rest
@@ -369,9 +362,6 @@ export function renderSprintSchedule(state: SprintScheduleState = {}): string {
             ? [{ left: '0.00', width: '11.67', cls: 'render', title: `${row.startsOn} → ${row.finish}` }]
             : []),
       deadlineTick: state.deadlineTick ?? (() => null),
-      // left edge of the hovered DAY as a track % — the shipped arithmetic is
-      // `plusLeft` in 50-gantt-geometry.js, executed by the geometry suite
-      plusLeft: (day: unknown) => (day ? '8.33' : null),
       fmtLongIso: (iso: unknown) => (iso ? `long:${String(iso)}` : '—'),
       sprintFootText: state.sprintFootText ?? (() => '—'),
       sprintFootCls: state.sprintFootCls ?? (() => 'empty'),
@@ -424,6 +414,15 @@ export interface DlCard {
   done: boolean;
   trelloUrl: string | null;
   figmaUrl: string | null;
+  /* ---- block 9 (owls #88/#89, PLAN.md template contract): the card is the
+     Deadlines DRAG SOURCE, so the partial binds the row it moves
+     (`c.rowId`), names it (`c.title`) and states the day it starts on
+     (`c.startsOn`) in its accessible name. Optional here because the
+     pre-block-9 fixtures in test/deadlines-tab.test.ts never carried them;
+     a drag fixture always does. */
+  rowId?: string;
+  title?: string;
+  startsOn?: string;
 }
 
 /** One day column of an expanded lane — `day` is the date every card in it STARTS on (spec v1.3 §6.2, 2026-09-08; it was the forecast finish under PLAN.md B2). */
@@ -433,6 +432,8 @@ export interface DlDay {
   cards: DlCard[];
   pending: number;
   done: number;
+  /** the same date under the name the drop-target contract uses (`data-day="{{d.iso}}"`, PLAN.md block 9) */
+  iso?: string;
 }
 
 /** One week lane, collapsed or expanded. */
@@ -451,6 +452,22 @@ export interface DlWeek {
   days: DlDay[];
 }
 
+/**
+ * The Deadlines day-drag, mid-gesture (block 9, owls #88/#89; PLAN.md client
+ * state, frozen): the row being dragged, the day it rests on, the day under
+ * the pointer (null until it is over a day column), whether that day is one
+ * the row may not have, and the lane the gesture is bounded to. `null` at
+ * rest, and the template dresses the card (`dragging` / `refused`) and the
+ * day column (`target`) from it.
+ */
+export interface DlDrag {
+  rowId: string;
+  fromDay: string;
+  day: string | null;
+  refused: boolean;
+  weekKey: string;
+}
+
 export interface DeadlinesState {
   dlWeeks?: DlWeek[];
   dlRange?: string;
@@ -458,6 +475,8 @@ export interface DeadlinesState {
   expandedWeek?: string | null;
   capacity?: { weekly: number };
   icon?: Record<string, string>;
+  /** the live day-drag, or null at rest (block 9) */
+  dlDrag?: DlDrag | null;
 }
 
 /**
@@ -518,6 +537,7 @@ export function renderDeadlines(state: DeadlinesState = {}): string {
       dlRange: state.dlRange ?? 'Aug 31 – Sept 30, 2026',
       expandedWeek: state.expandedWeek ?? null,
       capacity: state.capacity ?? { weekly: 120 },
+      dlDrag: state.dlDrag ?? null,
       /* MARKERS, not the shipped art: the sprite's own strings are asserted to
          carry the keys the template names (test/deadlines-tab.test.ts reads
          them out of the icon file), and a marker is what lets a render say
@@ -612,6 +632,40 @@ export function renderSprintModal(state: SprintModalState = {}): string {
       sprintDirty: state.sprintDirty ?? false,
       // LENGTH is derived and read-only; the real helper is mondaysBetween
       sprintLength: (s: SprintDraftRow) => (s && s.start && s.end ? '2 wk' : '0 wk'),
+    },
+  });
+  return instance.toHTML();
+}
+
+/**
+ * The DISPLACED-CARDS NOTICE (block 9, owl #90; PLAN.md template) — the
+ * partial the schedules view calls above the groups while `sprintDisplaced`
+ * is non-null. The partial's NAME is read off its own file (rule 2: the
+ * template registers it, the view calls it, and a test that spelled the
+ * name would pass on a renamed partial the view no longer reaches), and the
+ * render wraps it in the view's own gate so a null renders nothing.
+ */
+export const DISPLACED_NOTICE_FILE = 'templates/partials/40-displaced-notice.html';
+export function displacedNoticeName(): string {
+  const m = /\{\{#partial (\w+)\}\}/.exec(readFrontend(...DISPLACED_NOTICE_FILE.split('/')));
+  if (!m) throw new Error(`gantt-render: ${DISPLACED_NOTICE_FILE} registers no partial`);
+  return m[1]!;
+}
+export interface DisplacedCard {
+  id: string;
+  display_id: string;
+  title: string;
+  starts_on: string;
+  from_sprint: string;
+}
+export function renderDisplacedNotice(sprintDisplaced: DisplacedCard[] | null): string {
+  const name = displacedNoticeName();
+  const instance = new Ractive({
+    template: `{{#if sprintDisplaced}}{{>${name}}}{{/if}}`,
+    partials: { [name]: partialBody(name) },
+    data: {
+      sprintDisplaced,
+      fmtLongIso: (iso: unknown) => (iso ? `long:${String(iso)}` : '—'),
     },
   });
   return instance.toHTML();

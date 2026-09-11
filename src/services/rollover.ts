@@ -23,6 +23,10 @@
  * exactly as the PATCH sprint-items route does on a move; when no sprint
  * covers the day the row stays listed where it is (a gap between sprints is
  * a legal state, invariant 12, and "Outside any sprint" is how it surfaces).
+ * A row already outside any sprint (`sprint_id` null — a sprint re-date
+ * displaced it, owl #90; PLAN.md block 9 amendment 8) is still a placed card
+ * and rolls its day like every other; a sprint covering the new day adopts
+ * it, else it stays outside.
  * One audit row per moved card, actor `system`. An unchanged row writes
  * nothing and audits nothing — invariant 10 logs CHANGES, not attempts, the
  * convention the PATCH route's no-op guard set.
@@ -366,7 +370,10 @@ async function rollRows(projectId: Types.ObjectId, today: string, counts: Rollov
 
 async function rollRow(
   projectId: Types.ObjectId,
-  it: { _id: Types.ObjectId; starts_on?: string | null; sprint_id: Types.ObjectId; position: number },
+  /* `sprint_id` is nullable since owl #90 (PLAN.md block 9 amendment 8): a
+     row displaced by a sprint re-date keeps its day and rolls like any other
+     placed card (§6.2) — it simply has no list to leave. */
+  it: { _id: Types.ObjectId; starts_on?: string | null; sprint_id?: Types.ObjectId | null; position: number },
   w: Parameters<typeof finishOf>[0],
   model: Parameters<typeof finishOf>[2],
   ranges: Array<{ id: string; starts_on: string; ends_on: string }>,
@@ -397,7 +404,7 @@ async function rollRow(
   const finish = engine(next);
   if (finish === null) return null;
 
-  const before = { starts_on: startsOn, sprint_id: String(it.sprint_id), position: it.position };
+  const before = { starts_on: startsOn, sprint_id: it.sprint_id ? String(it.sprint_id) : null, position: it.position };
 
   /* Membership follows the NEW START day. #75 §2 read this off the finish,
      because the finish was then the card's day; spec v1.3 §6.2 (2026-09-08)
@@ -410,9 +417,12 @@ async function rollRow(
      position, so the two would swap places between reads. The same sprint
      keeps the row's position — and is not written at all, so a PM's
      reorder in the window is never clobbered (R3-2); no covering sprint
-     keeps the row where it is listed. */
+     keeps the row where it is listed. A row OUTSIDE any sprint (`sprint_id`
+     null, #90 / PLAN.md amendment 8) rolls its day the same way: a covering
+     sprint adopts it exactly as a cross-boundary roll does (system action,
+     R10-d), else it stays outside. */
   const target = sprintFor(next, ranges);
-  const moves = target !== null && target !== before.sprint_id;
+  const moves = target !== null && target !== (before.sprint_id ? String(before.sprint_id) : null);
   const position = moves ? await nextTailPosition(projectId, target as string) : before.position;
   const after = { starts_on: next, sprint_id: moves ? (target as string) : before.sprint_id, position };
 
@@ -420,13 +430,20 @@ async function rollRow(
      exactly what this pass read — `starts_on` and `sprint_id` — so a plot,
      un-plot or delete made between the read above and this write leaves
      `matchedCount` at 0 and the row untouched: no audit, counted `raced`,
-     re-evaluated next tick from its new state. */
+     re-evaluated next tick from its new state. An outside row is keyed on
+     `sprint_id: null` (#90 / amendment 8) — so a re-slot by the PM in the
+     window also reads as a race. */
   const res = await SprintItem.updateOne(
-    { _id: it._id, project_id: projectId, starts_on: before.starts_on, sprint_id: new Types.ObjectId(before.sprint_id) },
+    {
+      _id: it._id,
+      project_id: projectId,
+      starts_on: before.starts_on,
+      sprint_id: before.sprint_id ? new Types.ObjectId(String(before.sprint_id)) : null,
+    },
     {
       $set: {
         starts_on: after.starts_on,
-        ...(moves ? { sprint_id: new Types.ObjectId(after.sprint_id), position: after.position } : {}),
+        ...(moves ? { sprint_id: new Types.ObjectId(String(after.sprint_id)), position: after.position } : {}),
       },
     },
     { runValidators: true },
@@ -440,8 +457,8 @@ async function rollRow(
       action: 'sprintItem.rollover',
       entity: 'sprint_item',
       entity_id: String(it._id),
-      before: { starts_on: before.starts_on, sprint_id: before.sprint_id },
-      after: { starts_on: after.starts_on, sprint_id: after.sprint_id },
+      before: { starts_on: before.starts_on, sprint_id: before.sprint_id ? String(before.sprint_id) : null },
+      after: { starts_on: after.starts_on, sprint_id: after.sprint_id ? String(after.sprint_id) : null },
     });
   } catch (err) {
     /* R3-3: audit-or-revert. The move landed but its record did not, and a
@@ -454,10 +471,16 @@ async function rollRow(
         _id: it._id,
         project_id: projectId,
         starts_on: after.starts_on,
-        sprint_id: new Types.ObjectId(after.sprint_id),
+        sprint_id: after.sprint_id ? new Types.ObjectId(String(after.sprint_id)) : null,
         position: after.position,
       },
-      { $set: { starts_on: before.starts_on, sprint_id: new Types.ObjectId(before.sprint_id), position: before.position } },
+      {
+        $set: {
+          starts_on: before.starts_on,
+          sprint_id: before.sprint_id ? new Types.ObjectId(String(before.sprint_id)) : null,
+          position: before.position,
+        },
+      },
       { runValidators: true },
     );
     throw err;

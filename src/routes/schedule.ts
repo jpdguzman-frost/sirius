@@ -15,7 +15,7 @@ import { ensureProjectMember } from '../auth/membership.ts';
 import { audit } from '../services/audit.ts';
 import { classifyList } from '../services/status-rules.ts';
 import { loadPipeline, manilaToday } from '../services/pipeline.ts';
-import { deadlineFor, nextTailPosition, plotIssue, sprintRangeIssue, tailPosition } from '../services/sprint-items.ts';
+import { deadlineFor, firstWorkdayOfWeek, nextTailPosition, plotIssue, sprintRangeIssue, tailPosition, weekKeyOf } from '../services/sprint-items.ts';
 import { Deliverable, MilestoneDayPlan, Sprint, SprintItem, WorkCard } from '../models/index.ts';
 import { sprintIssues, suggestPlan, type PlannerCard } from '../../lib/planner.ts';
 import { HARD_MIX } from '../../lib/planner.constants.ts';
@@ -442,8 +442,65 @@ export function scheduleRouter(): Router {
           await Sprint.create({ project_id: projectId, name: sp.name, starts_on: sp.start, ends_on: sp.end, position: i + 1 });
         }
       }
+      /* THE RE-DATE DISPLACEMENT (owl #90, JP 2026-09-10; PLAN.md block 9).
+         A sprint whose dates moved can leave a plotted row's day outside its
+         range. That row KEEPS ITS EXACT DAY and leaves the sprint's list for
+         *Outside any sprint* (`sprint_id: null`) — not re-placed, not pushed
+         to the next sprint, not unslotted: re-placing could start a card
+         after its own deadline (the thing `plotIssue` refuses) and would
+         discard the Design Lead's day, which only Deadlines may set (#88).
+         The save is never refused for it — a two-day nudge is far lighter
+         than a destroyed schedule — and the PM re-slots by hand from the
+         notice the response carries. Only membership changes; nothing about
+         placement is recomputed, so the row's week (and the Design Lead's
+         bound, #89) still holds against the same week.
+
+         Only sprints that REMAIN are asked: a removed sprint's rows were
+         deleted above, the destructive act behind the confirm banner, which
+         #90 keeps distinct from this light edit. ONE read of every plotted
+         row under the surviving sprints, judged in memory by the same string
+         compare `sprintRangeIssue` uses — inclusive at both ends — so a row
+         on the new boundary day stays. Unplotted rows have no day to fall
+         outside anything and are not read. */
+      const kept = sorted.filter((sp): sp is typeof sp & { id: string } => sp.id !== undefined);
+      const rangeOf = new Map(kept.map((sp) => [sp.id, sp] as const));
+      const plotted = kept.length
+        ? await SprintItem.find({ project_id: projectId, sprint_id: { $in: kept.map((sp) => sp.id) }, starts_on: { $ne: null } })
+            .sort({ position: 1, _id: 1 })
+            .lean()
+        : [];
+      const displacedRows = plotted.filter((it) => {
+        const sp = rangeOf.get(String(it.sprint_id));
+        const day = it.starts_on as string;
+        return sp !== undefined && (day < sp.start || day > sp.end);
+      });
+      if (displacedRows.length) {
+        await SprintItem.updateMany(
+          { _id: { $in: displacedRows.map((it) => it._id) }, project_id: projectId },
+          { $set: { sprint_id: null } },
+        );
+      }
+      /* The notice names each card (JP 2026-09-09, the LIST half that #90
+         kept): the row's own `mc_number` as the display id — the group the
+         schedule lists it under — and the work card's title, joined the way
+         the schedule load joins it. A card gone from the board still names
+         its row by id rather than dropping out of the list. */
+      const titles = displacedRows.length
+        ? await WorkCard.find({ project_id: projectId, trello_card_id: { $in: displacedRows.map((it) => it.trello_card_id) } })
+            .select({ trello_card_id: 1, name: 1 })
+            .lean()
+        : [];
+      const titleOf = new Map(titles.map((w) => [w.trello_card_id as string, w.name as string]));
+      const displaced = displacedRows.map((it) => ({
+        id: String(it._id),
+        display_id: it.mc_number as string,
+        title: titleOf.get(it.trello_card_id as string) ?? (it.trello_card_id as string),
+        starts_on: it.starts_on as string,
+        from_sprint: rangeOf.get(String(it.sprint_id))!.name,
+      }));
+      const actor = (req.user as SessionUser).email;
       await audit({
-        project_id: projectId, actor: (req.user as SessionUser).email, action: 'sprints.replace', entity: 'sprint',
+        project_id: projectId, actor, action: 'sprints.replace', entity: 'sprint',
         before: { sprints: before.map((s) => ({ id: String(s._id), name: s.name, start: s.starts_on, end: s.ends_on })) },
         after: {
           sprints: sorted,
@@ -452,7 +509,21 @@ export function scheduleRouter(): Router {
           removed_items: orphaned.map((o) => ({ card_id: o.trello_card_id, mc_number: o.mc_number, starts_on: o.starts_on ?? null })),
         },
       });
-      res.json({ ok: true });
+      /* One audit row PER displaced row (invariant 10: a schedule move is a
+         state change of its own), in the PATCH's before/after shape so the
+         log reads alike whichever route moved the membership. The actor is
+         the person who edited the sprint — never `system`, which §6.2 keeps
+         for rollover. `starts_on` appears on both sides, unchanged, because
+         that is the point: the day was kept. */
+      for (const it of displacedRows) {
+        await audit({
+          project_id: projectId, actor, action: 'sprintItem.displaced', entity: 'sprint_item',
+          entity_id: String(it._id),
+          before: { starts_on: it.starts_on as string, sprint_id: String(it.sprint_id) },
+          after: { starts_on: it.starts_on as string, sprint_id: null },
+        });
+      }
+      res.json({ ok: true, displaced });
     },
   );
 
@@ -755,25 +826,43 @@ export function scheduleRouter(): Router {
     },
   );
 
-  /* PLOT or MOVE the bar. `starts_on` is the PM's click and the ONLY date they
-     set — the finish is computed from it (#72 §6), because click-to-place has
-     no duration to give and the bar must never be able to disagree with the
-     FORECASTED column. null un-plots the row, which leaves it in the list.
+  /* PLOT or MOVE the bar — TWO owners, one route (owls #88/#89, block 9).
+     The PM works Sprint Schedules at WEEK grain: `week` (a Monday) places the
+     bar on that week's first working day, resolved HERE on the canonical
+     calendar (invariant 11) because the browser holds no holiday set. The
+     Design Lead works Deadlines at DAY grain: a non-null `starts_on` moves the
+     bar within the week it already has, and never past either edge. The
+     finish is computed from the start either way (#72 §6) — click-to-place
+     has no duration to give and the bar must never be able to disagree with
+     the FORECASTED column. null un-plots the row, which leaves it in the list.
 
      There is deliberately NO cascade: placing a sketch does not create,
      position or suggest its render (BR-1a). Auto-placing render the moment
      sketch is forecast to land is the helpful thing one adds unprompted, and
-     it would remove the control this design exists to give. */
+     it would remove the control this design exists to give.
+
+     Gated by SURFACE only (JP at the block 9 gate, 2026-09-11): session and
+     project membership like every route (invariant 9), and no per-user or
+     role check — "the Design Lead" is a team rule, not a permission. */
   router.patch(
     '/api/projects/:projectId/sprint-items/:itemId',
     ensureAuthenticated,
     ensureProjectMember,
     async (req, res) => {
       const body = z
-        .object({ starts_on: DATE_ONLY.nullable().optional(), sprint_id: OBJECT_ID.optional() })
+        .object({ starts_on: DATE_ONLY.nullable().optional(), week: DATE_ONLY.optional(), sprint_id: OBJECT_ID.optional() })
         .strict()
         .safeParse(req.body);
       if (!body.success || Object.keys(body.data).length === 0) {
+        res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
+        return;
+      }
+      /* A week and a day in one request would be two owners in one act —
+         refused as malformed, not reconciled. And a `week` names a WEEK, so
+         it is its own Monday or it is nothing: any other day is a client
+         that built the key wrong, which is a 400 rather than a placement
+         judged on a day nobody chose. */
+      if (body.data.week !== undefined && (body.data.starts_on !== undefined || weekKeyOf(body.data.week) !== body.data.week)) {
         res.status(400).json({ ok: false, error: { code: 'INVALID_BODY' } });
         return;
       }
@@ -801,16 +890,55 @@ export function scheduleRouter(): Router {
         res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
         return;
       }
-      const before = { starts_on: item.starts_on ?? null, sprint_id: String(item.sprint_id) };
+      // `null` is *Outside any sprint* (owl #90) — a real state, not a missing id
+      const before = { starts_on: item.starts_on ?? null, sprint_id: item.sprint_id ? String(item.sprint_id) : null };
+
+      /* THE DAY WRITE NEEDS A WEEK TO STAY INSIDE (owl #89 §1). A row that
+         is not plotted has no week, so there is nothing to bound the day by
+         and no surface that offers the gesture — Deadlines lists plotted rows
+         only. The PM's week click is the act that gives it one. */
+      if (body.data.starts_on != null && before.starts_on === null) {
+        res.status(422).json({
+          ok: false,
+          error: { code: 'NOT_PLACED', message: 'That card has no week yet — place it on Sprint Schedules first.' },
+        });
+        return;
+      }
+
+      /* THE WEEK PLACEMENT (owl #89 §2). The day is the week's first working
+         day on the ACTIVE calendar, resolved server-side; a week of nothing
+         but holidays has no day to offer and says so — the one refusal here
+         that is about a week rather than a day, in the calendar's own code. */
+      let weekDay: string | null = null;
+      if (body.data.week !== undefined) {
+        weekDay = firstWorkdayOfWeek(body.data.week);
+        if (weekDay === null) {
+          res.status(422).json({ ok: false, error: { code: 'NOT_A_WORKDAY', message: 'That week has no working day.' } });
+          return;
+        }
+      }
+      /* WHICH SPRINT THE ROW WILL BE IN. A `sprint_id` in the body is a move
+         and names it. Otherwise the row's own — and for a row OUTSIDE ANY
+         SPRINT placed by week, the sprint whose dates cover the resolved day
+         (the PM's re-slot, drift report §H): none covering keeps it outside,
+         since gaps are legal (invariant 12). Read before the no-op guard so
+         a re-slot that lands where the row already sits is the non-change it
+         is. */
+      const covering = weekDay !== null && before.sprint_id === null && !sprint
+        ? await Sprint.findOne({ project_id: projectId, starts_on: { $lte: weekDay }, ends_on: { $gte: weekDay } })
+            .select({ _id: 1, starts_on: 1, ends_on: 1 })
+            .lean()
+        : null;
+      const nextSprint = body.data.sprint_id ?? (covering ? String(covering._id) : before.sprint_id);
+
       /* No-op guard (review 2026-08-28, finding 2): a second click in the
          client's reload window used to reach here with before == after and
          bank an audit row for a non-change. Invariant 10 logs CHANGES, not
          attempts — same convention as saveSprints' dirty check and dueApply's
          staged===baseline guard. */
-      const nextStarts = body.data.starts_on !== undefined ? (body.data.starts_on ?? null) : before.starts_on;
-      const nextSprint = body.data.sprint_id !== undefined ? body.data.sprint_id : before.sprint_id;
+      const nextStarts = weekDay ?? (body.data.starts_on !== undefined ? (body.data.starts_on ?? null) : before.starts_on);
       if (nextStarts === before.starts_on && nextSprint === before.sprint_id) {
-        res.json({ ok: true, noop: true });
+        res.json({ ok: true, noop: true, starts_on: before.starts_on, sprint_id: before.sprint_id });
         return;
       }
       /* THE BARE LIST MOVE (D5 resolved strict, 2026-09-09). A request that
@@ -831,25 +959,38 @@ export function scheduleRouter(): Router {
          OUT of range, i.e. exactly the placement JP's 2026-09-08 ruling
          forbids, reached by not mentioning the day. Rollover itself is
          untouched: it writes through Mongo and never through this route.
+         A row *Outside any sprint* (#90) re-files the same way: its kept day
+         must be inside the list it joins.
 
          Before any mutation, after the no-op guard and the target's 404 —
          a refusal writes nothing and audits nothing (invariant 10). */
-      if (body.data.starts_on === undefined && sprint && before.starts_on) {
+      if (body.data.starts_on === undefined && weekDay === null && sprint && before.starts_on) {
         const range = sprintRangeIssue({ sprint, startsOn: before.starts_on });
         if (range) {
           res.status(422).json({ ok: false, error: range });
           return;
         }
       }
-      /* THE PLACEMENT GUARD (JP 2026-09-08), on the day the PM SUPPLIES.
-         Clearing the bar (`null`) is the absence of a placement and is never
-         judged. When a day IS sent it is judged against the sprint the row
-         will BE in, so a move that carries a day is measured against the
-         target, never the origin — and it answers all three questions, where
-         the bare move above answers only the range. */
-      if (body.data.starts_on != null) {
+      /* THE PLACEMENT GUARD (JP 2026-09-08; the week bound owl #89), on the
+         day the request resolves to. Clearing the bar (`null`) is the absence
+         of a placement and is never judged. A day IS judged against the
+         sprint the row will BE in, so a move that carries a day is measured
+         against the target, never the origin. The two owners ask different
+         questions of `plotIssue`:
+           - the PM's `week` chooses a week, so the week bound is not asked
+             (there is no current week to stay inside — this is the act that
+             sets it); the sprint range, the deadline and the calendar are;
+           - the Design Lead's `starts_on` moves within the week the row has,
+             so all FOUR are asked, `assignedWeek` derived from the row's
+             current day (never stored — drift report §H), OUT_OF_WEEK first.
+         `target` is `null` for a row outside any sprint (#90) with no sprint
+         to land in: `plotIssue` skips the range and asks the rest. A row that
+         DOES name a sprint whose document is gone is a row that outlived its
+         list — the cascade makes that abnormal — and answering ok would write
+         the one placement nobody validated, so it stays a 404. */
+      if (body.data.starts_on != null || weekDay !== null) {
         const [target, card] = await Promise.all([
-          sprint ?? findPlotSprint(projectId, item.sprint_id),
+          sprint ?? covering ?? (before.sprint_id === null ? null : findPlotSprint(projectId, before.sprint_id)),
           /* The row's deadline is the card's OWN Trello due date and nothing
              inherited (`deadlineFor`, owl #78 §2) — the same date the row
              draws its tick from, so the guard and the tick cannot disagree. */
@@ -857,40 +998,41 @@ export function scheduleRouter(): Router {
             .select({ trello_due: 1 })
             .lean(),
         ]);
-        /* The sprint holding a row cannot normally vanish — removing one
-           cascades its rows — so this is a row that outlived its list. It has
-           no range to be judged against, and answering ok would write the one
-           placement nobody validated. */
-        if (!target) {
+        if (!target && nextSprint !== null) {
           res.status(404).json({ ok: false, error: { code: 'NOT_FOUND' } });
           return;
         }
         const placement = plotIssue({
           sprint: target,
-          startsOn: body.data.starts_on,
+          startsOn: nextStarts as string,
           deadline: deadlineFor(card),
+          ...(weekDay === null ? { assignedWeek: weekKeyOf(before.starts_on as string) } : {}),
         });
         if (placement) {
           res.status(422).json({ ok: false, error: placement });
           return;
         }
       }
-      if (body.data.sprint_id !== undefined && body.data.sprint_id !== String(item.sprint_id)) {
+      if (nextSprint !== before.sprint_id) {
         /* A move takes the TARGET list's tail position. Carrying the old
            position across let the row tie with one already there, and the load
            sorts on position — so the two swapped places between requests and
-           the row appeared to jump around the list. Same rule the insert uses. */
-        item.sprint_id = new Types.ObjectId(body.data.sprint_id);
-        item.position = await nextTailPosition(projectId, body.data.sprint_id);
+           the row appeared to jump around the list. Same rule the insert uses.
+           `nextSprint` is never null here: nothing on this route sends a row
+           OUT to *Outside any sprint* — only a re-date does (#90). */
+        item.sprint_id = new Types.ObjectId(nextSprint as string);
+        item.position = await nextTailPosition(projectId, nextSprint as string);
       }
-      if (body.data.starts_on !== undefined) item.starts_on = body.data.starts_on ?? undefined;
+      if (nextStarts !== before.starts_on) item.starts_on = nextStarts ?? undefined;
       await item.save();
+      const after = { starts_on: item.starts_on ?? null, sprint_id: item.sprint_id ? String(item.sprint_id) : null };
       await audit({
         project_id: projectId, actor, action: 'sprintItem.plot', entity: 'sprint_item',
-        entity_id: String(item._id), before,
-        after: { starts_on: item.starts_on ?? null, sprint_id: String(item.sprint_id) },
+        entity_id: String(item._id), before, after,
       });
-      res.json({ ok: true });
+      /* The resolved day comes back: a week click draws its bar at the Monday
+         until this answer names the working day the server chose. */
+      res.json({ ok: true, ...after });
     },
   );
 
@@ -918,7 +1060,7 @@ export function scheduleRouter(): Router {
       await audit({
         project_id: projectId, actor, action: 'sprintItem.remove', entity: 'sprint_item',
         entity_id: String(item._id),
-        before: { sprint_id: String(item.sprint_id), card_id: item.trello_card_id, starts_on: item.starts_on ?? null },
+        before: { sprint_id: item.sprint_id ? String(item.sprint_id) : null, card_id: item.trello_card_id, starts_on: item.starts_on ?? null },
       });
       res.json({ ok: true });
     },

@@ -1,53 +1,52 @@
 /**
  * Hit-testability + the inline-style law. Batch 7 (T153) built this file for
  * the planner's drag; TRIMMED 2026-08-28 when the Sprint Schedules rebuild
- * (owls #72/#73, PLAN.md) withdrew that drag — placement is a CLICK now.
+ * (owls #72/#73) withdrew that drag; RE-ARMED 2026-09-08 (block 7) when a
+ * placed bar dragged again; RE-TARGETED 2026-09-11 (block 9, owls #88/#89/#90,
+ * JP 2026-09-10; PLAN.md block 9) when the day left Sprint Schedules for the
+ * Deadlines tab, where the Design Lead's card is the ONE drag source in Sirius.
  *
  * ────────────────────────────────────────────────────────────────────────────
- * WHAT SURVIVES THE TRIM, AND WHY.
+ * WHAT THIS FILE HOLDS, AND WHY.
  *
- * 1. THE DRAG-SOURCE SWEEP — REAL AGAIN (block 7, JP 2026-09-08). The sources
- *    (`.grun`, `.growr`) died with their drag on 2026-08-28 and the Deadlines
- *    day entry died with the day planner on 2026-09-05, leaving this sweep over
- *    an empty set — exactly the state in which a guard quietly stops being one.
- *    A PLACED bar drags again now, so `.gitem` is a source and the sweep has a
- *    shipped element to bite on.
+ * 1. THE DRAG-SOURCE SWEEP, on the Deadlines CARD (block 9). The source is
+ *    found by the HANDLER that starts the drag — `on-pointerdown="['dlDragStart'`
+ *    on `.dlcard` — never by a `draggable` attribute, because there is none to
+ *    find: the HTML5 API dies inside the sticky, scrolling containers this
+ *    layout is built from (build-spec §5.2), so the drag is pointer events and
+ *    the card itself is the only thing the browser must keep hit-testable, in
+ *    every state it wears (`urgent`, `done`, `dragging`, `refused`). The
+ *    `draggable` set is swept SEPARATELY, and must stay EMPTY. The card's
+ *    ancestor chain is read off a RENDER of the expanded lane, because the
+ *    partial is defined at the top level of its own file and the template
+ *    parse would hand it no ancestors at all — the chain the browser gives it
+ *    (`.dlscroll` → `.dlweeks` → `.dlweek` → `.dldays.dllane` → `.dlday` →
+ *    `.dlcards`) only exists where the partial is CALLED. The fixture
+ *    (`FIXTURE_SOURCES`) is kept beside the shipped source: it proves the
+ *    sweeps fire on the ancestor-chain shapes the bug wore twice, which no
+ *    arrangement of today's stylesheet can demonstrate.
  *
- *    WHAT CHANGED IN THE DERIVATION: the source is found by the HANDLER that
- *    starts the drag, not by a `draggable` attribute. There is no attribute to
- *    find — deliberately: the HTML5 API dies inside the sticky, scrolling
- *    containers this layout is built from (build-spec §5.2), so the drag is
- *    pointer events and the bar itself is the only thing the browser must keep
- *    hit-testable. The `draggable` set is swept SEPARATELY, and must stay
- *    EMPTY. The fixture (`FIXTURE_SOURCES`) is kept beside the shipped source:
- *    it proves the sweeps fire on the ancestor-chain shapes the bug wore twice,
- *    which no arrangement of today's stylesheet can demonstrate.
- *
- * 2. THE WEEK-CELL SWEEP, same law, NEW CONSUMER. The `.gweek` cells used to
- *    be the drop path outside the coloured run; they are now the columns a
- *    real placement CLICK lands through — select a row, hover a week, click
- *    (`plotHover`/`plotPlace` on the `.gtrack` above them). A
- *    `pointer-events: none` anywhere on that chain refuses every placement
- *    while nothing else in the suite notices, exactly as it once refused
- *    every drop.
+ * 2. THE WEEK-CELL SWEEP AND ITS BINDINGS (block 9). The `.gweek` cells are the
+ *    columns a placement CLICK lands through — and since #88 they CARRY the
+ *    click: `weekHover` / `weekLeave` / `weekPlace` ride every committed row's
+ *    cells, placed rows included (the PM owns the week and re-places by week).
+ *    A `pointer-events: none` anywhere on that chain refuses every placement
+ *    while nothing else in the suite notices, exactly as it once refused every
+ *    drop. The bar (`.gitem`) is DISPLAY-ONLY here and is no longer a source.
  *
  * 3. THE INLINE-STYLE LAW, verbatim — including the `noteGrow` exact-text
  *    allow-list and its length-2 pin. It never was about the drag: a CSS
  *    guard cannot see an inline write, so the cheapest way to keep inline
  *    writes visible is to have none (minus the one documented exemption).
  *
- * 4. THE dayAtX SUITE (block 7): half-open, clamped arithmetic at WORKDAY
- *    grain, executed here out of the shipped file — it is what both the
- *    placement hover and the bar drag feed the pointer to. It replaces the
- *    week-column mapper `weekAtX`, which the day grain left without a caller
- *    and which was deleted with this suite's copy of it (review 2026-09-09).
- *
- * Gone with the retired drags: the `.grun`/`.gbar` source sweeps and their
- * `auto` dependency pair, the `.gdragging` sweep (that class is withdrawn — the
- * rebuilt drag dresses the BAR, not the board), the dropOnBar/dropOnWeek wiring
- * suite, and the pinned/unscheduled render suites. The mid-drag states the new
- * drag DOES carry — `dragging` and `refused` — are swept as part of the source's
- * own class list, which is where they live.
+ * Gone with block 9: the `dayAtX` suite (pointer-X → workday arithmetic — the
+ * PM names a week by its column INDEX now, and the Design Lead names a day by
+ * its COLUMN, so nothing maps an X to a day any more) and, with it, the literal
+ * `weekAtX` name-ban it carried (a snapshot guard, test/CLAUDE.md rule 1: the
+ * capability is what the bindings suite below states, not a name). Gone with
+ * the earlier trims: the `.grun`/`.gbar` source sweeps, the `.gdragging`
+ * sweep, the dropOnBar/dropOnWeek wiring suite, the pinned/unscheduled render
+ * suites, and block 7's `.gitem` source sweep.
  * ────────────────────────────────────────────────────────────────────────────
  * HONESTY NOTE — READ BEFORE TRUSTING A GREEN RUN.
  *
@@ -70,7 +69,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { APP_JS, GANTT_CSS, TEMPLATE, decl } from './helpers/gantt-render.ts';
+import {
+  GANTT_CSS,
+  TEMPLATE,
+  PLOTTED,
+  UNPLOTTED,
+  cssRule,
+  dlCardPartial,
+  renderDeadlines,
+  renderSprintSchedule,
+  type DlCard,
+  type DlWeek,
+} from './helpers/gantt-render.ts';
+import { groupsOf, schedulesView } from './helpers/sprint-schedule-tab.ts';
 
 /* ====================================================================== *
  * Parsers. Deliberately small, and each one is pinned by a test of its
@@ -316,44 +327,68 @@ const TEMPLATE_ELEMENTS = PARSED.elements;
 /**
  * THE DRAG SOURCES — derived by the handler that STARTS a drag.
  *
- * Block 7 gives a placed bar a pointer drag: mousedown on the coloured run,
- * mousemove over the track, mouseup writes the day. There is no `draggable`
- * attribute to key on, so the derivation reads the handler instead — and it is
- * still a derivation, not a list: a second drag source added tomorrow joins
- * every sweep below the day it appears.
+ * Block 9 gives the Deadlines CARD a pointer drag (owls #88/#89): pointerdown
+ * on `.dlcard` inside an expanded lane, pointermove over the lane's day
+ * columns, pointerup writes the day. There is no `draggable` attribute to key
+ * on, so the derivation reads the handler instead — and it is still a
+ * derivation, not a list: a second drag source added tomorrow joins every
+ * sweep below the day it appears.
  */
 const DRAG_SOURCES: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) =>
-  /on-mousedown="\['barDragStart'/.test(e.source),
+  /on-pointerdown="\['dlDragStart'/.test(e.source),
 );
 
 /** The HTML5 set — swept separately, and it must stay EMPTY (build-spec §5.2). */
 const HTML5_SOURCES: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) => /\bdraggable=/.test(e.source));
 
 /**
- * The bar's PHASE classes, read out of the shipped `itemPhase` recipe.
+ * THE CARD'S ANCESTOR CHAIN, off a RENDER of the expanded lane.
  *
- * `class="gitem {{b.cls}}…"` hides them from `possibleClasses` — a mustache is
- * not a token — so `.gitem.work { pointer-events: none }` would sail past a
- * target list built from the template alone. Derived from the recipe's own
- * return literals, never listed here (test/CLAUDE.md rule 2).
+ * The template parse gives the `dlCard` partial's `<article>` no ancestors:
+ * the partial is defined at the top level of its own file, and the chain the
+ * browser will give it exists only where the partial is CALLED — inside the
+ * day column of the open lane. So the shipped Deadlines tab is rendered with
+ * one lane open and one card in a day column, and the SAME `parseTemplate`
+ * reads the chain off the rendered markup. The card's own class list is
+ * still read off the partial's SOURCE (the conditional tokens the render
+ * would hide); only the chain comes from the render.
  */
-const PHASE_CLASSES: string[] = [...decl(APP_JS, 'itemPhase').matchAll(/return '([\w-]+)'/g)].map((m) => m[1]!);
+const CHAIN_CARD: DlCard = {
+  id: 'i1', rowId: 'i1', cardId: 'w1', mc: 'MC-655', label: 'MC-655: Hero', startsOn: '2026-08-04',
+  urgent: false, difficulty: null, assetType: null, lane: null, done: false, trelloUrl: null, figmaUrl: null,
+};
+const CHAIN_WEEK: DlWeek = {
+  key: '2026-08-03', label: 'Week 1', range: '3 - 7 Aug 2026', cards: [CHAIN_CARD],
+  pending: 1, urgent: 0, done: 0, load: 1, capPct: '0.8',
+  days: ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07'].map((day, i) => ({
+    day, name: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'][i]!, cards: day === '2026-08-04' ? [CHAIN_CARD] : [], pending: 0, done: 0,
+  })),
+};
+/* Rendered MID-GESTURE on purpose: the drop column wears `target` and the
+   card `dragging`, so the chain carries the state token a rule could bite
+   (`.dlday.target { … }`) — the resting render would hide it. */
+const RENDERED_LANE = parseTemplate(renderDeadlines({
+  dlWeeks: [CHAIN_WEEK],
+  expandedWeek: '2026-08-03',
+  dlDrag: { rowId: 'i1', fromDay: '2026-08-04', day: '2026-08-04', refused: false, weekKey: '2026-08-03' },
+}));
+const RENDERED_CARDS: TemplateElement[] = RENDERED_LANE.elements.filter((e) => e.classes.includes('dlcard'));
+
+/** The shipped sources, each given the chain the browser gives it. */
+const SOURCES_IN_PLACE: TemplateElement[] = DRAG_SOURCES.map((src) => ({
+  ...src,
+  ancestors: RENDERED_CARDS[0]?.ancestors ?? [],
+}));
 
 /**
  * A SYNTHETIC drag source, parsed by the SAME `parseTemplate` the shipped sweep
- * uses — and the reason this file still means something after 2026-09-05.
+ * uses — what keeps the sweeps honest whatever the shipped stylesheet says.
  *
- * The Deadlines rebuild (owls #74/#75, PLAN.md block 3) retired the day-drag
- * planner: the cards are read-only and derived, and the only thing that moves
- * one is the server's rollover. So `DRAG_SOURCES` is EMPTY today, and every
- * sweep over it passes for free. That is exactly the state in which a guard
- * quietly stops being a guard.
- *
- * The law it defends has not changed and the app has not lost the ability to
- * grow a drag — so the machinery is kept, wired to the template so a new
- * `draggable` joins it the day it appears, and its non-vacuity is proven
- * against this fixture instead of against a shipped element that no longer
- * exists. The fixture wears the retired chain (a scroller, a column, an entry
+ * Between 2026-09-05 and block 7, and again briefly before block 9 re-armed
+ * the Deadlines card, `DRAG_SOURCES` was EMPTY and every sweep over it passed
+ * for free — exactly the state in which a guard quietly stops being a guard.
+ * The fixture is the answer: its non-vacuity proofs run against a source that
+ * always exists, wearing the retired chain (a scroller, a column, an entry
  * with two state classes) because that is the shape the bug wore twice.
  */
 const FIXTURE_TEMPLATE = [
@@ -398,11 +433,8 @@ function offendersIn(
 const targetsFor = (label: string, els: { name: string; classes: string[] }[]): { name: string; classes: string[] }[] =>
   els.map((e) => ({ name: `${label} <${e.name}${e.classes.map((c) => `.${c}`).join('')}>`, classes: e.classes }));
 
-/** The source targets, widened by the phase classes the mustache hides. */
-const SOURCE_TARGETS = targetsFor('the drag source', DRAG_SOURCES).map((t) => ({
-  ...t,
-  classes: [...new Set([...t.classes, ...PHASE_CLASSES])],
-}));
+/** The source targets — the card, with every conditional token its source can carry. */
+const SOURCE_TARGETS = targetsFor('the drag source', DRAG_SOURCES);
 /** The same target list, built from the fixture — what keeps the sweeps honest. */
 const FIXTURE_TARGETS = targetsFor('the drag source', FIXTURE_SOURCES);
 
@@ -438,12 +470,13 @@ const declaresAuto = (rules: CssRule[], src: { classes: string[] }): boolean =>
  * The ancestor sweep, PER SOURCE. A source that re-enables itself drops out of
  * the sweep entirely; every other source keeps its whole chain.
  *
- * `sources` is a parameter rather than a closure over `DRAG_SOURCES` because
- * the shipped set is empty today (see `FIXTURE_SOURCES`): the fixture proofs
- * have to be able to point the same sweep at a source that exists, or they
- * would be proving that an empty list finds nothing.
+ * `sources` is a parameter rather than a closure: the shipped card is swept
+ * with the chain a RENDER gives it (`SOURCES_IN_PLACE`), and the fixture
+ * proofs point the same sweep at a source whose chain the fixture itself
+ * draws — neither would prove anything against the partial's own parse,
+ * which has no chain at all.
  */
-const ancestorOffenders = (rules: CssRule[], sources: TemplateElement[] = DRAG_SOURCES): string[] =>
+const ancestorOffenders = (rules: CssRule[], sources: TemplateElement[] = SOURCES_IN_PLACE): string[] =>
   offendersIn(
     rules,
     targetsFor(
@@ -453,22 +486,22 @@ const ancestorOffenders = (rules: CssRule[], sources: TemplateElement[] = DRAG_S
   );
 
 /**
- * The planner's WEEK CELLS — the columns a placement CLICK lands through.
- *
- * SAME LAW, NEW CONSUMER (the 2026-08-28 trim). Before the rebuild these
- * cells were the drop path outside the coloured run and were derived by their
- * `dropOnWeek` handler. The rebuilt track carries the handlers itself
- * (`plotHover`/`plotPlace`, derived below), and the cells carry none — so the
- * derivation keys on the frozen class instead (PLAN.md template contract: the
- * `.gtrack` holds the 12 `.gweek` cells). The chain still matters exactly as
- * it did: a `pointer-events: none` on `.gtrack` or anything above it refuses
- * every placement click while the rest of the suite stays green — check (j)'s
- * failure shape, reached by a click instead of a drop.
+ * The planner's WEEK CELLS — the columns a placement CLICK lands through, and
+ * since block 9 the elements that CARRY it (owls #88/#89; PLAN.md template
+ * contract): `weekHover` / `weekLeave` / `weekPlace` ride every committed
+ * row's `.gweek` cells. The derivation keys on the frozen class; the
+ * BINDINGS are derived below by handler, so a cell that stopped binding the
+ * click is found by the bindings suite and a cell that stopped being
+ * hit-testable by the sweep. The chain still matters exactly as it did: a
+ * `pointer-events: none` on `.gtrack` or anything above it refuses every
+ * placement click while the rest of the suite stays green.
  */
 const WEEK_CELLS: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) => e.classes.includes('gweek'));
 
-/** The elements that TAKE the placement click — derived by their handler. */
-const PLACE_TRACKS: TemplateElement[] = TEMPLATE_ELEMENTS.filter((e) => e.source.includes("'plotPlace'"));
+/** The cells that TAKE the placement click — derived by their handler. */
+const CLICK_CELLS: TemplateElement[] = WEEK_CELLS.filter((e) => e.source.includes("'weekPlace'"));
+/** The rest — the search row's and the result rows' inert tracks (owl #77 §0). */
+const INERT_CELLS: TemplateElement[] = WEEK_CELLS.filter((e) => !e.source.includes("'weekPlace'"));
 
 const weekCellOffenders = (rules: CssRule[]): string[] => [
   ...offendersIn(rules, targetsFor('the week cell', WEEK_CELLS)),
@@ -552,13 +585,15 @@ describe('the guard’s own parsers actually see the shipped files', () => {
  * ====================================================================== */
 
 describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT prove this — real input only)', () => {
-  it('enumerates the drag sources FROM the template — the placed bar’s coloured run', () => {
-    /* One source, and it is the BAR (block 7, JP 2026-09-08). Not the track:
-       a mousedown on empty grid would arm a drag from nothing. Not the row:
-       the pane holds the DEADLINE setter and three buttons, and a drag armed
-       there would fight every one of them. */
-    expect(DRAG_SOURCES.map((s) => s.classes[0]).sort()).toEqual(['gitem']);
+  it('enumerates the drag sources FROM the template — the Deadlines CARD, and only it (block 9, #88)', () => {
+    /* One source, and it is the CARD on Deadlines. Not the day column: a
+       pointerdown on empty column would arm a drag from nothing. Not the
+       Sprint Schedules bar: the day belongs to the Design Lead, on this tab
+       and nowhere else (#88), so `.gitem` binds nothing (its own contract is
+       test/sprint-schedule-bars-footer.test.ts SUITE 7). */
+    expect(DRAG_SOURCES.map((s) => `${s.name}.${s.classes[0]}`)).toEqual(['article.dlcard']);
     expect(DRAG_SOURCES).toHaveLength(1);
+    expect(TEMPLATE_ELEMENTS.filter((e) => e.classes.includes('gitem')).every((e) => !/\son-[a-z]+=/.test(e.source))).toBe(true);
   });
 
   it('drags by POINTER only — the `draggable` set stays empty', () => {
@@ -568,21 +603,19 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     expect(HTML5_SOURCES.map((e) => e.classes.join('.'))).toEqual([]);
   });
 
-  it('knows every STATE the source wears, phase fills included', () => {
+  it('knows every STATE the source wears — the two card flags and the two gesture states', () => {
     /* The class list is what a `pointer-events` rule can bite: the resting
-       class, the two conditionals the drag adds, the row's `late` flag, and
-       the three phase fills the mustache hides from the parser. There is no
-       in-flight class to add — the write is optimistic and the row reloads,
-       so the bar wears nothing while the PATCH is in the air. */
-    expect(DRAG_SOURCES[0]!.classes).toEqual(['gitem', 'late', 'dragging', 'refused']);
-    expect(PHASE_CLASSES.sort()).toEqual(['render', 'sketch', 'work']);
-    expect(SOURCE_TARGETS[0]!.classes.sort())
-      .toEqual(['dragging', 'gitem', 'late', 'refused', 'render', 'sketch', 'work']);
+       class, the card's own `urgent` / `done`, and the two the gesture adds
+       (`dragging` while live, `refused` over a day the row may not have).
+       There is no in-flight class to add — the write is optimistic and the
+       row reloads, so the card wears nothing while the PATCH is in the air. */
+    expect(DRAG_SOURCES[0]!.classes).toEqual(['dlcard', 'urgent', 'done', 'dragging', 'refused']);
+    expect(SOURCE_TARGETS[0]!.classes.sort()).toEqual(['dlcard', 'done', 'dragging', 'refused', 'urgent']);
   });
 
-  it('lets NO rule make the bar un-hit-testable in ANY of those states — and would catch one that did', () => {
-    /* THE BUG, on a source that exists again. A `pointer-events: none` on the
-       run — in any state, at any viewport — cancels the drag in the tick it
+  it('lets NO rule make the card un-hit-testable in ANY of those states — and would catch one that did', () => {
+    /* THE BUG, on a source that exists. A `pointer-events: none` on the card
+       — in any state, at any viewport — cancels the drag in the tick it
        starts, and nothing else in the suite notices. Both halves are asserted
        together so neither can pass for an uninteresting reason: the shipped
        sheets are clean, AND the sweep fires on every shape that would dirty
@@ -590,15 +623,16 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     expect(offendersIn(ALL_RULES, SOURCE_TARGETS)).toEqual([]);
     const fixture = (css: string) => offendersIn(cssRules('fixture.css', css), SOURCE_TARGETS);
     for (const sel of [
-      '.gitem',
-      '.gitem.late', // the red past-deadline bar — the one most worth dragging
-      '.gitem.dragging', // mid-gesture: a cure that evaporates on grab is no cure
-      '.gitem.refused',
-      '.gitem.dragging.refused',
-      '.gitem.work', // a phase fill, which the template hides behind a mustache
-      '.gitem:hover', // the state the pointer is IN when the button goes down
-      '.gitem:active',
-      '.gantt .gtrack .gitem.sketch',
+      '.dlcard',
+      '.dlcard.urgent', // the urgent card — the one most worth dragging
+      '.dlcard.done', // a finished card is faded, never inert
+      '.dlcard.dragging', // mid-gesture: a cure that evaporates on grab is no cure
+      '.dlcard.refused',
+      '.dlcard.dragging.refused',
+      '.dlcard:hover', // the state the pointer is IN when the button goes down
+      '.dlcard:active',
+      '.dlcard:focus-visible', // the keyboard path shares the element
+      '.dllane .dlday .dlcard.urgent',
     ]) {
       expect(fixture(`${sel} { pointer-events: none; }`), `\`${sel}\` slipped past the sweep`).toHaveLength(1);
     }
@@ -631,7 +665,7 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     expect(fixture('.entry .cliptext { pointer-events: none; }')).toEqual([]); // subject is the child
     expect(fixture('.daycol .entry { pointer-events: auto; }')).toEqual([]); // not a `none`
     expect(fixture('.ubadge.saving { pointer-events: none; }')).toEqual([]);
-    expect(fixture('.gplus { pointer-events: none; }')).toEqual([]); // the placement +, deliberately inert
+    expect(fixture('.dlquote { pointer-events: none; }')).toEqual([]); // the card's painted bar — a child
   });
 
   it('refuses a class-less subject as well — `*` or a bare tag would blanket every source', () => {
@@ -649,13 +683,15 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
 
   it('sweeps ANCESTORS too, because pointer-events is an inherited property', () => {
     // a transparent wrapper would disable the source inside it just as surely,
-    // and the chains come from the template's own nesting so one added
-    // tomorrow is swept the day it appears
+    // and the chain comes from a RENDER of the open lane — the partial's own
+    // parse has none — so a wrapper added tomorrow is swept the day it appears
+    expect(RENDERED_LANE.problems).toEqual([]);
+    expect(RENDERED_CARDS, 'the rendered lane carries no card to read a chain off').toHaveLength(1);
     expect(ancestorOffenders(ALL_RULES)).toEqual([]);
-    // …and the bar's chain is a real one, off the shipped template's own
-    // nesting: the track it moves inside, and the sheet that scrolls
-    expect(DRAG_SOURCES[0]!.ancestors.flatMap((a) => a.classes))
-      .toEqual(expect.arrayContaining(['gantt', 'gtrack', 'growr']));
+    // …and the card's chain is a real one: the column it sits in, the open
+    // lane (the drop bound), the week, and the sheet that scrolls
+    expect(SOURCES_IN_PLACE[0]!.ancestors.flatMap((a) => a.classes))
+      .toEqual(expect.arrayContaining(['dlscroll', 'dlweeks', 'dlweek', 'dldays', 'dllane', 'dlday', 'dlcards']));
     expect(FIXTURE_SOURCES.flatMap((s) => s.ancestors).length).toBeGreaterThan(3);
   });
 
@@ -669,6 +705,14 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     // general even though no shipped pair uses it today
     expect(fixture('.daycol { pointer-events: none; } .entry { pointer-events: auto; }')).toEqual([]);
     expect(fixture('.entry .cliptext { pointer-events: none; }')).toEqual([]); // a CHILD, not an ancestor
+    // …and on the SHIPPED chain, read off the render: the day column, the
+    // open lane and the scroller each take the card out of hit-testing
+    const shipped = (css: string) => ancestorOffenders(cssRules('fixture.css', css));
+    expect(shipped('.dlday { pointer-events: none; }')).toHaveLength(1);
+    expect(shipped('.dllane { pointer-events: none; }')).toHaveLength(1);
+    expect(shipped('.dlscroll { pointer-events: none; }')).toHaveLength(1);
+    expect(shipped('.dlday.target { pointer-events: none; }')).toHaveLength(1); // the drop column's own state
+    expect(shipped('.dlday { pointer-events: none; } .dlcard { pointer-events: auto; }')).toEqual([]);
   });
 
   it('takes NO state- or viewport-scoped rule as a CURE — a ban may bite sometimes, a cure may not', () => {
@@ -699,21 +743,25 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     // than one branch, and every occurrence is swept wherever it sits.
     expect(WEEK_CELLS.length).toBeGreaterThanOrEqual(1);
     for (const cell of WEEK_CELLS) {
-      expect(cell.classes).toEqual(['gweek']);
+      expect(cell.classes[0]).toBe('gweek');
+      expect(cell.classes.every((c) => c === 'gweek' || c === 'hover')).toBe(true);
       expect(cell.ancestors.flatMap((a) => a.classes)).toEqual(
         expect.arrayContaining(['gantt', 'gtrack']),
       );
     }
     expect(weekCellOffenders(ALL_RULES)).toEqual([]);
+    // the hovered state is part of what a rule can bite — swept as a token
+    const fixture = (css: string) => weekCellOffenders(cssRules('fixture.css', css));
+    expect(fixture('.gweek.hover { pointer-events: none; }').length).toBeGreaterThan(0);
   });
 
-  it('ties the sweep to its consumer — the placement handlers ride the track ABOVE the cells', () => {
+  it('ties the sweep to its consumer — the placement handlers ride the CELLS themselves (block 9)', () => {
     // derived by handler, so a renamed or relocated click target re-derives
-    // the day it moves; the cells' ancestor chain then covers it
-    expect(PLACE_TRACKS.length).toBeGreaterThanOrEqual(1);
-    for (const track of PLACE_TRACKS) {
-      expect(track.classes).toContain('gtrack');
-      expect(track.source).toContain("'plotHover'");
+    // the day it moves; the cells' own ancestor chain then covers it
+    expect(CLICK_CELLS.length).toBeGreaterThanOrEqual(1);
+    for (const cell of CLICK_CELLS) {
+      expect(cell.classes).toContain('gweek');
+      expect(cell.ancestors.flatMap((a) => a.classes)).toContain('gtrack');
     }
   });
 
@@ -725,16 +773,18 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     expect(fixture('.gantt .gtrack { pointer-events: none; }').length).toBeGreaterThan(0);
     // a cell may cure an ancestor for itself, exactly as a drag source does
     expect(fixture('.gantt .gtrack { pointer-events: none; } .gweek { pointer-events: auto; }')).toEqual([]);
-    // the `.gplus` circle is pointer-transparent BY DESIGN (the track takes
-    // the click) — a child, so the sweep rightly says nothing about it
-    expect(fixture('.gplus { pointer-events: none; }')).toEqual([]);
+    // the bar is a SIBLING of the cells, not an ancestor — a rule on it says
+    // nothing about the click (and there is no such rule: the bar is inert
+    // by having no binding, never by being transparent)
+    expect(fixture('.gitem { pointer-events: none; }')).toEqual([]);
   });
 
   it('leaves the deliberate transparencies alone — the guard must not have been met by deleting rules', () => {
-    // each of these is a child or a bystander, never a target or its ancestor:
-    // the placement + hands its click to the track, and the two saving states
-    // freeze a control that is mid-write
-    expect(GANTT_CSS).toMatch(/\.gplus[^{]*\{[^}]*pointer-events: none/);
+    // each of these is a bystander, never a target or its ancestor: the two
+    // saving states freeze a control that is mid-write. The placement `+`
+    // (`.gplus`, pointer-transparent so the track took its click) is GONE
+    // with the day controls (block 9) — not exempt, deleted.
+    expect(GANTT_CSS, 'the retired `+` rule came back').not.toMatch(/\.gplus\b/);
     const pipeline = STYLESHEETS.find((s) => s.file === '20-pipeline.css')!.css;
     expect(pipeline).toMatch(/\.ubadge\.saving \{[^}]*pointer-events: none/);
     expect(pipeline).toMatch(/\.datefield\.saving \{[^}]*pointer-events: none/);
@@ -746,15 +796,12 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
     // guard can see it. Neither exists today, and this is what keeps it so.
     const styleOf = (el: TemplateElement): string => /style="([^"]*)"/.exec(el.source)?.[1] ?? '';
     for (const el of TEMPLATE_ELEMENTS) expect(styleOf(el)).not.toMatch(/pointer-events/i);
-    /* the stricter per-source clause, live again: the bar DOES carry a
-       `style=` (its left and width are inline percentages out of the geometry
-       helper), so this is the one place an inline `display:none` or a
-       `visibility` write could hide the drag source from the sweep above. */
+    /* the stricter per-source clause: the CARD carries no inline style at
+       all — its box is the stylesheet's — so the one place an inline
+       `display:none` or a `visibility` write could hide the drag source
+       from the sweep above is closed by there being no `style=` to write. */
     expect(DRAG_SOURCES.length, 'the per-source clause went vacuous').toBeGreaterThan(0);
-    for (const src of DRAG_SOURCES) {
-      expect(styleOf(src), 'the bar carries no inline geometry any more').not.toBe('');
-      expect(styleOf(src)).not.toMatch(/pointer-events|visibility|display/i);
-    }
+    for (const src of DRAG_SOURCES) expect(styleOf(src), 'the card grew an inline style').toBe('');
     for (const { js } of SCRIPTS) {
       // the properties that actually take an element out of hit-testing:
       // banned outright, in every script, with no way to opt out
@@ -796,140 +843,82 @@ describe('every drag source stays hit-testable (a synthetic DragEvent CANNOT pro
 });
 
 /* ====================================================================== *
- * SUITE 2 — the pointer-X → WORKDAY mapping (block 7, JP 2026-09-08).
- * `plotHover` and `barDragMove` both feed the pointer to this one, so a
- * placement click and a bar drop land on the same day for the same X. The
- * recipe is the shipped `dayAtX`; its week-column ancestor `weekAtX` was
- * deleted with its last caller (review 2026-09-09).
+ * SUITE 2 — the WEEK-CLICK BINDINGS (block 9, owls #88/#89, JP 2026-09-10;
+ * PLAN.md block 9 template contract). Was the `dayAtX` suite (block 7): the
+ * pointer-X → workday arithmetic went with the day grain — the PM names a
+ * week by its column INDEX, so there is no X to map. What replaces it is a
+ * statement of the CAPABILITY (test/CLAUDE.md rule 1), not a name-ban: every
+ * committed row's `.gweek` cells carry the three week handlers, placed rows
+ * included; the inert tracks carry none; the day machinery is out of the
+ * shipped template whole.
  * ====================================================================== */
 
-/** 12 consecutive Mondays — `plannerWeeks` is always WEEK_COUNT long. */
-const WEEK_KEYS = [
-  '2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24',
-  '2026-08-31', '2026-09-07', '2026-09-14', '2026-09-21',
-  '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19',
-];
-const WEEKS = WEEK_KEYS.map((key) => ({ key }));
-/** 12 × 92px, the shipped `--gw`, offset so a bare `clientX` cannot pass by luck. */
-const RECT = { left: 1000, width: 1104 };
-
-type DayAtX = (clientX: number, rect: { left: number; width: number }, weeks?: { key: string }[]) => string | null;
-
-/** Sliced LAZILY on purpose: `decl()` throws when the function is absent, and
-    a throw at module scope takes the hit-test guard above down with it —
-    failing one suite is a report, failing the file is a blindfold.
-    `isoAddDays` and `isoOf` come
-    along because the recipe derives its date through them — string calendar
-    arithmetic, not a millisecond difference (invariant 11). */
-let dayAtXSrc: string | undefined;
-const DAY_AT_X_SRC = (): string => (dayAtXSrc ??= decl(APP_JS, 'dayAtX'));
-let dayAtXFn: DayAtX | undefined;
-const dayAtX: DayAtX = (...args) =>
-  (dayAtXFn ??= new Function(
-    [decl(APP_JS, 'WORKDAYS_PER_WEEK'), decl(APP_JS, 'isoOf'), decl(APP_JS, 'isoAddDays'), DAY_AT_X_SRC(), 'return dayAtX;'].join('\n'),
-  )() as DayAtX)(...args);
-
-/** The 60 workdays the 12 columns draw, derived from the week keys themselves. */
-const WORKDAYS: string[] = WEEK_KEYS.flatMap((key) => {
-  const monday = new Date(`${key}T00:00:00Z`);
-  return [0, 1, 2, 3, 4].map((n) => new Date(monday.getTime() + n * 864e5).toISOString().slice(0, 10));
-});
-/** 1104px ÷ 60 units = 18.4px, the shipped `--gu`. */
-const UNIT = 1104 / 60;
-
-describe('placement and the drag map a pointer’s X to a WORKDAY (arithmetic only — a real pointer is E2E’s)', () => {
-  it('walks all sixty units in order, so no off-by-one hides in the middle of a week', () => {
-    /* `WORKDAYS` is built five days at a time from the week KEYS, so this also
-       carries the week-seating property the retired `weekAtX` used to be
-       checked against: unit i lands in week floor(i / 5), or the hover tint
-       and the column it sits in would drift apart at some boundary. */
-    const mids = WORKDAYS.map((_, i) => dayAtX(RECT.left + i * UNIT + UNIT / 2, RECT, WEEKS));
-    expect(mids).toEqual(WORKDAYS);
-    expect(WORKDAYS).toHaveLength(60);
-  });
-
-  it('never names a weekend — the grid has no width for one', () => {
-    // the whole reason the axis counts workdays: Sat and Sun are not drawn, so
-    // no X can land on one, and `starts_on` cannot reach the server as one
-    for (let i = 0; i < 60; i++) {
-      const iso = dayAtX(RECT.left + i * UNIT + UNIT / 2, RECT, WEEKS)!;
-      const dow = new Date(`${iso}T00:00:00Z`).getUTCDay();
-      expect(dow, `unit ${i} landed on day-of-week ${dow} (${iso})`).toBeGreaterThanOrEqual(1);
-      expect(dow, `unit ${i} landed on day-of-week ${dow} (${iso})`).toBeLessThanOrEqual(5);
+describe('the week click rides the `.gweek` cells of every committed row — placed rows included (#88)', () => {
+  it('binds hover, leave and click on the cell, with the row id and the column index', () => {
+    expect(CLICK_CELLS.length, 'no cell binds weekPlace — the week click has no home').toBeGreaterThanOrEqual(1);
+    for (const cell of CLICK_CELLS) {
+      expect(cell.source).toContain(`on-mouseenter="['weekHover', row.id, @index]"`);
+      expect(cell.source).toContain(`on-mouseleave="['weekLeave']"`);
+      expect(cell.source).toContain(`on-click="['weekPlace', row.id, @index]"`);
     }
   });
 
-  it('answers the first unit at its exact left edge and the last at its last subpixel', () => {
-    expect(dayAtX(1000, RECT, WEEKS)).toBe('2026-08-03'); // Monday of week 1
-    expect(dayAtX(2103.9, RECT, WEEKS)).toBe('2026-10-23'); // Friday of week 12
-  });
-
-  it('treats a unit as half-open [start, end) — a pointer ON the boundary belongs to the RIGHT day', () => {
-    /* Measured on a track whose unit divides EXACTLY (1200 ÷ 60 = 20px): at
-       the shipped 18.4px the boundary is not a representable double, and an
-       assertion there would be pinning IEEE-754 rounding rather than the
-       half-open rule. The rule is what this defends; the 18.4px axis is swept
-       unit by unit at its midpoints above, where rounding cannot reach. */
-    const exact = { left: 1000, width: 1200 };
-    expect(dayAtX(1019.99, exact, WEEKS)).toBe('2026-08-03');
-    expect(dayAtX(1020, exact, WEEKS)).toBe('2026-08-04');
-    // and the week boundary is just another unit boundary — Friday to Monday
-    expect(dayAtX(1099.99, exact, WEEKS)).toBe('2026-08-07');
-    expect(dayAtX(1100, exact, WEEKS)).toBe('2026-08-10');
-  });
-
-  it('clamps BELOW the track to the first workday and BEYOND it to the last', () => {
-    // a drop can never fall off the axis; the guards decide whether the day is
-    // allowed, and they can only do that if a day comes back at all
-    expect(dayAtX(999.99, RECT, WEEKS)).toBe('2026-08-03');
-    expect(dayAtX(500, RECT, WEEKS)).toBe('2026-08-03');
-    expect(dayAtX(-5000, RECT, WEEKS)).toBe('2026-08-03');
-    expect(dayAtX(2104, RECT, WEEKS)).toBe('2026-10-23');
-    expect(dayAtX(99999, RECT, WEEKS)).toBe('2026-10-23');
-  });
-
-  it('divides the MEASURED width, not a hard-coded 18.4 — the same sixty days come back at 2× zoom', () => {
-    const zoom = { left: 0, width: 2208 };
-    expect(WORKDAYS.map((_, i) => dayAtX(i * 36.8 + 18.4, zoom, WEEKS))).toEqual(WORKDAYS);
-    expect(dayAtX(36.79, zoom, WEEKS)).toBe('2026-08-03');
-    expect(dayAtX(36.8, zoom, WEEKS)).toBe('2026-08-04');
-    expect(dayAtX(-1, zoom, WEEKS)).toBe('2026-08-03');
-    expect(dayAtX(99999, zoom, WEEKS)).toBe('2026-10-23');
-  });
-
-  it('returns null rather than a wrong day when it cannot measure', () => {
-    expect(dayAtX(1500, { left: 1000, width: 0 }, WEEKS)).toBeNull();
-    expect(dayAtX(1500, RECT, [])).toBeNull();
-    expect(dayAtX(1500, RECT, undefined)).toBeNull();
-  });
-
-  it('derives the date by STRING calendar arithmetic, never a millisecond difference', () => {
-    // invariant 11: `new Date(iso) - base` divided by a day is a day early
-    // west of UTC across a DST edge; `isoAddDays` moves the calendar fields
-    const src = DAY_AT_X_SRC();
-    expect(src).toContain('isoAddDays');
-    expect(src).not.toContain('new Date');
-    expect(src).not.toContain('864e5');
-  });
-
-  it('is PURE — no document, no window, no app.get, no shared week constants', () => {
-    for (const forbidden of ['document', 'window', 'app.get', 'WEEK_PX', 'WEEK_COUNT']) {
-      expect(DAY_AT_X_SRC()).not.toContain(forbidden);
+  it('binds UNCONDITIONALLY — no clause on `row.startsOn` gates the cells, so a placed row re-places by week', () => {
+    /* Block 7 switched the track's bindings on `{{#if !row.startsOn}}` (hover
+       and click for an unplotted row, the bar drag for a placed one). #88 gives
+       the PM the week on EVERY row — the Design Lead's day is the PM's to
+       overwrite by week (drift report §H) — so no such gate may exist on this
+       tab. Read as the RULE: nowhere in the schedules view is a section opened
+       on whether the row is placed. */
+    const view = schedulesView().replace(/\{\{!\s[\s\S]*?\}\}/g, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
+    expect(view).not.toMatch(/\{\{#if !?row\.startsOn\}\}/);
+    // the cell's own open tag: its bindings sit outside any section — the one
+    // mustache it carries is the hover token inside `class`, and that is the
+    // only place a section may open
+    for (const cell of CLICK_CELLS) expect(cell.source.replace(/class="[^"]*"/, '')).not.toContain('{{#if');
+    // …and the cells sit directly inside the committed row's track
+    for (const cell of CLICK_CELLS) {
+      expect(cell.ancestors.flatMap((a) => a.classes)).toEqual(expect.arrayContaining(['growr', 'sitem', 'gtrack', 'gweeks']));
     }
   });
 
-  it('is a named top-level function, and the week mapper it retired is GONE', () => {
-    expect(APP_JS).toMatch(/\nconst dayAtX = /);
-    expect(DAY_AT_X_SRC().startsWith('\nconst dayAtX =')).toBe(true);
-    /* `weekAtX` mapped an X to a week COLUMN and lost its last caller when the
-       grain moved to the day (review 2026-09-09). Dead code that still parses
-       is the thing a later reader reaches for by mistake, so it went rather
-       than staying as a second, coarser answer to the same question. */
-    expect(APP_JS, 'the retired week mapper came back').not.toMatch(/const weekAtX\b/);
-    // and nothing CALLS it either — the geometry file names it once, in the
-    // comment that records why it went, and comments are not callers
-    expect(APP_JS.replace(/\/\*[\s\S]*?\*\//g, ' '), 'a caller of the retired week mapper came back')
-      .not.toContain('weekAtX');
+  it('leaves the search row’s and the result rows’ cells INERT (owl #77 §0: adding and placing are two acts)', () => {
+    expect(INERT_CELLS.length).toBeGreaterThanOrEqual(1);
+    for (const cell of INERT_CELLS) {
+      expect(cell.source, `an inert cell binds a handler: ${cell.source}`).not.toMatch(/\son-[a-z]+=/);
+      const chain = cell.ancestors.flatMap((a) => a.classes);
+      expect(chain.some((c) => c === 'gsearch' || c === 'gresult'), `an inert cell outside the search row: ${chain.join('.')}`).toBe(true);
+    }
+  });
+
+  it('tints exactly the hovered WEEK of the hovered ROW — `gweek hover` from the pair, nothing else', () => {
+    const on = renderSprintSchedule({ sprintGroups: groupsOf(PLOTTED, UNPLOTTED), hoverRow: 'i1', hoverWeek: 1 });
+    const off = renderSprintSchedule({ sprintGroups: groupsOf(PLOTTED, UNPLOTTED), hoverRow: null, hoverWeek: null });
+    const hovered = (html: string): string[] => [...html.matchAll(/<div class="gweek[^"]*"/g)].map((m) => m[0]).filter((t) => /\bhover\b/.test(t));
+    expect(hovered(on)).toHaveLength(1);
+    expect(hovered(off)).toHaveLength(0);
+    // a row without a week (hoverWeek null) tints nothing — the OFFER is null
+    expect(hovered(renderSprintSchedule({ sprintGroups: groupsOf(PLOTTED), hoverRow: 'i1', hoverWeek: null }))).toHaveLength(0);
+    // and the track says a click lands here, on the hovered row only
+    expect([...on.matchAll(/class="gtrack placing"/g)]).toHaveLength(1);
+    expect(off).not.toContain('gtrack placing');
+  });
+
+  it('carries none of block 7’s day machinery in the shipped template', () => {
+    const view = TEMPLATE.replace(/\{\{!\s[\s\S]*?\}\}/g, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
+    for (const gone of ['gplus', 'ghovcell', 'barDrag', 'plotHover', 'plotLeave', 'plotPlace', 'plotDay', 'plotRow', 'dragRow', 'dragLeft', 'dragDay', 'plusLeft(', 'placeable(']) {
+      expect(view, `\`${gone}\` outlived the day controls in the template`).not.toContain(gone);
+    }
+    // negative control: the sweep sees the template it claims to read
+    expect(view).toContain("'weekPlace'");
+    expect(view).toContain("'dlDragStart'");
+  });
+
+  it('keeps the week tint a stylesheet rule on the cell, not a second element', () => {
+    // the hover cell (`.ghovcell`) was a one-workday element stacked in the
+    // track; the week tint is the cell's own state class (PLAN.md styles)
+    expect(cssRule('.gantt .gweek.hover')).toMatch(/background/);
+    expect(GANTT_CSS).not.toMatch(/\.ghovcell\b/);
   });
 });
 

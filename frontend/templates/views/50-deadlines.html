@@ -18,10 +18,13 @@
 
       WHAT IS DRAWN: the schedule's own rows, and only the ones a human opted
       into TWICE — added to a sprint AND plotted — that also have a forecast
-      finish. Nothing here reconciles against the board (#74 §1), and nothing
-      here writes: every card is read-only and derived, and the only thing
-      that moves one between days is the server's rollover job, which leaves
-      no marker (#74 §3, #75 §2).
+      finish. Nothing here reconciles against the board (#74 §1). Every card
+      is derived, and this tab writes exactly ONE thing (owls #88/#89, JP
+      2026-09-10; PLAN.md block 9 R2): the card's start DAY, by a bounded
+      pointer drag or an arrow-key nudge inside its own expanded week lane —
+      the only day control in the product. Rollover is the other thing that
+      moves a card between days; it runs on the server and leaves no marker
+      (#75 §2).
 
       WHICH DAY a card sits on is the day it STARTS — the day the team is
       slated to pick the work up, which is the design lead's instrument and
@@ -96,18 +99,33 @@
 
           {{#if expandedWeek === w.key}}
             {{! Expanded: five day columns, Monday to Friday, one lane open
-                at a time. This is passive GROUPING and nothing more — no
-                drop target, no arrow-key move, no put-it-back control. The
-                planner that used to own this shape retired with the tab: a
-                card's day is the day it starts, plotted on Sprint Schedules
-                and moved afterwards only by the server's rollover — never
-                from here (spec v1.3 §6.2). A weekday column still renders on a
-                holiday and carries no flag saying so — a start plotted on one
-                draws there like on any other day, and a column with nothing
-                on it draws the empty card like any other quiet day. }}
-            <div class="dldays">
+                at a time — and THE day-drag surface (owls #88/#89, JP
+                2026-09-10; build spec v1.4 §6.5 un-retired; PLAN.md block 9
+                R2). The open lane is `.dllane` and carries its week key; each
+                column is `.dlday` and carries its ISO day. A card is picked up
+                by pointer (see the card partial) and the drop is hit-tested
+                by the handlers as the closest `.dlday[data-day]` INSIDE the
+                same `.dllane[data-week]` — anything else is refused, which is
+                how the week bound (#89 §1) is enforced on the client: a card
+                cannot leave the week the PM assigned. `target` lights the
+                column the drop would land on, and only while the drop would
+                be taken — a refused day gets no target, the card wears the
+                pale wash instead and snaps back. The three block-7 guards
+                carry across intact (inside the sprint · no later than the
+                deadline · a working day) and the server judges all four
+                again on the write; nothing here is the control.
+                No HTML5 drag attribute or directive on this tab: the gesture
+                is pointerdown/move/up in the handlers, so no element needs a
+                native drag attribute and nothing hides from a hit-test.
+                A weekday column still renders on a holiday and carries no
+                flag saying so — a start plotted on one draws there like on
+                any other day; the drop onto one is the server's to refuse
+                (NOT_A_WORKDAY), since the browser holds no holiday set. A
+                column with nothing on it draws the empty card like any other
+                quiet day. }}
+            <div class="dldays dllane" data-week="{{w.key}}">
               {{#each w.days as d}}
-                <div class="dlday">
+                <div class="dlday{{#if dlDrag && dlDrag.day === d.day && !dlDrag.refused}} target{{/if}}" data-day="{{d.day}}">
                   <div class="dldhead">
                     <span class="dldname">{{d.name}}</span>
                     <span class="dlcount"><span class="dlc pending">{{d.pending}} Pending</span><span class="dldot" aria-hidden="true">•</span><span class="dlc done">{{d.done}} Done</span></span>
@@ -123,7 +141,10 @@
             </div>
           {{else}}
             {{! Collapsed: the week's cards stacked, in day order and then in
-                the schedule's own row order. Nothing re-sorts them here. }}
+                the schedule's own row order. Nothing re-sorts them here, and
+                NO DRAG here (PLAN.md block 9): there is no day column to
+                drop on, so the card partial binds its pointer and key
+                handlers only inside the expanded lane. }}
             <div class="dlcards">{{#each w.cards as c}}{{>dlCard}}{{else}}<div class="dlempty"><div class="dlemptybox">None slated this week</div></div>{{/each}}</div>
           {{/if}}
         </section>

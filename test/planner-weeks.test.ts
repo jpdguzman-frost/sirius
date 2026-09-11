@@ -59,8 +59,6 @@ interface Harness {
   months(): Array<{ month: string; monthKey: string; span: number }>;
   mondaysBetween(a: string, b: string): number;
   dayIndex(iso: string): number;
-  dayAtX(clientX: number, rect: { left: number; width: number }, weeks: { key: string }[]): string | null;
-  plusLeft(day: string | null): string | null;
   unitPct(u: number): string;
   TOTAL_UNITS: number;
   WEEK_COUNT: number;
@@ -81,8 +79,6 @@ const source = [
   decl(APP, 'dayIndex'),
   decl(APP, 'pctOf'),
   decl(APP, 'unitPct'),
-  decl(APP, 'dayAtX'),
-  decl(APP, 'plusLeft'),
   `const computed = { ${method('plannerWeeks')}, ${method('plannerMonths')} };`,
 ].join('\n');
 
@@ -98,7 +94,7 @@ const harness = new Function(`
     setWeek: (w) => { WEEK_START.v = w; },
     weeks: () => computed.plannerWeeks.call(ctx),
     months: () => computed.plannerMonths.call(self),
-    mondaysBetween, dayIndex, dayAtX, plusLeft, unitPct, TOTAL_UNITS, WEEK_COUNT,
+    mondaysBetween, dayIndex, unitPct, TOTAL_UNITS, WEEK_COUNT,
   };
 `)() as Harness;
 
@@ -192,70 +188,11 @@ describe('§3.4 — the bar axis counts WORKDAYS, so a phase boundary is day-res
 });
 
 /* ====================================================================== *
- * §3.4b — the axis has an INVERSE now (block 7, JP 2026-09-08): the
- * pointer names a workday, and the same helper that draws the bar puts
- * the + on it. These are round-trips, not copies of the arithmetic —
- * each side is executed against the other out of the shipped file.
+ * §3.4b — the axis's INVERSE (`dayAtX`, the pointer-X → workday mapper) and
+ * the `+`'s left (`plusLeft`) were block 7's day-grain placement on Sprint
+ * Schedules. RETIRED in block 9 (owls #88/#89, JP 2026-09-10; PLAN.md): the
+ * PM places by WEEK — a click on a `.gweek` cell names the week by its INDEX
+ * into `plannerWeeks`, so there is no pointer arithmetic to round-trip — and
+ * the day is set on Deadlines, by day COLUMN, not by X. `dayIndex` stays: it
+ * is what draws the bar.
  * ====================================================================== */
-
-describe('dayAtX is dayIndex read backwards — one axis, two directions', () => {
-  const WEEKS = Array.from({ length: 12 }, (_, i) => ({
-    key: new Date(Date.UTC(2026, 7, 3) + i * 7 * 864e5).toISOString().slice(0, 10),
-  }));
-  const RECT = { left: 1000, width: 1104 }; // 12 × --gw, the shipped track
-  const UNIT = 1104 / 60;
-
-  it('round-trips every one of the sixty units: dayIndex(dayAtX(x)) is the unit x fell in', () => {
-    /* THE PROPERTY THAT MATTERS. The bar is drawn from `dayIndex`; the
-       placement and the drag both name their day through `dayAtX`. If these
-       two ever disagreed by a unit, a bar would land one day away from where
-       the pointer was — silently, and only for some columns. */
-    harness.setWeek('2026-08-03');
-    for (let u = 0; u < 60; u++) {
-      const iso = harness.dayAtX(RECT.left + u * UNIT + UNIT / 2, RECT, WEEKS)!;
-      expect(harness.dayIndex(iso), `unit ${u} (${iso})`).toBe(u);
-    }
-  });
-
-  it('puts the + exactly on the unit the pointer named — the tint, the + and the bar share one left', () => {
-    harness.setWeek('2026-08-03');
-    for (let u = 0; u < 60; u++) {
-      const iso = harness.dayAtX(RECT.left + u * UNIT + UNIT / 2, RECT, WEEKS)!;
-      expect(harness.plusLeft(iso), `unit ${u} (${iso})`).toBe(harness.unitPct(u));
-    }
-    expect(harness.plusLeft('2026-08-03')).toBe('0.00');
-  });
-
-  it('follows the window when it scrolls — the same X names a different day', () => {
-    // the axis is relative to `weekStart`; a chevron step must move the whole
-    // mapping, not just the labels above it
-    harness.setWeek('2026-08-03');
-    const before = harness.dayAtX(RECT.left + 3 * UNIT + 1, RECT, WEEKS);
-    expect(before).toBe('2026-08-06');
-    expect(harness.plusLeft(before)).toBe(harness.unitPct(3));
-    harness.setWeek('2026-08-10');
-    // the WEEKS list the caller passes is what names the date, and the origin
-    // the helper reads is what turns it back into a unit — one step apart, the
-    // same date now falls before the window and pins to its left edge
-    expect(harness.plusLeft('2026-08-06')).toBe('0.00');
-    expect(harness.plusLeft('2026-08-13')).toBe(harness.unitPct(3));
-  });
-
-  it('is asymmetric at the window’s edges, exactly as the deadline tick is', () => {
-    /* A day BEFORE the window pins LEFT — which is where `itemBar` has already
-       clipped that row's bar to. A day BEYOND it is null: nothing is drawn
-       out there to point at, and a row starting past the window draws no bar
-       to grab in the first place. Same shape as `deadlineTick`'s left-pin
-       ruling (JP 2026-08-28).
-       This is the + and the tint only. A dragged BAR is wider than a column
-       and carries its own clamp — `barLeftAt`, executed against `itemBar` in
-       test/sprint-schedule-bars-footer.test.ts (review 2026-09-09). */
-    harness.setWeek('2026-08-03');
-    expect(harness.plusLeft('2026-07-31')).toBe('0.00'); // the Friday before, pinned
-    expect(harness.plusLeft('2026-06-15')).toBe('0.00'); // and one far outside
-    expect(harness.plusLeft('2026-10-26')).toBeNull(); // the Monday after
-    expect(harness.plusLeft('2026-10-23')).toBe(harness.unitPct(59)); // the last drawn
-    expect(harness.plusLeft(null)).toBeNull();
-    expect(harness.plusLeft('')).toBeNull();
-  });
-});

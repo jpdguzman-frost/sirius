@@ -7,10 +7,14 @@
    This sheet REPLACES the v1 tab (owl #64, node 630:51389) whole. The stats
    strip, the notice banners and their detail rows, the acknowledge and restore
    controls, the search field, the week rule badges, the capacity bar and the
-   day-drag planner entries are DELETED rather than parked: the markup they
-   dressed no longer exists, and a recipe with no consumer is the kind of thing
-   a later edit lands on by mistake. The conflict machinery those controls
-   fronted stays server-side, untouched — nothing in this sheet speaks for it.
+   MILESTONE tab's day-drag planner entries are DELETED rather than parked:
+   the markup they dressed no longer exists, and a recipe with no consumer is
+   the kind of thing a later edit lands on by mistake. The conflict machinery
+   those controls fronted stays server-side, untouched — nothing in this
+   sheet speaks for it. The day-drag that lives here NOW (§E2) is a different
+   thing built from zero in block 9 — the work-card start day, bounded by the
+   PM's week (owls #88/#89, JP 2026-09-10; build spec v1.4 §6.5) — not that
+   planner revived.
 
    Every colour is a token (05-tokens.css). The raw pixel values that remain
    are BOX GEOMETRY read off the nodes, for which the scale has no name — pane
@@ -152,9 +156,10 @@
    every card in a stack is the same size whatever it holds, which is what lets
    the stacks read as columns at all. The title clamps and the badge row wraps
    INSIDE it; anything that still does not fit is clipped by the card and never
-   allowed to change its height. Nothing on the card is a control — it is
-   read-only and writes nothing (#74 §3), so it carries no hover or focus
-   chrome of its own beyond the two links. ---- */
+   allowed to change its height. At rest the card carries no hover chrome of
+   its own beyond the two links; what it DOES carry since block 9 is the
+   drag and focus chrome of §E2 below, because the card is the day control
+   now (#88/#89). ---- */
 .dlcard {
   position: relative; overflow: hidden;
   flex: none; width: 308px; height: 180px;
@@ -166,9 +171,50 @@
 /* an urgent card gives its left inset back to the bar (#74 §3) */
 .dlcard.urgent { padding-left: 18px; }
 /* the done state is the WHOLE card faded and nothing else re-styled (#75 §3,
-   node 810:122394, read twice to be sure). It is deliberately the only rule in
-   this sheet that fades anything: a second one would make "done" ambiguous. */
+   node 810:122394, read twice to be sure). It was the only rule in this sheet
+   that faded anything until block 9; the two in-flight states of §E2 fade
+   too, but only for the length of a gesture — at rest, done is still the one
+   faded thing on the tab and still unambiguous. */
 .dlcard.done { opacity: 0.4; }
+
+/* ---- E2. the day-drag — the card is the drag source (owls #88/#89, JP
+   2026-09-10; build spec v1.4 §6.5 un-retired and §8; PLAN.md block 9 R2).
+   No Figma frame exists for any of this (block 9 figma survey §2): the
+   treatments are block seven's, carried over from the Sprint Schedules bar
+   they dressed there (35-gantt.css, retired) — provisional, to be reported
+   to Miles at CLOSE.
+
+   The WHOLE card is the source, only inside an expanded lane (`.dllane`):
+   the collapsed lane has no day column to drop on, so its cards keep the
+   default cursor and the partial binds nothing there. `touch-action: none`
+   is what lets pointer events own the gesture on a touch screen instead of
+   the lane scrolling under the finger.
+
+   THE LAW: the card and every ancestor of it stay hit-testable in every
+   state — at rest, dragging, refused, done or focused — so none of them is
+   ever made pointer-transparent, hidden or undisplayed. A source that cannot
+   be hit-tested cannot be picked up, moved or dropped (gantt-rules rule 1's
+   principle; the sweep in test/deadlines-drag.test.ts).
+
+   `dragging` lifts the card — the card-level shadow, a touch translucent so
+   the column under it reads through — and `refused` is block seven's pale
+   wash: the card goes faint and dashed, saying the drop will not be taken
+   (outside the assigned week · outside the sprint · past the deadline ·
+   not a working day, #89 §3) and will snap back. `target` on a day column
+   is the same indigo wash the Sprint Schedules week cell wears on hover
+   (35-gantt.css §6) — one placement colour on both tabs — and it shows only
+   while the drop WOULD be taken; a refused day lights nothing.
+
+   The outlines sit INSIDE the box (negative offset): the card stack clips
+   sideways (§B, the one-scroller rule) and the card is only two pixels
+   narrower than its column's inner width, so an outline drawn outside the
+   box would lose its right edge to the clip. No left BORDER anywhere — the
+   quote bar is the SVG, and the guard above sweeps for it. */
+.dllane .dlcard { cursor: grab; touch-action: none; }
+.dllane .dlcard:focus-visible { outline: 2px solid var(--blue-500); outline-offset: -2px; }
+.dlcard.dragging { cursor: grabbing; opacity: 0.9; box-shadow: var(--shadow-card); }
+.dlcard.refused { cursor: not-allowed; opacity: 0.45; outline: 1px dashed var(--red-500); outline-offset: -1px; }
+.dlday.target { background: color-mix(in srgb, var(--indigo-500) 12%, var(--white)); }
 
 /* the urgency bar (#74 §3, from the exported path). It belongs to the URGENT
    card alone — a non-urgent card carries no bar at all, pale or otherwise —

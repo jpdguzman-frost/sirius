@@ -140,3 +140,50 @@
   font-size: var(--text-body); font-weight: 400; line-height: 1.4;
   color: var(--slate-400); max-width: 420px;
 }
+
+/* ---- 5. the displaced-cards notice (owl #90, JP 2026-09-10; build spec
+   v1.4 §5.3; PLAN.md block 9 R3) ----
+   Drawn between the toolbar and the planner body after a sprint save whose
+   new dates left placed cards outside them, naming each card, until
+   dismissed. NOT the sprints modal's .sbanner: that recipe is the modal's
+   own (10-ui.css) and its advisory variant carries no CTA by ruling
+   (R-f-5) — this one carries Dismiss. The TOKENS are that advisory
+   banner's, though — amber-50 under amber-800, the description a step
+   lighter — because a re-date is a LIGHT edit and never destructive (#90):
+   the deletion confirm's red would say "something was destroyed", which is
+   the other flow's sentence. No Figma frame exists for this notice (block 9
+   figma survey §4); provisional, reported to Miles at CLOSE. Same 12/16
+   padding and 8 gap as the modal banner, so the two read as one family. */
+.dnotice {
+  display: flex; flex-direction: column; gap: var(--space-8);
+  padding: var(--space-12) var(--space-16); margin: 0 0 var(--space-16);
+  background: var(--amber-50); color: var(--amber-800);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+}
+.dnotice .dnhead { display: flex; align-items: center; gap: var(--space-8); padding-left: 2px; }
+.dnotice .dntitle { font-size: var(--text-body); font-weight: 600; line-height: 1.4; }
+.dnotice .dndesc { margin: 0; padding-left: 2px; max-width: 700px; font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--amber-700); }
+/* the one action: a ghost button in the banner's own ink, pushed to the right
+   edge by the auto margin so the title never has to share its line width */
+.dnotice .dndismiss {
+  margin-left: auto; height: 28px; flex: none; padding: 0 var(--space-12);
+  display: inline-flex; align-items: center;
+  background: transparent; border: 1px solid var(--amber-500); border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: var(--text-label); font-weight: 600; line-height: 1;
+  color: var(--amber-800); white-space: nowrap; cursor: pointer;
+}
+.dnotice .dndismiss:hover { background: var(--amber-100); }
+.dnotice .dndismiss:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 2px; }
+/* one line per displaced card: id · title · the day it keeps. A plain list
+   with its marker off — the id leads each line and is the marker. */
+.dnotice .dnlist {
+  margin: 0; padding: 0 0 0 2px; list-style: none;
+  display: flex; flex-direction: column; gap: var(--space-4);
+  font-size: var(--text-label); font-weight: 400; line-height: 1.4; color: var(--amber-800);
+}
+.dnotice .dnitem { display: flex; align-items: baseline; gap: var(--space-8); }
+.dnotice .dnid { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dnotice .dndot { color: var(--amber-500); }
+.dnotice .dnname { overflow-wrap: anywhere; }
+.dnotice .dnday { white-space: nowrap; }

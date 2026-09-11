@@ -10,7 +10,7 @@ source and the guard that asserts it (`test/deadlines-tab.test.ts` unless the
 rule says otherwise). Rollover law is here too, because the tab is where it
 shows; the job itself lives in `src/services/rollover.ts`.
 
-_last-verified: 2026-09-08_
+_last-verified: 2026-09-11_
 
 **Amended 2026-09-08.** Spec v1.3 §6.2 flips PLACEMENT from the forecast
 finish to the plotted start (R-d2-c, R-d2-d); owl #86 rules the quote bar
@@ -18,6 +18,16 @@ amber-600 (R-d2-k), which settles its old disagreement with R-d2-m; owl #87
 deletes the parked server half of the retired conflict machinery (R-d2-e).
 Nothing else on this tab moved — the counts, the order, the holiday
 treatment, the empty cards, the navigator and rollover are as they were.
+
+**Amended 2026-09-11 (block 9).** Owls #88–#90 (JP yes, 2026-09-10) give this
+tab the day control for real: the day-drag UN-RETIRES as §1a's own contract
+(R-d2-t…z), and Sprint Schedules' day-grain gesture reverses to week-grain
+(gantt-rules.md §1) to make room for it. R-d2-c's attribution corrects to
+match — the WEEK is still the PM's, the DAY is now this tab's alone. A
+re-dated sprint's displacement path (sprint-rules.md rule 30, new) reuses
+this tab's *Outside any sprint* idiom (R-d2-q) but is documented there, not
+here — displacement is a Sprint Schedules concern; only its DESTINATION
+concept is shared.
 
 ## 1. What appears
 
@@ -34,17 +44,22 @@ treatment, the empty cards, the navigator and rollover are as they were.
   label) clamped to three lines; the card carries NO date — the column it
   sits in is its date. [#74 §1/§3; node 810:122333]
 - **R-d2-c A card's day is its plotted START** (`row.startsOn` =
-  `sprint_items.starts_on`, the PM's own click) — the day the team is slated
-  to pick the work up. That is the design lead's instrument and the reason
-  this view runs on days; a computed finish is not a date the lead can choose,
-  so placing cards on it left them arranging dates they cannot move. The
-  finish (`WORKDAY(start, lead + design)`) keeps its other two jobs: half of
-  R-d2-a's gate, and the condition rollover tests (R-d2-p). The WEEK a card
-  counts toward follows the same key — a card that starts in one week and
-  finishes in the next counts in the week it STARTS. Both tabs read the ONE
-  row (`sprintItems.rows`), so they cannot disagree about where a card sits.
-  [spec v1.3 §6.2, 2026-09-08 — supersedes PLAN B2, which decided the finish
-  while the question was open with Miles; `dlBuild` executed]
+  `sprint_items.starts_on`) — the day the team is slated to pick the work
+  up. The WEEK is the PM's placement (Sprint Schedules, sprint-rules.md
+  R10-a), defaulting to that week's FIRST WORKING DAY (owl #89 §2); the
+  exact DAY within it is the Design Lead's, set by dragging on THIS tab
+  (§1a, the day-drag contract, below) — that is the design lead's
+  instrument and the reason this view runs on days. Both tabs write and
+  read the ONE field (`sprint_items.starts_on`), so they can never
+  disagree about where a card sits; Sprint Schedules only DISPLAYS it
+  (gantt-rules.md rule 2). The finish (`WORKDAY(start, lead + design)`)
+  keeps its other two jobs: half of R-d2-a's gate, and the condition
+  rollover tests (R-d2-p). The WEEK a card counts toward follows the same
+  key — a card that starts in one week and finishes in the next counts in
+  the week it STARTS. **(reversed 2026-09-11 by owls #88/#89; was: "the
+  PM's own click" — describing the block-7 reality where Sprint Schedules
+  itself set the exact day; that mechanism is retired, gantt-rules.md
+  §1.)** [spec v1.4 §6.5, 2026-09-11; `dlBuild` executed]
 - **R-d2-d Weeks are the selected month's Mon–Fri weeks** — every week with
   at least one weekday inside the month, EXACTLY `lib/calendar.ts monthWeeks`
   (a straddling week shows under BOTH its months: Aug 31's week is August's
@@ -61,6 +76,86 @@ treatment, the empty cards, the navigator and rollover are as they were.
   server-side (owl #87, JP 2026-09-08 — overruling the 2026-09-05 park, and
   §6.3's own "parked, not deleted"; the stored acknowledgements were archived
   by migration 011, never dropped). [PLAN B1/B9; withdrawal sweep]
+
+## 1a. The day-drag contract — Deadlines only (owls #88/#89, v1.4 §6.5;
+    un-retired, block 9, JP 2026-09-11)
+
+Owl #88 (JP yes, 2026-09-10) reverses block 7's day-grain gesture on Sprint
+Schedules (gantt-rules.md §1) and moves the ONLY day control to this tab —
+the card the Design Lead drags is no longer read-only or derived (R-d2-o,
+above, is reversed to match). This section is deadlines-rules.md's own
+version of gantt-rules.md §1: the drag contract for THIS surface.
+
+- **R-d2-t Source and hit-test.** The drag source is the `.dlcard` itself
+  (`on-pointerdown="['dlDragStart', c.rowId]"`, `20-deadline-card.html`) —
+  Deadlines has no bar to pick up (R-d2-j: fixed cards, not gantt bars).
+  Hit-testing is `document.elementFromPoint` → the closest
+  `.dlday[data-day]` cell INSIDE the same `.dllane[data-week]` the card's
+  own week lane renders — a hit anywhere else (a different week's lane,
+  empty space, another card, no `.dlday` at all) is `refused`, same as
+  failing a bounds check. Collapsed lanes carry no drag at all — a card
+  must be in its EXPANDED week to be dragged. [`frontend/scripts/
+  90-events.js dlDragStart/dlDragMove`; `50-deadlines.html`]
+- **R-d2-u A valid drop satisfies FOUR conditions at once, checked in this
+  order** — the Design Lead is told the first thing wrong with the day in
+  the order they would fix it:
+  1. `OUT_OF_WEEK` — inside the card's ASSIGNED week (the week the PM
+     placed it in, sprint-rules.md R10-a) — checked FIRST, since only
+     rollover may cross a week boundary (R-d2-p, below; sprint-rules.md
+     R10-d);
+  2. `OUT_OF_SPRINT` — inside the target sprint's own dates;
+  3. `PAST_DEADLINE` — no later than the card's own deadline;
+  4. `NOT_A_WORKDAY` — a working day on the ARES calendar
+     (`lib/calendar.ts`, invariant 11) — never checked client-side; the
+     server is the sole backstop for holidays (sprint-rules.md R10-e's
+     replacement, `dlDayPlaceable`).
+  All four must hold; failing any one refuses with that condition's own
+  frozen message, in the same voice as the other three (sprint-rules.md
+  R10-b's replacement). [owl #89 §1/§3, v1.4 §6.5]
+- **R-d2-v Refused previews pale and snaps back; nothing commits.** A drop
+  that fails any condition renders `.dlcard.refused` (opacity .45 + a
+  dashed outline — block 7's Sprint-Schedules refused treatment, reused
+  here) and the card returns to its last saved day on release; no write,
+  no audit row. A legal target lights `.dlday.target` (a violet tint)
+  while the drag is live. [`40-deadlines.css`; `frontend/scripts/
+  40-app-state.js dlDrag`]
+- **R-d2-w Commit is on release, when the day changed and is legal.**
+  `dlDragEnd` PATCHes `{ starts_on }` to the exact dropped day —
+  optimistic, the card shown at the new day until the server answers,
+  rolled back with the server's message on a 4xx (the existing error
+  banner). Releasing back on the card's own day, or on a refused day,
+  writes nothing. **Escape cancels** — `dlDragCancel`, bound on the window
+  while a drag is live and captured (`{ capture: true }`, not bubbled —
+  Deadlines has no add-search field to protect, R-d2-o, but the same
+  capture discipline applies to whatever had focus when the drag started),
+  snaps the card back to its last saved day and sends no write.
+- **R-d2-x The keyboard path is the same instrument, not a separate one**
+  (v1.4 §8: "NFR-9 is not optional decoration" — the day-drag is the
+  Design Lead's ONLY instrument and must not be pointer-only). A focused
+  `.dlcard` (`tabindex="0"`, `role="button"`, an `aria-label` naming the
+  card and the arrow-key affordance) answers ArrowLeft/ArrowRight with
+  `dlNudge`, moving the day one working day earlier/later through the SAME
+  write and the SAME four conditions as the pointer drag (R-d2-u, one
+  validator, no separate path); Escape cancels; every other key is
+  ignored. Nudging past a legal day at either end of the week (or past the
+  sprint, the deadline, or onto a holiday) refuses exactly as a pointer
+  drop would, same message. [v1.4 §8; `frontend/scripts/90-events.js
+  dlKey/dlNudge`]
+- **R-d2-y Audited on success, silent on refusal; gated by SURFACE only.**
+  One `audit_log` row per committed day-drag or nudge (before/after
+  `starts_on`), same shape as any other schedule move (invariant 10); a
+  refusal (any of the four conditions) writes and audits nothing — a
+  refusal is not a state change. **Who may drag: gated by SURFACE only**
+  (JP, 2026-09-11) — any project member may PATCH a card's `starts_on`
+  from this route; the route re-checks session and project membership
+  like every route (invariant 9) and adds no per-user or role check. "The
+  Design Lead" names who in practice uses this tab, not a permission
+  Sirius enforces — Sirius has an allow-list, not roles.
+- **R-d2-z Rollover stays exempt, as always.** `rollUnfinished` (§4,
+  R-d2-p) never calls the day-drag's validator and is not bound by the
+  week (or any other) condition here — it is the one gesture, system
+  actor, that DOES cross a week boundary. This section governs a PERSON's
+  drag/nudge only.
 
 ## 2. Counting
 
@@ -107,8 +202,13 @@ treatment, the empty cards, the navigator and rollover are as they were.
   square off and "shipped wrong twice". Non-Urgent cards get NO bar, not a
   grey one, not a pale one. It is not a conflict, past-deadline or at-risk
   signal; there is no second accent colour and NO conflict indicator on this
-  tab at all — that is the design, not a gap. [#74 §3; SVG export; guard:
-  no `border-left` on `.dlcard`; the bar only under `.urgent`]
+  tab at all — that is the design, not a gap. **Re-checked 2026-09-11, block
+  9 survey: amber-600 still stands** — no owl or v1.4 section touches the
+  quote bar's colour; the day-drag contract (§1a, below) adds no accent of
+  its own to the card, refused/dragging states included (deadlines-rules.md
+  §1a, R-d2-v — a refused drag wears a wash, never a second bar colour).
+  [#74 §3; SVG export; guard: no `border-left` on `.dlcard`; the bar only
+  under `.urgent`]
 - **R-d2-l A done card is the whole card at opacity 0.4** — one property,
   nothing underneath restyled, the only `opacity` rule in the stylesheet.
   A done card does not roll. [#75 §3; node opacity 0.4; guard]
@@ -130,10 +230,14 @@ treatment, the empty cards, the navigator and rollover are as they were.
   810:121579 · 810:121571]
 - **R-d2-o Removed on purpose, never reintroduced**: the stats strip, the
   week-level conflict badges, the notice banners and the Model Constants
-  legend, the search field (no search, no filters — navigation is the month
-  navigator and scrolling), the acknowledge/restore controls, the day-drag
-  planner (card fields are read-only and derived; the card writes nothing),
-  the requestor chip. [#74 §2/§3; JP 2026-09-05; withdrawal sweep]
+  legend, the search field (no search, no filters — navigation is the
+  month navigator and scrolling), the acknowledge/restore controls, the
+  requestor chip. **(reversed 2026-09-11 by owls #88/#89, v1.4 §6.5; was:
+  "the day-drag planner (card fields are read-only and derived; the card
+  writes nothing)" also listed here as removed-on-purpose — it is
+  UN-RETIRED, built in this block as the tab's day-drag contract, §1a
+  below; the card is no longer read-only.)** [#74 §2/§3; JP 2026-09-05;
+  withdrawal sweep; un-retired block 9, owls #88/#89]
 
 ## 4. Rollover (server law, shown here)
 
@@ -185,3 +289,11 @@ treatment, the empty cards, the navigator and rollover are as they were.
   three-line title, the quote bar's curve and the 40% card — screenshot them
   on the local rt-test rig before CLOSE. Rollover is proven by running the
   job against the local db with a future `today` and reading the audit row.
+  **The day-drag contract (§1a) ships only after a real-pointer pass, same
+  discipline as gantt-rules.md rules 46–49** (new, block 9): no synthetic
+  pointer event proves a real down/move/up sequence drives `.dlcard`;
+  `test/deadlines-drag.test.ts` names its own gap the same way — calling
+  `dlDragStart`/`dlDragMove`/`dlDragEnd` directly proves wiring, not the
+  gesture. Escape mid-drag is proven by executed handler only (no available
+  tool holds a pointer button mid-gesture); the pointer drop, the four
+  refusals and the arrow-key nudge are proven live on rt-test before CLOSE.

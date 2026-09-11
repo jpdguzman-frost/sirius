@@ -10,7 +10,10 @@
  * search and the day-drag planner. Every one of those is withdrawn (#74 §2,
  * #74 §3, PLAN.md B9), so its guards are not "failing" — they are describing a
  * screen that no longer exists. The withdrawal itself is guarded here, in
- * section F, so nothing can quietly grow back.
+ * section F, so nothing can quietly grow back — with ONE reversal since block
+ * 9 (owls #88/#89, JP 2026-09-10): the day-drag is UN-RETIRED, rebuilt as a
+ * bounded pointer drag on the card (test/deadlines-drag.test.ts), so section
+ * F's "writes nothing" became "writes only the bounded day move".
  *
  * WHAT IS PROVEN, AND HOW:
  *  - the week arithmetic and the formatters are EXECUTED out of the
@@ -41,6 +44,7 @@ import {
   TEMPLATE,
   type DlCard,
   type DlWeek,
+  dlCardPartial,
   fnBody,
   handlerBody,
   renderDeadlines,
@@ -606,7 +610,7 @@ describe('a COLLAPSED lane stacks the week’s cards (node 731:100872)', () => {
 
   it('stacks the cards and draws NO day columns', () => {
     expect(cards(html)).toHaveLength(2);
-    expect(html).not.toContain('class="dldays"');
+    expect(html).not.toContain('class="dldays');
     expect(html).not.toContain('class="dlday"');
   });
 
@@ -657,7 +661,8 @@ describe('an EXPANDED lane is five day columns (node 810:121954)', () => {
   it('marks the lane open and draws exactly five day columns', () => {
     expect(lanes(html)[0]).toMatch(/class="dlweek[^"]*\bexpanded\b/);
     expect([...html.matchAll(/class="dlday"/g)]).toHaveLength(5);
-    expect(html).toContain('class="dldays"');
+    // the row of columns is also the drop LANE (block 9): it carries the week
+    expect(html).toContain('class="dldays dllane" data-week="2026-08-03"');
   });
 
   it('names each day and gives it the TWO counts the frame draws', () => {
@@ -868,14 +873,16 @@ describe('the deadlines stylesheet keeps the rules the frame is made of', () => 
     expect(TEMPLATE).toContain('class="dlquote" viewBox="2 1 8 180"');
   });
 
-  it('gives the DONE card the only opacity on the tab', () => {
+  it('gives the DONE card the only opacity AT REST on the tab — the two gesture states are the ruled exceptions', () => {
     /* #75 §3: a done card is the whole card at four tenths and nothing else.
        Swept rather than spot-checked — a second faded thing anywhere on this
-       tab would make the done state stop meaning done. */
+       tab would make the done state stop meaning done. Since block 9 (owl
+       #89) the live drag adds exactly two, both worn only mid-gesture and
+       never at rest: `dragging` (lifted, .9) and `refused` (the pale wash
+       that says "not a drop target"). Anything else faded is a defect. */
     const faded = RULES.filter((r) => /(^|[^-])opacity\s*:/.test(r.body));
-    expect(faded.map((r) => r.selector), 'something other than a done card is faded').toHaveLength(1);
-    expect(faded[0]!.selector).toContain('dlcard');
-    expect(faded[0]!.selector).toContain('done');
+    expect(faded.map((r) => r.selector).sort()).toEqual(['.dlcard.done', '.dlcard.dragging', '.dlcard.refused']);
+    for (const r of faded) expect(r.selector).toContain('dlcard');
   });
 
   it('draws NO left border on the card — the bar is the SVG, not a stripe', () => {
@@ -976,14 +983,26 @@ describe('the milestone tab is gone whole, not hidden', () => {
     }
   });
 
-  it('writes NOTHING from this tab — the cards are read-only and derived (#74 §3)', () => {
-    /* The day planner was the one write path here, and it wrote a Sirius-only
-       plan the board never saw. Rollover is the only thing that moves a card
-       now, and it runs on the server. */
+  it('writes ONLY the bounded day move — never HTML5 drag, never an inline edit (#88/#89; block 9)', () => {
+    /* INVERTED 2026-09-11. #74 §3's "the card writes nothing" held until owl
+       #88 UN-RETIRED §6.5's day-drag here: the Deadlines card is now the ONE
+       day control in Sirius — a pointer drag (and an arrow-key nudge) inside
+       the card's own week lane, writing `starts_on` through the same
+       sprint-item PATCH, refused by the server's four checks. What stays true
+       is HOW it writes: pointer events, never the HTML5 drag API (it dies
+       inside sticky, scrolling containers — build-spec §5.2), and never an
+       inline edit. The gesture itself is test/deadlines-drag.test.ts's;
+       hit-testability is test/drag-hittest.test.ts's. */
     const view = deadlinesView();
-    for (const verb of ['on-drop', 'on-dragover', 'on-dragstart', 'contenteditable']) {
+    for (const verb of ['on-drop', 'on-dragover', 'on-dragstart', 'on-dragend', 'draggable', 'contenteditable']) {
       expect(view).not.toContain(verb);
+      expect(dlCardPartial()).not.toContain(verb);
     }
+    // the ONE write path, on the card, by pointer and by key — and nothing on
+    // the view itself (the lane header and the day header bind no write)
+    expect(dlCardPartial()).toContain("on-pointerdown=\"['dlDragStart', c.rowId]\"");
+    expect(dlCardPartial()).toContain("on-keydown=\"['dlKey', c.rowId]\"");
+    expect(view).not.toMatch(/on-(pointerdown|mousedown|keydown)=/);
   });
 
   it('stops fetching the retired payload on every load', () => {

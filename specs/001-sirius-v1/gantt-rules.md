@@ -13,155 +13,147 @@ Pipeline-tab and Requests-tab rules (R-warn-*, the two-valued Requests STATUS,
 the requestor clip) are out of scope — see `pipeline-frame-notes.md` and
 `requests-frame-notes.md`.
 
-_last-verified: 2026-09-09_
+_last-verified: 2026-09-11_
 
-## 1. The drag contract (pointer-drag, block 7, JP 2026-09-08 — supersedes the
-   HTML5 drag-and-drop contract this section held through 2026-08-28)
+## 1. The drag contract — Sprint Schedules (week-grain) and Deadlines
+   (day-grain) (block 9, JP 2026-09-11, owls #88/#89 — reverses block 7's
+   day-grain gesture here and un-retires the day-drag on Deadlines)
 
-The HTML5 `draggable`/dragstart/dragover/drop contract rules 2–18 once
-described here (`.grun`, `.growr`, `dropOnBar`/`dropOnWeek`, `ganttDragging`,
-the phase-segment run box) died with the phase-segment gantt on 2026-08-28 —
-`test/sprint-schedule-bars-footer.test.ts` and `test/drag-hittest.test.ts`
-assert every one of those names GONE from the shipped source. Between
-2026-08-28 and block 7 (2026-09-08) Sprint Schedules had click-to-place only
-and no drag at all. Block 7 rebuilds dragging as pointer events on the single
-urgency-coloured bar (`.gitem`) that replaced the phase-segment run. The
-numbering below keeps rule 1's principle — that survived every rebuild — and
-replaces the rest with what is actually wired in `frontend/scripts/90-events.js`
-and `frontend/scripts/50-gantt-geometry.js`.
+Owls #88/#89 (JP yes, 2026-09-10) reverse block 7's day-grain pointer-drag
+on `.gitem`: **the day belongs to the Design Lead, on Deadlines only.**
+Sprint Schedules returns to week-grain placement (pre-block-7, corrected
+for the first-working-day default — owl #89 §2). The Deadlines-side
+contract (four conditions, keyboard, audit) is documented in full in
+`deadlines-rules.md` §1a — this file states only what changes HERE, plus
+the parts (Escape, no ghost, no HTML5 DnD) that bind both surfaces.
 
-1. **A drag source must stay hit-testable in every state.** The source is
-   picked up and driven by `mousedown`/`mousemove`/`mouseup` handlers, not by
-   the browser's own HTML5 drag machinery, but the principle is unchanged:
-   `pointer-events: none`, `visibility: hidden` or `display: none` on the
-   source or an ancestor — at rest, hovered, dragging, refused, late or
-   saving — must never make it unclickable. `test/drag-hittest.test.ts`
-   enumerates `.gitem`, `.gitem.late`, `.gitem.dragging`, `.gitem.refused`,
-   `.gitem.dragging.refused`, `.gitem.work` and the `:hover`/`:active`
-   states and proves each stays hit-testable. [R-g-1, batch 7; rebuilt block
-   7, `test/drag-hittest.test.ts`]
-2. **The drag source is `.gitem`** — the row's one coloured bar
-   (`frontend/templates/views/40-schedules.html`), the same element `itemBar`
-   draws and the PM already reads as the row's placement. There is no
-   separate run/segment box: a work card shows one phase class (`work`,
-   `sketch` or `render`, colour only — `itemPhase`) plus `late` when it
-   qualifies, and `dragging`/`refused` are added only for the gesture's
-   duration. No `.grun`, no per-segment handle — never built for the single-
-   bar model. [`on-mousedown="['barDragStart', ...]"` on `.gitem`; block 7]
-3. **No HTML5 drag-and-drop, anywhere in this contract.** `draggable` stays
-   absent from the shipped source — `test/drag-hittest.test.ts` sweeps it as
-   a set that must stay EMPTY, separately from the pointer sources. Pointer
-   events were chosen because HTML5 DnD fails inside sticky and scrolling
-   containers, which this layout has (build-spec-v1.3 §5.2). [block 7]
-4. **Day-grain snap, not week-grain.** `barDragMove` reads the day under the
-   pointer through `dayAtX(clientX, rect, weeks)` — the same workday-indexed
-   axis `dayAtX` gives the click-to-place `+` (sprint-rules.md R10-a) — and
-   stores it as `dragDay`; the bar's preview position comes from `barLeftAt`
-   at that day (rule 13, below), not from `plusLeft`, which the `+` alone
-   uses. Snapping to a week column, and the mid-drag chip showing a
-   week and a delta, described the retired contract and are not built.
-5. **The bar previews at the dragged day with its OWN width unchanged** —
-   `dragLeft` repositions the same box `itemBar` already sized; nothing
-   stretches or shrinks it mid-drag. `dragLeft` comes from `barLeftAt(row,
-   day)` (rule 13, below), never `plusLeft`, so the preview carries `itemBar`'s
-   own MIN_GRAB final-column slide and never overhangs the track. A day
-   outside the row's own sprint or past its deadline previews wearing
-   `refused` and does not commit on release (`placeable`, sprint-rules.md
-   R10-e). A holiday is the one case this does NOT catch: `placeable` has no
-   holiday clause on purpose (R10-e — the ARES calendar is canonical and the
-   client holds no copy of it), so a holiday inside the sprint and before the
-   deadline previews and commits like any other day and is refused only by
-   the server's 422 `NOT_A_WORKDAY` on release — the bar then snaps back with
-   the server's message shown (rule 6).
-6. **Commit is `mouseup`**, and only when the day changed and is placeable:
-   `barDragEnd` PATCHes `starts_on` to `dragDay`, optimistic — the bar stays
-   at the dropped day until the row reloads — and rolls back with the
-   server's message shown in the existing error banner on a 422
-   (sprint-rules.md R10-b). Releasing on the day the row already sits on, or
-   on a refused day, writes nothing.
-7. **Escape cancels** — `barDragCancel` snaps the bar back to its last saved
-   position and sends no write, matching build-spec-v1.3 §5.2's Escape rule
-   for the retired multi-row shift.
-8. **No ghost element.** The bar itself is the only thing that moves; there
-   is nothing behind it to snapshot and nothing painted in a `.gghost`
-   layer — that class does not exist in the shipped template.
-9. **`mousemove` is bound unconditionally, `mouseup`/`keydown` only while a
-   drag is live.** `barDragMove` is wired by the TEMPLATE on every placed
-   row's `.gtrack` at all times (`40-schedules.html`'s `{{else}}` arm on the
-   track element) — it is never attached or removed by `barDragStart`; the
-   handler itself guards with `if (app.get('dragRow') !== rowId) return`, so
-   an idle track calling it is a no-op. `mouseup` (`barDragUp`) and `keydown`
-   (`barDragKey`, capture) ride the WINDOW and ARE attached in `barDragStart`
-   and removed by `barDragStop()` — called at the TOP of `barDragEnd` (before
-   any await, "the listeners go first, on every path below"), in
-   `barDragCancel`, and in `resetForProjectSwitch` — never in a `finally`. A
-   stray `mouseup` at rest reaches nothing because these two are the only
-   ones ever detached.
-10. **Multi-row relative-shift drag (build-spec-v1.3 §5.2) is not built.**
-    One row drags at a time; dragging several rows a week apart and
-    preserving that spacing is out of this pilot (PLAN.md "Not built").
-11. **Cross-sprint drag is not built, in either direction.** `placeable(row,
-    day)` (sprint-rules.md R10-e) refuses every day outside the row's OWN sprint, so
-    neither the pointer nor a click can ever name a day inside a different
-    sprint's range; `plotPlace` and `barDragEnd` PATCH `{ starts_on }` only —
-    neither carries a `sprint_id`. The route-level machinery that would judge
-    a day sent WITH a `sprint_id` against the TARGET sprint exists
-    (sprint-rules.md R10-b, tested directly) but has no caller in the client:
-    it is reachable only by a hand-written request, not by anything a PM can
-    do on screen.
-12. **The grab offset — `dragGrab`.** `barDragStart` reads the day under the
-    pointer at mousedown (`dayAtX` against the `.gtrack` ancestor of the
-    `.gitem` grabbed) and stores its distance from the row's own `startsOn`
-    in whole units as `dragGrab`; `barDragMove` walks the pointer's X back by
-    `dragGrab` units of the track's width before naming the day, so the bar's
-    LEFT EDGE stays under the same point of the pointer that grabbed it
-    instead of teleporting to the cursor. `barDragMove` and `plotHover` share
-    the one mapper (`dayAtX`) with the same clamp, so a drag and a fresh
-    placement can never land a pixel apart for the same day. [`50-gantt-
-    geometry.js`, `90-events.js`]
-13. **`barLeftAt(row, day)` is the drag preview's left**, carrying
-    `itemBar`'s own MIN_GRAB final-column slide (§2 rule 20) — `left = max(0,
-    min(dayIndex(day), TOTAL_UNITS − width))` — so the preview at mousedown
-    equals the box's own resting left (no jump on grab) and the preview never
-    slides the box past the track's right edge for a bar starting in the
-    final drawn columns. `dragLeft` is computed by `barLeftAt` alone, never
-    by `plusLeft`.
-14. **A lost `mouseup` cancels rather than commits.** `barDragMove` checks
-    `ctx.event.buttons === 0` on every move; a release the window listener
-    never saw (over a native layer, a devtools break, outside the frame)
-    fires `barDragCancel` on the next move rather than leaving the gesture
-    armed for an unrelated later `mouseup` to commit.
-15. **`plotHover` stands down while a bar drag is live** — gated on
-    `app.get('dragRow')` in addition to the saving lock — so a pointer that
-    wanders vertically across a neighbouring unplotted row's track mid-drag
-    does not light that row's `+` and hover tint. (The affordance would be
-    inert either way — nothing there is clickable while `sprintItemSaving` or
-    a drag holds the lock — but the gate keeps a second offer off screen.)
-16. **Escape is captured, not bubbled.** `barDragKey` is bound with
-    `{ capture: true }` and calls `stopPropagation()`, removed with the same
-    flag; only while a drag is live. Without capture, the mousedown's own
-    `preventDefault()` leaves focus wherever it was — often a sprint's
-    add-search field — and a bubble-phase Escape would first clear that
-    field's query (R8-h) before ever cancelling the drag. Capture puts the
-    drag's Escape first, on the way down, so the field never sees the key
-    while a drag owns it.
-17. **The `.gweek` cells are swept as drop targets in their own right** — a
-    `pointer-events: none` on their chain (e.g. `.gtrack`) is banned even
-    when every `.gitem` source still drags. `.gtrack` is load-bearing twice
-    over now: it takes the placement click (`plotHover`/`plotPlace`) AND
-    binds `barDragMove` (rule 9) for every placed row's drag — so a chain
-    that swallowed the week cells would break both the click-to-place `+`
-    and the drag it sits beside, on every unplotted AND every placed row.
+1. **A drag source must stay hit-testable in every state, on whichever tab
+   owns the gesture.** Source is `.gitem` here (rule 2), `.dlcard` on
+   Deadlines (deadlines-rules.md §1a, R-d2-t). `pointer-events: none`,
+   `visibility: hidden` or `display: none` on the source or an ancestor
+   must never make it unclickable, in any state. Each tab's own suite
+   proves its own states: `test/drag-hittest.test.ts` here (rule 25),
+   `test/deadlines-drag.test.ts` there. [R-g-1, batch 7; principle
+   carried, wording generalised block 9]
+2. **The placement source is `.gweek`, not `.gitem`.** `.gitem` is
+   DISPLAY-ONLY from block 9 on — it still draws the row's placed bar
+   (`itemBar`, colour, `late`, a `title`, rule 42) but takes no pointer
+   handler: no `mousedown`, no `dragging`/`refused` class, `cursor:
+   default`. The gesture lives on every row's `.gweek` track cells
+   (placed rows included): `weekHover`/`weekLeave` light `.gweek.hover`;
+   `weekPlace` on click PATCHes `{ week }` (rule 6). **(reversed
+   2026-09-11 by owl #88; was: "The drag source is `.gitem`" — picked up
+   by `barDragStart` on `mousedown`, driven day-grain by
+   `barDragMove`/`barDragEnd`, block 7.)** [`90-events.js
+   weekHover/weekLeave/weekPlace`; `40-schedules.html`]
+3. **No HTML5 drag-and-drop, on either surface.** `draggable` stays
+   absent from shipped source on both tabs — swept as an EMPTY set.
+   Pointer events were chosen because HTML5 DnD fails inside sticky and
+   scrolling containers, which both layouts have (build-spec v1.4
+   §5.2/§6.5). [unaffected]
+4. **Sprint Schedules snaps to WEEKS — day-grain snap is retired.**
+   `weekHover`/`weekPlace` read the `.gweek` column by its own index
+   (`@index` into `plannerWeeks`); no day-level read remains on this tab.
+   `dayAtX`, `plusLeft` and `placeable` are DELETED —
+   `50-gantt-geometry.js` keeps only `itemBar`, `deadlineTick`,
+   `dayIndex` and `barLeftAt` (display caller only, rule 13). Deadlines'
+   own day-level read is a different geometry problem (a fixed 5-column
+   lane, not a track) — deadlines-rules.md §1a, R-d2-t. **(reversed
+   2026-09-11 by owls #88/#89; was: `barDragMove` read the day via
+   `dayAtX`, block 7.)**
+5. **A week click either lands or is a no-op — no drag preview to
+   refuse.** `weekPlace` always resolves to a day inside the clicked week
+   (rule 6); this tab carries no per-day guard (sprint-rules.md R10-a) and
+   so nothing to preview refused. The refused-preview idiom (pale wash,
+   snap-back) moves whole to Deadlines, where a drop CAN fail —
+   deadlines-rules.md §1a, R-d2-v, reusing this tab's visual treatment.
+   **(reversed 2026-09-11 by owls #88/#89; was: the bar previewed
+   `refused` via `dragLeft`/`barLeftAt`, gated by `placeable`, block 7 —
+   all retired.)**
+6. **Commit is `weekPlace`'s click** — PATCHes `{ week }` (the clicked
+   week's Monday ISO); the server resolves `starts_on` to that week's
+   FIRST WORKING DAY (`firstWorkdayOfWeek`, owl #89 §2 — never a bare
+   Monday) and judges the sprint check against the target (sprint-rules.md
+   rule 30). The bar draws optimistically at the week's Monday until the
+   server answers, rolling back on a 4xx. A click on the row's own week is
+   a no-op (rule 38, sprint-rules.md). Deadlines commits on release —
+   deadlines-rules.md §1a, R-d2-w. **(reversed 2026-09-11 by owls #88/#89;
+   was: "Commit is `mouseup`" on `.gitem`'s day-grain drag, block 7.)**
+   [`schedule.ts`; `sprint-items.ts firstWorkdayOfWeek`]
+7. **Escape cancels, on both surfaces.** Deadlines' `dlDragCancel`
+   (deadlines-rules.md §1a) snaps back and sends no write; this tab has no
+   mid-gesture state to cancel — a hover leaving `.gweek` before a click
+   just clears `hoverRow`/`hoverWeek`. Matches build-spec v1.4 §6.5's
+   Escape rule. [unaffected in principle]
+8. **No ghost element, on either surface.** The bar or the card is the
+   only thing that moves; no `.gghost` layer exists. [unaffected]
+9. **No drag-lifetime listeners remain on Sprint Schedules to bind.**
+   `weekHover`/`weekLeave`/`weekPlace` are plain per-cell handlers, no
+   armed/disarmed state — no `mousemove`/`mouseup`/`keydown` window
+   binding on this tab any more. Deadlines' own lifetime binding
+   (`dlDragMove`/`dlDragEnd` on the window while live; `dlKey` per-card,
+   focus-gated) is deadlines-rules.md §1a's rule. **(reversed 2026-09-11
+   by owls #88/#89; was: `mousemove` bound unconditionally on every
+   `.gtrack`, `mouseup`/`keydown` armed only during a drag, block 7 — all
+   deleted with `barDragStart`/`barDragMove`/`barDragEnd`/`barDragCancel`/
+   `barDragUp`/`barDragKey`/`barDragStop`.)**
+10. **Multi-row relative-shift drag (build-spec v1.3/v1.4 §5.2) is not
+    built.** Unaffected — still Sprint-Schedules-only, still week-grain
+    when built (PLAN.md "Not built"; owl #88 "Not affected").
+11. **Cross-sprint drag is not built, on either tab.** A week click's
+    valid targets are confined to weeks within the row's own sprint
+    (sprint-rules.md rule 30); Deadlines' week bound (deadlines-rules.md
+    §1a, R-d2-u) plus sprints' always-Mon/Fri-aligned boundaries (rule 33)
+    exclude it there too, structurally, not merely by omission.
+    **(reversed 2026-09-11 by owls #88/#89; was: keyed off
+    `placeable(row, day)`, R10-e, retired with the day-grain gesture.)**
+12. **The grab offset (`dragGrab`) is RETIRED — moot on both surfaces.** A
+    week click has no sub-week pixel precision to preserve; Deadlines'
+    day-drag drops into discrete cells under the pointer
+    (deadlines-rules.md §1a, R-d2-t), not a continuous track — nearest
+    cell at release IS the mechanic. **(reversed 2026-09-11 by owls
+    #88/#89; was: `barDragStart` stored the pointer's offset from
+    `row.startsOn` as `dragGrab`, block 7.)**
+13. **`barLeftAt(row, day)` is kept, DISPLAY-CALLER ONLY** — it positions
+    the resting `.gitem` bar (rule 19) but is no longer called by any drag
+    preview on either tab. `dragLeft` (state) is DELETED. **(reversed
+    2026-09-11 by owls #88/#89; was: `barLeftAt` fed the drag preview's
+    `dragLeft`, block 7.)**
+14. **A lost pointerup cancels rather than commits — Deadlines only.**
+    `dlDragMove` checks the event's buttons on every move; a release the
+    window never saw fires `dlDragCancel` on the next move rather than
+    arming for a later unrelated commit (deadlines-rules.md §1a). Sprint
+    Schedules has no drag-lifetime state left to corrupt (rule 9).
+15. **No drag lock remains on Sprint Schedules to stand down for.**
+    `weekHover`/`weekLeave` are plain hover handlers, inert under
+    `sprintItemSaving` same as any control here — nothing else competes.
+    Deadlines' `dlDrag` names one `rowId` at a time, so a neighbouring
+    card mid-drag is a no-op by construction. **(reversed 2026-09-11 by
+    owls #88/#89; was: `plotHover` gated on `app.get('dragRow')`, block 7
+    — both deleted.)**
+16. **Escape is captured, not bubbled — where it still matters.**
+    Deadlines' window Escape handler (deadlines-rules.md §1a) is bound
+    `{ capture: true }`, stopping propagation so a bubble-phase Escape
+    never reaches whatever had focus first. Sprint Schedules keeps this
+    rule's ORIGINAL hazard for its add-search field (sprint-rules.md
+    R8-h), unaffected — though no `.gitem` drag remains to capture ahead
+    of it.
+17. **The `.gweek` cells are swept as drop targets in their own right —
+    unchanged, now load-bearing for PLACEMENT itself, not only the drag it
+    sat beside.** A `pointer-events: none` on their chain (e.g. `.gtrack`)
+    is banned even though `.gitem` carries no handler. `.gtrack` takes
+    `weekHover`/`weekLeave`/`weekPlace` for every row, placed or not.
     `test/drag-hittest.test.ts`'s week-cell sweep proves this non-vacuous
-    against `.gweek` and `.gantt .gtrack` directly, independent of the
-    `.gitem` source sweep (rule 1). [`test/drag-hittest.test.ts`]
-18. **The placement `+` is exactly one unit wide** — `.gplus` is `var(--gu)`
-    square (`--gu` = `--gw` / `WORKDAYS_PER_WEEK`), filling its `.ghovcell`
-    column rather than a fixed pixel size centred by a margin; at day-grain
-    columns (18.4px at 92px week width) a fixed-size circle would overhang
-    both neighbours and be clipped — under the sticky left pane at unit 0,
-    under `.gwrap`'s `overflow: hidden` at unit 59. The `+` and its hover
-    tint agree on the same one-unit box by construction.
+    against `.gweek` and `.gantt .gtrack` directly. [unaffected in
+    substance, rewired to the new handlers]
+18. **The placement affordance fills the whole `.gweek` cell — no
+    separate `+` element.** Block 7's `.gplus`/`.ghovcell` are REMOVED;
+    the week's own cell is both hover and click target, tinted
+    `.gweek.hover` (block 7's `.ghovcell` colour, carried over). No
+    unit-width arithmetic remains to get wrong at either clipped edge —
+    the cell IS the target. **(reversed 2026-09-11 by owl #88; was: a
+    unit-wide `.gplus`, `var(--gu)` square, filling a `.ghovcell` day
+    column, block 7.)** [`35-gantt.css`; `40-schedules.html`]
 
 ## 2. Geometry
 
@@ -202,15 +194,27 @@ and `frontend/scripts/50-gantt-geometry.js`.
     carries `startsOn`/`finish` off the server, so the bar and the
     FORECASTED column are one field and cannot disagree. [R3]
 25. **Which tests guard what**: `test/drag-hittest.test.ts` — hit-testability
-    of every enumerated `.gitem` source and state, the empty `draggable` set,
-    ancestor sweeps, and the `.gweek`/`.gtrack` week-cell sweep (rule 17)
-    separately from the `.gitem` source sweep;
-    `test/sprint-schedule-bars-footer.test.ts` — bar and
-    deadline-tick geometry on both axes against a frozen oracle (horizontal
-    within the 0.02 pp bound, vertical by exact equality), the dead-class
-    bans (`.grun`, `.gbar`, `.gseg.review`, `.gdragging`, …), footer capacity;
+    of `.gweek` cells and the week-cell sweep (rule 17), the display-only
+    `.gitem` states (late; `dragging`/`refused` removed — rule 2), the
+    empty `draggable` set; `test/deadlines-drag.test.ts` (new, block 9) —
+    hit-testability and states of `.dlcard`/`.dlday` on Deadlines, the
+    four-condition refusal sweep, Escape and the arrow-key nudge
+    (deadlines-rules.md §1a); `test/sprint-schedule-bars-footer.test.ts` —
+    bar and deadline-tick geometry on both axes against a frozen oracle
+    (horizontal within the 0.02 pp bound, vertical by exact equality), the
+    dead-class bans (`.grun`, `.gbar`, `.gseg.review`, `.gdragging`,
+    `.gplus`, `.ghovcell`, `.gitem.dragging`, `.gitem.refused`, …), footer
+    capacity; `test/sprint-items-plot.test.ts` (new, block 9 — split of
+    `test/sprint-items.test.ts` at the plot-guard tests) — `OUT_OF_WEEK`,
+    `weekKeyOf`, `firstWorkdayOfWeek` alongside the three carried guards;
     `test/gantt-legend.test.ts` — each phase colour declared once. Guards
-    assert the RULE, never a snapshot. [supersedes batch 8–9; review sweep]
+    assert the RULE, never a snapshot. **(reversed 2026-09-11 by owls
+    #88/#89: the day-grain sweeps `test/sprint-schedule-
+    deadline.test.ts:379-637` and part of `test/sprint-schedule-bars-
+    footer.test.ts:436-890` (incl. Escape-mid-drag) and the `.gitem`
+    drag-source sweep `test/drag-hittest.test.ts:554-840` are deleted;
+    their behaviour's test coverage moved to Deadlines' own suite.)**
+    [supersedes batch 8–9; review sweep; block 9]
 
 ## 4. Standing decisions — deliberately not done
 
@@ -233,12 +237,23 @@ and `frontend/scripts/50-gantt-geometry.js`.
     [supersedes batch 9 §honest-line]
 44. **Not built, by product**: the sprint-header checkbox; a click-to-open
     range picker on the bar; the multi-row relative-shift drag and
-    cross-sprint drag of build-spec-v1.3 §5.2 (§1 rules 10–11); dimming
-    out-of-range weeks; hiding holiday days client-side (the server refuses
-    them — sprint-rules.md R10-e); keyboard nudging of a bar. Accept keeps
-    the label "Accept". Cards carrying a suggest note but absent from `plan`
-    surface nowhere — flagged, stands. [R6; batch 3; PLAN.md block 7 "Not
-    built"]
+    cross-sprint drag of build-spec v1.3/v1.4 §5.2 (§1 rules 10–11);
+    dimming out-of-range weeks; hiding holiday days client-side (the
+    server refuses them — deadlines-rules.md §1a, relocated from
+    sprint-rules.md R10-e). Accept keeps the label "Accept". Cards
+    carrying a suggest note but absent from `plan` surface nowhere —
+    flagged, stands. **Keyboard nudging of a bar is BUILT, block 9 — not
+    on this tab.** v1.4 §8 ("NFR-9 is not optional decoration") and owls
+    #88/#89 put the only day control, keyboard included, on Deadlines: a
+    focused `.dlcard`'s ArrowLeft/ArrowRight nudge the day one working day
+    at a time through the same write and the same four conditions as the
+    pointer drag (deadlines-rules.md §1a, R-d2-x). Sprint Schedules' own
+    week-grain placement has no keyboard equivalent and none is owed by
+    v1.4 §8 (the day-drag is named as the instrument needing one, not the
+    week click) — that gap is unchanged and still stands as not-built.
+    **(reversed 2026-09-11 by owls #88/#89, v1.4 §8; was: "keyboard
+    nudging of a bar" listed here as a deliberate non-build, batch 3.)**
+    [R6; batch 3; PLAN.md block 7 "Not built" / block 9]
 45. **`.gitem` does not restate `--gbar-h` or a translate anywhere else** — a
     second copy can be re-tuned alone. [supersedes batch 9, which said the
     same of the retired `.gseg`]

@@ -94,33 +94,42 @@ const app = new Ractive({
     /* the checkbox — a row HIGHLIGHT whose semantics are still with product
        (owl jp→miles #60); it gates nothing in placement */
     sprintSel: null,
-    /* the hover pair (node 731:100277): `plotRow` is the committed row whose
-       track the pointer is on, and `plotDay` the WORKDAY under it, where the
-       cell tints and the violet + renders. `plotDay` is null whenever the
-       pointer is elsewhere — and also whenever the day under it is one this
-       row may not be placed on (outside its sprint, or after its deadline):
-       one key carries both "no hover" and "no offer", which is what keeps the
-       + and the tint from ever advertising a write the server would refuse.
-       Only committed rows have a live track: the search row and its results
-       draw no + (owl #77 §0, node 840:31630; PLAN.md B5). */
-    plotRow: null,
-    plotDay: null,
-    /* the bar drag (block seven, JP 2026-09-08): `dragRow` is the PLACED row
-       whose coloured run is under the button, `dragDay` the workday the
-       pointer currently names, and `dragLeft` the preview offset the bar
-       renders at while the gesture runs (`barLeftAt` — the resting bar's own
-       left at that day, slide and all), its width unchanged.
-       `dragGrab` is WHERE INSIDE THE BAR the pointer took hold, in whole
-       units, signed: the bar's left column minus the pointer's (review
-       2026-09-09). Applied on every move, it is what makes the bar travel
-       WITH the pointer instead of snapping its left edge underneath it.
-       All four null at rest, and cleared together on release, on cancel and
-       on a refusal, which is what makes the bar snap back to the start the
-       server still holds. */
-    dragRow: null,
-    dragDay: null,
-    dragLeft: null,
-    dragGrab: null,
+    /* the WEEK hover (block nine, JP 2026-09-10 — owl #88 reversed block
+       seven's day grain): `hoverRow` is the committed row whose track the
+       pointer is on, and `hoverWeek` the INDEX into plannerWeeks of the week
+       column under it — the cell the template tints. `hoverWeek` is null
+       whenever the pointer is elsewhere, and also whenever the week under it
+       is one this row may not be placed in at all (every day of it outside
+       the sprint, or every day past the deadline): one key carries both "no
+       hover" and "no offer", so the tint never advertises a write the server
+       would refuse outright. The DAY inside the week is never chosen here —
+       a click sends the week and the server lands the row on its first
+       working day (#89 §2); the day belongs to the Design Lead, on Deadlines
+       (#88). Only committed rows have a live track: the search row and its
+       results draw nothing (owl #77 §0, node 840:31630; PLAN.md B5). */
+    hoverRow: null,
+    hoverWeek: null,
+    /* the Deadlines day drag (block nine, owls #88/#89; PLAN.md "Client
+       state"): null at rest, else the one live gesture — `rowId` the sprint
+       item under the pointer (or under the arrow keys), `fromDay` the start
+       the server holds, `day` the column the pointer currently names or null
+       when it names none, `refused` when that day is one the row may not
+       have (outside its assigned week, outside its sprint, past its deadline,
+       or no column at all), and `weekKey` the Monday of the ASSIGNED week —
+       the bound the whole gesture is judged against (#89 §1: the Design Lead
+       rearranges days INSIDE the week the PM assigned, never across its
+       edge). Cleared on release, on cancel and on a refusal, and clearing IS
+       the snap-back: the card's column comes from the row's own `startsOn`,
+       the value the server still holds. A brief `refused` marker with no
+       pointer behind it is the keyboard nudge saying no (dlNudge). */
+    dlDrag: null,
+    /* owl #90: the cards a sprint re-date just moved to Outside any sprint,
+       as the save's response named them — `[{ id, display_id, title,
+       starts_on, from_sprint }]` — or null when the last save displaced
+       nothing or the notice was dismissed. VIEW state: the rows themselves
+       carry `sprintId: null` and render under the outside group on the next
+       load; this list is only the notice that says which ones and why. */
+    sprintDisplaced: null,
     /* owl #77 §0 (PLAN.md B10): sprintId → the text in that sprint's search
        field, two-way bound. A MAP, not one string: every sprint has its own
        always-visible field and several may hold text at once. Survives a
@@ -462,7 +471,28 @@ const app = new Ractive({
        calendar is not read: the frame draws no holiday state, and a calendar
        refresh must not rebuild every lane for a flag nothing renders. */
     dlWeeks() {
-      return dlBuild(this.get('sprintItems.rows'), this.get('dlMondays'), this.get('capacity.weekly'));
+      const weeks = dlBuild(this.get('sprintItems.rows'), this.get('dlMondays'), this.get('capacity.weekly'));
+      /* THE DRAG'S HANDLES (block nine, owls #88/#89; PLAN.md "Template"):
+         the card partial binds `c.rowId` to the day drag and reads
+         `c.startsOn` and `c.title` into the card's accessible name. All
+         three are stamped here, once per build, rather than computed in the
+         template (frontend/CLAUDE.md, performance law): `rowId` is the sprint
+         item id the PATCH is addressed to — the same `id` dlBuild already
+         carries, named for what the handler does with it; `startsOn` is the
+         column's own day, which is the day the card was slotted into by
+         construction; `title` is the card's printed label. A collapsed
+         lane's `cards` are the same objects as its days', so one pass over
+         the days stamps both views. */
+      for (const w of weeks) {
+        for (const d of w.days) {
+          for (const c of d.cards) {
+            c.rowId = c.id;
+            c.startsOn = d.day;
+            c.title = c.label;
+          }
+        }
+      }
+      return weeks;
     },
     /* ---- Requests (owl #77 §1–4; PLAN D2, D4, D5, D8, D12) ------------------
        Pipeline's chain over the one unfiltered payload: search → axes → sort →
@@ -715,15 +745,24 @@ const app = new Ractive({
        needs a home, and an empty sprint that vanished would leave nowhere to
        put its first card. Rows are the server's sprint_items filtered by
        sprintId, in the server's own order (position-sorted there; re-sorting
-       here would fight the persisted order). NO 'outside' and NO
-       'unscheduled' group: absence is the design (#72 §2) — a work card
-       either belongs to a sprint or it is not on this screen.
+       here would fight the persisted order). NO 'unscheduled' group: a work
+       card either belongs to a sprint or it is not on this screen (#72 §2).
+
+       ONE MORE group, and only when it has rows (owl #90, block nine;
+       PLAN.md "Client state"): *Outside any sprint* — the rows a sprint
+       re-date displaced. They keep the exact day they sat on and lose only
+       their membership (`sprintId: null`), so they render here, last, with
+       their bars where they were, until the PM re-slots them by hand. The
+       group's id is the literal 'outside' — never a sprint id, so no search
+       panel, no add and no capacity keys on it — and it is absent, not
+       empty, whenever nothing is displaced: absence is still the design for
+       everything that has a sprint.
 
        `meta` and `count` stay two strings because the frame gives them two
        tones (sprintHeader: '#duration' #64748b, '#items' #94a3b8). */
     sprintGroups() {
       const items = this.get('sprintItems').rows;
-      return this.get('sprints').map((s) => {
+      const groups = this.get('sprints').map((s) => {
         const rows = items.filter((r) => r.sprintId === s.id);
         return {
           id: s.id,
@@ -733,6 +772,17 @@ const app = new Ractive({
           rows,
         };
       });
+      const outside = items.filter((r) => r.sprintId === null);
+      if (outside.length) {
+        groups.push({
+          id: 'outside',
+          name: 'Outside any sprint',
+          meta: 'no sprint dates',
+          count: itemCount(outside.length),
+          rows: outside,
+        });
+      }
+      return groups;
     },
     /* THE SEARCH PANELS (owl #77 §0; PLAN.md "Computed"): sprintId → { items }
        for every sprint whose field holds a query, derived through addMatches

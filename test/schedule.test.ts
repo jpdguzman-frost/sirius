@@ -2,8 +2,11 @@
  * Phase 7 backend — schedule writes (AC-13/AC-14 API side), ownership
  * enforcement, sprint overlap rejection (FR-5.15), suggest-proposes-only
  * (AC-15), duplicate-without-links (FR-5.12), audit on every change
- * (invariant 10), and the withdrawn acknowledgement/day-plan routes staying
- * withdrawn (owl #87, 2026-09-08).
+ * (invariant 10), the withdrawn acknowledgement/day-plan routes staying
+ * withdrawn (owl #87, 2026-09-08), and — since block 9 (owls #88/#89/#90) —
+ * the two owners of `PATCH /sprint-items/:itemId` (the PM's `week`, the
+ * Design Lead's bounded `starts_on`) and the re-date displacement on
+ * `PUT /sprints`.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -489,6 +492,273 @@ describe('the plot guard reads the active ARES working-day calendar (invariant 1
       setHolidays(restore);
     }
     expect(await SprintItem.countDocuments({ project_id: project._id })).toBe(1);
+  });
+});
+
+/* ====================================================================== *
+ * BLOCK 9 — two owners, one route (owls miles→jp #88/#89, JP 2026-09-10;
+ * PLAN.md block 9 "Server"): the PM's WEEK click and the Design Lead's DAY
+ * move share `PATCH /sprint-items/:itemId`, and a re-dated sprint displaces
+ * rows to *Outside any sprint* (owl #90) without refusing the save.
+ * ====================================================================== */
+
+/** One sprint (Mon 3 – Fri 14 Aug 2026), one work card, one row — unplotted unless `startsOn` says otherwise. */
+async function seedRow(projectId: Types.ObjectId, over: { startsOn?: string | null; due?: string | null; sprint?: { starts_on: string; ends_on: string } } = {}) {
+  const sprint = await Sprint.create({ project_id: projectId, name: 'Sprint 46', position: 1, ...(over.sprint ?? { starts_on: '2026-08-03', ends_on: '2026-08-14' }) });
+  await WorkCard.create({
+    project_id: projectId, trello_card_id: 'wc-1', mc_number: 'MC-655',
+    name: 'Sketch Asset: hero', task_prefix: 'Sketch Asset', current_list: 'Design', active: true,
+    ...(over.due ? { trello_due: over.due } : {}),
+  });
+  const item = await SprintItem.create({
+    project_id: projectId, sprint_id: sprint._id, mc_number: 'MC-655', trello_card_id: 'wc-1',
+    position: 0, added_by: 'pm@frostdesigngroup.com', ...(over.startsOn ? { starts_on: over.startsOn } : {}),
+  });
+  return { sprint, item };
+}
+const itemUrl = (pid: unknown, id: unknown) => `/api/projects/${pid}/sprint-items/${id}`;
+const rowOf = async (id: unknown) => (await SprintItem.findById(id).lean())!;
+
+describe('PATCH { week } — the PM’s week click lands the bar on the week’s FIRST WORKING day (#89 §2)', () => {
+  it('resolves the day on the canonical calendar, audits before/after, and answers the day it chose', async () => {
+    const { project, agent } = await setup();
+    const { item } = await seedRow(project._id);
+    const res = await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-10' }).expect(200);
+    expect((await rowOf(item._id)).starts_on).toBe('2026-08-10');
+    expect(res.body.ok).toBe(true);
+    const log = await AuditLog.findOne({ action: 'sprintItem.plot', entity_id: String(item._id) }).lean();
+    expect(log!.before).toMatchObject({ starts_on: null });
+    expect(log!.after).toMatchObject({ starts_on: '2026-08-10' });
+    expect(log!.actor).toBe('pm@frostdesigngroup.com');
+  });
+
+  it('hands a holiday Monday to Tuesday — the ARES calendar decides, never a weekday assumption (invariant 11)', async () => {
+    const { project, agent } = await setup();
+    const { item } = await seedRow(project._id);
+    const restore = getHolidays();
+    try {
+      setHolidays(['2026-08-10']);
+      await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-10' }).expect(200);
+    } finally {
+      setHolidays(restore);
+    }
+    expect((await rowOf(item._id)).starts_on).toBe('2026-08-11');
+  });
+
+  it('judges the resolved day on the three non-week checks — the sprint, the deadline, the calendar', async () => {
+    const { project, agent } = await setup();
+    const { item } = await seedRow(project._id, { due: '2026-08-05' });
+    // a week the sprint does not cover
+    let res = await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-17' }).expect(422);
+    expect(res.body.error.code).toBe('OUT_OF_SPRINT');
+    // a week whose first working day is past the deadline
+    res = await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-10' }).expect(422);
+    expect(res.body.error.code).toBe('PAST_DEADLINE');
+    // a week of nothing but holidays has no day to offer
+    const restore = getHolidays();
+    try {
+      setHolidays(['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07']);
+      res = await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-03' }).expect(422);
+      expect(res.body.error).toMatchObject({ code: expect.any(String), message: expect.any(String) });
+    } finally {
+      setHolidays(restore);
+    }
+    // every refusal wrote nothing and audited nothing
+    expect((await rowOf(item._id)).starts_on ?? null).toBeNull();
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
+    // IS NOT VACUOUS: the week every check allows lands
+    await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-03' }).expect(200);
+    expect((await rowOf(item._id)).starts_on).toBe('2026-08-03');
+  });
+
+  it('refuses a week that is not a Monday, and a week sent WITH a day, as malformed (400) — nothing judged, nothing written', async () => {
+    const { project, agent } = await setup();
+    const { item } = await seedRow(project._id);
+    for (const body of [
+      { week: '2026-08-11' }, // a Tuesday
+      { week: '2026-08-09' }, // a Sunday — the UTC-midnight trap would call it Monday's key
+      { week: '2026-08-10', starts_on: '2026-08-12' }, // two owners in one act
+      { week: '2026-08-10', starts_on: null },
+    ]) {
+      const res = await agent.patch(itemUrl(project._id, item._id)).send(body).expect(400);
+      expect(res.body.error.code, JSON.stringify(body)).toBe('INVALID_BODY');
+    }
+    expect((await rowOf(item._id)).starts_on ?? null).toBeNull();
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
+  });
+
+  it('re-places a PLACED row by week — the Design Lead’s day is the PM’s to overwrite by week (drift report §H)', async () => {
+    const { project, agent } = await setup();
+    const { item } = await seedRow(project._id, { startsOn: '2026-08-05' });
+    await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-10' }).expect(200);
+    expect((await rowOf(item._id)).starts_on).toBe('2026-08-10');
+    // the same week again is the no-op it is (invariant 10 logs changes)
+    const res = await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-10' }).expect(200);
+    expect(res.body.noop).toBe(true);
+    expect(await AuditLog.countDocuments({ action: 'sprintItem.plot', entity_id: String(item._id) })).toBe(1);
+  });
+});
+
+describe('PATCH { starts_on } — the Design Lead’s day move stays INSIDE the row’s week (#89 §1), and needs a week to stay inside', () => {
+  it('answers 422 NOT_PLACED for a row with no day — a card with no week is not on Deadlines to be dragged', async () => {
+    const { project, agent } = await setup();
+    const { item } = await seedRow(project._id);
+    const res = await agent.patch(itemUrl(project._id, item._id)).send({ starts_on: '2026-08-05' }).expect(422);
+    expect(res.body).toMatchObject({ ok: false, error: { code: 'NOT_PLACED', message: expect.any(String) } });
+    expect((await rowOf(item._id)).starts_on ?? null).toBeNull();
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
+    // the same body on the SAME row once the PM has given it a week goes through
+    await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-03' }).expect(200);
+    await agent.patch(itemUrl(project._id, item._id)).send({ starts_on: '2026-08-05' }).expect(200);
+    expect((await rowOf(item._id)).starts_on).toBe('2026-08-05');
+  });
+
+  it('answers 422 OUT_OF_WEEK, in the fourth voice, for a day past either edge of the current week — nothing written', async () => {
+    const { project, agent } = await setup();
+    const { item } = await seedRow(project._id, { startsOn: '2026-08-05' }); // Wed of week 3–7 Aug
+    for (const day of ['2026-08-10', '2026-07-31', '2026-08-14']) {
+      const res = await agent.patch(itemUrl(project._id, item._id)).send({ starts_on: day }).expect(422);
+      expect(res.body.error, day).toEqual({
+        code: 'OUT_OF_WEEK',
+        message: "That day is outside the card's assigned week (Mon 3 Aug 2026 – Fri 7 Aug 2026).",
+      });
+    }
+    expect((await rowOf(item._id)).starts_on).toBe('2026-08-05');
+    expect(await AuditLog.countDocuments({ project_id: project._id })).toBe(0);
+  });
+
+  it('takes a day inside the week — 200, the day written, one audit row with before and after', async () => {
+    const { project, agent } = await setup();
+    const { item } = await seedRow(project._id, { startsOn: '2026-08-05' });
+    for (const day of ['2026-08-03', '2026-08-07', '2026-08-04']) {
+      await agent.patch(itemUrl(project._id, item._id)).send({ starts_on: day }).expect(200);
+      expect((await rowOf(item._id)).starts_on, day).toBe(day);
+    }
+    const moves = await AuditLog.find({ action: 'sprintItem.plot', entity_id: String(item._id) }).sort({ _id: 1 }).lean();
+    expect(moves.map((m) => [(m.before as { starts_on: string }).starts_on, (m.after as { starts_on: string }).starts_on])).toEqual([
+      ['2026-08-05', '2026-08-03'], ['2026-08-03', '2026-08-07'], ['2026-08-07', '2026-08-04'],
+    ]);
+    expect(moves.every((m) => m.actor === 'pm@frostdesigngroup.com')).toBe(true);
+  });
+
+  it('is gated by SURFACE only — any project member, no role check (JP at the block 9 gate, 2026-09-11)', async () => {
+    // a second member of the same project writes the day; a non-member cannot
+    // reach the route at all (invariant 9 — the membership check every route
+    // already makes, and the ONLY check here)
+    const { project, agent } = await setup();
+    const { item } = await seedRow(project._id, { startsOn: '2026-08-05' });
+    const lead = await User.create({ email: 'lead@frostdesigngroup.com' });
+    await UserProject.create({ user_id: lead._id, project_id: project._id });
+    const app = createApp({ env, redis: null, mongo: null });
+    const leadAgent = request.agent(app);
+    await leadAgent.post('/__test/login').send({ userId: String(lead._id), email: lead.email }).expect(200);
+    await leadAgent.patch(itemUrl(project._id, item._id)).send({ starts_on: '2026-08-06' }).expect(200);
+    expect((await rowOf(item._id)).starts_on).toBe('2026-08-06');
+    expect((await AuditLog.findOne({ action: 'sprintItem.plot', entity_id: String(item._id) }).lean())!.actor).toBe('lead@frostdesigngroup.com');
+    const outsider = await User.create({ email: 'other@frostdesigngroup.com' });
+    const outsiderAgent = request.agent(app);
+    await outsiderAgent.post('/__test/login').send({ userId: String(outsider._id), email: outsider.email }).expect(200);
+    const res = await outsiderAgent.patch(itemUrl(project._id, item._id)).send({ starts_on: '2026-08-07' });
+    expect([403, 404]).toContain(res.status);
+    expect((await rowOf(item._id)).starts_on).toBe('2026-08-06');
+    // the one-week route still guards the writer's own domain exactly as before
+    void agent;
+  });
+});
+
+describe('PUT /sprints re-date — displaced rows move to Outside any sprint, keeping their day; the save is never refused (#90)', () => {
+  const put = (agent: Agent, pid: unknown, sprint: { _id: unknown; name: string }, start: string, end: string) =>
+    agent.put(`/api/projects/${pid}/sprints`).send({ sprints: [{ id: String(sprint._id), name: sprint.name, start, end }] });
+
+  it('nulls the membership of a row whose day left the range, keeps the day, names it in displaced[], audits once as the editor', async () => {
+    const { project, agent } = await setup();
+    const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-12' });
+    const res = await put(agent, project._id, sprint, '2026-08-03', '2026-08-07').expect(200);
+    expect(res.body.displaced).toEqual([{
+      id: String(item._id), display_id: 'MC-655', title: 'Sketch Asset: hero', starts_on: '2026-08-12', from_sprint: expect.any(String),
+    }]);
+    expect([String(sprint._id), 'Sprint 46']).toContain(res.body.displaced[0].from_sprint);
+    const row = await rowOf(item._id);
+    expect(row.sprint_id ?? null).toBeNull(); // *Outside any sprint*
+    expect(row.starts_on).toBe('2026-08-12'); // the exact day, kept
+    // ONE audit row per displaced row, the editor as actor — never `system`
+    const logs = await AuditLog.find({ action: 'sprintItem.displaced', project_id: project._id }).lean();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      actor: 'pm@frostdesigngroup.com', entity: 'sprint_item', entity_id: String(item._id),
+      before: { starts_on: '2026-08-12', sprint_id: String(sprint._id) },
+      after: { starts_on: '2026-08-12', sprint_id: null },
+    });
+    // the sprint itself was re-dated, not refused
+    const saved = await Sprint.findById(sprint._id).lean();
+    expect(saved).toMatchObject({ starts_on: '2026-08-03', ends_on: '2026-08-07' });
+  });
+
+  it('keeps a row whose day is ON the new boundary, and never touches an UNPLOTTED row — inclusive at both ends, no day, no displacement', async () => {
+    const { project, agent } = await setup();
+    const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-07' });
+    const unplotted = await SprintItem.create({
+      project_id: project._id, sprint_id: sprint._id, mc_number: 'MC-655', trello_card_id: 'wc-2', position: 1, added_by: 'pm@frostdesigngroup.com',
+    });
+    const res = await put(agent, project._id, sprint, '2026-08-03', '2026-08-07').expect(200);
+    expect(res.body.displaced ?? []).toEqual([]);
+    expect(String((await rowOf(item._id)).sprint_id)).toBe(String(sprint._id));
+    expect(String((await rowOf(unplotted._id)).sprint_id)).toBe(String(sprint._id));
+    expect(await AuditLog.countDocuments({ action: 'sprintItem.displaced' })).toBe(0);
+  });
+
+  it('a re-date that displaces nothing answers no displaced[], touches no row, audits no displacement', async () => {
+    const { project, agent } = await setup();
+    const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-05' });
+    const before = await rowOf(item._id);
+    const res = await put(agent, project._id, sprint, '2026-08-03', '2026-08-13').expect(200);
+    expect(res.body.displaced ?? []).toEqual([]);
+    const after = await rowOf(item._id);
+    expect(after).toEqual(before); // byte for byte — no `updatedAt`, no position, nothing
+    expect(await AuditLog.countDocuments({ action: 'sprintItem.displaced' })).toBe(0);
+    expect(await AuditLog.countDocuments({ action: 'sprints.replace' })).toBe(1);
+  });
+
+  it('a SHRINK never enters the deletion path — the row stays, removed_items stays empty, the sprint keeps its id', async () => {
+    /* #90 keeps re-dating DISTINCT from deletion: deletion removes scheduled
+       rows, audited as removed_items, behind a confirmation naming the count;
+       a date edit is a light edit and must never be destructive. */
+    const { project, agent } = await setup();
+    const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-12' });
+    await put(agent, project._id, sprint, '2026-08-03', '2026-08-07').expect(200);
+    expect(await SprintItem.countDocuments({ _id: item._id })).toBe(1);
+    expect(await Sprint.countDocuments({ _id: sprint._id })).toBe(1);
+    const replace = await AuditLog.findOne({ action: 'sprints.replace' }).lean();
+    expect((replace!.after as { removed_items: unknown[] }).removed_items).toEqual([]);
+    /* …and a displaced row belongs to NO sprint, so even deleting the sprint
+       it was displaced from (the destructive act, cascading its own rows —
+       proven above in "removing a sprint removes its scheduled rows WITH
+       it") leaves it standing: it is the PM's to re-slot, never collateral. */
+    await agent.put(`/api/projects/${project._id}/sprints`).send({ sprints: [{ name: 'Other', start: '2026-09-07', end: '2026-09-11' }] }).expect(200);
+    expect(await SprintItem.countDocuments({ _id: item._id })).toBe(1);
+    expect((await rowOf(item._id)).starts_on).toBe('2026-08-12');
+  });
+
+  it('a displaced row re-slots by the PM’s week click — into the sprint that covers the day, else it stays outside (invariant 12)', async () => {
+    const { project, agent } = await setup();
+    const { sprint, item } = await seedRow(project._id, { startsOn: '2026-08-12' });
+    await put(agent, project._id, sprint, '2026-08-03', '2026-08-07').expect(200);
+    expect((await rowOf(item._id)).sprint_id ?? null).toBeNull();
+    // a week no sprint covers: the row keeps its new day and stays outside (gaps are legal)
+    await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-17' }).expect(200);
+    let row = await rowOf(item._id);
+    expect(row.starts_on).toBe('2026-08-17');
+    expect(row.sprint_id ?? null).toBeNull();
+    // the sprint's own week: membership derives from the day it lands on
+    await agent.patch(itemUrl(project._id, item._id)).send({ week: '2026-08-03' }).expect(200);
+    row = await rowOf(item._id);
+    expect(row.starts_on).toBe('2026-08-03');
+    expect(String(row.sprint_id)).toBe(String(sprint._id));
+    // and a displaced row still takes the Design Lead's day inside its week
+    await put(agent, project._id, sprint, '2026-08-10', '2026-08-14').expect(200); // displaces it again
+    expect((await rowOf(item._id)).sprint_id ?? null).toBeNull();
+    await agent.patch(itemUrl(project._id, item._id)).send({ starts_on: '2026-08-05' }).expect(200);
+    expect((await rowOf(item._id)).starts_on).toBe('2026-08-05');
   });
 });
 

@@ -397,11 +397,13 @@ describe('the search row and its results in CSS (833:68629 / 840:31597 / 841:336
     expect(result.some((r) => /padding:[^;]*29px/.test(r.body)), "the node's 29px label inset is gone").toBe(false);
   });
 
-  it('keeps the placement circle — the + outlived the add zone it shared a recipe with', () => {
-    expect(
-      rulesFor('gplus').some((r) => /var\(--indigo-500\)/.test(r.body)),
-      'the placement + lost its circle with the add zone',
-    ).toBe(true);
+  it('dropped the placement circle with the day controls — the + is gone from the sheet (block 9, #88)', () => {
+    /* INVERTED 2026-09-11. The `+` outlived the add zone it shared a recipe
+       with (owl #77) and then retired with block 7's day-grain placement:
+       the PM places by WEEK now, and the week tint is `.gweek.hover`. */
+    expect(rulesFor('gplus')).toEqual([]);
+    expect(rulesFor('gweek').some((r) => /\.gweek\.hover\b/.test(r.selector) && /var\(--indigo-500\)/.test(r.body)),
+      'the week tint is not the indigo the + wore').toBe(true);
   });
 });
 

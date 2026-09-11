@@ -1,0 +1,43 @@
+{{! THE DISPLACED-CARDS NOTICE — Sprint Schedules, above the groups (owl
+    miles→jp #90, JP's yes 2026-09-10; build spec v1.4 §5.3; PLAN.md block 9
+    R3). When a sprint's dates are edited so that already-placed cards fall
+    outside them, those cards KEEP THE EXACT DAY they sit on and move to
+    'Outside any sprint' — not re-placed, not pushed to the next sprint, not
+    unslotted. The save is never refused; the PUT answers with `displaced[]`
+    and the client parks it on `sprintDisplaced` until the PM dismisses it.
+    This notice is the LIST half of JP's 09-09 wish (the REFUSE half is
+    withdrawn by #90): it names every displaced card so the PM can re-slot
+    each by hand, deliberately — nothing is placed except deliberately.
+
+    Tone: a re-date is a LIGHT edit and must not read as destructive (#90),
+    so this wears the advisory amber the sprints modal's gap banner wears,
+    never the deletion confirm's — the styling is 30-planner.css §5, its own
+    recipe rather than the modal's .sbanner, because the modal's advisory
+    variant carries no CTA by ruling (R-f-5) and this one carries Dismiss.
+    No Figma frame exists for it (block 9 figma survey §4): provisional,
+    reported to Miles at CLOSE.
+
+    One line per card: display id · title · the day it keeps. The day is
+    the row's own starts_on, printed the way the schedule prints every date
+    and carried raw on the <time> so a reader (or a test) can take either.
+
+    Registered at the TOP LEVEL of its own file, beside the calendar and card
+    partials: a partial nested inside an element goes local and every call
+    from a view renders empty while the build still passes (frontend/CLAUDE.md;
+    standing guard test/template-partials.test.ts). The caller gates on
+    `sprintDisplaced` being non-null, so the length read below is safe. }}
+{{#partial displacedNotice}}
+<div class="dnotice" role="status">
+  <div class="dnhead">
+    <svg class="i15" aria-hidden="true"><use href="#i-warning" /></svg>
+    <span class="dntitle">{{sprintDisplaced.length}} card{{ sprintDisplaced.length === 1 ? '' : 's' }} moved to Outside any sprint</span>
+    <button class="dndismiss" type="button" on-click="['dismissDisplaced']" aria-label="Dismiss the displaced-cards notice">Dismiss</button>
+  </div>
+  <p class="dndesc">The saved sprint dates no longer cover these cards. Each keeps its day; click a week in a sprint to re-slot it.</p>
+  <ul class="dnlist">
+    {{#each sprintDisplaced as x}}
+      <li class="dnitem"><span class="dnid">{{x.display_id}}</span><span class="dndot" aria-hidden="true">·</span><span class="dnname">{{x.title}}</span><span class="dndot" aria-hidden="true">·</span><time class="dnday" datetime="{{x.starts_on}}">{{fmtLongIso(x.starts_on)}}</time></li>
+    {{/each}}
+  </ul>
+</div>
+{{/partial}}

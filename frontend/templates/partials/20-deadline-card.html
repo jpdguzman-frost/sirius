@@ -14,15 +14,39 @@
     thing in the file, and be reached through the layout's partial marker
     (frontend/CLAUDE.md; standing guard test/template-partials.test.ts).
 
-    The card is READ-ONLY and wholly derived (#74 §3: "the card writes
-    nothing"). There is no control on it, no drag handle, no date field. The
-    only thing that moves a card from one day to the next is the server's
-    rollover job, and it leaves no marker here (#75 §2, jp→miles #59 §3).
+    The card is wholly derived, and it is THE day control (owls #88/#89, JP
+    2026-09-10; build spec v1.4 §6.5 and §8; PLAN.md block 9 R2) — the
+    "writes nothing" of #74 §3 is superseded on this one point. Inside an
+    EXPANDED lane the whole card is the pointer drag source (no handle, no
+    date field): pointerdown picks it up, the handlers hit-test the drop
+    against the day columns of the SAME lane, and the write is the start day
+    — refused when the day is outside the assigned week, outside the sprint,
+    past the deadline or not a working day (#89 §3), in which case the card
+    wears `refused` and snaps back and nothing is written. The keyboard path
+    is the smallest form v1.4 §8 asks for: the card is focusable, names
+    itself and its day, and Left/Right nudge the day one working day inside
+    the same lane through the same write and the same four refusals. Both
+    bindings, the tab stop and the role exist ONLY in the expanded lane
+    (the caller's `expandedWeek === w.key` — `w` is in scope from either
+    caller's each-block): a collapsed lane has no day column to drop on, so
+    its cards stay inert (PLAN.md: "Collapsed lanes: no drag").
+    `dragging` and `refused` come off `dlDrag`, the one in-flight gesture,
+    matched by the row id A2 puts on the card (`c.rowId`); the same id is
+    stamped as `data-row` on every card, expanded or collapsed (inert data),
+    so `dlRefocus` in 90-events.js can return focus to the re-rendered card
+    after an arrow nudge's reload (PLAN.md amendment 1). No HTML5 drag
+    attribute here — the sweeps in test/deadlines-tab.test.ts read the raw
+    source for them — and this card and its ancestors are NEVER made
+    pointer-transparent (gantt-rules rule 1's principle, now guarding this source).
+    Rollover still moves a card between days on the server and leaves no
+    marker here (#75 §2, jp→miles #59 §3).
 
     Both callers in 50-deadlines.html bind the alias `c`, so every reference
     below resolves in the enclosing each-block's context. }}
 {{#partial dlCard}}
-<article class="dlcard {{#if c.urgent}}urgent{{/if}} {{#if c.done}}done{{/if}}">
+<article class="dlcard {{#if c.urgent}}urgent{{/if}} {{#if c.done}}done{{/if}}{{#if dlDrag && dlDrag.rowId === c.rowId}} dragging{{#if dlDrag.refused}} refused{{/if}}{{/if}}"
+         data-row="{{c.rowId}}"
+         {{#if expandedWeek === w.key}}tabindex="0" role="button" aria-label="{{c.label}}, starts {{c.startsOn}}; use left and right arrows to move the day within the week" on-pointerdown="['dlDragStart', c.rowId]" on-keydown="['dlKey', c.rowId]"{{/if}}>
   {{! The quote bar: the left edge only, curved into the card's own corner
       radius, and drawn ONLY on an urgent card — a non-urgent card carries no
       bar at all, pale or otherwise (#74 §3). The path is the frame's own
@@ -52,9 +76,10 @@
       clamp is a display treatment, so search and screen readers still have
       the whole string.
 
-      There is NO DATE on this card. The column it sits in IS the date, and
-      the deadline it is measured against lives on Sprint Schedules, where the
-      tick and the bar can be compared (#74 §3, #78 §2). }}
+      There is NO DATE printed on this card. The column it sits in IS the
+      date (the accessible name says it for a reader who cannot see the
+      column), and the deadline it is measured against lives on Sprint
+      Schedules, where the tick and the bar can be compared (#74 §3, #78 §2). }}
   <p class="dltitle">{{c.label}}</p>
   <p class="dllinks">{{#if c.trelloUrl}}<a href="{{c.trelloUrl}}" target="_blank" rel="noopener" aria-label="Open {{c.mc}} in Trello">{{{icon.trello}}}</a>{{/if}}{{#if c.figmaUrl}}<a href="{{c.figmaUrl}}" target="_blank" rel="noopener" aria-label="Open {{c.mc}} in Figma">{{{icon.figma}}}</a>{{/if}}</p>
 </article>

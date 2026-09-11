@@ -492,8 +492,17 @@ const sprintItemSchema = new Schema(
     /* Which sprint's LIST the row appears under. Set by the insertion point —
        the + belongs to a specific sprint, so the row lands in that one and
        never in a default (#72 §4). Independent of `starts_on`: the list says
-       where the row is read, the date says where the bar is drawn. */
-    sprint_id: { type: Schema.Types.ObjectId, ref: 'Sprint', required: true },
+       where the row is read, the date says where the bar is drawn.
+
+       NULLABLE since block 9 (owl #90, JP 2026-09-10): `null` is *Outside any
+       sprint* — a re-dated sprint dropped the row from its range and the row
+       KEPT ITS DAY (`starts_on` untouched). Nothing else writes a null: every
+       add lands in the sprint the + belongs to, and a deletion cascades its
+       rows rather than orphaning them. A null row leaves the group by the
+       PM's week click (PATCH `week`) into the sprint that covers the day.
+       Mongoose-level only — the collection carries no validator (migration
+       009 created it bare), so no migration accompanies the flip. */
+    sprint_id: { type: Schema.Types.ObjectId, ref: 'Sprint', required: false, default: null },
     /* The MC group the card carries. Denormalised from the work card so the
        list can group without a second read; work cards attach to the MC group
        and never to one deliverable (invariant 4). */

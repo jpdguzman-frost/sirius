@@ -19,12 +19,13 @@ import {
 import { H, groupsOf, schedulesView } from './helpers/sprint-schedule-tab.ts';
 
 /* ====================================================================== *
- * SUITE 1 — groups: one per sprint, EMPTY INCLUDED, and nothing else.
+ * SUITE 1 — groups: one per sprint, EMPTY INCLUDED, and — since owl #90
+ * (block 9) — 'Outside any sprint' LAST, only while a row has sprintId null.
  * The computed is EXECUTED out of the shipped scripts (rule 2); the render
  * half proves the markup an empty group still emits.
  * ====================================================================== */
 
-describe('sprintGroups — one group per sprint, empty sprints included, no synthetic groups', () => {
+describe('sprintGroups — one group per sprint, empty sprints included, plus Outside any sprint only while a row is displaced (#90)', () => {
   const SPRINTS = [
     { id: 's1', name: 'Alpha', start: '2026-08-24', end: '2026-08-28' },
     { id: 's2', name: 'Beta', start: '2026-08-31', end: '2026-09-04' },
@@ -72,22 +73,76 @@ describe('sprintGroups — one group per sprint, empty sprints included, no synt
     expect(h.groups().every((g) => g.rows.length === 0)).toBe(true);
   });
 
-  it("emits NO 'outside' and NO 'unscheduled' group — absence is the design (#72 §2)", () => {
+  it("appends ONE 'Outside any sprint' group, LAST, when a row has sprintId null — and none otherwise (owl #90; block 9)", () => {
+    /* INVERTED 2026-09-11 (block 9, owl #90, JP 2026-09-10; PLAN.md R3).
+       #72 §2's "absence is the design" is overturned for this ONE case: a
+       sprint whose dates were edited leaves the rows its range no longer
+       covers with `sprintId: null`, keeping their exact day, and this screen
+       must SHOW them — surfaced, never quietly redistributed — under a
+       synthetic group the PM re-slots from by week click. Both directions
+       are asserted so the guard cannot pass by the group never rendering
+       (rule 1): present with a null row, absent without one. */
     const h = H();
     h.set('sprints', SPRINTS);
-    // a row pointing at NO existing sprint surfaces nowhere on this screen
+    h.set('sprintItems', { rows: [{ ...PLOTTED, sprintId: 's1' }, { ...OFF_BOARD, id: 'd1', sprintId: null }], addable: {} });
+    const groups = h.groups();
+    expect(groups.map((g) => g.id)).toEqual(['s1', 's2', 'outside']);
+    const outside = groups[2]!;
+    expect(outside.name).toBe('Outside any sprint');
+    expect(outside.rows.map((r: SprintScheduleRow) => r.id)).toEqual(['d1']);
+    expect(outside.count).toBe(h.itemCount(1));
+    // the sprint groups are untouched by its presence
+    expect(groups[0]!.rows.map((r: SprintScheduleRow) => r.id)).toEqual(['i1']);
+    expect(groups[1]!.rows).toEqual([]);
+
+    // ABSENT when no row is outside — the group is not a permanent fixture
+    h.set('sprintItems', { rows: [{ ...PLOTTED, sprintId: 's1' }], addable: {} });
+    expect(h.groups().map((g) => g.id)).toEqual(['s1', 's2']);
+    h.set('sprintItems', { rows: [], addable: {} });
+    expect(h.groups().map((g) => g.id)).toEqual(['s1', 's2']);
+  });
+
+  it("keeps 'Outside any sprint' for NULL alone — a row naming a sprint the list lacks still surfaces nowhere", () => {
+    // `null` is a stored state (#90: the server nulls membership on
+    // displacement); a dangling id is a row that outlived its list, which the
+    // deletion cascade makes abnormal — it is not promoted into the group
+    const h = H();
+    h.set('sprints', SPRINTS);
     h.set('sprintItems', { rows: [{ ...PLOTTED, sprintId: 'gone' }], addable: {} });
     const groups = h.groups();
     expect(groups.map((g) => g.id)).toEqual(['s1', 's2']);
     expect(groups.every((g) => g.rows.length === 0)).toBe(true);
-    // and the tab BODY names neither retired group. Comments are stripped
-    // first (the prose legitimately explains the absence), and the sweep
-    // stops at the sprints modal — untouched this build, and its delete
-    // notice still speaks in deliverable terms (flagged at CLOSE, not here).
+  });
+
+  it("emits NO 'unscheduled' group — that absence is still the design (#72 §2)", () => {
+    const h = H();
+    h.set('sprints', SPRINTS);
+    h.set('sprintItems', { rows: [{ ...PLOTTED, sprintId: 's1' }, { ...UNPLOTTED, sprintId: null }], addable: {} });
+    expect(h.groups().map((g) => g.id)).toEqual(['s1', 's2', 'outside']);
+    expect(h.groups().map((g) => g.name)).not.toContain('Unscheduled');
+    // and the tab BODY names no retired group. Comments are stripped first
+    // (the prose legitimately explains the absence), and the sweep stops at
+    // the sprints modal.
     const view = schedulesView().replace(/\{\{!\s[\s\S]*?\}\}/g, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
     const body = view.slice(0, view.indexOf('modal-back') > 0 ? view.indexOf('modal-back') : undefined);
-    expect(body).not.toContain('Outside any sprint');
     expect(body).not.toContain('Unscheduled');
+  });
+
+  it("renders the 'Outside any sprint' group LAST, with its rows, through the same group markup", () => {
+    // the render half: the synthetic group is an ordinary group to the
+    // template — header, rows, search row — so nothing here can special-case
+    // it into a different shape
+    const html = renderSprintSchedule({
+      sprintGroups: [
+        { id: 's1', name: 'Sprint A', meta: 'Aug 24 - Aug 28', count: '· 1 items', rows: [PLOTTED] },
+        { id: 'outside', name: 'Outside any sprint', meta: 'no sprint dates', count: '· 1 items', rows: [{ ...OFF_BOARD, sprintId: null }] },
+      ],
+    });
+    expect(html.indexOf('Outside any sprint')).toBeGreaterThan(html.indexOf('Sprint A'));
+    expect([...html.matchAll(/growr sitem/g)]).toHaveLength(2);
+    expect(html).toContain('MC-712'); // the displaced row's MC, in the second group
+    // and the fixture's ordinary two-group render never says it
+    expect(renderSprintSchedule()).not.toContain('Outside any sprint');
   });
 
   it('renders an empty group as header + search row with zero rows', () => {

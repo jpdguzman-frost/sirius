@@ -27,7 +27,7 @@
  */
 
 import { Types } from 'mongoose';
-import { isHoliday, localIso, parseDate } from '../../lib/calendar.ts';
+import { isHoliday, localIso, parseDate, toMonday } from '../../lib/calendar.ts';
 import { forecast } from '../../lib/forecast.ts';
 import type { EmpiricalModel } from '../../lib/model.ts';
 import { SprintItem } from '../models/index.ts';
@@ -47,8 +47,10 @@ const NOT_OFFERED: ReadonlySet<ListStatus> = new Set(['done', 'excluded']);
 export interface SprintItemRow {
   /** The `sprint_items` document id — the handle for plot / move / remove. */
   id: string;
-  /** Which sprint's LIST the row appears under (#72 §4: the + carries meaning). */
-  sprintId: string;
+  /** Which sprint's LIST the row appears under (#72 §4: the + carries meaning).
+      `null` is *Outside any sprint* (owl #90, block 9): a re-dated sprint
+      dropped the row from its range and the row kept its day. */
+  sprintId: string | null;
   mcNumber: string;
   /** The WORK CARD's Trello id. Identity is (project, card) — invariant 3. */
   cardId: string;
@@ -252,8 +254,12 @@ export function longDate(iso: string): string {
   return `${Number(d)} ${month} ${y}`;
 }
 
-/** The three refusals a manual placement can earn. Frozen copy — see below. */
-export type PlotIssueCode = 'OUT_OF_SPRINT' | 'PAST_DEADLINE' | 'NOT_A_WORKDAY';
+/**
+ * The four refusals a manual placement can earn. Frozen copy — see below.
+ * `OUT_OF_WEEK` is block 9's (owl #89 §3, PLAN.md): the Deadlines day-drag is
+ * bounded by the week the PM assigned, in the same voice as the other three.
+ */
+export type PlotIssueCode = 'OUT_OF_WEEK' | 'OUT_OF_SPRINT' | 'PAST_DEADLINE' | 'NOT_A_WORKDAY';
 
 /** A refusal as the routes answer it: 422, body `{ code, message }`. */
 export interface PlotIssue {
@@ -264,6 +270,78 @@ export interface PlotIssue {
 /** The working-day calendar the guard asks. `lib/calendar.ts` is the default. */
 export interface WorkingCalendar {
   isHoliday(day: Date): boolean;
+}
+
+/**
+ * THE WEEK A DAY BELONGS TO, as its Monday's `YYYY-MM-DD` — the same key
+ * `buildWeeks` hands the client (`Week.key`), so a lane on Deadlines and a
+ * column on Sprint Schedules name the week the way the server does.
+ *
+ * Composed from `lib/calendar` (invariant 5: the file is untouched; invariant
+ * 11: workday math lives there). `parseDate` first, never `toMonday(iso)`
+ * directly — `toMonday` builds `new Date(string)`, which is UTC midnight and
+ * reads the PREVIOUS calendar day west of UTC; `parseDate` is local midnight,
+ * and `localIso` reads the local date back out. Manila, UTC and New York agree.
+ *
+ * The assigned week is DERIVED from the row's current day, never stored
+ * (block 9 drift report §H): every guarded write keeps the row inside its
+ * week by construction, and the one thing that crosses a week — rollover —
+ * never asks this guard, so a stored week could only ever disagree with the
+ * day it was derived from.
+ */
+export function weekKeyOf(iso: string): string {
+  return localIso(toMonday(parseDate(iso)));
+}
+
+/**
+ * THE FIRST WORKING DAY OF A WEEK — where a PM's week click lands the bar
+ * (owl #89 §2: "that week's FIRST WORKING DAY", not its Monday; v1.4 §5.1b's
+ * "Monday" lost to the owl at the gate). Mon..Fri scanned on the ACTIVE
+ * calendar — the ARES working-day set `calendar-sync.ts` loads into
+ * lib/calendar — so a holiday Monday hands the bar to Tuesday. `null` when
+ * the whole week is holidays: there is no day to place on, and the route
+ * answers that rather than inventing one.
+ *
+ * `mondayIso` is a Monday by contract; the PATCH route refuses anything else
+ * (400) before asking. `lib/calendar` has no such function — `workday(d, 0)`
+ * returns a holiday Monday unchanged (survey §5) — and per invariant 5 it
+ * gains none, so this composes its primitives here, beside `plotIssue`, on
+ * the same injectable calendar.
+ */
+export function firstWorkdayOfWeek(mondayIso: string, calendar?: WorkingCalendar): string | null {
+  const monday = parseDate(mondayIso);
+  for (let i = 0; i < 5; i++) {
+    const day = new Date(monday);
+    day.setDate(monday.getDate() + i);
+    // `calendar.isHoliday(day)`, never unbound — see `plotIssue`
+    if (!(calendar ? calendar.isHoliday(day) : isHoliday(day))) return localIso(day);
+  }
+  return null;
+}
+
+/**
+ * IS THIS DAY INSIDE THE CARD'S ASSIGNED WEEK? `null` if yes, `OUT_OF_WEEK`
+ * if not. The fourth guard (owl #89 §1/§3, block 9), checked FIRST: the
+ * Design Lead rearranges days INSIDE the week the PM assigned and cannot
+ * carry a card past either edge — a day in another week is not a drop
+ * target, whatever else is true of it. The message names the week the way
+ * the other three name their bound, so the PM reads one register.
+ *
+ * `assignedWeek` is the Monday key (`weekKeyOf`); the week runs Mon–Fri on
+ * the copy because that is the lane the Deadlines tab draws. String compare,
+ * as `plotIssue` documents.
+ */
+export function weekIssue(input: { assignedWeek: string; startsOn: string }): PlotIssue | null {
+  const { assignedWeek, startsOn } = input;
+  if (weekKeyOf(startsOn) !== assignedWeek) {
+    const friday = parseDate(assignedWeek);
+    friday.setDate(friday.getDate() + 4);
+    return {
+      code: 'OUT_OF_WEEK',
+      message: `That day is outside the card's assigned week (Mon ${longDate(assignedWeek)} – Fri ${longDate(localIso(friday))}).`,
+    };
+  }
+  return null;
 }
 
 /**
@@ -303,14 +381,21 @@ export function sprintRangeIssue(input: {
 }
 
 /**
- * CAN THE PM PLACE A BAR ON THIS DAY? `null` if yes, the refusal if not.
+ * CAN A PERSON PLACE A BAR ON THIS DAY? `null` if yes, the refusal if not.
  *
- * ONE validator for every route that takes a `starts_on` from a person — the
- * single add and the plot/move PATCH — so the three answers cannot drift apart
- * per route. JP's rules (2026-09-08):
+ * ONE validator for every route that takes a day from a person — the single
+ * add, the PM's week placement and the Design Lead's day-drag, all through
+ * the plot/move PATCH — so the four answers cannot drift apart per route.
+ * JP's rules (2026-09-08), plus the week bound (owl #89, 2026-09-10):
  *
+ *  0. when the row already has a week, the day must stay INSIDE it —
+ *     `weekIssue` above. Only the Deadlines day write asks this (the PM's
+ *     week click and the add are choosing a week, not moving within one);
  *  1. the day must be inside the sprint's own dates, both ends included —
- *     `sprintRangeIssue` above, which the bare list move asks on its own;
+ *     `sprintRangeIssue` above, which the bare list move asks on its own.
+ *     SKIPPED when `sprint` is `null`: a row *Outside any sprint* (owl #90)
+ *     has no range to be inside, and the day it kept is still its to move
+ *     within the week;
  *  2. the day must not be AFTER the card's deadline. The START is what is
  *     guarded — a FINISH past the deadline stays legal and paints the bar red
  *     (§5.1, R9-b). The deadline day itself is a legal start;
@@ -319,8 +404,9 @@ export function sprintRangeIssue(input: {
  *     lib/calendar (invariant 11, amendment 2026-08-15). There is no second
  *     holiday source here; injecting `calendar` only redirects the question.
  *
- * The order is contractual: a day can fail all three, and the PM is told the
- * first thing wrong with it in the order they would fix it.
+ * The order is contractual (PLAN.md block 9: OUT_OF_WEEK → OUT_OF_SPRINT →
+ * PAST_DEADLINE → NOT_A_WORKDAY): a day can fail all four, and the person is
+ * told the first thing wrong with it — the narrowest bound first.
  *
  * ROLLOVER (src/services/rollover.ts) NEVER CALLS plotIssue: §6.2 lets a roll
  * leave its sprint and outrun the deadline. That freedom is the whole point of
@@ -334,14 +420,20 @@ export function sprintRangeIssue(input: {
  * which is what keeps the answer the same in Manila and in UTC.
  */
 export function plotIssue(input: {
-  sprint: { starts_on: string; ends_on: string };
+  sprint: { starts_on: string; ends_on: string } | null;
   startsOn: string;
   deadline?: string | null;
   calendar?: WorkingCalendar;
+  /** The row's current week (`weekKeyOf`), when the write must stay inside it. */
+  assignedWeek?: string;
 }): PlotIssue | null {
-  const { sprint, startsOn, deadline = null, calendar } = input;
+  const { sprint, startsOn, deadline = null, calendar, assignedWeek } = input;
 
-  const range = sprintRangeIssue({ sprint, startsOn });
+  if (assignedWeek !== undefined) {
+    const week = weekIssue({ assignedWeek, startsOn });
+    if (week) return week;
+  }
+  const range = sprint ? sprintRangeIssue({ sprint, startsOn }) : null;
   if (range) return range;
   if (deadline && startsOn > deadline) {
     return { code: 'PAST_DEADLINE', message: `That day is after the card's deadline (${longDate(deadline)}).` };
@@ -438,7 +530,8 @@ export async function loadSprintItems(
     const deadline = deadlineFor(w);
     return {
       id: String(it._id),
-      sprintId: String(it.sprint_id),
+      // `null` is *Outside any sprint* (owl #90) — the client's last group, not a string 'null'
+      sprintId: it.sprint_id ? String(it.sprint_id) : null,
       mcNumber: it.mc_number as string,
       cardId: it.trello_card_id as string,
       name: (w?.name as string) ?? it.trello_card_id as string,

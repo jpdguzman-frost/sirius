@@ -27,11 +27,16 @@ import { describe, expect, it } from 'vitest';
 import {
   APP_JS,
   APP_JS_CODE,
+  PLANNER_CSS,
   TEMPLATE,
   UI_CSS,
+  displacedNoticeName,
   handlerBody,
   leakedMustacheText,
+  renderDisplacedNotice,
   renderSprintModal,
+  tabView,
+  type DisplacedCard,
   type SprintBanner,
 } from './helpers/gantt-render.ts';
 
@@ -1095,6 +1100,115 @@ describe('batch semantics — one PUT, nothing per row', () => {
 
   it('re-copies from the stored list on open, which is what makes Cancel a discard', () => {
     expect(APP_JS).toContain("app.set('sprintDraft', stored.map((s) => ({ ...s })))");
+  });
+});
+
+/* ====================================================================== *
+ * THE DISPLACED-CARDS NOTICE (block 9, owl #90, JP 2026-09-10; PLAN.md R3).
+ * A re-dated sprint is a LIGHT edit: never refused, never destructive. The
+ * rows its new dates no longer cover keep their exact day and move to
+ * 'Outside any sprint'; the PUT answers `displaced[]` and the client parks
+ * it on `sprintDisplaced` until the PM dismisses it. The notice is the LIST
+ * half of JP's 09-09 wish (the REFUSE half is withdrawn by #90): it names
+ * every displaced card. Rendered through the SHIPPED partial (rule 6), its
+ * name read off its own file (rule 2).
+ * ====================================================================== */
+
+const displaced = (over: Partial<DisplacedCard> = {}): DisplacedCard => ({
+  id: 'i1', display_id: 'MC-655', title: 'Sketch Asset: hero', starts_on: '2026-08-12', from_sprint: 'Sprint 46', ...over,
+});
+
+describe('the displaced-cards notice renders from sprintDisplaced, names each card, and dismisses', () => {
+  it('is called by the schedules view above the groups, gated on sprintDisplaced (source)', () => {
+    const name = displacedNoticeName();
+    const view = tabView('schedules');
+    expect(view).toContain(`{{#if sprintDisplaced}}{{>${name}}}{{/if}}`);
+    // above the groups: the call precedes the first group markup
+    expect(view.indexOf(`{{>${name}}}`)).toBeLessThan(view.indexOf('{{#each sprintGroups as g}}'));
+    // registered ONCE, at the top level of its own file (template-partials law)
+    expect([...TEMPLATE.matchAll(new RegExp(`\\{\\{#partial ${name}\\}\\}`, 'g'))]).toHaveLength(1);
+  });
+
+  it('renders NOTHING while sprintDisplaced is null — the resting state', () => {
+    expect(renderDisplacedNotice(null).trim()).toBe('');
+  });
+
+  it('counts the cards in the heading and names Outside any sprint, singular and plural', () => {
+    const two = renderDisplacedNotice([displaced(), displaced({ id: 'i2', display_id: 'MC-656', title: 'Render Asset: hero', starts_on: '2026-08-13' })]);
+    expect(two).toContain('2 cards moved to Outside any sprint');
+    const one = renderDisplacedNotice([displaced()]);
+    expect(one).toContain('1 card moved to Outside any sprint');
+    expect(one).not.toContain('1 cards');
+  });
+
+  it('lists ONE line per card — display id · title · the day it keeps, the day printed by the shared formatter and carried raw', () => {
+    const html = renderDisplacedNotice([displaced(), displaced({ id: 'i2', display_id: 'MC-656', title: 'Render Asset: hero', starts_on: '2026-08-13' })]);
+    const items = [...html.matchAll(/<li class="dnitem">[\s\S]*?<\/li>/g)].map((m) => m[0]);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toContain('MC-655');
+    expect(items[0]).toContain('Sketch Asset: hero');
+    expect(items[0]).toContain('datetime="2026-08-12"');
+    expect(items[0]).toContain('long:2026-08-12'); // fmtLongIso, the schedule's own date formatter
+    expect(items[1]).toContain('MC-656');
+    expect(items[1]).toContain('datetime="2026-08-13"');
+    // reading order is the server's — never re-sorted here
+    expect(html.indexOf('MC-655')).toBeLessThan(html.indexOf('MC-656'));
+  });
+
+  it('says the day is KEPT and the re-slot is the PM’s — a light edit, in advisory chrome, never the deletion confirm’s', () => {
+    const html = renderDisplacedNotice([displaced()]);
+    expect(html).toMatch(/keeps its day/i);
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('sbanner'); // not the modal's banner recipe (R-f-5: that variant carries no CTA)
+    expect(html).not.toContain('sconfirm');
+    expect(html).not.toMatch(/remove|delete/i);
+    // …and the recipe is its own, in the planner sheet, amber like the gap banner
+    expect(PLANNER_CSS).toMatch(/\.dnotice \{[^}]*amber/);
+  });
+
+  it('offers exactly one action — Dismiss — bound to dismissDisplaced (source), and the handler clears the list', () => {
+    const html = renderDisplacedNotice([displaced()]);
+    expect([...html.matchAll(/<button/g)]).toHaveLength(1);
+    expect(html).toMatch(/<button class="dndismiss"[^>]*>Dismiss<\/button>/);
+    const partial = TEMPLATE.slice(TEMPLATE.indexOf(`{{#partial ${displacedNoticeName()}}}`));
+    expect(partial.slice(0, partial.indexOf('{{/partial}}'))).toContain("on-click=\"['dismissDisplaced']\"");
+    // EXECUTED: the handler sets the one key the gate reads, and nothing else
+    const sets: Array<[string, unknown]> = [];
+    new Function('app', `(function dismissDisplaced() ${handlerBody('dismissDisplaced')})()`)({
+      set: (k: string, v: unknown) => { sets.push([k, v]); },
+      get: () => { throw new Error('dismissDisplaced read state it has no business reading'); },
+    });
+    expect(sets).toEqual([['sprintDisplaced', null]]);
+  });
+
+  it('saveSprints parks the PUT’s displaced[] on sprintDisplaced — and clears it when the save displaced nothing', async () => {
+    /* EXECUTED against a one-key app: the save closes the modal and, in the
+       SAME set, parks the list — so the notice is on screen when the reload
+       lands the rows under Outside any sprint. An empty or absent list
+       clears any earlier notice: a second save must not leave a stale one. */
+    const run = async (response: Record<string, unknown>): Promise<Record<string, unknown>> => {
+      const state: Record<string, unknown> = {
+        sprintBlocked: false, sprintDirty: true, activeProjectId: 'p1',
+        sprintDraft: [{ id: 's1', name: 'S', start: '2026-08-03', end: '2026-08-07' }],
+        sprintDisplaced: [displaced()], // a stale notice from an earlier save
+      };
+      const app = {
+        get: (k: string) => state[k],
+        set: (a: string | Record<string, unknown>, b?: unknown) => { if (typeof a === 'string') state[a] = b; else Object.assign(state, a); },
+      };
+      const api = { send: async () => response };
+      const loadAll = async () => {};
+      await new Function('app', 'api', 'loadAll', `
+        ${constDecl('sprintPayload', APP_JS_CODE)}
+        return (async function saveSprints() ${handlerBody('saveSprints')})();
+      `)(app, api, loadAll);
+      return state;
+    };
+    const two = [displaced(), displaced({ id: 'i2', display_id: 'MC-656' })];
+    expect((await run({ ok: true, displaced: two })).sprintDisplaced).toEqual(two);
+    expect((await run({ ok: true, displaced: [] })).sprintDisplaced).toBeNull();
+    expect((await run({ ok: true })).sprintDisplaced).toBeNull();
+    expect((await run({ ok: true, displaced: two })).sprintModal).toBe(false);
   });
 });
 
