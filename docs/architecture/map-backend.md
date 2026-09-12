@@ -51,6 +51,7 @@ _last-verified: 2026-08-18_
 - `src/services/ares.ts` — ARES read-API client (v1 envelopes, 60/min); AresClient.
 - `src/services/audit.ts` — insert-only audit writer; audit.
 - `src/services/calendar-sync.ts` — ARES-canonical work calendar persist/load (global; invariant-1 exception); loadCalendar/syncCalendarFromAres.
+- `src/services/classification-write.ts` — W4 business-unit label commit half (Trello-first, audit + sync_runs both ways, no-op guard; no route/caller yet — surface and actor unruled); applyClassificationWrite.
 - `src/services/guard.ts` — refuse prod board ids outside production; assertNotProductionBoards.
 - `src/services/intake-parser.ts` — sheet parser (ragged rows, serial dates, dup Type cols); parseIntake.
 - `src/services/mapper.ts` — Trello taxonomy → deliverables + MC-group work cards; mapTrello.

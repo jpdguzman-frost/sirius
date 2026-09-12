@@ -187,6 +187,12 @@ const deliverableSchema = new Schema(
     // mid-write reverts the user's change (product owl #50, 2026-08-18).
     // Absent = Sirius has never written this card, which reconciles normally.
     registry_written_at: Date,
+    // W4 (JP 2026-09-10; contracts/trello-write.md §W4): the business-unit
+    // label Sirius last wrote to the card. On BOTH card kinds because the
+    // surface is unruled; whichever is ruled, the field is already here. Not
+    // in `registryFields()` yet — nothing reconciles it from ARES until a
+    // caller exists (src/services/classification-write.ts).
+    unit_label: String,
 
     // ---- from the intake sheet, joined on mc_number ----
     sheet_deadline: DATE_ONLY,
@@ -264,6 +270,8 @@ const workCardSchema = new Schema(
     // urgency and difficulty are registry-owned too, so the same
     // read-mid-write revert applies to them
     registry_written_at: Date,
+    // W4: mirror of the deliverable's `unit_label` — see the note there
+    unit_label: String,
     work_started_at: Date,
     work_done_at: Date,
     active: { type: Boolean, required: true, default: true },

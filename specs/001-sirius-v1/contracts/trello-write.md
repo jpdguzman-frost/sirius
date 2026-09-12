@@ -13,7 +13,7 @@ to any source system exists; Google Sheets has no write path, ever.
 | W1 | `Urgent` label | `POST /cards/{id}/idLabels` · `DELETE /cards/{id}/idLabels/{labelId}` | Pipeline urgency control (work-card rows) | `urgency.set` | v1 (FR-4.6) |
 | W2 | Due date | `PUT /cards/{id}` with `{due}`; `{due: null}` clears | The DEADLINE cell on Sprint Schedules (work-card rows; Pipeline read-only since #78 §2) | `due.set` | 2026-08-04 (FR-9.1) |
 | W3 | `Difficulty: …` label | `POST /cards/{id}/idLabels` (new value) · `DELETE /cards/{id}/idLabels/{labelId}` (stale values) | Pipeline difficulty control (work-card rows) | `difficulty.set` | 2026-08-12 (BRD-§9-A1) |
-| W4 | Business-unit classification label (the UNIT field — the intake sheet's Business Unit column) | `POST /cards/{id}/idLabels` with an EXISTING label id · `DELETE /cards/{id}/idLabels/{labelId}` for the stale value — never `POST /boards/{id}/labels` | **UNRULED** — tab and card kind pending product; actor of an ingestion-triggered tag pending JP; nothing writes W4 until both are ruled | `classification.set` (proposed) | authorised 2026-09-10 (JP; BRD v2.9 §9 / FR-4.10–4.11; owls #94–#95) — **unbuilt** |
+| W4 | Business-unit classification label (the UNIT field — the intake sheet's Business Unit column) | `POST /cards/{id}/idLabels` with an EXISTING label id · `DELETE /cards/{id}/idLabels/{labelId}` for the stale value — never `POST /boards/{id}/labels` | **UNRULED** — tab and card kind pending product; actor of an ingestion-triggered tag pending JP; nothing writes W4 until both are ruled | `classification.set` (proposed) | authorised 2026-09-10 (JP; BRD v2.9 §9 / FR-4.10–4.11; owls #94–#95) — **server half built 2026-09-11, unwired** (§W4 semantics) |
 
 Interfaces live in `lib/trello.ts` only: `setUrgency(cardId, boardId, urgent)` (§5.3 verbatim
 shape, unchanged), `setDue(cardId, isoDateTimeOrNull)`, and
@@ -143,3 +143,23 @@ Product-owned, tracked in STATE.md.
   ingestion-triggered tag records actor `system` or becomes a person's action. Every rule
   above binding W1–W3 (optimistic + rollback, audit_log + sync_runs, board guard, reconcile
   from ARES reads, the integration account) binds W4 the day it is built.
+- **Server half built, unwired (2026-09-11, worktree `w4-server`; build-spec v1.4 §4.3a
+  "server-side work can proceed on the rule above — the control cannot"):** the primitive
+  exists as `TrelloClient.setClassification(cardId, boardId, tag, previousTag?)` in
+  `lib/trello.ts` (reads the board's labels fresh, resolves via the pure `resolveLabelIds`,
+  add-then-remove with W3's restore on a failed removal), and the commit half as
+  `applyClassificationWrite` in `src/services/classification-write.ts` (Trello-first,
+  `audit_log` `classification.set` / `classification.set_failed` — no longer "proposed" —
+  plus `sync_runs`, `registry_written_at` stamped on success, no-op on a same value). An
+  **ambiguous** tag — two board labels that normalise to the same name — is refused and
+  surfaced exactly like an unmatched one (`UnknownClassificationLabel`, `reason`
+  `unmatched` | `ambiguous` | `reserved`): a wrong business unit is worse than a missing one.
+  A **reserved** tag — one that resolves to registry-owned or kind-deciding taxonomy (W1's
+  `Urgent`, W3's `Difficulty: …`, the `Main Card` kind label, a 🛑 blocker; the set is derived
+  from the mapper's own constants in `lib/trello.ts`, `isReservedLabelName`) — is refused the
+  same way, and a reserved `previousTag` is never stripped: W4 writes the business-unit label
+  and nothing else (review F1, 2026-09-11). The stored value is the board label's canonical
+  name, not the raw tag; a same-value write compares trim + case-folded and is a no-op. The value
+  persists as `unit_label` on both card-kind schemas, reconciled from ARES by nothing yet.
+  **Still no route, no caller, no UI** — the surface and the ingestion actor remain unruled;
+  the future caller runs `writeGuards()`'s checks first, as W1–W3 do.
