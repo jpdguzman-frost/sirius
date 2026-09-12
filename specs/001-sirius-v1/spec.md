@@ -8,7 +8,33 @@
 
 **Input**: User description: "Convert the signed-off BRD v2.2 (docs/product/brd.md) into Spec Kit format. Preserve every FR, BR, NFR, AC with its ID. Preserve every measured constant exactly. Mark Open Decisions [NEEDS CLARIFICATION]. Scope is v1 only. Add nothing the BRD does not contain."
 
-**Source of truth**: `docs/product/brd.md` (v2.2, 3 August 2026). This document is a format conversion, not a rewrite. Where this spec and the BRD diverge, the BRD wins and this spec is in error. Requirement IDs (FR-x.y, BR-n, NFR-n, AC-n) are the BRD's own and are how work is traced.
+**Source of truth**: `docs/product/brd.md` — **v3.0 since 2026-09-12** (the v2.2 this document was converted from is archived as `brd-v2.2.md`). This document is a format conversion, not a rewrite. Where this spec and the BRD diverge, the BRD wins and this spec is in error. Requirement IDs (FR-x.y, BR-n, NFR-n, AC-n) are the BRD's own and are how work is traced.
+
+> ⚠️ **PARTIALLY SUPERSEDED BY BRD v3.0 (adopted 2026-09-12). The body below is still
+> the v2.2 conversion; only the Acceptance Criteria section has been brought forward.**
+> Read the BRD first for anything in this list, and treat this document as wrong where
+> they disagree:
+>
+> - **Acceptance Criteria — CURRENT.** Rewritten to v3.0 on adoption, including the
+>   renumbering of the four locally-added criteria to AC-27–AC-30. That section is safe.
+> - **User Story 2 / FR-5.7, FR-5.8, FR-5.9 — Suggest plan and its pinning test are
+>   WITHDRAWN** (AC-15, AC-16 with them). The scenarios at lines ~49–56 describe a
+>   feature that no longer exists.
+> - **User Story 3 / BR-6, BR-9a, FR-6.7 — conflict detection and acknowledgement are
+>   WITHDRAWN and the implementation DELETED** (2026-09-07). AC-17 goes with them; the
+>   Deadlines tab counts rather than flags.
+> - **FR-7.5 and the review-SLA scenarios — RETIRED** with review time (BR-1b). AC-12
+>   retires with them; confidence now applies to design time only.
+> - **The scheduled unit is the WORK CARD, not the deliverable** — slotted week, pin,
+>   confidence, start day, deadline, sprint membership and urgency all live there.
+>   Every "drag a row"/"slot a deliverable" reading below predates that.
+> - **Placement is WEEK GRAIN on Sprint Schedules**; the day belongs to the design lead
+>   on Deadlines alone (build spec v1.4 §5.1b/§6.2, block 9).
+> - **BR-10's keyword classifier is RETIRED** — lane state comes from the ARES lanes
+>   endpoint, with product's table owning which lane means which state.
+>
+> Re-converting the body to v3.0 is outstanding work, deliberately not done inside the
+> adoption: it is a rewrite of a derived document, not a swap of a held one.
 
 ## Overview
 
@@ -428,28 +454,42 @@ Preserved verbatim from BRD §10. These define "done" for v1.
 | AC-8 | Deadline join | Pipeline coverage rises ~1/269 → ~169/269 |
 | AC-9 | Row deleted in the sheet | Marked inactive, history intact |
 | AC-10 | Golden test: ported spreadsheet formula vs the workbook | Identical dates for identical inputs — proves the port before retirement |
-| AC-11 | Forecast in the UI | Matches the ARES-derived grid; provenance and sample size visible |
-| AC-12 | Review SLA entered | All downstream dates recalculate |
-| AC-13 | Drag a row | Dates, sprint group and load update |
-| AC-14 | Multi-select drag | Relative spacing preserved |
-| AC-15 | Suggest plan | Proposes; applies nothing until accepted |
-| AC-16 | Pinned row + suggest | Never moved |
-| AC-17 | Two urgent milestones in a week | Deadlines flags and names both |
-| AC-18 | Forecast past deadline | Row late, bar red, listed for replot |
+| AC-11 | Forecast dates wherever they surface — Pipeline, Sprint Schedules, Deadlines | Match the ARES-derived measurements for the same inputs. *Provenance clause dropped with FR-7.7* |
+| ~~AC-12~~ | ~~Review SLA entered~~ | **RETIRED** with FR-7.5 and review time (BR-1b) |
+| AC-13 | Move a row to another **week** | Dates, sprint group and load update. *Week grain — there is no day placement on this tab* |
+| AC-14 | Multi-select **week** move | Relative spacing preserved. *Not yet built* |
+| ~~AC-15~~ | ~~Suggest plan~~ | **WITHDRAWN with FR-5.7 / FR-5.8** |
+| ~~AC-16~~ | ~~Pinned row + suggest~~ | **WITHDRAWN** — nothing left to test pinning against; see FR-5.9 |
+| ~~AC-17~~ | ~~Two urgent milestones in a week~~ | **WITHDRAWN with BR-6.** Deadlines flags nothing; it counts |
+| AC-18 | Forecast past deadline | Row late, **bar red** — but **no replot list**, that went with BR-6 |
 | AC-19 | Sync service unavailable | Last good data shown; error surfaced; app usable |
 | AC-20 | Keyboard-only scheduling | A row can be slotted without a pointer |
-| AC-21 | Frost note: remark vs flag | A remark alone leaves status unchanged; the clarification flag flips it to *With Clarification*; both audited |
-| AC-22 | 4-day week (one holiday) expanded to days | Day columns sum exactly to the weekly capacity; the holiday takes zero and rejects drops |
-| AC-23 | Day drag, then week replot | Day drag never changes the week; the week change lapses the day placement |
-| AC-24 | Weekly load on the verified board shape | Rows weigh 1 + tasks ÷ deliverables; the board totals 478 card-equivalents |
+| AC-21 | A card's forecast finish passes while it sits outside a Done lane | It moves forward one working day; the Sprint Schedules bar translates whole; **no marker appears** |
+| AC-22 | The design lead drags a card past the edge of its assigned week | Refused. The bar goes pale and snaps back |
+| AC-23 | A sprint is re-dated so placed cards fall outside it | Those cards keep their day and move to *Outside any sprint*. **Nothing is unslotted or destroyed** |
+| AC-24 | A business unit with no matching Trello label is tagged | Refused and surfaced. **No label is created** |
+| AC-25 | An unmapped Trello lane appears | Surfaced and logged, never silently assigned a state |
+| AC-26 | A main card is opened on Pipeline | Urgency, difficulty and deadline all read **em-dash**; no control is offered on the parent row |
+| AC-27 | Frost note: remark vs flag | A remark alone leaves status unchanged; the clarification flag flips it to *With Clarification*; both audited |
+| AC-28 | 4-day week (one holiday) expanded to days | Day columns sum exactly to the weekly capacity; the holiday takes zero and rejects drops |
+| AC-29 | Day drag, then week replot | Day drag never changes the week; the week change lapses the day placement |
+| AC-30 | Weekly load on the verified board shape | Rows weigh 1 + tasks ÷ deliverables; the board totals 478 card-equivalents |
 
-AC-21–AC-24 added 2026-08-12 (FR-11, FR-12, BR-6c — from build spec v1.1); AC-1–AC-20 remain the BRD's verbatim.
+**Numbering (JP, 2026-09-12).** AC-1–AC-26 are BRD v3.0's, verbatim, and v3.0's numbering
+is authoritative. The four criteria added here on 2026-08-12 from build spec v1.1 (FR-11,
+FR-12, BR-6c) were AC-21–AC-24 until that date and are **AC-27–AC-30** now: v3.0 assigned
+those four numbers to different scenarios, and two numbering schemes for one project is the
+worse of the two costs. State logs, task checkpoints and commit messages written before
+2026-09-12 keep the old numbers — they are archive and are not rewritten; `docs/history/`
+is where the old mapping lives if a pre-adoption reference needs decoding.
+**Retired or withdrawn by v3.0:** AC-12 (with FR-7.5 and review time), AC-15, AC-16
+(with Suggest Plan), AC-17 (with BR-6).
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-1**: All acceptance criteria (AC-1–AC-24: 20 from the BRD, 4 added 2026-08-12) pass — as automated tests where testable.
+- **SC-1**: All live acceptance criteria pass as automated tests where testable — AC-1–AC-26 from BRD v3.0 plus AC-27–AC-30 added here 2026-08-12. AC-12, AC-15, AC-16 and AC-17 are retired or withdrawn and are not counted.
 - **SC-2**: Pipeline deadline coverage rises from ~1/269 to ~169/269 via the sheet join, with no behaviour change asked of the team (AC-8).
 - **SC-3**: The forecast users see derives solely from measured delivery data, with provenance and sample sizes visible (AC-11); the spreadsheet formula — which overstates review waits 2.6–4.6× — is never exposed (BR-2, BR-3). Release-gated on the PM recognising the dates.
 - **SC-4**: Pipeline and Sprint Schedules load in < 2 s at p95 with 5,000 cards; drag feedback < 100 ms; a Trello change reaches Sirius in < 15 min (NFR-1, NFR-2, NFR-3).
@@ -515,9 +555,9 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 
 - The product team's build spec v1.1 (`docs/history/build-spec-v1.1.md`) was reviewed against the live system; corrections returned as `docs/history/build-spec-v1.1-errata.md`. *(Both archived 2026-08-18 per JP → `docs/history/`.)*
 - **W2 confirmed standing**: the doc's §4.2 "open decision" on writing the Trello due date predates the 2026-08-04 amendment. The decision holds — a Sirius deadline edit writes the Trello due date; no Sirius-local override layer exists or will be built.
-- **Frost notes adopted** → FR-11, AC-21 (build spec §3.7–3.8).
-- **Daily plotting adopted** → FR-12, AC-22/AC-23 (build spec §6.2).
-- **Weighted row load adopted** → BR-6c, AC-24 (build spec §5.4) — resolves the BR-6a caveat by converting deliverable rows to card-equivalents.
+- **Frost notes adopted** → FR-11, AC-27 *(AC-21 before the 2026-09-12 renumbering)* (build spec §3.7–3.8).
+- **Daily plotting adopted** → FR-12, AC-28/AC-29 *(AC-22/AC-23 before the 2026-09-12 renumbering)* (build spec §6.2).
+- **Weighted row load adopted** → BR-6c, AC-30 *(AC-24 before the 2026-09-12 renumbering)* (build spec §5.4) — resolves the BR-6a caveat by converting deliverable rows to card-equivalents.
 - One question back to the product team (in the errata): the Deadlines count basis — §6.1's example disagrees with §5.4's formula. Default until answered: BR-6c weight everywhere. **Answered 2026-08-12** (`docs/product/errata-reply-v1.2.md`): §5.4 weight everywhere — the default stands, no code change; §6.1 was a doc error, fixed in their v1.2.
 
 ### Session 2026-08-12 (JP) — W3 difficulty writeback

@@ -25,9 +25,8 @@ rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 
 ## Decisions needed from JP (blocking)
 
-| # | Decision | Blocks | Status |
-|---|---|---|---|
-| BRD §9 | Amend "write impossible by permission" — the write surface is now the three-entry registry (urgency + due date + difficulty) | Vendor assessment, v2 | ⬜ open (grew 2026-08-04, again 2026-08-12) — product confirmed 2026-08-12 they'll raise it across all THREE docs quoting "one write": BRD §9, pilot security readiness, vendor assessment; not done yet |
+_None. The last one (BRD §9's write-surface amendment, open since 2026-08-04)
+closed 2026-09-12 when BRD v3.0 was adopted — `docs/history/decision-log.md`._
 
 ## Decisions needed later (not blocking yet)
 
@@ -40,7 +39,11 @@ rule 5; its real fix is parked below. `--dir test` is RETIRED — no worktree.
 
 ## Acceptance criteria scoreboard
 
-AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ✅ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ✅ (fixture-scale; literal at staging) · AC-9 ✅ · AC-10 ✅ · AC-11 ✅ (data side; UI at phase 7) · AC-12 ✅ · AC-13 ✅ (API+UI) · AC-14 ✅ (API) · AC-15 ✅ · AC-16 ✅ · AC-17 ✅ · AC-18 ✅ · AC-19 ⬜ · AC-20 ⬜ · AC-21 ✅ · AC-22 ✅ · AC-23 ✅ · AC-24 ✅ (added 2026-08-12, phase 12)
+**BRD v3.0's numbering, adopted 2026-09-12** — AC-1–AC-26 are the BRD's; AC-27–AC-30 are
+the four added here 2026-08-12 (were AC-21–AC-24). Older logs use the old numbers.
+
+AC-1 ✅ · AC-2 ✅ · AC-3 ✅ · AC-4 ⬜ · AC-5 ✅ · AC-6 ⬜ · AC-7 ⬜ · AC-8 ✅ (fixture-scale; literal at staging) · AC-9 ✅ · AC-10 ✅ · AC-11 ✅ (data side) · AC-13 ✅ (API+UI) · AC-14 ⬜ (API only; v3.0 marks it unbuilt) · AC-18 ✅ · AC-19 ⬜ · AC-20 ⬜ · AC-21 ✅ · AC-22 ✅ · AC-23 ✅ · AC-24 ✅ · AC-25 ✅ · AC-26 ✅ · AC-27 ✅ · AC-28 ✅ · AC-29 ✅ · AC-30 ✅
+**Retired by v3.0:** AC-12 (with FR-7.5), AC-15/AC-16 (Suggest plan), AC-17 (BR-6).
 
 ## Deviations proposed by the agent, awaiting JP
 
@@ -50,14 +53,16 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
-  before building on one. **Acked through #71** + #76–#79 + #81–#87 + **#91–#93**. **UNACKED**:
-  #72/#73 (screens pending) ·
-  #91–#98 (tiles, W4) · #99–#113 (the full doc set) · **#114/#115 (09-11: the
-  §5.1c toolbar; the §5.1d confidence picker, whose ARITHMETIC product is
-  holding — a flat +3/+6/+9 ladder Miles put back to them — out of block 9 by
-  their own wording)**. Bodies cached in `.claude/owls/`; history in the state
-  logs. jp→miles through **#78** (#75 block 9 built, putting back the mid-week sprint-start gap, three undrawn surfaces and four node-vs-spec findings; **#76 it is LIVE** — those three questions still open, none blocking). Build spec **v1.4 is the held copy**
-  (`docs/product/build-spec-v1.4.md`; v1.3 beside it). Product is fixing frame
+  before building on one. **Acked through #113** (the full doc set acked
+  2026-09-12 on adoption). **UNACKED**: #72/#73 (screens pending) · #94–#97
+  (W4, AGENTS.md) · **#114/#115 — the §5.1c toolbar and the §5.1d confidence
+  picker: both buildable, the picker's ARITHMETIC held by product (a flat
+  +3/+6/+9 ladder Miles put back to them)**. Bodies cached in `.claude/owls/`;
+  history in the state logs. jp→miles through **#78** (#75 block 9 built, putting back the mid-week sprint-start gap, three undrawn surfaces and four node-vs-spec findings; **#76 it is LIVE** — those three questions still open, none blocking). Build spec **v1.4 is the held copy**
+  (`docs/product/build-spec-v1.4.md`; v1.3 beside it). **BRD v3.0, the swept
+  engineering doc and the pilot security doc are the held copies since
+  2026-09-12** (`docs/product/`; v2.2 and the 08-18 plan archived beside them).
+  Product is fixing frame
   defects; **until they confirm, this build is authoritative over those
   frames**. **Awaiting Miles**: #66's three answers · the reworded
   past-deadline legend · the mid-week sprint-start consequence (block 9).
@@ -103,7 +108,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 line, newest first; older lines are deleted as the 10KB cap bites, and the
 state log is self-indexing by date.
 
-- 2026-09-12 — **Block 10 BUILT + DEPLOYED + SIGNED OFF** (`beca9bb`; JP's "go deploy", then complete): the Pipeline strip becomes PENDING · ONGOING · DONE · URGENT over WORK CARDS, rescoping to search + filter, walking DISTINCT MCs (siblings share one array — per-row counting inflates 99×); excluded lanes counted nowhere, urgent included. Requests UNTOUCHED (JP: "keep it as is") — §3.1 and §3.7 held together, since tiles that filter *and* rescope feed back on themselves. Stroke drift WITHDRAWN not fixed: nodes read `bottom 1`, other sides 0 — both spec sections were right. VALIDATE ×2 green (1,806 UTC+Manila, 274 NY), 9/9 proofs; live healthz 200 ×3, wall 401, pm2 0 unstable, urgency round-trip green. **REVIEW and the browser pass were NOT run** — the browser half moved onto the *Live browser checks owed* card so it cannot vanish with the closed one. Owls #77/#78. Log: `docs/history/state-log/2026-09-12.md`.
+- 2026-09-12 — **Block 10 BUILT + DEPLOYED + SIGNED OFF** (`beca9bb`, then JP complete): the Pipeline strip becomes PENDING · ONGOING · DONE · URGENT over WORK CARDS, rescoping to search + filter, walking DISTINCT MCs (siblings share one array — per-row counting inflates 99×); excluded lanes counted nowhere, urgent included. Requests UNTOUCHED (JP). Stroke drift WITHDRAWN — both spec sections were right. VALIDATE ×2 green, 9/9 proofs, live smoke green. **REVIEW and the browser pass were NOT run** — the browser half sits on the *Live browser checks owed* card. Log: `docs/history/state-log/2026-09-12.md`; plan+drift rotated to `2026-09-12-plan-block10.md`.
+- 2026-09-12 — **The swept document set ADOPTED** (JP: yes, and *follow theirs* on numbering): `docs/product/brd.md` is **BRD v3.0**, `implementation-plan.md` is the swept engineering doc, `security-readiness.md` is new — v2.2 and the 08-18 plan archived beside them. Closes the BRD §9 blocker open since 2026-08-04 (§9 enumerates four writes). **ACs renumbered to v3.0's**: its AC-1–AC-26 stand, our four move to AC-27–AC-30, AC-12/15/16/17 retire. Two banners carry what the sweep does NOT override: the engineering doc specifies Postgres (the Stack ruling wins) and `spec.md`'s body is still the v2.2 conversion (AC section brought forward; re-converting the body is outstanding). No code work — the three new ACs already had passing suites. Owls #98–#113 acked. Log: `docs/history/state-log/2026-09-12.md`.
 - 2026-09-12 — **`w4-server` merged to main** (`55cf976`) now block 9 has shipped; still **INERT** — no route, no caller, `unit_label` outside `registryFields()`, verified again on the host after deploy. Log: `docs/history/state-log/2026-09-12.md`.
-- 2026-09-11/12 — **Block 9 SHIPPED** (`e406141`, deployed 2026-09-12): the day moves to the Design Lead on Deadlines only; Sprint Schedules is week-grain. Survey → gate → 5 build agents → VALIDATE ×3 → 16 proofs → REVIEW → E2E 18/18, which found 2 defects (block 9's keyboard focus writing ANOTHER card; a pre-existing `PUT /sprints` 500 on any sprint REORDER that blocked the very edit #90 rules on) — both fixed and re-proven. Log: `docs/history/state-log/2026-09-11.md`.
-- 2026-09-10 — **Block 8 built** (five JP yeses: the reversal accepted, re-date → *Outside any sprint*, model reader started, lane fold, Ares pools per lane + the `lib/model.ts` amendment): Ares model read + gated + provenance, work-card labels, label-first lane, lane reconcile; REVIEW 38 → 34 fixed; VALIDATE ×3 green; E2E green; **DEPLOYED 23:28 Manila**. Owls: #71 to Miles, #14–#16 to Ares. Log: `docs/history/state-log/2026-09-10.md`; plan+drift: `2026-09-10-plan-block8.md`.
+- 2026-09-11/12 — **Block 9 SHIPPED** (`e406141`, deployed 2026-09-12): the day moves to the Design Lead on Deadlines only; Sprint Schedules is week-grain. E2E found and fixed two defects. Log: `docs/history/state-log/2026-09-11.md`.

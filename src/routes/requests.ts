@@ -7,7 +7,8 @@
  *   MC group has deliverables → 'In Pipeline'
  *   else                      → 'For Filing'
  * Nothing else is reachable. Neither a remark NOR the clarification flag can
- * change status (FR-11.4, AC-21): the flag is a property of the NOTE, and it
+ * change status (FR-11.4, AC-27 — AC-21 before the 2026-09-12 renumbering): the
+ * flag is a property of the NOTE, and it
  * surfaces in the Remarks cell, not in the STATUS column. The earlier third
  * value 'For Clarification' (owls #13–#15) is retired, and 'To File' is
  * renamed 'For Filing' — the tile keeps its own TO FILE wording (owl #35

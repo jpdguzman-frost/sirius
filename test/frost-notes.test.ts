@@ -1,5 +1,6 @@
 /**
- * T094 — frost notes (FR-11; AC-21), two-valued status model (owls #34–#35,
+ * T094 — frost notes (FR-11; AC-27, renumbered from AC-21 when BRD v3.0's
+ * numbering was adopted 2026-09-12), two-valued status model (owls #34–#35,
  * 2026-08-17): the one Sirius-owned annotation on an intake request.
  *
  * STATUS is the Trello join and nothing else (FR-11.3): 'In Pipeline' when the
@@ -59,7 +60,7 @@ const rowOf = (body: RequestsBody, mc: string) => byMc(body.requests, mc);
 const statusOf = (body: RequestsBody, mc: string) => rowOf(body, mc)?.status;
 
 describe('frost notes (FR-11)', () => {
-  it('AC-21: neither a remark nor the flag moves status — the flag lands on the note', async () => {
+  it('AC-27: neither a remark nor the flag moves status — the flag lands on the note', async () => {
     const { p, agent } = await fixture();
 
     await putNote(agent, p._id, 'MC-702', { remark: 'Asked for the brand kit', clarify: false }).expect(200);

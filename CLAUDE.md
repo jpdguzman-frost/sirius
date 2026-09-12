@@ -1,10 +1,10 @@
 # CLAUDE.md — Sirius Build Constitution
 
-You are building **Sirius**, Frost Design Group's internal delivery pipeline and forecasting platform. Source documents: `docs/product/brd.md` (v2.2 — the *what*) and `docs/product/implementation-plan.md` (the *how*). When they conflict, the Implementation Plan wins on engineering detail; the BRD wins on scope and business rules. If a conflict matters, stop and ask.
+You are building **Sirius**, Frost Design Group's internal delivery pipeline and forecasting platform. Source documents: `docs/product/brd.md` (v3.0, adopted 2026-09-12 — the *what*) and `docs/product/implementation-plan.md` (the swept engineering doc, adopted the same day — the *how*, whose §1 database chapter loses to the Stack section below). `docs/product/security-readiness.md` holds the pilot gate. When they conflict, the Implementation Plan wins on engineering detail; the BRD wins on scope and business rules. If a conflict matters, stop and ask.
 
 ## What Sirius is, in three lines
 
-Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning decisions: which week a deliverable is slotted, confidence, SLA overrides, pins, status notes. It writes back only what the write registry enumerates — today the `Urgent` label, the card due date, the card difficulty label, and (authorised 2026-09-10, not yet built) the business-unit classification label — nothing else, anywhere. It is multi-project from the first migration.
+Sirius reads Trello (via ARES) and intake Google Sheets, and owns only planning decisions: which week a work card is slotted, its confidence, pins, status notes. (SLA overrides went with review time — BRD v3.0 retires FR-7.5 and AC-12; the fields survive only inside the verbatim-ported engine, which invariant 5 keeps untouched.) It writes back only what the write registry enumerates — today the `Urgent` label, the card due date, the card difficulty label, and (authorised 2026-09-10, not yet built) the business-unit classification label — nothing else, anywhere. It is multi-project from the first migration.
 
 ## Invariants — never violate, never "improve"
 
