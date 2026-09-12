@@ -57,7 +57,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   §5.1c toolbar; the §5.1d confidence picker, whose ARITHMETIC product is
   holding — a flat +3/+6/+9 ladder Miles put back to them — out of block 9 by
   their own wording)**. Bodies cached in `.claude/owls/`; history in the state
-  logs. jp→miles through **#74**. Build spec **v1.4 is the held copy**
+  logs. jp→miles through **#75** (2026-09-12: block 9 built and verified, not deployed; the mid-week sprint-start gap, the three undrawn surfaces, and four node-vs-spec findings put back to product). Build spec **v1.4 is the held copy**
   (`docs/product/build-spec-v1.4.md`; v1.3 beside it). Product is fixing frame
   defects; **until they confirm, this build is authoritative over those
   frames**. **Awaiting Miles**: #66's three answers · the reworded
