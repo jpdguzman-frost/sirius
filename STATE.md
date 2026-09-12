@@ -16,7 +16,7 @@ Open or not-yet-deployed only. Complete phases → `docs/history/phase-log.md`.
 | 0–8a | Setup → conflict acks | **complete 2026-08-03/04** (T001–T068) | AC-10 ✅ · PM sign-off ✅ · TEST-board round-trip ✅ |
 | 9 | Security testing + pilot | in progress — T069 anon half ✅, T072 ✅, T086 ✅; **G7 ✅ 2026-08-12**; T073/T091 ⏸, T075 pending | write-enable on rt-837 = next JP gate |
 
-**Build health (2026-09-09):** 1566 tests, 0 `it.todo`, 78 files — green
+**Build health (2026-09-12):** 1845 tests, 0 `it.todo`, 85 files — green
 under `TZ=Asia/Manila` and `TZ=UTC` (calendar suites also
 `TZ=America/New_York`). Migrations defined through **011** (archives `conflict_acknowledgements`; runs at
 the next deploy). The
