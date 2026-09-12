@@ -40,9 +40,9 @@ _last-verified: 2026-08-18_
    [gantt-rules §5; JP 2026-08-18, STATE.md §Still open]
 
 5. **Run the suite dual-TZ**: `TZ=UTC` and `TZ=Asia/Manila`; calendar
-   suites also `TZ=America/New_York`. THREE known ENVIRONMENTAL flakes — on
+   suites also `TZ=America/New_York`. FOUR known ENVIRONMENTAL flakes — on
    any red, re-run the FULL suite once, record both runs, never retry-cap,
-   never mask:
+   never mask (4th: `migrations-archive-acks`, 09-12):
    - squatted loopback ports → ~1 run in 5 fails a random server suite
      (socket hang up / a stranger's 404). Fix parked → STATE.md §Still open.
    - `startTestDb()` timeouts across many files. Tell is DURATION, 973s vs
