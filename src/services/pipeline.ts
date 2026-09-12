@@ -212,7 +212,7 @@ export interface PipelineResult {
    * numbers, 35 cards. This does not FIX the data (the cards need correcting
    * at source); it stops the gap being silent.
    */
-  unattachedWork: { cards: number; mcNumbers: string[] };
+  unattachedWork: { cards: number };
   /* NO `corrections`, AND NO PER-ROW `missing`. The §4.4 incomplete-card
      warning was WITHDRAWN whole on 2026-09-08 (owl #86: the missing-difficulty
      question is closed, and no design exists for an ingestion-health surface).
@@ -363,11 +363,16 @@ export async function loadPipeline(
 
   /* Derived from the two maps already built above rather than a third query:
      an MC with tasks and no row is exactly a `workCardsByMc` key that
-     `rowsByMc` does not know. Sorted so the wire is stable between reads. */
-  const unattachedMcs = Object.keys(workCardsByMc).filter((mc) => !rowsByMc.has(mc)).sort();
+     `rowsByMc` does not know.
+
+     The COUNT is all that ships. The MC list beside it went with the Pipeline
+     tile that named them in its tooltip (block 10); its last reader is gone,
+     and a wire field nobody reads reads as a feature to whoever finds it next.
+     Sprint Schedules still draws the count, which is the warning's only home. */
   const unattachedWork: PipelineResult['unattachedWork'] = {
-    cards: unattachedMcs.reduce((n, mc) => n + workCardsByMc[mc]!.length, 0),
-    mcNumbers: unattachedMcs,
+    cards: Object.keys(workCardsByMc)
+      .filter((mc) => !rowsByMc.has(mc))
+      .reduce((n, mc) => n + workCardsByMc[mc]!.length, 0),
   };
 
   /* `rows` rides along for ONE thing since block 3 (owl #78 §2): the MC

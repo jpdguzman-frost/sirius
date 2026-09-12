@@ -1,11 +1,3 @@
-/* ---- KPI stat rows ---- */
-.kpis { display: flex; gap: 2.5rem; margin: 0.4rem 0 1.4rem; flex-wrap: wrap; }
-.kpi { min-width: 10rem; border-bottom: 1px solid var(--border); padding-bottom: 0.9rem; }
-.kpi .klabel { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
-.kpi .kvalue { font-size: 2.4rem; font-weight: 700; line-height: 1.2; }
-.kpi.red .klabel, .kpi.red .kvalue { color: var(--red); }
-.kpi.orange .klabel, .kpi.orange .kvalue { color: #b45309; }
-.kpi.purple .klabel, .kpi.purple .kvalue { color: #6d28d9; }
 
 /* ---- info banners / callouts ---- */
 .note {

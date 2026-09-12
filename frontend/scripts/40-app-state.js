@@ -28,7 +28,7 @@ const app = new Ractive({
     rows: [],
     writesEnabled: true, // G7 observation mode: false = read-only project, W1/W2 controls disabled
     workCardsByMc: {},
-    unattachedWork: { cards: 0, mcNumbers: [] }, // owl #61: work with no MC row
+    unattachedWork: { cards: 0 }, // owl #61: work with no MC row
     /* owl #62 — Pipeline sort + filter. `pipeSort` is a key from PIPE_SORTS or
        null for the default order (single-select: choosing replaces, never
        stacks). `pipeFilters` is one array per axis (multi-select). Both are

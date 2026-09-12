@@ -318,7 +318,7 @@ async function loadAll() {
       dlToday: manilaToday(), // the Deadlines month follows the clock (R1-1)
       writesEnabled: pipeline.writesEnabled !== false,
       workCardsByMc: pipeline.workCardsByMc,
-      unattachedWork: pipeline.unattachedWork || { cards: 0, mcNumbers: [] },
+      unattachedWork: pipeline.unattachedWork || { cards: 0 },
       sprints: pipeline.sprints,
       /* stored VERBATIM off the payload (#72): {rows, addable} is the whole
          Sprint Schedules body — rows are position-sorted per sprint and
