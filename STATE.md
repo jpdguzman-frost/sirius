@@ -58,7 +58,7 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
   (W4, AGENTS.md) · **#114/#115 — the §5.1c toolbar and the §5.1d confidence
   picker: both buildable, the picker's ARITHMETIC held by product (a flat
   +3/+6/+9 ladder Miles put back to them)**. Bodies cached in `.claude/owls/`;
-  history in the state logs. jp→miles through **#78** (#75 block 9 built, putting back the mid-week sprint-start gap, three undrawn surfaces and four node-vs-spec findings; **#76 it is LIVE** — those three questions still open, none blocking). Build spec **v1.4 is the held copy**
+  history in the state logs. jp→miles through **#79** (12 Sep, the adoption: their AC numbering wins; three caveats back — the engineering doc's Postgres §1 vs our stack, OD-8 shown open though answered, our spec-kit copy still the v2.2 conversion; asked: fold §5.1c/§5.1d into a v1.5? `AGENTS.md` deliberately NOT adopted). Block 9's three questions stay open, none blocking. Build spec **v1.4 is the held copy**
   (`docs/product/build-spec-v1.4.md`; v1.3 beside it). **BRD v3.0, the swept
   engineering doc and the pilot security doc are the held copies since
   2026-09-12** (`docs/product/`; v2.2 and the 08-18 plan archived beside them).
