@@ -65,7 +65,7 @@ silent defaults.
 The legacy week-board was the only UI for four row-level controls, so they were
 kept rather than silently removed: the BR-8 multi-select checkbox and the R11
 drag handle sit in the 58px gutter, and pin (FR-5.9) / duplicate (FR-5.12) /
-status-note (FR-11) form a cluster in the STATUS cell. Without them, unpinning,
+status-note (FR-3.7–FR-3.10) form a cluster in the STATUS cell. Without them, unpinning,
 duplicating, noting and multi-row drags become unreachable.
 
 Two of those four are genuinely beyond the frame, and two are the frame's own

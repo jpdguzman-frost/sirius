@@ -1,6 +1,6 @@
 /**
  * Seed a SYNTHETIC intake mirror into a TEST project, so the team can
- * exercise Requests + frost notes (FR-3, FR-11) while the live sheet stays
+ * exercise Requests + frost notes (FR-3, notes at FR-3.7–FR-3.10) while the live sheet stays
  * deferred. Fixture data only — no real briefs, requestors or clients ever
  * (invariant 16).
  *

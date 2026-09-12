@@ -53,7 +53,7 @@ export const byMc = (rows: RequestRow[], mc: string) => rows.find((r) => r.mc_nu
 
 export const mcsOf = (rows: RequestRow[]) => rows.map((r) => r.mc_number);
 
-/** The note write (FR-11). Returns the supertest Test so callers own `.expect()`. */
+/** The note write (FR-3.7/FR-3.8). Returns the supertest Test so callers own `.expect()`. */
 export const putNote = (
   agent: TestAgent,
   projectId: Types.ObjectId,

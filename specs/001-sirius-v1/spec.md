@@ -220,7 +220,7 @@ IDs and text are the BRD's, preserved verbatim. Priority M = must, S = should.
 | FR-3.5 | Surface unparseable rows with row number, reason and a link | M |
 | FR-3.6 | Filter by filed / unfiled / missing deadline | S |
 
-*FR-3.1 and FR-3.3 amended 2026-08-12 by FR-11: the mirror itself stays read-only with no write-back, but each request may carry a Sirius-owned frost note stored beside it (never in the sheet), and status becomes three-state per FR-11.3.*
+*FR-3.1 and FR-3.3 amended 2026-08-12 by what are now FR-3.7–FR-3.10 (was FR-11): the mirror itself stays read-only; the note is Sirius-owned data beside it, never written back.*
 
 #### FR-4 — Pipeline
 
@@ -319,28 +319,38 @@ IDs and text are the BRD's, preserved verbatim. Priority M = must, S = should.
 
 *Clarified 2026-08-05 (JP): admin flag model (first admin: JP) · core actions only (no role management in UI) · new tab beside the five · built immediately so the WCAG pass covers it. The four sign-in checks are untouched — admin is authorization layered after them; no constitution amendment required.*
 
-#### FR-11 — Frost notes *(added 2026-08-12, JP-directed — adopted from product build spec v1.1 §3.7–3.8; not in BRD v2.2)*
+#### FR-11 — Frost notes *(added 2026-08-12, JP-directed; **FOLDED into BRD v3.0's numbering 2026-09-12** — JP)*
 
-| ID | Requirement | Priority |
+BRD v3.0 carries these rules as **FR-3.7–FR-3.10**, so product's numbers are the names
+from here on. What follows is the map, not a second statement of the rules — read the BRD
+for anything marked *folded*.
+
+| was | is | note |
 |---|---|---|
-| FR-11.1 | Each intake request may carry one Sirius-owned frost note — a free-text remark, and a clarification flag with a required reason — keyed `(project_id, mc_number)` | M |
-| FR-11.2 | Notes are never written to the intake sheet; the service account keeps `spreadsheets.readonly`, so the permission enforces the rule (FR-8.2, FR-8.3 unchanged) | M |
-| FR-11.3 | Request status becomes three-state, derived and never stored: Trello card exists → *In Pipeline*; else clarification flag → *With Clarification*; else *For Filing* (amends FR-3.3) | M |
-| FR-11.4 | A remark alone never changes status; only the clarification flag does | M |
-| FR-11.5 | Requests gains a FOR CLARIFICATION tile that counts and filters flagged requests | M |
-| FR-11.6 | Note edits are inline, optimistic with rollback, and every change writes `audit_log` (invariant 10) | M |
-| FR-11.7 | Routes live under the project scope (`/api/projects/:projectId/…`) behind session + membership like every other route (NFR-6) — the build spec's bare `/api/frost-notes` path is illustrative only | M |
+| FR-11.1 | **FR-3.7 + FR-3.8** | one rule here, two there: the clarification flag with its required reason (3.7) and the internal remark (3.8). Still one stored note keyed `(project_id, mc_number)` |
+| FR-11.2 | **FR-3.9** | never written to the intake sheet. The `spreadsheets.readonly` scope is what enforces it — an engineering fact v3.0 does not state and this spec keeps |
+| FR-11.3 | ⚠️ **HELD — not folded** | v3.0's FR-3.3 still calls *For Clarification* a STATUS value. Sirius shipped a **two-valued** STATUS (owls #34/#35, 2026-08-17): the flag is a property of the NOTE and surfaces in the Remarks cell. v3.0's own sentence that a clarified row is "both For Filing AND For Clarification" is the cross-cutting reading we built. **Wording question for product; until it lands, `FR-11.3` stays the name in code and tests** |
+| FR-11.4 | ⚠️ **HELD — not folded** | same question: a remark alone never changes status, and neither does the flag. Named in AC-27 |
+| FR-11.5 | **stays local** | the FOR CLARIFICATION tile that counts and filters. No counterpart in v3.0, and JP ruled 2026-09-12 that the Requests tiles keep filtering |
+| FR-11.6 | **stays local** | inline editing, optimistic with rollback, every change audited (invariant 10). v3.0's FR-3.10 covers only "shared and durable" |
+| FR-11.7 | **stays local** | routes under `/api/projects/:projectId/…` behind session + membership (NFR-6). Engineering detail; the build spec's bare path is wrong |
 
-#### FR-12 — Deadlines daily plotting *(added 2026-08-12, JP-directed — adopted from product build spec v1.1 §6.2; not in BRD v2.2)*
+#### FR-12 — Deadlines daily plotting *(added 2026-08-12, JP-directed; **FOLDED into BRD v3.0's numbering 2026-09-12** — JP)*
 
-| ID | Requirement | Priority |
+BRD v3.0 carries the day rules as **FR-6.9–FR-6.14**, rewritten for the work-card unit.
+
+| was | is | note |
 |---|---|---|
-| FR-12.1 | A week header on Deadlines expands to a Mon–Fri day grid; one week open at a time | M |
-| FR-12.2 | Milestones (deliverable × phase) drag between days with pointer events; a keyboard equivalent exists (NFR-9) | M |
-| FR-12.3 | Day placement never changes the week; stored per `(project_id, deliverable, phase)`; absent means *follow the forecast* | M |
-| FR-12.4 | Day capacity distributes the week's capacity across non-holiday weekdays by largest remainder — day columns sum exactly to the weekly capacity; holidays take zero and reject drops | M |
-| FR-12.5 | Day placements are optimistic with rollback and audited (invariant 10) | M |
-| FR-12.6 | When a milestone's week changes — drag, suggest apply, or deadline change — its day placement lapses back to the forecast default | M |
+| FR-12.1 | **stays local** | the week header expanding to a Mon–Fri grid, one week open at a time. v3.0's §6 assumes a day grid without specifying how it opens; the built mechanism is this one |
+| FR-12.2 | **FR-6.9** | the day drag, now with four drop conditions at once — inside the assigned week, inside the sprint, on or before the deadline, a working day |
+| FR-12.3 | **FR-6.10** | day placement never changes the week. ⚠️ The KEY changed with the unit: `(project_id, deliverable, phase)` became the work card's own start day, per the swept engineering doc |
+| FR-12.4 | ⚠️ **stays local, and is OPEN** | day capacity by largest remainder. v3.0 has no equivalent, and whether §6.2's day-capacity paragraph survives at all is a live question with product |
+| FR-12.5 | **stays local** | optimistic with rollback and audited. v3.0 does not state it; invariant 10 does |
+| FR-12.6 | **stays local** | a week change lapses the day placement back to the forecast default. v3.0's nearest rule is FR-6.13 rollover, which is a different mechanism — do not treat one as the other. Named in AC-29 |
+
+**What this fold does NOT do.** FR-9 (two-way sync) and FR-10 (the admin screen) keep their
+local numbers: v3.0 spreads the write rules across FR-4.5–FR-4.11 and §9 rather than giving
+them one id, and it has no admin-screen requirement at all.
 
 ### Business Rules
 
@@ -555,8 +565,8 @@ From BRD §9. Sirius holds no personal data beyond staff names and work emails. 
 
 - The product team's build spec v1.1 (`docs/history/build-spec-v1.1.md`) was reviewed against the live system; corrections returned as `docs/history/build-spec-v1.1-errata.md`. *(Both archived 2026-08-18 per JP → `docs/history/`.)*
 - **W2 confirmed standing**: the doc's §4.2 "open decision" on writing the Trello due date predates the 2026-08-04 amendment. The decision holds — a Sirius deadline edit writes the Trello due date; no Sirius-local override layer exists or will be built.
-- **Frost notes adopted** → FR-11, AC-27 *(AC-21 before the 2026-09-12 renumbering)* (build spec §3.7–3.8).
-- **Daily plotting adopted** → FR-12, AC-28/AC-29 *(AC-22/AC-23 before the 2026-09-12 renumbering)* (build spec §6.2).
+- **Frost notes adopted** → **FR-3.7–FR-3.10** *(local FR-11 until the 2026-09-12 fold)*, AC-27 *(AC-21 before the same date)* (build spec §3.7–3.8).
+- **Daily plotting adopted** → **FR-6.9–FR-6.14** *(local FR-12 until the 2026-09-12 fold)*, AC-28/AC-29 *(AC-22/AC-23 before the same date)* (build spec §6.2).
 - **Weighted row load adopted** → BR-6c, AC-30 *(AC-24 before the 2026-09-12 renumbering)* (build spec §5.4) — resolves the BR-6a caveat by converting deliverable rows to card-equivalents.
 - One question back to the product team (in the errata): the Deadlines count basis — §6.1's example disagrees with §5.4's formula. Default until answered: BR-6c weight everywhere. **Answered 2026-08-12** (`docs/product/errata-reply-v1.2.md`): §5.4 weight everywhere — the default stands, no code change; §6.1 was a doc error, fixed in their v1.2.
 

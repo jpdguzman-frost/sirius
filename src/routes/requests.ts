@@ -1,5 +1,5 @@
 /**
- * Requests routes (T039 + T094; FR-3.x, FR-11) — read-only mirror of the
+ * Requests routes (T039 + T094; FR-3.x, the note rules now FR-3.7–FR-3.10) — read-only mirror of the
  * intake sheet, plus the one Sirius-owned annotation: the frost note.
  *
  * Status derives from the Trello join ALONE and is never stored (FR-11.3,
@@ -35,7 +35,7 @@
  * else the sheet date, else none — mc_number is not unique (invariant 3),
  * so the whole group is scanned.
  *
- * Notes never touch the sheet (FR-11.2) — no Sheets write path exists
+ * Notes never touch the sheet (FR-3.9) — no Sheets write path exists
  * anywhere; the service account stays spreadsheets.readonly (FR-8.2/8.3).
  * Filters: filed / unfiled / clarification / missing-deadline (FR-3.6);
  * missing-deadline tests the resolved value.
@@ -185,7 +185,7 @@ export function requestsRouter(): Router {
     },
   );
 
-  // FR-11: the note write. Optimistic on the client; the server is the truth
+  // FR-3.7/FR-3.8: the note write. Optimistic on the client; the server is the truth
   // and every change lands in audit_log (FR-11.6, invariant 10).
   router.put(
     '/api/projects/:projectId/requests/:mc/note',

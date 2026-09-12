@@ -72,7 +72,7 @@
 
 .chev { border: none; background: none; cursor: pointer; color: var(--faint); font: inherit; padding: 0 0.2rem; }
 
-/* The FR-12 day-planner recipes (day grid, day columns, the draggable entry)
+/* The FR-6.9–FR-6.14 day-planner recipes (day grid, day columns, the draggable entry)
    left with the milestone Deadlines tab on 2026-09-05 (owl #74: card fields
    are read-only; rollover is the only mover). Nothing renders them. */
 

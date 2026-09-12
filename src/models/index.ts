@@ -429,10 +429,10 @@ pushEventSchema.index({ event_id: 1 }, { unique: true });
 pushEventSchema.index({ project_id: 1, status: 1, received_at: 1 });
 pushEventSchema.index({ received_at: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 }); // TTL 7d
 
-// ============ frost notes (FR-11, added 2026-08-12) ============
+// ============ frost notes (FR-3.7–FR-3.10; local FR-11 until the 2026-09-12 fold) ============
 // One Sirius-owned annotation per intake request, keyed (project_id,
 // mc_number) — a multi-deliverable MC carries ONE note. Never written to the
-// intake sheet (FR-11.2): no Sheets write path exists anywhere (invariant 2).
+// intake sheet (FR-3.9): no Sheets write path exists anywhere (invariant 2).
 
 const frostNoteSchema = new Schema(
   {
@@ -448,9 +448,9 @@ const frostNoteSchema = new Schema(
 );
 frostNoteSchema.index({ project_id: 1, mc_number: 1 }, { unique: true });
 
-// ============ milestone day plan (FR-12, added 2026-08-12) ============
+// ============ milestone day plan (FR-6.9–FR-6.14; local FR-12 until the 2026-09-12 fold) ============
 // A Mon–Fri day choice for one deliverable phase. `week` records the Monday
-// the placement was made for: day placement never changes the week (FR-12.3),
+// the placement was made for: day placement never changes the week (FR-6.10),
 // and when the milestone's computed week no longer matches, the placement has
 // lapsed and reads as absent — follow the forecast (FR-12.6).
 

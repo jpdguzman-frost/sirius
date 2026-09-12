@@ -104,7 +104,7 @@ export const MIGRATIONS: Migration[] = [
     },
   },
   {
-    // frost_notes (FR-11) + milestone_day_plan (FR-12), phase 12 — both keyed
+    // frost_notes (FR-3.7–FR-3.10) + milestone_day_plan (FR-6.9–FR-6.14), phase 12 — both keyed
     // with project_id (invariant 1), unique per request / per milestone.
     id: '004-frost-notes-day-plan',
     up: async () => {

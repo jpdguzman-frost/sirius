@@ -597,7 +597,7 @@ app.on({
   },
   reqScrolled(ctx) { updateThumb(ctx.node, 'reqThumb'); },
 
-  /* ---- frost notes (FR-11): inline editor, only Submit persists ---- */
+  /* ---- frost notes (FR-3.7/FR-3.8): inline editor, only Submit persists ---- */
   openNote(_ctx, mc) {
     const r = app.get('requests').find((x) => x.mc_number === mc);
     const n = (r && r.note) || null;
