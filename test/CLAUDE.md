@@ -40,16 +40,15 @@ _last-verified: 2026-08-18_
    [gantt-rules §5; JP 2026-08-18, STATE.md §Still open]
 
 5. **Run the suite dual-TZ**: `TZ=UTC` and `TZ=Asia/Manila`; calendar
-   suites also `TZ=America/New_York`. Known ENVIRONMENTAL flake: local
-   services squat loopback ports, so ~1 full run in 5 fails one random
-   server suite (socket hang up / stranger's 404). Green
-   on rerun is fine — record it; never retry-cap, never mask. The real fix
-   (explicit `127.0.0.1` listening, ~21 files) is a parked task.
-
-   ⚠️ SECOND, distinct flake: many files timing out at `startTestDb()` (31
-   start a real mongod). Tell is DURATION — 973s vs ~27s. Confirm by
-   re-running the FULL suite, not one file. → state-log 2026-08-25
-   [STATE.md §Still open]
+   suites also `TZ=America/New_York`. THREE known ENVIRONMENTAL flakes — on
+   any red, re-run the FULL suite once, record both runs, never retry-cap,
+   never mask:
+   - squatted loopback ports → ~1 run in 5 fails a random server suite
+     (socket hang up / a stranger's 404). Fix parked → STATE.md §Still open.
+   - `startTestDb()` timeouts across many files. Tell is DURATION, 973s vs
+     ~27s → state-log 2026-08-25.
+   - `difficulty-write` "rejects values outside Easy/Medium/Hard" answering
+     404 not 400, full-parallel only → state-log 2026-09-11.
 
 6. **Render tests go through `test/helpers/gantt-render.ts`** — real
    Ractive `toHTML()` over one balanced `<div>` subtree of the SHIPPED
