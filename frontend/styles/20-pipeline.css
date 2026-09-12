@@ -77,6 +77,13 @@
 }
 .metrics .metric .mlabel { font-size: var(--text-label); font-weight: 600; line-height: 1; color: var(--surface-foreground); }
 .metrics .metric .mvalue { font-size: var(--text-display); font-weight: 600; line-height: 1.2; color: var(--surface-foreground); }
+/* ⚠️ `.red`, `.green` and `.amber` are REQUESTS' modifiers, not dead weight —
+   corrected by the block 10 review, 2026-09-12, which found the build plan
+   recording them as "dead but shared-looking". `reqStats()` emits
+   `cls: 'green' | 'amber' | 'red'` and `20-requests.html` renders
+   `class="metric rstat {{s.cls}}"`, so these three colour IN PIPELINE, TO FILE
+   and FOR CLARIFICATION. Deleting them un-colours that strip silently. The
+   sheet is shared by both tabs; only the state modifiers below are Pipeline's. */
 .metrics .metric.red .mlabel, .metrics .metric.red .mvalue { color: var(--status-destructive-strong); }
 .metrics .metric.green .mlabel, .metrics .metric.green .mvalue { color: var(--green-600); }
 /* THE THREE STATE FIGURES — build-spec v1.4 §4.0, owls #91–#93 (Miles,
@@ -106,11 +113,13 @@
 .metrics .metric.done .mlabel, .metrics .metric.done .mvalue { color: var(--emerald-600); }
 /* Pipeline's URGENT tile — owl #79, node 843:125894. The same amber the Urgent
    badge wears on the work-card rows, so urgency speaks with ONE colour on this
-   tab: tile and badge are the same claim at two scales. Deadlines' own URGENT
-   tile keeps `.red` (its rail ruling is still open, #79) — this modifier is
-   Pipeline's, which is why it is a new one rather than a repaint of `.red`. */
+   tab: tile and badge are the same claim at two scales. It is a NEW modifier
+   rather than a repaint of `.red` because `.red` belongs to the Requests strip
+   above (see the note there) — the block 10 review corrected the older reason
+   given here, that Deadlines kept an URGENT tile in `.red`: Deadlines has no
+   metric strip at all. The conclusion stands; the reason did not. */
 .metrics .metric.urgent .mlabel, .metrics .metric.urgent .mvalue { color: var(--amber-600); }
-.metrics .metric.amber .mlabel, .metrics .metric.amber .mvalue { color: var(--amber-500); }
+.metrics .metric.amber .mlabel, .metrics .metric.amber .mvalue { color: var(--amber-500); } /* Requests' TO FILE — see the note above `.red` */
 /* WITHDRAWN 2026-09-07 (owl #81, Miles): `.blue` was the OPEN WORK tile's, and
    OPEN WORK counted the incomplete cards §4.4 withdrew. The strip is four
    tiles now and none of them counts an incomplete card, so the rule is

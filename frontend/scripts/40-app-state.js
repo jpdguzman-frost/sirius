@@ -443,11 +443,24 @@ const app = new Ractive({
         // ONCE PER MC, never once per row — see the array-sharing note above
         if (!r.mcNumber || counted.has(r.mcNumber)) continue;
         counted.add(r.mcNumber);
-        for (const w of byMc[r.mcNumber] || []) {
+        /* `Object.hasOwn`, not a bare index: an MC number spelled `constructor`
+           or `toString` reads a FUNCTION off the prototype, and `for…of` throws
+           on it — taking the whole tab down, not one tile. Unreachable while the
+           server builds this map on a bare object (it would die first), and the
+           same idiom already guards DIFF_RANK. */
+        const cards = Object.hasOwn(byMc, r.mcNumber) ? byMc[r.mcNumber] : null;
+        for (const w of cards || []) {
           const state = w.status;
-          if (state === 'excluded') continue; // ops work, counted nowhere on this strip
+          /* An ALLOW-LIST, not a deny-list on `excluded` alone. A state the
+             lane mapping does not produce today would otherwise fall past all
+             three buckets and still reach the urgent line below — counted in no
+             state and inflating the cross-cutting figure, which is precisely the
+             invariant this strip rests on ("an urgent card is also counted in
+             its state"). `classifyList` is total over the four today, so this
+             changes nothing now and holds the day a fifth is added. */
+          if (state !== 'pending' && state !== 'ongoing' && state !== 'done') continue; // ops work counts nowhere
           if (narrow && !pipeWorkMatch(w, sel, null)) continue;
-          if (state === 'pending' || state === 'ongoing' || state === 'done') out[state] += 1;
+          out[state] += 1;
           if (w.urgency === 'Urgent') out.urgent += 1; // cross-cutting, never instead of a state
         }
       }

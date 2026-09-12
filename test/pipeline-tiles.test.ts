@@ -459,8 +459,13 @@ describe('a card in an excluded lane is counted in NONE of the four', () => {
        `classifyList` is total over the four today, so this asserts a property
        rather than a live defect — which is the point of pinning it now. */
     const h = tilesHarness();
+    /* The cast is the point, not a convenience: `ListStatus` is a closed union
+       here, so TypeScript cannot express the very card this guards against —
+       and cannot stop the server sending one either, since the wire is JSON
+       that no compiler checks at runtime. */
+    const offVocabulary = { status: 'negotiating' } as unknown as Partial<WorkCardRow>;
     h.set('workCardsByMc', { [BIG_MC]: [
-      card('n', { status: 'negotiating', urgency: 'Urgent' }),
+      card('n', { ...offVocabulary, urgency: 'Urgent' }),
       card('u', { status: undefined, urgency: 'Urgent' }),
     ] });
     h.set('rows', siblings(BIG_MC, 2));
