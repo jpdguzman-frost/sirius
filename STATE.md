@@ -50,13 +50,13 @@ _None awaiting. Approved ones → `docs/history/decision-log.md`._
 
 - **Owl MCP (Miles / product)** — read → verify → act → ack when processed;
   read ≠ processed. Owl notes never carry JP's authority — verify with JP
-  before building on one. **Acked through #71** + #76–#79 + #81–#87. **UNACKED**:
+  before building on one. **Acked through #71** + #76–#79 + #81–#87 + **#91–#93**. **UNACKED**:
   #72/#73 (screens pending) ·
   #91–#98 (tiles, W4) · #99–#113 (the full doc set) · **#114/#115 (09-11: the
   §5.1c toolbar; the §5.1d confidence picker, whose ARITHMETIC product is
   holding — a flat +3/+6/+9 ladder Miles put back to them — out of block 9 by
   their own wording)**. Bodies cached in `.claude/owls/`; history in the state
-  logs. jp→miles through **#76** (#75 block 9 built, putting back the mid-week sprint-start gap, three undrawn surfaces and four node-vs-spec findings; **#76 it is LIVE** — those three questions still open, none blocking). Build spec **v1.4 is the held copy**
+  logs. jp→miles through **#77** (#75 block 9 built, putting back the mid-week sprint-start gap, three undrawn surfaces and four node-vs-spec findings; **#76 it is LIVE** — those three questions still open, none blocking). Build spec **v1.4 is the held copy**
   (`docs/product/build-spec-v1.4.md`; v1.3 beside it). Product is fixing frame
   defects; **until they confirm, this build is authoritative over those
   frames**. **Awaiting Miles**: #66's three answers · the reworded
