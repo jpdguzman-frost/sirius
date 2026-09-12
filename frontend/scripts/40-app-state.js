@@ -247,41 +247,6 @@ const app = new Ractive({
       const p = this.get('projects').find((x) => x._id === this.get('activeProjectId'));
       return p ? p.trello_board_id : '';
     },
-    kpi() {
-      const rows = this.get('rows');
-      const byMc = this.get('workCardsByMc');
-      /* Both work-card totals in ONE pass over the map — WORK CARDS is every
-         entry, URGENT is the entries carrying the label, and counting them
-         apart walked every list twice and built a throwaway array per MC.
-
-         owl #78 §1: urgency lives on the WORK CARD, so the tile counts urgent
-         WORK cards project-wide — the same population `work` totals, orphans
-         included. It counted main rows before, which was the only number on
-         this screen still reading a main card's Urgent label after the column
-         stopped showing one. WHICH population the tile means has never been
-         ruled — the frame gives it no definition beyond the word — so
-         project-wide is the reading that matches what the column shows. Asked
-         of Miles; the urgency test in the loop below is the one thing that
-         changes if he wants attached cards only. */
-      let work = 0;
-      let urgent = 0;
-      for (const cards of Object.values(byMc)) {
-        work += cards.length;
-        for (const w of cards) if (w.urgency === 'Urgent') urgent += 1;
-      }
-      const unattached = this.get('unattachedWork') || { cards: 0, mcNumbers: [] };
-      return {
-        main: rows.length,
-        work,
-        /* owl #61. `work` above ALREADY counts these — the server keys work
-           cards by MC and orphans get a key like any other — so the strip has
-           always reported a total that included cards no row could ever show.
-           Naming them turns a quiet inaccuracy into a stated one. */
-        unattached: unattached.cards,
-        unattachedMcs: unattached.mcNumbers.length,
-        urgent, // owl #78 §1 / PLAN D3 — counted above, with WORK CARDS
-      };
-    },
     /* Search alone — the set every filter axis counts against, and the base
        both `pipelineRows` and `pipeFacets` build on so they cannot disagree
        about what "the table" is. */
@@ -426,6 +391,66 @@ const app = new Ractive({
       const sel = this.get('pipeFilters');
       const out = {};
       for (const [mc, kids] of Object.entries(byMc)) out[mc] = kids.filter((w) => pipeWorkMatch(w, sel, null));
+      return out;
+    },
+    /* THE METRIC STRIP, over what the table is showing (build spec v1.4 §4.0;
+       owls #91–#93, Miles, 2026-09-10). Four figures, every one of them
+       counting task cards — ONE unit, so the four can be read against each
+       other — over the MCs the search and the filters left on the table. It
+       rescopes with the table because the reader cannot tell which control
+       narrowed it, so a project-wide total sitting above a narrowed table
+       would read as a contradiction of the rows beneath it rather than as a
+       second scope. An empty table keeps the strip and reads zeroes: zero is
+       a truthful answer, and a strip that vanished would take the
+       explanation away with it.
+
+       WALKED BY MC, ONCE EACH — never per row, and this is the one property
+       to keep if any of it is ever rewritten. Every row of an MC holds the
+       SAME array object its siblings hold (stamped once in loadAll, not
+       copied), so totalling row by row multiplies an MC's cards by however
+       many deliverables it carries — ninety-nine of them on the largest. The
+       MC number is the identity here for the same reason the anchor above
+       needs one: mc_number is not unique (invariant three), so the DISTINCT
+       keys on the table are the population, and a row carrying no MC number
+       contributes nothing.
+
+       A card in an OPS lane (§7a's excluded state) is dropped BEFORE
+       anything is counted, the cross-cutting figure included: ops work is
+       not Frost's work, and an urgent ops card is the one way this strip
+       could inflate a figure that claims to be Frost's.
+
+       The cross-cutting figure counts the label over those same survivors
+       and is never added to the other three — a card carrying it is also in
+       one of the three states, never instead of one. The month lanes tally
+       the same way (11-constants-deadlines.js).
+
+       Under a live work-card axis only the cards that axis admits are
+       counted, through the SAME predicate the open group draws its children
+       with just above — a strip counting cards the table is actively hiding
+       has stopped describing the table. The consequence is deliberate: the
+       three states then describe the filtered work, not the MC's whole load.
+
+       A task card whose MC has no row on the table is reachable from no key
+       in this walk, so it falls out of every figure by construction. That is
+       intended — §4.0 sends those to ingestion health, not here. */
+    pipeTiles() {
+      const byMc = this.get('workCardsByMc') || {};
+      const sel = this.get('pipeFilters');
+      const narrow = this.get('pipeWorkLive');
+      const out = { pending: 0, ongoing: 0, done: 0, urgent: 0 };
+      const counted = new Set();
+      for (const r of this.get('pipelineRows')) {
+        // ONCE PER MC, never once per row — see the array-sharing note above
+        if (!r.mcNumber || counted.has(r.mcNumber)) continue;
+        counted.add(r.mcNumber);
+        for (const w of byMc[r.mcNumber] || []) {
+          const state = w.status;
+          if (state === 'excluded') continue; // ops work, counted nowhere on this strip
+          if (narrow && !pipeWorkMatch(w, sel, null)) continue;
+          if (state === 'pending' || state === 'ongoing' || state === 'done') out[state] += 1;
+          if (w.urgency === 'Urgent') out.urgent += 1; // cross-cutting, never instead of a state
+        }
+      }
       return out;
     },
     /* owl #76, frame 748:18444 — the table's no-results verdict: the filtered

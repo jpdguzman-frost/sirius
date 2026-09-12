@@ -10,17 +10,43 @@
  * is now the guard that they stay gone. The colour RULE #69 established (a
  * coloured tile colours the label as well as the figure) outlived its first
  * tile and is asserted over the two modifiers that remain.
+ *
+ * AMENDED 2026-09-12, block 10 (owls #91/#92/#93, build spec v1.4 §4.0/§8):
+ * the strip was replaced WHOLE. The project-total computed these describes
+ * executed no longer exists; four rescoped work-card figures took its place.
+ * Three consequences, each handled below rather than deleted:
+ *   - the URGENT population is now the RESCOPED one, and D3's "orphans
+ *     included" reading is REVERSED — work under an MC with no row on the
+ *     table is reachable from no key in the new walk, by design.
+ *   - the UNATTACHED tile is retired, and its two rules go with it: hide-at-
+ *     zero (owl #61) and the tooltip that carried the consequence (owl #48).
+ *     That describe is now the guard that neither comes back HERE — the
+ *     warning itself survives on Sprint Schedules and is asserted to.
+ *   - the modifier set grew from two to four.
+ * The strip's own arithmetic — the by-MC walk, the excluded lanes, the
+ * rescoping and the cross-cutting rule — lives in test/pipeline-tiles.test.ts
+ * with the harness that executes it. What stays here is what this file has
+ * always owned: the two enumerated writes, the urgency POPULATION, the
+ * retirements, and the colour rules.
  */
 
 import { describe, expect, it } from 'vitest';
 import {
   APP_JS,
+  APP_JS_CODE,
+  COMPUTED_CTX_JS,
   PIPELINE_CSS,
+  TEMPLATE,
   TOKENS_CSS,
+  type WorkCardRow,
   cssRule,
+  divFragment,
   handlerBody,
   method,
+  pipeRecipeDecls,
   renderMetrics,
+  stampRows,
+  tabViewCode,
 } from './helpers/gantt-render.ts';
 
 /* ---------------------------------------------------------------------- */
@@ -85,127 +111,133 @@ describe('the urgency and difficulty writes address a WORK card, and only that',
 });
 
 /* ---------------------------------------------------------------------- */
-/* H2 — owl #78 §1 / D3: the URGENT tile counts WORK cards                  */
+/* H2 — owl #78 §1 / D3: the URGENT figure counts WORK cards                 */
 /* ---------------------------------------------------------------------- */
 
-describe('the URGENT tile counts urgent WORK cards, project-wide', () => {
+describe('the urgent figure counts urgent WORK cards, over the rows on the table', () => {
   /* EXECUTED, not read: a source assertion could show the computed reaching
      for `workCardsByMc` without showing it ever produces a different number
      from the old main-card count. The idiom is the executed-computed one this
      suite's siblings use (`method()` out of the shipped scripts, a `get` that
      serves the plain data the computed reads).
 
-     WHICH population "urgent" means was never ruled — the frame gives the tile
-     no definition beyond the word — so D3 reads it project-wide, orphans
-     included, matching the population the column now shows. Asked of Miles;
-     one line changes if he wants attached cards only. */
-  const kpi = (over: Record<string, unknown>) =>
-    new Function('DATA', `
-      const computed = { ${method('kpi')} };
-      return computed.kpi.call({ get: (k) => DATA[k] });
-    `)({
-      rows: [], workCardsByMc: {},
-      unattachedWork: { cards: 0, mcNumbers: [] },
-      ...over,
-    }) as { urgent: number; main: number; work: number };
+     WHICH population it means was unruled when #78 asked, and D3 answered it
+     project-wide, orphans included, to match the column beneath. Block 10
+     REVERSES that half: §8 rescopes every figure on the strip to the rows
+     search and filter have left, so the population is the distinct MCs on the
+     table, and work belonging to no row belongs to no figure. Its own home is
+     ingestion health (§4.0) — and §2.6, where the spec sends it, has never
+     been written, which is why nothing here counts it instead.
 
-  const wc = (cardId: string, urgency: string) => ({ cardId, urgency });
+     Scoped to the POPULATION question, which is this file's. How the walk
+     itself behaves — once per MC, ops lanes dropped, the filter and the search
+     followed — is test/pipeline-tiles.test.ts's, beside the harness. */
+  const tiles = (over: Record<string, unknown>) =>
+    new Function('stampRows', 'OVER', `
+      ${pipeRecipeDecls()}
+      const computed = { ${['pipeSearched', 'pipeSortDef', 'pipelineRows', 'pipeWorkLive', 'pipeTiles'].map((n) => method(n)).join(', ')} };
+      const DATA = { rows: [], searchQ: '', pipeFilters: PIPE_FILTERS_EMPTY(), pipeSort: null, workCardsByMc: {}, ...OVER };
+      DATA.rows = stampRows(DATA.rows, DATA.workCardsByMc);
+      ${COMPUTED_CTX_JS}
+      return computed.pipeTiles.call(ctx);
+    `)(stampRows, over) as { pending: number; ongoing: number; done: number; urgent: number };
+
+  /** a work card as the wire carries it, in a lane so the state figures see it too */
+  const wc = (cardId: string, urgency: string): WorkCardRow =>
+    ({ cardId, name: `work ${cardId}`, status: 'pending', urgency } as WorkCardRow);
 
   it('reads ZERO for an urgent MAIN card whose work cards are all quiet', () => {
     /* the exact state the defect produced: the label sits on the parent, the
-       tile counted it, and nothing a reader can see on the table agrees. */
-    const out = kpi({
+       tile counted it, and nothing a reader can see on the table agrees.
+       The state figure is read alongside, so a zero here cannot come from the
+       cards being dropped from the walk altogether — they ARE counted, and
+       only the parent's label is not. */
+    const out = tiles({
       rows: [{ cardId: 'main-1', mcNumber: 'MC-837', urgency: 'Urgent' }],
       workCardsByMc: { 'MC-837': [wc('t1', 'Non-Urgent'), wc('t2', 'Non-Urgent')] },
     });
     expect(out.urgent).toBe(0);
-    expect(out.main, 'MAIN CARDS still counts rows').toBe(1);
-    expect(out.work, 'WORK CARDS still counts every work card').toBe(2);
+    expect(out.pending, 'the two work cards were dropped from the walk entirely').toBe(2);
   });
 
   it('reads TWO for two urgent work cards under one MC', () => {
-    expect(kpi({
+    expect(tiles({
       rows: [{ cardId: 'main-1', mcNumber: 'MC-837', urgency: 'Non-Urgent' }],
       workCardsByMc: { 'MC-837': [wc('t1', 'Urgent'), wc('t2', 'Urgent'), wc('t3', 'Non-Urgent')] },
     }).urgent).toBe(2);
   });
 
-  it('counts an urgent card under an MC with no row at all (D3 — orphans included)', () => {
-    /* `work` above has always totalled these (owl #61), so excluding them here
-       would make the two tiles disagree about what the board holds. */
-    expect(kpi({ rows: [], workCardsByMc: { 'MC-999': [wc('t9', 'Urgent')] } }).urgent).toBe(1);
+  it('REVERSES D3 — an urgent card under an MC with no row is counted nowhere', () => {
+    /* D3 included orphans so the two tiles beside it could not disagree about
+       what the board held; block 10 retired both of those tiles, and §8
+       replaced the question. The figure describes the table now, and that card
+       is not on the table. The pair below is the whole rule: the same card,
+       counted once its MC has a row and not at all while it has none. */
+    const orphan = { 'MC-999': [wc('t9', 'Urgent')] };
+    expect(tiles({ rows: [], workCardsByMc: orphan }).urgent).toBe(0);
+    expect(tiles({ rows: [{ cardId: 'main-9', mcNumber: 'MC-999' }], workCardsByMc: orphan }).urgent).toBe(1);
   });
 
   it('treats a card with no urgency at all as quiet, not as urgent', () => {
     // the wire defaults to 'Non-Urgent', but a lean read that missed the field
     // must not promote the card — absence is the absence of the Urgent label
-    expect(kpi({ workCardsByMc: { 'MC-837': [{ cardId: 't1' }] } }).urgent).toBe(0);
+    expect(tiles({
+      rows: [{ cardId: 'main-1', mcNumber: 'MC-837' }],
+      workCardsByMc: { 'MC-837': [{ cardId: 't1', name: 'no urgency field', status: 'pending' }] },
+    }).urgent).toBe(0);
   });
 });
 
 /* ---------------------------------------------------------------------- */
-/* I — owl #61: work that belongs to no row and no week                     */
+/* I — owl #61's tile is RETIRED, and so are the two rules it carried        */
 /* ---------------------------------------------------------------------- */
 
-describe('the UNATTACHED metric states work that is absent from capacity', () => {
-  const kpi = (over: Record<string, unknown> = {}) => ({
-    main: 10, work: 45, open: 3, urgent: 1, unattached: 35, unattachedMcs: 11, ...over,
+describe('the UNATTACHED tile and both of its rules are off the Pipeline strip', () => {
+  /* WHAT DIED WITH THE TILE, said where the next reader will look for it.
+     This describe used to assert three things about a fourth tile: that it
+     drew the orphaned work, that it HID ITSELF AT ZERO (owl #61 — "a
+     permanent zero teaches people to stop reading it"), and that its tooltip
+     carried the CONSEQUENCE rather than the number (owl #48 — the cards are
+     counted in no week's capacity, so planned load reads light).
+
+     Block 10 retires the tile, and both rules retire with it. They are not
+     rules of the strip and must not be carried onto the four figures that
+     replaced it: those are unconditional by ruling (§8, a zero is a truthful
+     answer) and none of them carries a tooltip, because a figure that needs a
+     sentence to be readable is the wrong figure.
+
+     THE FACT ITSELF IS NOT LOST. The server still derives the count, and
+     Sprint Schedules still draws it from the loader state with the same
+     consequence in the same voice. That is now its ONE home — asserted here,
+     because retiring the tile is only safe while the other one stands. */
+
+  it('draws no such tile, at any value, and no tooltip anywhere on the strip', () => {
+    const markup = renderMetrics({ pending: 10, ongoing: 45, done: 4, urgent: 1 });
+    expect(markup).not.toContain('UNATTACHED');
+    expect(markup, 'a figure on the strip needs a sentence to be readable').not.toContain('title=');
   });
 
-  it('renders the tile with the count when there is unattached work', () => {
-    const html = renderMetrics(kpi());
-    // owl #79 / D8: the node's own string is UNATTACHED CARDS, not UNATTACHED
-    expect(html).toContain('UNATTACHED CARDS');
-    expect(html).toContain('>35</span>');
+  it('leaves NO quiet recipe behind for the tile to come back to', () => {
+    /* declarations only: a prose comment naming a retired modifier is history
+       being kept, not a treatment (test/CLAUDE.md rule 3). The same reason the
+       withdrawn `.blue` rule was removed rather than orphaned — a dead
+       selector reads as a live treatment to the next person pricing a change.
+       `.metric.warn` stays asserted gone too: #79 ruled "do not restore a
+       warning colour here", and it outlived the tile it was ruled about. */
+    const declarations = PIPELINE_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    expect(declarations, 'the retired tile kept its recipe').not.toContain('.metric.quiet');
+    expect(declarations, 'a warning colour came back to the strip').not.toContain('.metric.warn');
   });
 
-  it('HIDES at zero — a permanent zero teaches people to stop reading it', () => {
-    expect(renderMetrics(kpi({ unattached: 0, unattachedMcs: 0 }))).not.toContain('UNATTACHED');
-    // the four standing metrics are untouched by its absence
-    expect(renderMetrics(kpi({ unattached: 0 }))).toContain('MAIN CARDS');
-    expect(renderMetrics(kpi({ unattached: 0 }))).toContain('URGENT');
-  });
-
-  it('carries the CONSEQUENCE in its tooltip, not just the number', () => {
-    /* the count alone is trivia; "counted in NO week's capacity" is the thing
-       that tells a PM their planned load reads lighter than the real work */
-    const tip = /title="([^"]*)"/.exec(renderMetrics(kpi()))![1]!;
+  it('keeps the warning itself alive on Sprint Schedules, with its consequence', () => {
+    /* Not a copy of the sentence — the SHAPE of it: the count, the fact that
+       these belong to no week, and where it gets fixed. A tab that kept the
+       number and dropped the consequence would leave the reader with trivia. */
+    expect(TEMPLATE).toContain('unattachedWork.cards');
+    const tip = /title="([^"]*)"/.exec(TEMPLATE.slice(TEMPLATE.indexOf('cwunattached')))![1]!;
     expect(tip).toContain('no main card');
-    // apostrophes come back HTML-escaped from toHTML(), so match around one
-    expect(tip).toMatch(/counted in NO week/i);
+    expect(tip).toMatch(/counted in no week/i);
     expect(tip).toContain('Trello'); // where it gets fixed — at source, not here
-  });
-
-  it('pluralises both counts rather than printing "1 cards across 1 MC numbers"', () => {
-    const tip = (n: number, mcs: number) =>
-      /title="([^"]*)"/.exec(renderMetrics(kpi({ unattached: n, unattachedMcs: mcs })))![1]!;
-    expect(tip(1, 1)).toContain('1 task card across 1 MC number ');
-    expect(tip(35, 11)).toContain('35 task cards across 11 MC numbers ');
-  });
-
-  it('wears the QUIETEST voice on the strip — slate-400, and never a warning again', () => {
-    /* SUPERSEDES owl #61's amber-700 reading, which this test used to pin.
-       Owl #79 (node 843:125895, #94A3B8 on both text nodes) demoted the tile:
-       unattached cards are a condition of the DATA, not of the work, and amber
-       sat one shade from URGENT — two adjacent tiles competing in the same warm
-       family while answering unrelated questions. The tooltip carries the
-       consequence (#48's reasoning, asserted above); the tile carries the
-       number. #61's hide-at-zero rule is untouched and still asserted above.
-
-       "Do not restore a warning colour here" is the ruling, so the OLD
-       modifier is asserted gone from the stylesheet rather than merely unused:
-       a live `.metric.warn` rule is exactly how the amber comes back, one
-       template edit later, under a green suite. */
-    expect(renderMetrics(kpi())).toContain('class="metric quiet"');
-    const rule = cssRule('.metrics .metric.quiet .mlabel, .metrics .metric.quiet .mvalue', PIPELINE_CSS);
-    expect(rule).toContain('var(--slate-400)');
-    expect(TOKENS_CSS).toContain('--slate-400:');
-    // the help cursor moved with the modifier — the tooltip IS the tile's point
-    expect(cssRule('.metrics .metric.quiet .mvalue', PIPELINE_CSS)).toContain('cursor: help');
-    // declarations only: a prose comment naming the retired modifier is history
-    // being kept, not a treatment (test/CLAUDE.md rule 3)
-    expect(PIPELINE_CSS.replace(/\/\*[\s\S]*?\*\//g, ' ')).not.toContain('.metric.warn');
-    expect(renderMetrics(kpi())).not.toContain('class="metric warn"');
   });
 });
 
@@ -215,7 +247,7 @@ describe('the UNATTACHED metric states work that is absent from capacity', () =>
 /* ------------------------------------------------------------------ */
 
 describe('the Pipeline urgency colour set is amber, tile and badge alike', () => {
-  const kpi = { main: 10, work: 45, open: 4, urgent: 3, unattached: 0, unattachedMcs: 0 };
+  const tiles = { pending: 10, ongoing: 45, done: 4, urgent: 3 };
 
   it('paints the URGENT tile amber-600 on BOTH text nodes, not red', () => {
     /* SUPERSEDES the `.metric.red` reading the tile shipped with (and the
@@ -224,9 +256,10 @@ describe('the Pipeline urgency colour set is amber, tile and badge alike', () =>
        it closed: "URGENT tile is now #D97706, overline and figure both,
        matching the Urgent badge exactly. Do not revert the tile to red."
        Pipeline gets its OWN modifier so Deadlines' URGENT tile, which #79
-       leaves alone, keeps `.red`. */
-    expect(renderMetrics(kpi)).toContain('class="metric urgent"');
-    expect(renderMetrics(kpi), 'the Pipeline strip went back to red').not.toContain('class="metric red"');
+       leaves alone, keeps `.red`. Block 10 rebuilt the strip around it and
+       left this tile alone, which is why the ruling reads unchanged. */
+    expect(renderMetrics(tiles)).toContain('class="metric urgent"');
+    expect(renderMetrics(tiles), 'the Pipeline strip went back to red').not.toContain('class="metric red"');
     const rule = cssRule('.metrics .metric.urgent .mlabel, .metrics .metric.urgent .mvalue', PIPELINE_CSS);
     expect(rule).toContain('var(--amber-600)');
     expect(TOKENS_CSS).toContain('--amber-600:');
@@ -323,48 +356,56 @@ describe('the Pipeline urgency colour set is amber, tile and badge alike', () =>
 });
 
 /* ------------------------------------------------------------------ */
-/* The metric strip — owl #81 took OPEN WORK off it                    */
+/* The metric strip — what is NOT on it, at three depths                */
 /* ------------------------------------------------------------------ */
 
-describe('the strip counts four things, and incomplete cards is not one of them', () => {
-  const kpi = { main: 10, work: 45, urgent: 1, unattached: 0, unattachedMcs: 0 };
+describe('the strip counts four things, and none of them is a project total', () => {
+  const tiles = { pending: 10, ongoing: 45, done: 4, urgent: 1 };
 
-  /* THE RULING (owl #81, Miles, 2026-09-07). OPEN WORK counted `corrections`
-     — the incomplete-card set build-spec §4.4 described — and §4.4 is
-     withdrawn whole. The stale claim went with it: the metric strip counts
-     work cards now, and the incomplete set has NO tile. If a count of
-     incomplete cards is ever wanted it needs its own decision rather than
-     inheriting a tile whose meaning has moved.
+  /* THE RULINGS, stacked. Owl #81 (2026-09-07) took OPEN WORK off: it counted
+     `corrections`, the incomplete-card set build-spec §4.4 described, and §4.4
+     is withdrawn whole. Owls #91–#93 (2026-09-10) then replaced the rest — the
+     two reconciliation totals and the ingestion warning are dropped from this
+     tab, and four work-card figures stand in their place.
 
-     This is the negation of the guard that used to stand here ("keeps OPEN
-     WORK counting corrections"). It is asserted at three depths, because the
-     tile could come back at any one of them on its own: the rendered strip,
-     the computed that fed it, and the state key the computed counted. */
+     This is the negation of every guard that ever stood here, asserted at the
+     three depths a retired tile can come back at on its own: the rendered
+     strip, the computed that feeds it, and the state the computed counts.
+     The POSITIVE half — four tiles, in order, unconditional, correctly
+     coloured — is test/pipeline-tiles.test.ts's. */
 
-  it('renders MAIN CARDS · WORK CARDS · URGENT — and no OPEN WORK', () => {
-    const markup = renderMetrics(kpi);
-    expect(markup, 'the withdrawn tile is back on the strip').not.toContain('OPEN WORK');
-    expect(markup, 'the tile came back under another word').not.toContain('metric blue');
-    for (const label of ['MAIN CARDS', 'WORK CARDS', 'URGENT']) {
+  it('renders PENDING · ONGOING · DONE · URGENT and none of the four retired labels', () => {
+    const markup = renderMetrics(tiles);
+    for (const gone of ['OPEN WORK', 'MAIN CARDS', 'WORK CARDS', 'UNATTACHED CARDS']) {
+      expect(markup, `${gone} is back on the strip`).not.toContain(gone);
+    }
+    expect(markup, 'the withdrawn tile came back under another word').not.toContain('metric blue');
+    for (const label of ['PENDING', 'ONGOING', 'DONE', 'URGENT']) {
       expect(markup, `${label} left the strip`).toContain(label);
     }
   });
 
-  it('draws UNATTACHED CARDS as the fourth, and only when there is some (owl #61)', () => {
-    // the conditional tile is what makes "four" the full strip rather than a
-    // count of what this fixture happens to carry
-    expect(renderMetrics(kpi), 'a permanent zero teaches people to stop reading it')
-      .not.toContain('UNATTACHED CARDS');
-    expect(renderMetrics({ ...kpi, unattached: 35, unattachedMcs: 11 })).toContain('UNATTACHED CARDS');
+  it('draws its fourth tile ALWAYS — the conditional one retired with owl #61', () => {
+    // what used to make "four" a count of what a fixture happened to carry is
+    // now a property of the strip: nothing on it is conditional, so the same
+    // four tiles render at every value, a full set of zeroes included
+    for (const fixture of [tiles, { pending: 0, ongoing: 0, done: 0, urgent: 0 }]) {
+      expect([...renderMetrics(fixture).matchAll(/class="metric /g)]).toHaveLength(4);
+    }
   });
 
-  it('stops computing `open`, and stops holding `corrections` to compute it from', () => {
+  it('stops computing the retired figures, and stops holding the state they counted', () => {
     /* Deeper than the markup: a tile removed from the template while the
        computed still counted a state key nobody filled would ship a silent
        arithmetic over an empty array, ready for the next reader to re-surface.
-       The payload half is the server's (agent L) — this is the client's. */
-    expect(method('kpi'), 'the kpi computed still returns an `open` count').not.toMatch(/\bopen:/);
+       Read off the comment-free corpus so the reasoning above the computed can
+       go on naming what was dropped (test/CLAUDE.md rule 3). */
+    const body = method('pipeTiles', APP_JS_CODE);
+    expect(body, 'OPEN WORK came back as a figure of the strip computed').not.toMatch(/\bopen\s*:/);
     expect(APP_JS, 'the client still holds a `corrections` array').not.toContain('corrections');
+    // the two reconciliation totals and the ingestion count are the block-10
+    // half of the same rule, asserted beside the computed in
+    // test/pipeline-tiles.test.ts rather than restated here
   });
 
   it('leaves NO .blue tile recipe behind for it to come back to', () => {
@@ -373,6 +414,16 @@ describe('the strip counts four things, and incomplete cards is not one of them'
     expect(PIPELINE_CSS, 'the OPEN WORK tile colour outlived the tile')
       .not.toMatch(/\.metric\.blue/);
   });
+
+  it('reads ONE computed, and the tab reads no other figure source', () => {
+    /* The strip is one computed's four fields. A tile wired to a second source
+       — a loader field, a server count — would render perfectly and rescope
+       with nothing, which is the failure §8 is about. */
+    const strip = divFragment('<div class="metrics">', tabViewCode('pipeline'));
+    const reads = [...strip.matchAll(/\{\{([a-zA-Z]+)\.([a-zA-Z]+)\}\}/g)];
+    expect(reads.length, 'no figure is read at all — the tiles draw literals').toBe(4);
+    expect([...new Set(reads.map((m) => m[1]!))]).toEqual(['pipeTiles']);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -380,7 +431,7 @@ describe('the strip counts four things, and incomplete cards is not one of them'
 /* ------------------------------------------------------------------ */
 
 describe('a coloured metric tile colours the LABEL as well as the figure', () => {
-  const kpi = { main: 10, work: 45, urgent: 1, unattached: 0, unattachedMcs: 0 };
+  const tiles = { pending: 10, ongoing: 45, done: 4, urgent: 1 };
 
   /* THE RULE, not this tile. #69 says "both text nodes take the colour" and
      says it twice, because the natural build is to colour only the 32px
@@ -389,16 +440,19 @@ describe('a coloured metric tile colours the LABEL as well as the figure', () =>
      the shipped markup actually uses, so the next coloured tile is covered
      the day it is added and nobody has to remember this file exists. */
   it('EVERY metric modifier in the shipped markup pairs .mlabel with .mvalue', () => {
-    const markup = renderMetrics({ ...kpi, unattached: 35, unattachedMcs: 11 });
+    const markup = renderMetrics(tiles);
     const modifiers = [...markup.matchAll(/class="metric ([a-z]+)"/g)].map((m) => m[1]!);
     expect(new Set(modifiers).size, 'no coloured tiles rendered — the guard would pass vacuously')
       .toBeGreaterThan(1);
     /* #69's promise was that the NEXT coloured tile is covered the day it is
-       added, and owls #78/#79 are that day: `urgent` and `quiet` are the two
-       modifiers they introduce, and both must be inside this walk rather than
-       beside it. Named explicitly so a renamed modifier fails here instead of
-       quietly leaving the pairing rule uncovered. */
-    expect([...new Set(modifiers)].sort()).toEqual(['quiet', 'urgent']);
+       added, and this is the third time it has come due: #78/#79 brought
+       `urgent` and `quiet`, and owls #91–#93 replaced the whole strip with
+       four coloured tiles at once — every one of which lands inside this walk
+       rather than beside it, with no edit to the loop below. The set is named
+       explicitly so a renamed or dropped modifier fails HERE instead of
+       quietly leaving the pairing rule uncovered, and it is the complete set:
+       an uncoloured fifth tile would fail it too, which is the point. */
+    expect([...new Set(modifiers)].sort()).toEqual(['done', 'ongoing', 'pending', 'urgent']);
 
     for (const mod of new Set(modifiers)) {
       const selector = `.metrics .metric.${mod} .mlabel, .metrics .metric.${mod} .mvalue`;

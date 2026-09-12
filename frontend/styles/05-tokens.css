@@ -30,6 +30,10 @@
   --amber-600: #d97706;
   --amber-700: #b45309;
   --amber-800: #92400e;
+  --yellow-600: #ca8a04; /* the first of Pipeline's three state figures
+     (build-spec v1.4 §4.0, read from the tile node 2026-09-12). Less orange
+     than the amber ramp directly above, which answers a different question on
+     the same strip — the two do not substitute for each other there. */
   --blue-50: #eff6ff; /* Requests filter-bar active select (build-spec v1.2 §3) */
   --blue-100: #dbeafe;
   --blue-200: #bfdbfe;
@@ -45,6 +49,13 @@
   --green-500: #22c55e;
   --green-600: #16a34a;
   --emerald-100: #d1fae5;
+  --emerald-600: #059669; /* completion — Pipeline's third state figure
+     (build-spec v1.4 §4.0, read from the tile node 2026-09-12). Emerald and
+     not the green ramp, which is a decision rather than a shade preference:
+     green already carries Easy in the difficulty column of the very same
+     table, while emerald is what completion wears across the product — the
+     state badge on those rows sits on the fill one line up. One hue, one
+     meaning. */
 
   /* type scale */
   --text-caption: 10px;

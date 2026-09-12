@@ -825,13 +825,23 @@ const DUE_CALENDAR_PARTIAL = (() => {
 })();
 
 /**
- * Renders the Pipeline KPI strip (`<div class="metrics">`) with a supplied
- * `kpi`. Its own renderer because the strip sits OUTSIDE `.pscrollwrap` — the
- * table renderer cannot reach it, and owl #61's tile is conditional, so its
- * absence at zero has to be renderable to be provable.
+ * Renders the Pipeline metric strip (`<div class="metrics">`) over a supplied
+ * `pipeTiles`. Its own renderer because the strip sits OUTSIDE `.pscrollwrap`
+ * — the table renderer starts inside the scroll wrapper and cannot reach a
+ * sibling above it, and the strip has to render on its own for the swap
+ * beneath it (an emptied table) to be provable without the table.
+ *
+ * BLOCK 10 (2026-09-12, owls #91–#93): the seeded key follows the strip. It
+ * used to be `kpi`, and every tile was a project total; the strip reads one
+ * computed of four rescoped figures now. The rename is not cosmetic — a
+ * renderer seeding a key the template no longer reads still returns markup,
+ * with every figure blank, so the whole suite would go green against empty
+ * spans. That is the exact vacuity test/CLAUDE.md rule 6 exists to catch, and
+ * it is why test/pipeline-tiles.test.ts asserts this helper's own figures
+ * reach the markup before it asserts anything about them.
  */
-export function renderMetrics(kpi: Record<string, unknown>): string {
-  return new Ractive({ template: divFragment('<div class="metrics">'), data: { kpi } }).toHTML();
+export function renderMetrics(pipeTiles: Record<string, unknown>): string {
+  return new Ractive({ template: divFragment('<div class="metrics">'), data: { pipeTiles } }).toHTML();
 }
 
 export const PIPE_COLS: Array<{ cls: string; label: string }> =

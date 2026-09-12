@@ -79,25 +79,42 @@
 .metrics .metric .mvalue { font-size: var(--text-display); font-weight: 600; line-height: 1.2; color: var(--surface-foreground); }
 .metrics .metric.red .mlabel, .metrics .metric.red .mvalue { color: var(--status-destructive-strong); }
 .metrics .metric.green .mlabel, .metrics .metric.green .mvalue { color: var(--green-600); }
+/* THE THREE STATE FIGURES — build-spec v1.4 §4.0, owls #91–#93 (Miles,
+   2026-09-10). The fills are read from the four tile nodes through Rex on
+   2026-09-12, never from the annotation prose: that prose has now been wrong
+   about its own design four times on this project, and the node is the only
+   thing that has not been.
+
+   Each rule names BOTH text nodes because the overline and the figure carry
+   the SAME fill on every tile (owl #69, and it is asserted). The natural build
+   colours only the 32px figure, which strands it under a slate-900 overline
+   and reads as a rendering fault rather than as a treatment.
+
+   The completion figure is emerald and deliberately NOT the green ramp. Green
+   is already spoken for on this table — it is what Easy wears in the
+   difficulty column a few hundred lines down — and emerald is what completion
+   wears across the product, including the state badge on the rows these
+   figures count. One hue, one meaning. Do not fold it back onto green because
+   the two sit close in a swatch list.
+
+   Nor are these the row state badges' recipes — two of the three part company
+   with the badge naming the same state (the first is yellow where its badge is
+   amber; the third is emerald where its badge's text is green). The nodes say so.
+   Do not bring the two sets into line by hand. */
+.metrics .metric.pending .mlabel, .metrics .metric.pending .mvalue { color: var(--yellow-600); }
+.metrics .metric.ongoing .mlabel, .metrics .metric.ongoing .mvalue { color: var(--blue-500); }
+.metrics .metric.done .mlabel, .metrics .metric.done .mvalue { color: var(--emerald-600); }
 /* Pipeline's URGENT tile — owl #79, node 843:125894. The same amber the Urgent
    badge wears on the work-card rows, so urgency speaks with ONE colour on this
    tab: tile and badge are the same claim at two scales. Deadlines' own URGENT
    tile keeps `.red` (its rail ruling is still open, #79) — this modifier is
    Pipeline's, which is why it is a new one rather than a repaint of `.red`. */
 .metrics .metric.urgent .mlabel, .metrics .metric.urgent .mvalue { color: var(--amber-600); }
-/* UNATTACHED CARDS — owl #79 (node 843:125895), which SUPERSEDES the amber
-   reading owl #61 gave this tile. Amber sat one shade from the URGENT tile:
-   two neighbours competing in the same warm family while answering unrelated
-   questions. Unattached work is a condition of the DATA, not of the work, so
-   the tile states the number and the tooltip carries the consequence (the #48
-   reasoning, unchanged). Do not restore a warning colour here. */
-.metrics .metric.quiet .mlabel, .metrics .metric.quiet .mvalue { color: var(--slate-400); }
-.metrics .metric.quiet .mvalue { cursor: help; }
 .metrics .metric.amber .mlabel, .metrics .metric.amber .mvalue { color: var(--amber-500); }
 /* WITHDRAWN 2026-09-07 (owl #81, Miles): `.blue` was the OPEN WORK tile's, and
    OPEN WORK counted the incomplete cards §4.4 withdrew. The strip is four
-   tiles now — MAIN CARDS, WORK CARDS, URGENT, UNATTACHED CARDS — and the rule
-   is removed rather than left orphaned: a dead modifier reads as a live
+   tiles now and none of them counts an incomplete card, so the rule is
+   removed rather than left orphaned: a dead modifier reads as a live
    treatment to the next person pricing a change. If a count of incomplete
    cards is ever wanted it needs its own decision, not a tile whose meaning has
    moved. */

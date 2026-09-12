@@ -1,34 +1,65 @@
 {{#if activeTab === 'pipeline'}}
   <div class="metrics">
-    <div class="metric"><span class="mlabel">MAIN CARDS</span><span class="mvalue">{{kpi.main}}</span></div>
-    <div class="metric"><span class="mlabel">WORK CARDS</span><span class="mvalue">{{kpi.work}}</span></div>
-    {{! owl #79, node 843:125894 — this tile was red; it is amber now, the
-        same amber the Urgent badge wears on the work-card rows, so urgency
-        speaks with ONE colour on this tab. The red belonged to the Deadlines
-        tab's urgent tile, which Miles is still ruling on — hence a tab-local
-        modifier here rather than a change to the shared one. Overline and
-        figure are coloured together, never one alone. }}
-    <div class="metric urgent"><span class="mlabel">URGENT</span><span class="mvalue">{{kpi.urgent}}</span></div>
-    {{! owl #61 — Miles: make the orphaned work VISIBLE. Renders only when
-        there is some, because a permanent zero teaches people to stop reading
-        it. WORK CARDS beside it already counts these, so this names a subset
-        rather than adding to a total. The title carries the consequence,
-        which is the part that matters: they are absent from capacity, so the
-        forecast is quietly light and nothing else says so. Not a data fix —
-        the cards need correcting at source.
+    {{! owls #91 / #92 / #93 (Miles, 2026-09-10) and build spec v1.4 §4.0,
+        nodes 843:125893 / 843:125895 / 913:36123 / 843:125894. The strip was
+        replaced WHOLE. What stood here before were two reconciliation totals
+        and an ingestion warning — figures read deliberately when a sync is
+        suspect, not daily by the PM. The spec sends them to an ingestion
+        health section that has never been written, so they are DROPPED here
+        rather than rehomed here. Do not invent that section to hold them, and
+        do not quietly restore a tile because someone misses its number.
 
-        owl #79, node 843:125895 SUPERSEDES #61's amber: this tile is now the
-        quietest thing on the strip, grey. It sat one shade from URGENT, two
-        neighbours competing in the same warm family over unrelated questions
-        — and unattached cards are a condition of the DATA, not of the work.
-        Do not restore a warning colour: the title above carries the
-        consequence, the tile carries only the number. #61's hide-it-at-zero
-        rule survives untouched. The node also spells the label out in full. }}
-    {{#if kpi.unattached}}
-    <div class="metric quiet"><span class="mlabel">UNATTACHED CARDS</span><span class="mvalue"
-      title="{{kpi.unattached}} task card{{kpi.unattached === 1 ? '' : 's'}} across {{kpi.unattachedMcs}} MC number{{kpi.unattachedMcs === 1 ? '' : 's'}} carry an MC number with no main card. They appear under no row and are counted in NO week's capacity, so planned load reads lighter than the real work. Fix the card at source in Trello."
-      >{{kpi.unattached}}</span></div>
-    {{/if}}
+        Every tile counts WORK-CARD units — one unit across all four, because
+        the work is carried by those and not by the cards that merely track
+        it. The first three partition the non-excluded lanes of §7a and
+        therefore sum; ops lanes are counted in none of them.
+
+        THE LAST TILE IS CROSS-CUTTING, NOT A FOURTH STATE. A card counted
+        there is also counted in one of the first three, and it is NEVER
+        added to them. The strip does not total.
+
+        The tiles count work-card units while the filter positions a
+        DELIVERABLE by reading its main-card lane (§4.1). Filtering answers
+        where a request stands; the strip answers how much is in flight. Both
+        are correct at once and a future reader will be tempted to reconcile
+        them. Do not — the split is the ruling, not an oversight.
+
+        FOUR SIBLINGS, NOT A LOOP. There is no dynamic list of tiles here, and
+        test law rule 6 is unforgiving: an array a template walks must be
+        stubbed in a render test or the section draws nothing and every
+        assertion passes against empty markup. A fixed set of four gains
+        nothing from being iterated and risks a whole suite going vacuous.
+
+        NOTHING HERE IS CONDITIONAL. All four draw always, a zero included:
+        §8 — a zero is the truthful answer to a query that matched nothing,
+        while a strip that vanishes reads as a broken page. The tile that
+        stood fourth before hid itself at zero (owl #61); that rule retired
+        WITH the tile it protected and must not be carried onto these. For the
+        same reason the strip stays put in the no-results state — it does not
+        leave with the table and the pager.
+
+        The figures rescope to search and to the filter, which is §8 reversing
+        its own former rule: they describe what is left on the table, not the
+        project. The arithmetic belongs to the computed, never to this
+        template. What makes a narrowed number safe to read is the chip row
+        above — an active axis is always on screen, so a rescoped figure can
+        never be mistaken for a project total. If chips are ever allowed to
+        hide, that stops being true.
+
+        Colour belongs to the stylesheet, one modifier per tile, and owl #69's
+        rule holds for all four: the overline and the figure take the colour
+        together, never one alone. The last tile's amber is unchanged from owl
+        #79 — it was red once, and the red stayed with the Deadlines tab's
+        equivalent tile, which is why the modifier is tab-local rather than a
+        change to the shared one. Urgency speaks with ONE colour on this tab.
+
+        The ingestion warning is NOT lost with its tile: Sprint Schedules
+        draws it straight from the loader state, and that is now its only home
+        in the app. }}
+    <div class="metric pending"><span class="mlabel">PENDING</span><span class="mvalue">{{pipeTiles.pending}}</span></div>
+    <div class="metric ongoing"><span class="mlabel">ONGOING</span><span class="mvalue">{{pipeTiles.ongoing}}</span></div>
+    <div class="metric done"><span class="mlabel">DONE</span><span class="mvalue">{{pipeTiles.done}}</span></div>
+    <div class="metric urgent"><span class="mlabel">URGENT</span><span class="mvalue">{{pipeTiles.urgent}}</span></div>
   </div>
 
   <div class="pipestack">
