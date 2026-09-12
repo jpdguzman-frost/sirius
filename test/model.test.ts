@@ -555,7 +555,14 @@ describe('refresh + loader (integration)', () => {
     const { model, provenance } = await loadProjectModel(p._id);
     expect(model.design.Easy?.ops?.['0.7']).toBe(ops.p70); // the MEASURED lane still wins
     expect(model.design.Easy?.design).toEqual(EMPIRICAL.design.Easy!.design); // the absent one is snapshot-filled
-    expect(provenance.source).toContain('lanes from snapshot'); // FR-7.7 visibility
+    /* FR-7.7 visibility. The count is DERIVED from the snapshot's own Easy tier
+       (rule 2) — block 12 retired the assets cell, so that tier now has exactly
+       one lane left for the fill to report, and the provenance string is
+       correctly singular. Pinning the plural would break again the next time
+       the snapshot's lane set changes. */
+    const filled = Object.keys(EMPIRICAL.design.Easy!).filter((l) => l !== 'ops').length;
+    expect(filled, 'the fixture must leave a lane for the fill to report').toBeGreaterThan(0);
+    expect(provenance.source).toContain(`${filled} lane${filled === 1 ? '' : 's'} from snapshot`);
 
     const f = forecast(
       { difficulty: 'Easy', currentList: 'Working on Design', labels: [], startDate: '2026-08-03', confidence: '0.7', slaSketch: null, slaRender: null },

@@ -33,21 +33,19 @@ bundle, minified identifiers kept, DO NOT EDIT.
 
   **AMENDED 2026-09-10 (JP, block-8 Q3)** — FIVE additive edits; nothing else
   moves:
-  1. `Lane` gains `content`; `designCell`'s fallback chain is untouched, so a
-     `content` card with no cell of its own prices off `design`.
+  1. `Lane` gains `content`. ⚠️ 1 and 4 SUPERSEDED by decisions/0026.
   2. `WORK_TYPE_LANES` — the board's label FAMILY folded onto a lane; growing
      it is a product ruling.
   3. `workTypeOf(labels)` — the ONE work-type label, else null; ARES's
      `extractWorkTypeLabels` shape exactly (X3).
-  4. `laneOfWorkType(key)` — family → lane via `Object.hasOwn` (A1-F3);
-     unmapped (Build, Dev) is null, never `design`.
+  4. `laneOfWorkType(key)` — family → lane via `Object.hasOwn` (A1-F3).
   5. `laneOf` gains a label-family branch AHEAD of the list/title regex, whose
      TEXT is unchanged but is FED the list plus non-family-shaped labels only
      (A1-F1/X2): a declined work type falls to the list.
 
   2–5 live here (lib never imports src); `src/services/work-type.ts` re-exports
-  them. Golden parity is unaffected — `test/forecast.test.ts` drives it against
-  the oracle with `labels: []`, where the branch cannot fire.
+  them. ⚠️ That suite drives LIST names as well as `labels: []`, so the regex
+  IS reached — see decisions/0026 on the pinned divergence.
 - `sheets.ts` (read-only Sheets source) and `trello.ts` (THE write path,
   exactly registry entries W1/W2/W3) are governed by invariants 2 and 8 and
   `specs/001-sirius-v1/contracts/trello-write.md` — pointer only.

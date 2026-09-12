@@ -228,18 +228,26 @@ describe('adding a card and plotting its bar are two acts', () => {
     }
   });
 
-  /* THE CELL IS NOT CHOSEN BY THE CARD'S TITLE. `laneOf` matches
-     /asset|illustrat|render|icon/, and every task prefix the board actually
-     uses — 'Sketch Asset', 'Render Asset', 'Icon Clean Up' — matches it. Feeding
-     the prefix in as a label therefore classified EVERY task card as `assets`,
-     which for an Easy card selects a 13.88-day cell instead of a 0.94-day one.
-     Fourteen times the duration, decided by a naming habit. Asserted across the
-     three real prefixes rather than on one, so a fourth prefix cannot quietly
-     reintroduce it. */
+  /* THE CELL IS NOT CHOSEN BY THE CARD'S TITLE. The task prefix is a naming
+     habit, not a classification: `finishOf` feeds `laneOf` the card's list and
+     labels and nothing else. Feeding the prefix in as a label instead
+     classified every task card off its title.
+
+     AMENDED 2026-09-12 (block 12). The original trap was the asset prefixes —
+     'Sketch Asset', 'Render Asset', 'Icon Clean Up' all matched the fallback's
+     `/asset|illustrat|render|icon/` alternation, so an Easy card picked up a
+     cell fourteen times the design one. That alternation was retired with the
+     cell behind it, so those three prefixes can no longer move the lane at all
+     and, alone, would make this case vacuous. They STAY — the real board still
+     uses them and their regression is the reason the case exists — and a
+     fourth, ops-flavoured prefix joins them to keep the discrimination live:
+     it is the one prefix that WOULD still change the answer if it leaked, and
+     the case asserts that it does not. */
   it('does not let the task PREFIX choose the design cell', async () => {
     const { project, sprint, agent } = await setup();
+    const PREFIXES = ['Sketch Asset', 'Render Asset', 'Icon Clean Up', 'Ops Board Management'];
     const finishes = new Set<string>();
-    for (const [i, prefix] of ['Sketch Asset', 'Render Asset', 'Icon Clean Up'].entries()) {
+    for (const [i, prefix] of PREFIXES.entries()) {
       const id = `p${i}`;
       await mkWorkCard(project._id, id, { difficulty: 'Easy', task_prefix: prefix, name: `${prefix}: X` });
       await addAndPlot(agent, project._id, id, String(sprint._id), '2026-08-03');
@@ -249,22 +257,20 @@ describe('adding a card and plotting its bar are two acts', () => {
 
     // one list, one lane, one duration — the prefix contributes nothing
     expect(finishes.size).toBe(1);
-    // and it is the DESIGN cell the card's own list implies, not the assets one
-    const expected = localIso(
-      forecast(
-        { difficulty: 'Easy', currentList: 'Working on Design', labels: [], startDate: '2026-08-03' },
-        EMPIRICAL,
-      ).sketchDelivery,
-    );
+    // and it is the cell the card's own list implies
+    const byList = (labels: string[]) =>
+      localIso(
+        forecast(
+          { difficulty: 'Easy', currentList: 'Working on Design', labels, startDate: '2026-08-03' },
+          EMPIRICAL,
+        ).sketchDelivery,
+      );
+    const expected = byList([]);
     expect([...finishes][0]).toBe(expected);
-    // the trap it replaces was not subtle: assets would have been ~13 days out
-    const assetsCell = localIso(
-      forecast(
-        { difficulty: 'Easy', currentList: 'Working on Design', labels: ['Sketch Asset'], startDate: '2026-08-03' },
-        EMPIRICAL,
-      ).sketchDelivery,
-    );
-    expect(assetsCell).not.toBe(expected);
+    // non-vacuity: at least one of the prefixes really would move the bar if it
+    // were fed to the classifier, so the assertion above is not free
+    const leaks = PREFIXES.filter((p) => byList([p]) !== expected);
+    expect(leaks.length, 'a prefix that WOULD change the lane must be in the fixture').toBeGreaterThan(0);
   });
 
   it('draws no bar for a card with no difficulty label', async () => {

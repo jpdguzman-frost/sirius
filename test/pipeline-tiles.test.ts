@@ -194,6 +194,11 @@ describe('the strip draws four tiles, in the ruled order, unconditionally', () =
 
        Four values chosen so no tile could borrow another's and pass. */
     const drawn = tilesOf(renderMetrics({ ...DISTINCT }));
+    /* The count comes FIRST. Review finding, 2026-09-12: a loop over an empty
+       list passes every iteration it never runs, so the guard written to catch
+       vacuity was vacuous itself — markup with no tiles at all, or with the
+       modifier class dropped so the parser matches nothing, sailed through it. */
+    expect(drawn, 'the strip rendered no tiles — the loop below would assert nothing').toHaveLength(4);
     for (const t of drawn) {
       expect(t.value, `the ${t.modifier} tile drew no figure — the harness seeds a key the template does not read`)
         .toBe(String(DISTINCT[t.modifier as keyof Tiles]));
@@ -295,6 +300,16 @@ describe('every tile is coloured by a token the stylesheet can actually resolve'
       expect(TOKENS_CSS, `--${token} is referenced by .metric.${t.modifier} and declared nowhere`)
         .toContain(`--${token}:`);
       expect(rule, `.metric.${t.modifier} carries a raw colour value`).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+      /* Review finding, 2026-09-12: reading the PAIRED rule proves what the
+         paired rule says, not what the tile ends up wearing. A later rule
+         naming one node alone — `.metrics .metric.pending .mlabel { color: … }`
+         — wins the cascade and strands the overline, with every assertion here
+         still green. So the sheet is swept: exactly ONE rule may set a colour
+         on this modifier's text nodes, and it is the paired one. */
+      const colouring = PIPELINE_CSS.split('\n')
+        .filter((line) => line.includes(`.metric.${t.modifier} .m`) && /\bcolor\s*:/.test(line));
+      expect(colouring, `more than one rule colours .metric.${t.modifier} — the last one wins, not the paired one`)
+        .toHaveLength(1);
     }
   });
 
@@ -348,19 +363,30 @@ describe('an MC contributes its work cards ONCE, however many deliverables it ca
 
   it('holds when the siblings are INTERLEAVED with another MC, not contiguous', () => {
     /* A cheaper-looking fix for the same defect — skip a row whose MC matches
-       the row before it — passes a contiguous fixture and fails the moment a
-       sort or a filter interleaves two MCs, which the table does by default on
-       several of its sorts. Identity has to be the whole set of MCs seen, not
-       the last one. */
+       the row BEFORE it — passes a contiguous fixture and fails the moment two
+       MCs interleave. Identity has to be the whole set of MCs seen, not the
+       last one.
+
+       Review finding, 2026-09-12: this test did not catch that rewrite, because
+       feeding interleaved ROWS proves nothing — `pipelineRows` sorts before
+       `pipeTiles` walks it, and the default sort handed the walk a de-interleaved
+       list. So the interleaving is produced through the SHIPPED sort (A–Z over
+       names chosen to alternate) and asserted to survive into the row set before
+       the figures are read — the same "reproduce the hazard first" idiom as the
+       sibling test above. */
     const h = tilesHarness();
     h.set('workCardsByMc', WORK);
+    h.set('pipeSort', 'name');
     h.set('rows', [
-      deliverable(BIG_MC, 1),
-      deliverable(SMALL_MC, 1),
-      deliverable(BIG_MC, 2),
-      deliverable(SMALL_MC, 2),
-      deliverable(BIG_MC, 3),
+      deliverable(BIG_MC, 1, { name: 'a one', blob: 'a one' }),
+      deliverable(SMALL_MC, 1, { name: 'b two', blob: 'b two' }),
+      deliverable(BIG_MC, 2, { name: 'c three', blob: 'c three' }),
+      deliverable(SMALL_MC, 2, { name: 'd four', blob: 'd four' }),
+      deliverable(BIG_MC, 3, { name: 'e five', blob: 'e five' }),
     ]);
+    const order = h.rows().map((r) => r.mcNumber);
+    expect(order, 'the sort regrouped the MCs — an interleaved walk is no longer being tested')
+      .toEqual([BIG_MC, SMALL_MC, BIG_MC, SMALL_MC, BIG_MC]);
     expect(h.tiles(), 'the walk remembers only the previous row, not every MC counted').toEqual(BOTH);
   });
 
@@ -419,6 +445,26 @@ describe('a card in an excluded lane is counted in NONE of the four', () => {
     // the ops card sits under the same MC as countable work; excluding the MC
     // along with the card would silently retire a whole group from the strip
     expect(populated(3).tiles(), 'an ops card took its MC out of the figures with it').toEqual(BOTH);
+  });
+
+  it('drops a state the lane mapping does not produce, rather than letting it reach URGENT', () => {
+    /* Added by the block 10 review, 2026-09-12. The bucketing was a deny-list:
+       drop `excluded`, then test for the three. A state that is none of the four
+       — the day a fifth `ListStatus` is added, or a card that reaches the client
+       with no status at all — fell past all three buckets and still reached the
+       cross-cutting line, so it was counted in NO state while inflating URGENT.
+       That breaks the rule the whole strip rests on: a card counted in URGENT is
+       ALSO counted in one of the three, never instead of one.
+
+       `classifyList` is total over the four today, so this asserts a property
+       rather than a live defect — which is the point of pinning it now. */
+    const h = tilesHarness();
+    h.set('workCardsByMc', { [BIG_MC]: [
+      card('n', { status: 'negotiating', urgency: 'Urgent' }),
+      card('u', { status: undefined, urgency: 'Urgent' }),
+    ] });
+    h.set('rows', siblings(BIG_MC, 2));
+    expect(h.tiles(), 'an unrecognised state is counted in no tile — URGENT included').toEqual(ZEROED);
   });
 });
 

@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest';
 import {
   APP_JS,
   APP_JS_CODE,
+  PIPELINE_CSS,
   REQUESTS_CSS,
   TEMPLATE,
   TOKENS_CSS,
@@ -29,6 +30,7 @@ import {
   decl,
   fnBody,
   handlerBody,
+  method,
   renderRequests,
   renderRequestsTable,
   reqClient,
@@ -708,5 +710,24 @@ describe('D4 — the tiles and the filter panel are ONE state', () => {
     // ...and with the axis empty, nothing dims
     const clear = view({ reqStats: stats.map((s) => ({ ...s, on: false })) });
     expect(clear).not.toContain('rstat all off');
+  });
+
+  it('every colour this strip asks for is declared in the SHARED metric sheet', () => {
+    /* Added by the block 10 review, 2026-09-12. These tiles are coloured by
+       `.metric.green` / `.amber` / `.red` in 20-pipeline.css — a sheet named for
+       the other tab, where a reader pricing a change reads them as Pipeline's
+       leftovers. The block 10 plan recorded exactly that and left them for a
+       simplification pass to delete; deleting them un-colours IN PIPELINE, TO
+       FILE and FOR CLARIFICATION and no suite would have noticed.
+
+       Read out of the SHIPPED computed rather than typed here, so a renamed
+       class fails this instead of drifting past it (test/CLAUDE.md rule 2). */
+    const classes = [...method('reqStats').matchAll(/cls:\s*'([a-z-]*)'/g)].map((m) => m[1]!);
+    expect(classes.filter(Boolean), 'reqStats stopped naming its tile colours').toHaveLength(3);
+    for (const cls of classes.filter(Boolean)) {
+      const rule = `.metrics .metric.${cls} .mlabel, .metrics .metric.${cls} .mvalue`;
+      expect(PIPELINE_CSS, `the Requests strip asks for .metric.${cls} and the shared sheet no longer draws it`)
+        .toContain(rule);
+    }
   });
 });

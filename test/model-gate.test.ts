@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_GATE, gateCells } from '../src/services/model-gate.ts';
 import type { GateModel, GateOptions, GateReason } from '../src/services/model-gate.ts';
 import type { GridCell } from '../src/services/model-refresh.ts';
+import { WORK_TYPE_LANES } from '../lib/model.ts';
 import type { ConfidenceKey, Difficulty, Lane } from '../lib/model.ts';
 
 const TIERS: Difficulty[] = ['Easy', 'Medium', 'Hard'];
@@ -88,7 +89,7 @@ describe('gateCells — one reason at a time', () => {
   it("'min_n' — exactly the cells with sample_n below minN, on the boundary", () => {
     const ns = [DEFAULT_GATE.minN - 1, DEFAULT_GATE.minN, DEFAULT_GATE.minN + 1];
     // one lane per n so ordering cannot interfere; lanes drawn from the Lane union
-    const lanes: Lane[] = ['design', 'ops', 'assets'];
+    const lanes: Lane[] = ['design', 'ops', 'dev'];
     const cells = lanes.flatMap((lane, i) => orderedLane(lane, ns[i]!));
     const { passed, failed } = gateCells(cells, healthyModel(), DEFAULT_GATE);
     const expectedFail = cells.filter((c) => c.sample_n < DEFAULT_GATE.minN);
@@ -265,7 +266,20 @@ describe('gate purity and the freeze (invariant 7)', () => {
 
   it('X8 — the T045 grid table iterates the lanes present in the refreshed model, never a hardcoded lane list', () => {
     expect(script).toMatch(/Object\.keys\(model\.design\[diff\]/);
-    // the pre-amendment union, in any spacing/quoting, must not be typed into the script
+    /* No array literal of lane names, whatever the union happens to be today.
+       The names are DERIVED from the shipped fold rather than typed here, so a
+       lane added on 2026-09-12 (`dev`) or later cannot be hardcoded into the
+       script under a guard that only knew the older ones. The retired
+       pre-amendment form is kept as an explicit extra so that exact regression
+       cannot come back. */
+    const laneNames = [...new Set(Object.values(WORK_TYPE_LANES))];
+    expect(laneNames.length, 'the fold must yield lane names or the guard is vacuous').toBeGreaterThan(1);
+    const q = (s: string) => `['"]${s}['"]`;
+    for (const a of laneNames)
+      for (const b of laneNames) {
+        if (a === b) continue;
+        expect(script, `${a},${b}`).not.toMatch(new RegExp(`\\[\\s*${q(a)}\\s*,\\s*${q(b)}`));
+      }
     expect(script).not.toMatch(/\[\s*['"]design['"]\s*,\s*['"]ops['"]\s*,\s*['"]assets['"]\s*\]/);
   });
 

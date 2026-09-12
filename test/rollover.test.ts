@@ -252,12 +252,19 @@ describe('the rollover classifies a card exactly as the schedule does (T179, rev
    * where it is (or, mirrored, walked while its bar is still running).
    *
    * The card below is the disagreement in its sharpest form: an `Asset: Icons`
-   * label (the ruled fold → design, fast) in a list the verbatim regex reads as
-   * `assets` (slow). Both finishes are EXECUTED, never typed.
+   * label (the ruled fold → design, fast) in a list the FALLBACK reads as a
+   * different, slower lane. Both finishes are EXECUTED, never typed.
+   *
+   * AMENDED 2026-09-12 (block 12): that list used to be an asset-named one.
+   * The alternation that gave those lists a lane of their own was retired with
+   * the cell behind it, so label and list would now agree and the case would
+   * prove nothing. It is an ops-named list instead — the last lane the
+   * fallback text still reaches — and the disagreement is asserted below
+   * rather than assumed.
    */
   const LABELLED = {
     difficulty: 'Easy',
-    current_list: 'Render Assets',
+    current_list: 'Ops / Process',
     labels: ['Difficulty: Easy', 'Asset: Icons'],
   };
   const finishBy = (labels: string[], start: string) => {

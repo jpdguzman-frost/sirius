@@ -163,17 +163,39 @@ describe('taxonomy (BRD §5)', () => {
     /* The join between this file and `work-type.test.ts`: the mapper keeps the
        label, `laneOf` reads it. Derived by EXECUTING `laneOf` on the mapped
        labels rather than pinning a lane string, so the ruled fold stays the one
-       source of truth. The list is deliberately one the verbatim regex reads as
-       `assets`, which is what the label has to override. */
+       source of truth.
+
+       The list is deliberately one the FALLBACK reads as a different lane, so
+       the label genuinely has to override something. Until 2026-09-12 that was
+       an asset-named list; the branch that made those a separate lane was
+       retired with the cell behind it, so the discriminating list is now an
+       ops-named one — the last lane the fallback text can still reach. */
     const r = mapTrello(
-      [card('Render Asset: MC-9 glyphs', ['Asset: Icons'], { cardId: 'wc-1', currentList: 'Render Assets' })],
+      [card('Render Asset: MC-9 glyphs', ['Asset: Icons'], { cardId: 'wc-1', currentList: 'Ops / Process' })],
       null,
     );
     const w = r.workCards[0]!;
-    expect(laneOf({ currentList: w.current_list ?? '', labels: w.labels })).toBe(
-      laneOfWorkType('Asset: Icons'),
+    const byLabel = laneOf({ currentList: w.current_list ?? '', labels: w.labels });
+    const byListAlone = laneOf({ currentList: w.current_list ?? '', labels: [] });
+    expect(byLabel).toBe(laneOfWorkType('Asset: Icons'));
+    expect(byListAlone, 'the fixture list must reach a DIFFERENT lane or the override proves nothing').not.toBe(
+      byLabel,
     );
-    expect(laneOf({ currentList: w.current_list ?? '', labels: [] })).toBe('assets'); // what it was
+  });
+
+  it('an asset-named list no longer classifies a card on its own (block 12)', () => {
+    /* The inverse of the case above, and the reason its fixture changed: the
+       `/asset|illustrat|render|icon/` branch of `laneOf`'s fallback was retired
+       on 2026-09-12 with the cell it fed, so an unlabelled card in an
+       asset-named list falls to `design` — the ruled fold for cards that do not
+       announce themselves. */
+    const r = mapTrello(
+      [card('Render Asset: MC-9 glyphs', [], { cardId: 'wc-2', currentList: 'Render Assets' })],
+      null,
+    );
+    const w = r.workCards[0]!;
+    expect(w.labels).toEqual([]);
+    expect(laneOf({ currentList: w.current_list ?? '', labels: w.labels })).toBe('design');
   });
 
   it('mcNumberOf tolerates MC-57, MC 57 and mc-57 forms', () => {

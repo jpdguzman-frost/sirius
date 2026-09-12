@@ -45,3 +45,4 @@ _last-verified: 2026-08-18_
 | 0023 | docs/ reorganized into role folders; old paths redirect from here | accepted | 2026-08-18 |
 | 0024 | STATE.md rotates per section, not per file; two archives added | accepted | 2026-08-18 |
 | 0025 | A reconcile never overwrites a newer registry write | accepted | 2026-08-18 |
+| 0026 | Lane vocabulary retires `assets`, adds `dev`, general fallback | accepted | 2026-09-12 |

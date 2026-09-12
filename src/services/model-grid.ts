@@ -94,13 +94,28 @@ export async function loadProjectModel(
 
   // Snapshot fill for a sparse young grid, per difficulty tier AND per lane
   // inside a present tier. lib/model's verbatim designCell walks difficulty →
-  // Medium → lane → 'design' → first-cell, with no guards: a missing tier
-  // dereferences undefined (live 500 on rt-test, 2026-08-13), and a tier whose
-  // only measured lane is 'assets' silently forecasts a design-lane card off
-  // the assets cell. Filling the snapshot's own lanes restores the exact
+  // Medium → lane → general pool → first-cell, with no guards: a missing tier
+  // dereferences undefined (live 500 on rt-test, 2026-08-13), and a tier that
+  // measured only SOME of its lanes answers the rest off the board-wide
+  // general pool while the shipped snapshot holds a measured cell for the very
+  // lane asked for. Filling the snapshot's own lanes restores the exact
   // fallback chain the shipped grid gives. Measured cells always win — only
-  // absent ones are filled, and lanes the snapshot itself lacks are left to
-  // designCell's t.design step.
+  // absent ones are filled.
+  //
+  // The example this comment carried until 2026-09-12 was the sharper one — a
+  // tier whose only measured lane was 'assets' silently forecast a design-lane
+  // card off the 19.24-day assets cell. That example is gone because BLOCK 12
+  // RETIRED the assets cell and its lane, not because the hazard was tidied
+  // away: the fill is what stands between a one-lane tier and a board-wide
+  // number where a lane-specific measured one exists, and it is unchanged.
+  //
+  // Lanes the snapshot itself LACKS ('content', 'dev') are still left to
+  // designCell's own step — but since block 12 that step resolves them to
+  // lib/model's GENERAL pool (the 5,245-card board-wide number) rather than to
+  // the design lane's cell, which is JP's ruling of 2026-09-12: a lane with no
+  // cell of its own gets the general number, and content is merely its first
+  // user. Nothing here needs to know which lanes those are — the fill iterates
+  // the snapshot's keys, so a lane the snapshot gains later fills itself.
   let tiersFilled = 0;
   let lanesFilled = 0;
   for (const d of Object.keys(EMPIRICAL.design) as Difficulty[]) {

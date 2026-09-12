@@ -239,7 +239,7 @@ describe('planner phases — the Gantt bar (R3, contract §1.2)', () => {
     const p = await newProject();
     for (const [i, difficulty] of ['Easy', 'Medium', 'Hard'].entries())
       for (const [j, week] of ['2026-08-03', '2026-08-10', '2026-08-17'].entries())
-        for (const [k, lane] of ['design', 'ops', 'assets'].entries())
+        for (const [k, lane] of ['design', 'ops', 'dev'].entries())
           await mk(p._id, `c${i}${j}${k}`, { difficulty, lane, slotted_week: week, sheet_deadline: '2026-12-31' });
 
     const { rows } = await load(p);

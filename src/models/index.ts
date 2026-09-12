@@ -155,7 +155,12 @@ const deliverableSchema = new Schema(
     name: { type: String, required: true },
     current_list: String,
     difficulty: { type: String, enum: ['Easy', 'Medium', 'Hard'] },
-    lane: String, // lib/model Lane: design | ops | assets | content
+    /* lib/model Lane: design | ops | content | dev. Block 12 (JP 2026-09-12)
+       retired `assets` — the families fold to `design` — and added `dev`.
+       Free String, not an enum, deliberately: a row stamped with the old
+       vocabulary still loads and is re-derived by `laneOf` on its next sync,
+       so a union change never needs a migration to be safe. */
+    lane: String,
     blocker: String, // from 🛑 labels
     figma_url: String,
     labels: { type: [String], required: true, default: [] },

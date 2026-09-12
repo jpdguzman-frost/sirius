@@ -57,11 +57,31 @@ export interface GridCell {
 /**
  * The grid's lane axis, as a runtime set. `satisfies Record<Lane, true>` ties
  * it to lib/model's union both ways at compile time: a lane added there
- * without a key here, or a key here the union lacks, fails `tsc`. Ares's
- * `laneKey` vocabulary is wider (dev / working-on-design on 837) — those are
- * counted, never guessed into a lane (§7a's rule, on this axis).
+ * without a key here, or a key here the union lacks, fails `tsc`.
+ *
+ * BLOCK 12 (JP, 2026-09-12) — the axis moved on BOTH ends, and the old comment
+ * used `dev` as its example of a key we deliberately refuse. That example is
+ * retired, because `dev` is now a lane:
+ *
+ * • `assets` LEFT. The legacy asset figure (Easy p85 19.24, n 353) was retired
+ *   as non-canonical; the asset work-type families already fold to `design`
+ *   (JP 2026-09-10) and measure p85 0.84 there over 1,671 finished cards.
+ * • `dev` ARRIVED, and NOTHING IS NEEDED FROM ARES to bring it. Ares has been
+ *   sending the pooled cell all along — `dev` on 837, n 834, p85 Easy 0.98 /
+ *   Medium 1.06 / Hard 3.60, firm-sourced and correctly ordered — and because
+ *   this set omitted the key, every one of those cells was counted `unmapped`
+ *   and thrown away. Admitting the key IS the change; the cells land on the
+ *   next refresh, no endpoint and no Ares work. Both the `Build` and `Dev`
+ *   work-type families map here (JP's gate answer, 2026-09-12), because Ares
+ *   pools both into the one cell we read — a lane whose label disagreed with
+ *   its contents is the failure the lane-state table exists to prevent.
+ *
+ * The rule that made the vocabulary narrow is unchanged; only its examples
+ * are. Ares's `laneKey` vocabulary is still the wider one (`working-on-design`
+ * on 837), and a key outside this set is COUNTED in `unmapped`, never guessed
+ * into a lane (§7a's rule, on this axis).
  */
-const LANE_KEYS = { design: true, ops: true, assets: true, content: true } satisfies Record<Lane, true>;
+const LANE_KEYS = { design: true, ops: true, content: true, dev: true } satisfies Record<Lane, true>;
 const isLane = (key: string): key is Lane => Object.hasOwn(LANE_KEYS, key);
 
 /** `Design: Refinement` → `Design`; a key with no colon is its own prefix. */
