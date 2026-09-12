@@ -10,31 +10,24 @@
 
 **Source of truth**: `docs/product/brd.md` — **v3.0 since 2026-09-12** (the v2.2 this document was converted from is archived as `brd-v2.2.md`). This document is a format conversion, not a rewrite. Where this spec and the BRD diverge, the BRD wins and this spec is in error. Requirement IDs (FR-x.y, BR-n, NFR-n, AC-n) are the BRD's own and are how work is traced.
 
-> ⚠️ **PARTIALLY SUPERSEDED BY BRD v3.0 (adopted 2026-09-12). The body below is still
-> the v2.2 conversion; only the Acceptance Criteria section has been brought forward.**
-> Read the BRD first for anything in this list, and treat this document as wrong where
-> they disagree:
+> **RE-CONVERTED TO BRD v3.0 on 2026-09-12** (JP: *"start now"*). The body below is no longer
+> the v2.2 conversion: the functional requirements and the business rules are v3.0's own text,
+> the user stories and edge cases were rewritten to the work-card unit, and the acceptance
+> criteria were brought forward when v3.0 was adopted earlier the same day.
 >
-> - **Acceptance Criteria — CURRENT.** Rewritten to v3.0 on adoption, including the
->   renumbering of the four locally-added criteria to AC-27–AC-30. That section is safe.
-> - **User Story 2 / FR-5.7, FR-5.8, FR-5.9 — Suggest plan and its pinning test are
->   WITHDRAWN** (AC-15, AC-16 with them). The scenarios at lines ~49–56 describe a
->   feature that no longer exists.
-> - **User Story 3 / BR-6, BR-9a, FR-6.7 — conflict detection and acknowledgement are
->   WITHDRAWN and the implementation DELETED** (2026-09-07). AC-17 goes with them; the
->   Deadlines tab counts rather than flags.
-> - **FR-7.5 and the review-SLA scenarios — RETIRED** with review time (BR-1b). AC-12
->   retires with them; confidence now applies to design time only.
-> - **The scheduled unit is the WORK CARD, not the deliverable** — slotted week, pin,
->   confidence, start day, deadline, sprint membership and urgency all live there.
->   Every "drag a row"/"slot a deliverable" reading below predates that.
-> - **Placement is WEEK GRAIN on Sprint Schedules**; the day belongs to the design lead
->   on Deadlines alone (build spec v1.4 §5.1b/§6.2, block 9).
-> - **BR-10's keyword classifier is RETIRED** — lane state comes from the ARES lanes
->   endpoint, with product's table owning which lane means which state.
+> **Three gaps are marked in place rather than guessed.** Each is a question already with
+> product, and each names the reading the build follows meanwhile:
 >
-> Re-converting the body to v3.0 is outstanding work, deliberately not done inside the
-> adoption: it is a rewrite of a derived document, not a swap of a held one.
+> | | question | built as | asked in |
+> |---|---|---|---|
+> | **GAP 1** | FR-3.3 — is *For Clarification* a status value or a flag? | a flag; STATUS is two-valued | owl #81 |
+> | **GAP 2** | FR-7.3 / BR-2 / BR-4 — work-type label or lane? | lane and difficulty, for sample depth | owl #74 |
+> | **GAP 3** | BR-10 / §7a — does the lanes endpoint supersede the name table? | no; the table is the source of state | owl #74 |
+>
+> **What is this document's own, not the BRD's:** FR-9 (two-way sync), FR-10 (the admin
+> screen), BR-6c (row weight), AC-27–AC-30, and the engineering notes marked as such. Product's
+> numbering wins everywhere the two describe the same rule — FR-11 folded to FR-3.7–FR-3.10 and
+> FR-12 to FR-6.9–FR-6.14 on the same day.
 
 ## Overview
 
@@ -44,7 +37,7 @@ Sirius replaces the *planning and forecasting* half of that system: a pipeline r
 
 Sirius owns only planning decisions: which week a deliverable is slotted, confidence, review SLA overrides, status notes, pins — and, since 2026-08-12, frost notes on intake requests and day placements on Deadlines. It writes back only what the write registry enumerates — the `Urgent` label and the card due date, both on Trello — nothing else, anywhere (amended 2026-08-04; was urgency-only).
 
-The business case is not headcount. It is that a forecast becomes defensible, scheduling conflicts surface before they bite, and the manual reconciliation between two spreadsheets and a board stops consuming PM time.
+The business case is not headcount. It is that a forecast becomes defensible, the week's real load is visible before it bites, and the manual reconciliation between two spreadsheets and a board stops consuming PM time.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -62,65 +55,125 @@ A Frost PM opens the Pipeline view for a project and sees every deliverable — 
 
 1. **Given** a synced project, **When** the PM opens Pipeline, **Then** deliverables list with the FR-4.1 fields and Trello-sourced fields are read-only (FR-4.3).
 2. **Given** a deliverable in an MC group with work cards, **When** the row expands, **Then** the group's work cards appear (FR-4.2) — attached to the MC group, not to a single deliverable.
-3. **Given** cards missing difficulty, deadline or Figma link, **When** the PM opens the correction list, **Then** each appears with a link to fix it at source (FR-4.4).
+3. **Given** a card missing its difficulty, **When** Pipeline renders it, **Then** nothing is drawn to
+   mark it incomplete — no amber accent, no alert icon, no hover card. ⚠️ **FR-4.4's correction list
+   is WITHDRAWN**: a missing difficulty is a data error for ingestion health, not a Pipeline
+   surface. 19% of done cards carry no difficulty label today, and the column simply reads
+   em-dash (AC-26).
 
 ---
 
 ### User Story 2 - Sprint scheduling (Priority: P2)
 
-The PM plans by dragging deliverable rows into weeks on a list-plus-gantt view grouped by sprint. Multi-select moves preserve relative spacing. Rows can be pinned. **Suggest plan** proposes slots from empirical throughput and applies nothing until explicitly accepted. Sprints themselves are edited in the platform — added, renamed, re-dated, reordered, deleted.
+The PM plans on a list-plus-gantt view grouped by sprint. **The scheduled unit is the work
+card, not the deliverable** — sketch and render are separate rows, one bar each, with a start
+and a forecasted finish. Placement is **week grain and click-to-place**: the PM clicks a week
+and the bar starts on that week's first working day. Multi-select moves apply a relative week
+shift. Rows can be pinned. Sprints themselves are edited in the platform — added, renamed,
+re-dated, reordered, deleted.
 
-**Why this priority**: Slotting weeks is the planning decision Sirius owns; it feeds Deadlines and Forecast.
+**Why this priority**: Slotting weeks is the planning decision Sirius owns; it feeds Deadlines
+and the forecast.
 
-**Independent Test**: Drag single and multi-selected rows, pin a row, run Suggest plan, edit sprints — verify AC-13, AC-14, AC-15, AC-16 and FR-5.x behaviours.
+**Independent Test**: Click-place a card into a week, move a multi-selection, re-date a sprint
+under placed cards, edit sprints — verify AC-13, AC-14, AC-23 and FR-5.x behaviours.
 
 **Acceptance Scenarios**:
 
-1. **Given** a slotted deliverable, **When** the PM drags its row to another week, **Then** dates, sprint group and load update (AC-13).
-2. **Given** several selected rows, **When** dragged, **Then** the interval between the grabbed row's week and the drop week applies to every selected row, preserving spacing (AC-14, BR-8).
-3. **Given** a backlog, **When** Suggest plan runs, **Then** proposals preview as ghosts and nothing applies until accepted (AC-15, FR-5.8).
-4. **Given** a pinned row, **When** Suggest plan runs, **Then** the pinned row never moves (AC-16, FR-5.9).
-5. **Given** two sprints whose dates overlap, **When** saved, **Then** the save is rejected (FR-5.15); weeks covered by no sprint surface as *Outside any sprint* (BR-5).
+1. **Given** a slotted work card, **When** the PM places it in another week, **Then** dates,
+   sprint group and load update, and the bar starts on that week's first working day (AC-13,
+   FR-5.4).
+2. **Given** several selected rows, **When** moved, **Then** the interval between the grabbed
+   row's week and the target week applies to every selected row, preserving spacing (AC-14,
+   BR-8). *Not yet built — the API half exists; v3.0 marks the move unbuilt.*
+3. **Given** a sprint re-dated so placed cards fall outside it, **When** saved, **Then** those
+   cards keep their day and move to *Outside any sprint* — nothing is unslotted or destroyed
+   (AC-23, BR-5).
+4. **Given** two sprints whose dates overlap, **When** saved, **Then** the save is rejected
+   (FR-5.15); weeks covered by no sprint surface as *Outside any sprint* (BR-5).
+5. **Given** the PM on this tab, **When** they try to place or drag at day precision,
+   **Then** there is no such gesture — the day belongs to the design lead, on Deadlines
+   (FR-5.4, BR-9b).
+
+⚠️ **Suggest plan (FR-5.7, FR-5.8, BR-7) is WITHDRAWN**, and AC-15/AC-16 with it. Pinning
+(FR-5.9) survives as a flag that now protects against nothing. Read the absence as a decision:
+product removed it to watch how the tool is actually used, and any rebuild would take a
+different form.
 
 ---
 
-### User Story 3 - Deadlines and conflicts (Priority: P3)
+### User Story 3 - Deadlines (Priority: P3)
 
-The Operations Lead opens the read-only Deadlines view for a month and sees, per week, each deliverable's two entries — sketch delivery and render delivery — with conflicts detected and explained on screen, and a replot list naming every affected deliverable and why. A conflict knowingly accepted can be acknowledged; the acknowledgement lapses if the cards involved change.
+The design lead opens Deadlines for a month and sees each week's work cards on the day work
+**starts**, with per-week and per-day counts. **This is the one surface that owns the day**:
+she drags a card between days, bounded by four conditions at once — inside the card's assigned
+week, inside its sprint, on or before its deadline, and a working day. A card whose forecast
+finish has passed while it sits outside a Done lane rolls forward one working day.
 
-**Why this priority**: Surfacing conflicts before they bite is a core business-case line; it depends on scheduling (US2) existing.
+**Why this priority**: It is where the day-level decision is made, and it depends on
+scheduling (US2) existing.
 
-**Independent Test**: Construct weeks that trigger each BR-6 rule, verify detection, explanation, replot list, and acknowledgement lapse per BR-9a (AC-17, AC-18).
+**Independent Test**: Drag a card to a valid and an invalid day, let a forecast finish pass on
+an unfinished card, and check the counts — verify AC-18, AC-21, AC-22 and FR-6.x.
 
 **Acceptance Scenarios**:
 
-1. **Given** two urgent milestones in one week, **When** Deadlines renders, **Then** the conflict is flagged and both items named (AC-17).
-2. **Given** a forecast date after the client deadline, **When** Deadlines renders, **Then** the row flags late, the render bar is red, and the item is listed for replot (AC-18).
-3. **Given** an acknowledged conflict, **When** a card involved is added, removed, replotted or moves phase, **Then** the acknowledgement lapses and the conflict resurfaces (FR-6.7, BR-9a).
-4. **Given** an acknowledged conflict, **When** viewing Deadlines, **Then** card-level indicators (red bar, late flag) remain visible — never suppressed (BR-9a).
-5. **Given** a week expanded to its Mon–Fri days, **When** a milestone is dragged to another day, **Then** the week never changes and the day columns still sum to the weekly capacity — holidays take zero (AC-22, AC-23, FR-12 — added 2026-08-12).
+1. **Given** a card placed in a week, **When** the design lead drags it to another day in that
+   week, **Then** it moves and the assigned week never changes (FR-6.9, FR-6.10, AC-29).
+2. **Given** a drag past the edge of the assigned week, **When** released, **Then** it is
+   refused — the bar goes pale and snaps back (AC-22, FR-6.9).
+3. **Given** a forecast date after the client deadline, **When** Deadlines renders, **Then**
+   the row flags late and the bar is red — **no replot list**, which went with BR-6 (AC-18).
+4. **Given** an unfinished card whose forecast finish has passed, **When** the day rolls over,
+   **Then** it moves forward one working day, the Sprint Schedules bar translates whole, and
+   no marker appears (AC-21, FR-6.13).
+5. **Given** a week expanded to its Mon–Fri days, **When** a milestone is dragged,
+   **Then** the day columns still sum to the weekly capacity and holidays take zero
+   (AC-28, FR-12.4 — locally added, and whether v3.0 §6.2 keeps day capacity is OPEN).
+
+⚠️ **Conflict detection (BR-6), the replot list (FR-6.5) and acknowledgement (FR-6.7, FR-6.8,
+BR-9a) are WITHDRAWN**, and the acknowledgement implementation was **deleted** 2026-09-07, not
+parked. AC-17 goes with them. Deadlines counts rather than flags: `N Pending · N Urgent ·
+N Done` per week, `N Pending · N Done` per day. **Card-level indicators — the red bar, the
+late flag — are never suppressed by anything** (constitution invariant 13).
 
 ---
 
 ### User Story 4 - Forecast (Priority: P4)
 
-The PM opens Forecast and sees a single forecast computed from measured delivery data — design time keyed on difficulty **and** lane, review time from measured review dwell — at a selectable confidence per card. Entering a review SLA override replaces modelled review time and cascades downstream. Model constants and sample sizes are visible.
+Every date the team sees is computed from measured delivery data — `finish = WORKDAY(start,
+lead + design)`, design time from the ARES-derived grid, at a selectable confidence per work
+card. **There is no Forecast tab**: the forecast surfaces as the Sprint Schedules bar, the
+Pipeline dates and the Deadlines placement. **Review time is retired** (BR-1b) — a work card
+is done when it is done internally, and client review is not part of its duration.
 
-**Why this priority**: The defensible forecast is the headline business case, but it is gated: no forecast dates are shown to users until the model refresh produces dates the PM recognises (release gate; BR-3).
+**Why this priority**: The defensible forecast is the headline business case, but it is
+gated: no refreshed model reaches users until it produces dates the PM recognises (release
+gate, constitution invariant 7; BR-3).
 
-**Independent Test**: With a computed model grid, verify UI dates match the grid, provenance and sample sizes visible (AC-11); enter an SLA and verify downstream recalculation (AC-12).
+**Independent Test**: With a computed grid, verify the dates on all three surfaces match the
+measurements for the same inputs (AC-11).
 
 **Acceptance Scenarios**:
 
-1. **Given** a computed empirical grid, **When** Forecast renders, **Then** its dates match the grid and provenance and sample size are visible (AC-11).
-2. **Given** a review SLA entered, **When** it is saved, **Then** all downstream dates recalculate (AC-12).
-3. **Given** any user-facing view, **When** forecasts are shown, **Then** only the empirical model is offered — the spreadsheet formula is never exposed (FR-7.2, BR-2).
+1. **Given** a computed empirical grid, **When** any surface renders a date, **Then** it
+   matches the ARES-derived measurement for the same inputs (AC-11).
+2. **Given** any user-facing view, **When** dates are shown, **Then** only the empirical model
+   is offered — the spreadsheet formula is never exposed (FR-7.2, BR-2, invariant 6).
+3. **Given** a confidence level chosen on a row, **When** it changes, **Then** the finish
+   moves with the measured distribution for that card. *The control is specced (§5.1d) and
+   unbuilt; its arithmetic is held by product.*
+
+⚠️ **Retired with review time:** `Sketch Approved` as a computed date, the review percentile
+table, the review term in total cycle time, **FR-7.5** (SLA override) and **AC-12**. Also
+retired: **FR-7.7**, the model-constants view — no user asked for the grid, and AC-11's
+provenance clause went with it.
 
 ---
 
 ### User Story 5 - Requests mirror (Priority: P5)
 
-A Frost user opens Requests and sees a read-only mirror of the project's intake sheet tab: MC #, deliverable, type, use case, requestor, deadline, brief, and a link to the source row, with status derived from the Trello join (*In pipeline* / *Not yet filed*). Pre-allocated MC rows are skipped silently and counted; unparseable rows are surfaced with row number, reason and a link.
+A Frost user opens Requests and sees a read-only mirror of the project's intake sheet tab — eleven columns: MC #, Year, Month, Deliverable, Type, **UNIT** (the renamed *Use Case*), Requestor, Deadline, Brief, Status, Frost notes — plus a link to the source row, with status derived from the Trello join (*In Pipeline* / *For Filing*). Pre-allocated MC rows are skipped silently and counted; unparseable rows are surfaced with row number, reason and a link.
 
 **Why this priority**: Completes the picture (intent vs execution) but reads an independent source; the register stands without it.
 
@@ -131,7 +184,11 @@ A Frost user opens Requests and sees a read-only mirror of the project's intake 
 1. **Given** the current intake sheet, **When** sync runs, **Then** 495 rows import, 495 are reserved, 8 are rejected (AC-6).
 2. **Given** the deadline join on MC number, **When** Pipeline renders, **Then** deadline coverage rises from ~1/269 to ~169/269 (AC-8).
 3. **Given** a row deleted in the sheet, **When** the next sync runs, **Then** the request is marked inactive with history intact — never deleted (AC-9, FR-8.4).
-4. **Given** a request with only a remark, **When** viewed, **Then** status is unchanged; **Given** the clarification flag set with a reason, **Then** status reads *With Clarification* and the FOR CLARIFICATION tile counts it (AC-21, FR-11 — added 2026-08-12).
+4. **Given** a request with only a remark, **When** viewed, **Then** status is unchanged; **Given**
+   the clarification flag set with a reason, **Then** status is **still** unchanged and the FOR
+   CLARIFICATION tile counts and filters it (AC-27, FR-3.7–FR-3.9). ⚠️ **GAP 1** — v3.0's FR-3.3
+   calls *For Clarification* a status value; the built model keeps STATUS two-valued and puts the
+   flag on the note (owls #34/#35; asked again in #81).
 
 ---
 
@@ -139,13 +196,16 @@ A Frost user opens Requests and sees a read-only mirror of the project's intake 
 
 The PM marks a deliverable urgent in Pipeline. Sirius adds an `Urgent` label to the Trello card so designers working the board see it. Removing urgency removes the label. A failed write rolls the local change back — Sirius never shows a state Trello lacks.
 
-**Why this priority**: The only write path; deliberately last, with its own review, rollback semantics and a dedicated integration account (BRD §9).
+**Why this priority**: The write paths are deliberately last, each with its own review and rollback semantics. ⚠️ **Urgency is no longer the only one.** The registry now enumerates **four** — the `Urgent` label, the card due date (W2, FR-9), the `Difficulty: …` label (W3, FR-4.9) and the business-unit tag (W4, FR-4.11, built but inert). A fifth requires a BRD amendment (FR-4.10), and the constitution treats growing the registry as an amendment, never a code change.
 
 **Independent Test**: Toggle urgency against a duplicate board; verify label add/remove, audit records, and rollback on a forced failure (FR-4.6, FR-4.7).
 
 **Acceptance Scenarios**:
 
-1. **Given** a non-urgent deliverable, **When** the PM marks it urgent, **Then** the Trello card gains the `Urgent` label; absence of the label means non-urgent — no second state to sync (FR-4.6).
+1. **Given** a non-urgent **work card**, **When** the PM marks it urgent, **Then** the Trello card
+   gains the `Urgent` label; absence means non-urgent — no second state to sync, and no
+   `Non-Urgent` label exists (FR-4.6). ⚠️ **The control targets the WORK CARD, never the parent** —
+   a parent row offers none, and reads em-dashes instead (AC-26).
 2. **Given** a Trello write failure, **When** the write fails, **Then** the local change rolls back and the failure is recorded (FR-4.7).
 
 ---
@@ -170,17 +230,19 @@ A Frost user switches project and every view scopes to it — no data bleeds bet
 
 - MC number carries many deliverables — 15 do today; MC-825 carries 99. `mc_number` is never treated as unique; identity is (project, Trello card).
 - Work card titles do not name their parent deliverable (1 of 27 matched) — tasks attach to the MC group; no task→deliverable edge is modelled.
-- A deliverable with neither Trello due date nor sheet deadline has no deadline and cannot raise a deadline conflict (BR-9).
+- A work card with neither Trello due date nor sheet deadline has no deadline, so nothing can read late against it (BR-9). *Conflicts themselves are withdrawn — BR-6.*
 - A slotted week covered by no sprint appears under *Outside any sprint* — never forced into a neighbour (BR-5).
-- The backlog's own hard share exceeds the ceiling: the planner spreads hard work evenly, places everything, and states the ceiling is unreachable — reported, not refused (BR-7a).
+- The backlog's own hard share exceeds the ceiling: the ceiling is reported as unreachable, never enforced by refusing work (BR-7a — still live, and **not** dependent on the withdrawn Suggest plan).
 - Sync service unavailable: last good data remains visible, error surfaced, app usable (AC-19, FR-8.5).
 - Sheet un-shared from the reader: access fails safely; re-sharing restores (AC-7).
 - Non-Frost account or Frost account off the allow-list: denied with a clear reason (AC-1, AC-2).
-- Urgency write fails mid-flight: local state rolls back (FR-4.7).
+- Any registry write fails mid-flight: the local state rolls back, so Sirius never shows a state Trello lacks (FR-4.7, invariant 8).
+- A business unit with no matching board label is tagged: refused and surfaced, and **no label is created** (AC-24, FR-4.11).
+- A Trello lane appears that the name table does not know: surfaced and logged, never silently assigned a state (AC-25, BR-10).
 - Trello list names resolve to a lane state via a static table (`LIST_STATES` in `src/services/status-rules.ts`) → pending | ongoing | done | excluded, exact match after normalisation, with Ready-for / family-stage / Backlog rules for the prefixed Ongoing lanes and unknown names defaulting to ongoing and logged per sync (spec v1.3 §7a, owl #82, 2026-09-08) (BR-10).
-- A multi-deliverable MC (MC-655 × 3) carries **one** frost note — the note attaches to the request row, not to each deliverable (FR-11.1).
+- A multi-deliverable MC (MC-655 × 3) carries **one** note — it attaches to the request row, not to each deliverable (FR-3.7, FR-3.8).
 - A deliverable whose MC group has no work cards weighs exactly 1 (BR-6c); the 20 unkeyed cards belong to no group and weigh into none.
-- A week whose Mon–Fri are all holidays: every day takes zero capacity and rejects drops; the week's milestones still render (FR-12.4).
+- A week whose Mon–Fri are all holidays: every day takes zero capacity and rejects drops; the week's cards still render (FR-12.4, locally held — whether v3.0 §6.2 keeps day capacity is OPEN with product).
 
 ## Requirements *(mandatory)*
 
@@ -214,40 +276,45 @@ IDs and text are the BRD's, preserved verbatim. Priority M = must, S = should.
 | ID | Requirement | Priority |
 |---|---|---|
 | FR-3.1 | Mirror the project's intake tab; no editing, no write-back | M |
-| FR-3.2 | Show MC #, deliverable, type, use case, requestor, deadline, brief, and a link to the source row | M |
-| FR-3.3 | Derive status from the Trello join: *In pipeline* or *Not yet filed* | M |
+| FR-3.2 | Eleven columns: MC #, Year, Month, Deliverable, Type, **UNIT**, Requestor, Deadline, Brief, Status, Frost notes — plus a link to the source row. **`UNIT` is the renamed `Use Case`**, sourced from the sheet's `Business Unit` column; the sheet's name lives in the parser, not on screen | M |
+| FR-3.3 | Derive status, never store it. **Three values:** *In Pipeline* (MC # found in Trello — this **is** the filed state) · *For Filing* (MC # absent) · *For Clarification* (the Sirius-only flag). `Filed` is not a value. **A clarified row is both For Filing AND For Clarification**, so status counts sum past the row count by design | M |
 | FR-3.4 | Skip pre-allocated MC rows silently and report the count | M |
 | FR-3.5 | Surface unparseable rows with row number, reason and a link | M |
-| FR-3.6 | Filter by filed / unfiled / missing deadline | S |
-
-*FR-3.1 and FR-3.3 amended 2026-08-12 by what are now FR-3.7–FR-3.10 (was FR-11): the mirror itself stays read-only; the note is Sirius-owned data beside it, never written back.*
+| FR-3.6 | One filter panel, **six axes** — `YEAR · MONTH · TYPE · UNIT · REQUESTOR · STATUS` — multi-select, per-value counts. Every axis must appear verbatim as a column header. Default sort *Recently requested*. ⚠️ **Tiles do not filter** (retired 10 Sep); the Filter button is the only filter door | M |
+| FR-3.7 | Frost can flag a request as **needs clarification**, with a reason, blocking it from filing | M |
+| FR-3.8 | Frost can add an internal **remark** to any request | M |
+| FR-3.9 | Neither is written back to the intake sheet | M |
+| FR-3.10 | Both are shared across the team and durable across sessions | M |
 
 #### FR-4 — Pipeline
 
 | ID | Requirement | Priority |
 |---|---|---|
-| FR-4.1 | Deliverables listed with type, difficulty, urgency, current list, requestor, deadline, cycle time, links | M |
+| FR-4.1 | **Ten columns:** MC #, Card name, Type, Urgency, Difficulty, Status, Deadline, Started, Done, Links. ⚠️ **`REQUESTOR` was removed** from this table and its filter — the axis left with its column. **Urgency, difficulty and deadline live on the WORK CARD**; a parent row draws an em-dash in all three | M |
 | FR-4.2 | Expand to reveal the MC group's work cards | M |
 | FR-4.3 | Trello-sourced fields are read-only | M |
-| FR-4.4 | Cards missing difficulty, deadline or Figma link are listed for correction, with links | M |
+| ~~FR-4.4~~ | ~~Cards missing difficulty, deadline or Figma link are listed for correction~~ — **WITHDRAWN.** Ruled by Miles: Pipeline draws nothing to mark a card as incomplete. No amber accent, no alert icon, no hover card. **Do not reintroduce it as a smaller warning** — the smaller warning *was* the reduced version, replacing a full-row wash that lit 247 of 249 rows. An absent value shows as an em-dash, everywhere | — |
 | FR-4.5 | Cycle time derived from Trello activity timestamps, not date fields | M |
-| FR-4.6 | Urgency is set here and written back to Trello as an `Urgent` label; absence means non-urgent | M |
+| FR-4.6 | Urgency is set from a Pipeline row and written to Trello as an `Urgent` label; absence means non-urgent. ⚠️ **It targets the WORK CARD, never the parent** — a parent row carries no control | M |
 | FR-4.7 | A failed write rolls the local change back, so Sirius never shows a state Trello lacks | M |
-| FR-4.8 | Difficulty is editable in the Pipeline and written back to Trello as a `Difficulty: …` label swap (write registry W3; BRD-§9-A1, added 2026-08-12) | M |
+| FR-4.8 | ⚠️ **The deadline is READ-ONLY here — plain text, not a control.** It is set on work cards in **Sprint Schedules** and nowhere else. No border, no fill, no calendar icon, no hover affordance: a cell carrying the grammar of a date picker invites the click the rule exists to prevent. Empty renders as an em-dash. **The W2 write itself now originates on Sprint Schedules** | M |
+| FR-4.9 | Difficulty is set from a Pipeline row and written to Trello by swapping the card's `Difficulty: …` label — added before the stale one is removed, so the card is never left without a difficulty. ⚠️ **Targets the WORK CARD** | M |
+| FR-4.10 | These four are the complete set of writes; a fifth requires a BRD amendment | M |
+| FR-4.11 | **Classification tagging (W4).** **Business unit only** — the `UNIT` field — is written back to Trello by assigning and unassigning labels from a named set that already exists on the board. Matching is exact after normalisation; an unmatched value is surfaced, never fuzzy-matched. **Sirius never creates a label** — a tag with no matching board label is refused and surfaced, never resolved by creating one | M |
 
 #### FR-5 — Sprint Schedules
 
 | ID | Requirement | Priority |
 |---|---|---|
 | FR-5.1 | Fixed list pane plus scrolling gantt, grouped by sprint | M |
-| FR-5.2 | Three segments per row — sketch, client review, render — plus a deadline marker | M |
-| FR-5.3 | A render segment past its deadline renders red; the row flags late | M |
-| FR-5.4 | Rows are dragged to slot them; the gantt is output, not a control | M |
+| FR-5.2 | **One bar per row.** The scheduled unit is the **work card**, not the deliverable — sketch and render are **separate rows**, each a task with a start and a forecasted finish. ⚠️ **Bar colour encodes URGENCY, not phase** — urgent amber-600, non-urgent slate-400. The sketch-amber / render-blue convention is **retired**: the row already says which it is. The client deadline is a 2px red vertical rule. **No review segment, and review is not computed at all** — retired, BR-1b | M |
+| FR-5.3 | A **bar** ending past its deadline renders red; the row flags late. *("Segment" belonged to the retired two-phase row — sketch and render are separate rows now)* | M |
+| FR-5.4 | ⚠️ **Placement is WEEK GRAIN and click-to-place.** The PM clicks a week; the bar starts on that week's first working day. **No day-precise placement and no day-drag on this tab** — the day belongs to the design lead, in Deadlines alone (BR-9b). The start day is shown here **read-only**. A card may still be moved to a different **week** | M |
 | FR-5.5 | Multi-select by checkbox, shift-range or whole sprint | M |
-| FR-5.6 | A multi-row drag applies a relative shift, preserving spacing | M |
-| FR-5.7 | **Suggest plan** proposes slots from empirical throughput, ordered urgency → deadline → difficulty | S |
-| FR-5.8 | Suggestions preview as ghosts and apply only on explicit accept | M |
-| FR-5.9 | Rows can be pinned; suggestions never move a pinned row | M |
+| FR-5.6 | A multi-row move applies a relative **week** shift, preserving spacing. *Not yet built* | M |
+| ~~FR-5.7~~ | ~~**Suggest plan** proposes slots from empirical throughput~~ — **WITHDRAWN, see below** | — |
+| ~~FR-5.8~~ | ~~Suggestions preview as ghosts and apply only on explicit accept~~ — **WITHDRAWN** | — |
+| FR-5.9 | Rows can be pinned | **see below — pinning now protects against nothing** |
 | FR-5.10 | Throughput setting selectable: conservative / typical / stretch | S |
 | FR-5.11 | Trello status may be overridden with a note, visibly marked manual and reversible | M |
 | FR-5.12 | Duplicate a row without inheriting its Trello or Figma links | M |
@@ -257,30 +324,67 @@ IDs and text are the BRD's, preserved verbatim. Priority M = must, S = should.
 | FR-5.16 | Weekly capacity is set in cards per week, bounded by the project's ARES reference weeks | M |
 | FR-5.17 | The weekly footer shows cards against capacity and the Hard share | S |
 
+**Suggest plan withdrawn.** FR-5.7 and FR-5.8 are withdrawn, along with BR-7, AC-15 and AC-16.
+Miles's reasoning: removed for now to observe how the tool is actually used, and if a smart
+suggest proves warranted it will be rebuilt in a different form. Read the absence as a decision,
+not an oversight — do not restore it from this document.
+
+Two consequences that are **not** withdrawals:
+
+- **`planner.ts` stays.** `weekLoad()` and the WEIGHTS / HARD\_MIX constants remain
+  load-bearing for week capacity and the hard-mix ceiling. Only `suggestPlan()` goes dormant,
+  kept rather than deleted because the feature may return.
+  ⚠️ **`cardWeight()`'s `1 + tasks ÷ deliverables` (BR-6c) must NOT be applied on Sprint
+  Schedules or Deadlines.** It existed only because a deliverable row had to absorb the weight of
+  tasks with no row of their own. **Work cards have rows now, so each row weighs 1** and the
+  footer counts them directly: `N / 120 Work Cards`.
+- **FR-5.10 stays.** The throughput setting was bundled with smart plan in roadmap 3.4, but it
+  drives displayed capacity independently — the gantt footer reads `Capacity: 120 (Typical)`.
+
+**FR-5.9 is orphaned and needs a decision.** Pinning exists so that suggestions cannot move a
+row. With no suggester, a pin now protects against nothing. Either give it a second purpose or
+withdraw it — leaving it is a control that does nothing, which is worse than either.
+
 #### FR-6 — Deadlines
 
 | ID | Requirement | Priority |
 |---|---|---|
-| FR-6.1 | Read-only; all dates derive from Sprint Schedules | M |
-| FR-6.2 | Weeks of a selected month, navigable to any month | M |
-| FR-6.3 | Each deliverable contributes two entries — sketch delivery and render delivery | M |
-| FR-6.4 | Conflicts detected per BR-6 and explained on screen | M |
-| FR-6.5 | A replot list naming every affected deliverable and why | M |
-| FR-6.6 | Trello and Figma links on each entry | M |
-| FR-6.7 | Conflicts may be acknowledged; acknowledgement lapses when the cards involved change | M |
-| FR-6.8 | Acknowledged conflicts are counted and restorable | S |
+| FR-6.1 | Read-only and **downstream of Sprint Schedules**. The unit is the **work card**; sketch and render appear as separate cards | M |
+| FR-6.2 | A prev/next **month** navigator with a label — not a date-range picker | M |
+| FR-6.3 | ⚠️ **DOUBLY OPT-IN.** A card appears only if it was **added to Sprint Schedules AND plotted**. On the board but not added → absent. Added but not plotted → absent. **Neither is a gap, a sync failure or a bug** — do not reconcile against the board, and do not warn about unscheduled work | M |
+| ~~FR-6.4~~ | ~~Conflicts detected per BR-6~~ — **WITHDRAWN.** See BR-6 | — |
+| ~~FR-6.5~~ | ~~A replot list~~ — **WITHDRAWN** | — |
+| FR-6.6 | Trello and Figma links on each card | M |
+| ~~FR-6.7~~ | ~~Conflicts may be acknowledged~~ — **WITHDRAWN, and the server half DELETED** 2026-09-07, not parked | — |
+| ~~FR-6.8~~ | ~~Acknowledged conflicts counted and restorable~~ — **WITHDRAWN** | — |
+| FR-6.9 | ⚠️ **The day-drag lives here and ONLY here.** The design lead moves a card between days; a valid drop day satisfies four conditions at once — **inside the card's assigned week** · inside the sprint's dates · no later than the deadline · a working day | M |
+| FR-6.10 | **A card sits on its START day**, not its forecast finish. Day placement never changes the assigned week | M |
+| FR-6.11 | Placement is shared and durable across sessions and users | M |
+| FR-6.12 | Counts per week `N Pending · N Urgent · N Done`, per day `N Pending · N Done`. **Pending and Done do not sum to the total** — an ongoing card is in neither. **Urgent is a cross-cutting subset**, never added to the other two | M |
+| FR-6.13 | **Rollover.** An unfinished card moves forward one working day once its forecast finish has **passed** and it is **not in a Done lane**. It crosses week and sprint boundaries, membership follows the card, and the Sprint Schedules bar **translates whole**. **No marker records that it moved** | M |
+| FR-6.14 | **No search and no filters.** Navigation is the month control and scrolling. A completed card renders at `opacity: 0.4` | M |
 
-#### FR-7 — Forecast
+#### FR-7 — Forecast engine
+
+**The Forecast tab was withdrawn.** The model remains as an internal engine with no screen of
+its own, supplying projected dates, week capacity and day capacity to Pipeline, Sprint
+Schedules and Deadlines. Requirement IDs are left unrenumbered so existing references hold.
 
 | ID | Requirement | Priority |
 |---|---|---|
-| FR-7.1 | Column names match the Delivery Forecast sheet | M |
 | FR-7.2 | A single forecast, from measured delivery. The ported spreadsheet formula is retained in code for migration tests but is not exposed | M |
-| FR-7.3 | Empirical mode keys design time on difficulty **and** lane | M |
-| FR-7.4 | Difficulty read-only; confidence selectable per card | M |
-| FR-7.5 | Review SLA override replaces modelled review time and cascades | M |
+| FR-7.3 | ⚠️ Design time keys on difficulty **and the WORK-TYPE LABEL — not the lane.** Corrected 2026-09-09 after a 17,986-card audit: the lane says where a card *sat*, a label says what the *work was*. Labels are shaped `Category: Specific`; 57 exist on real cards and 98.3% of finished work cards carry exactly one. A cell is work-type × difficulty, and there are 134 | M |
 | FR-7.6 | The empirical grid recomputes on a schedule from a rolling window | M |
-| FR-7.7 | Model constants and sample sizes visible to users | S |
+
+**Withdrawn with the tab.** FR-7.1 — column names matching the Delivery Forecast sheet.
+
+**All three are now settled** — this section previously asked where each should go:
+
+| ID | Control | Question |
+|---|---|---|
+| ~~FR-7.4~~ | ~~Confidence, selectable per card~~ | ✅ **REHOMED, not orphaned.** It is a per-row select on **Sprint Schedules** — 70th / 85th / 95th — choosing from the measured design-time distribution for that card's difficulty and work type. This table listed it as an open question after it had been answered |
+| ~~FR-7.5~~ | ~~Review SLA override~~ | **RETIRED** — review time is withdrawn (BR-1b). Nothing left to override. |
+| ~~FR-7.7~~ | ~~Model constants and sample sizes visible to users~~ | **RETIRED** — no user asked for the grid. The team needs the bar and the confidence selector, both of which exist on Sprint Schedules. |
 
 #### FR-8 — Ingestion
 
@@ -293,7 +397,37 @@ IDs and text are the BRD's, preserved verbatim. Priority M = must, S = should.
 | FR-8.5 | Sync failures are logged and alerted; last good data remains visible | M |
 | FR-8.6 | Sync status and last-success time visible in the UI | S |
 
-#### FR-9 — Two-way sync *(added 2026-08-04, JP-directed change — not in BRD v2.2; BRD §9 amendment pending)*
+
+> **Engineering notes on the block above** — where the built system and v3.0 do not describe
+> each other. None of these is a licence to ignore the BRD; each is a question already with
+> product, and the build follows the reading named here until it is answered.
+>
+> ⚠️ **GAP 1 — FR-3.3's status values** (asked in owl #81, 2026-09-12). Its first sentence
+> makes *For Clarification* a third STATUS value; its third sentence makes it a flag a
+> *For Filing* row also carries. Sirius shipped the second reading on product's own #34/#35
+> ruling (2026-08-17): **STATUS is two-valued** — *In Pipeline* / *For Filing* — derived from
+> the Trello join alone, with the clarification flag living on the note and surfacing in the
+> Remarks cell. Named locally as FR-11.3 / FR-11.4 until the reword lands.
+>
+> ⚠️ **GAP 2 — FR-7.3's forecast axis** (asked in owl #74, 2026-09-11). v3.0 keys design time
+> on the **work-type label**; Sirius keys it on **lane and difficulty**, the lane folded from
+> the card's label family, reading ARES's pooled per-lane table. The reason is sample depth:
+> most single work types are too thin on the live board. Unanswered.
+>
+> **FR-3.6's "tiles do not filter" does not hold on Requests.** JP ruled 2026-09-12 that the
+> Requests tiles keep filtering **and** keep their unfiltered server counts, because tiles
+> that filter *and* rescope feed back on themselves. Pipeline's four tiles do not filter and
+> do rescope — that half is built as v3.0 states it.
+>
+> **FR-4.11 (W4) is built but INERT** — no route, no caller, `unit_label` outside
+> `registryFields()`. Its surface (which tab, which card kind) and the actor of an
+> ingestion-triggered tag are UNRULED, and constitution invariant 2 forbids a write until
+> they are.
+>
+> **FR-5.9's pinning protects against nothing** now that Suggest plan is withdrawn; the flag
+> and its audit row remain, unused by any planner.
+
+#### FR-9 — Two-way sync *(added 2026-08-04, JP-directed; **the BRD amendment landed** — v3.0 §9 and FR-4.10 enumerate four writes, so this section is now engineering detail beneath them, not a pending exception)*
 
 | ID | Requirement | Priority |
 |---|---|---|
@@ -354,45 +488,170 @@ them one id, and it has no admin-screen requirement at all.
 
 ### Business Rules
 
-Preserved verbatim from BRD §7.
+Preserved verbatim from BRD v3.0 §7.
 
-**BR-1 — Forecast arithmetic.** Unchanged from the workbook. `Sketch Delivery = WORKDAY(start, lead + design)`; `Sketch Approved = WORKDAY(sketch delivery, review)`; render begins the **Friday of the sketch-approval week**; `Total Cycle Time = 1.28 × forecast review time + 2.96` in spreadsheet mode.
+**BR-1 — Forecast arithmetic.** `Finish = WORKDAY(start, lead + design)`, per work card, at the
+selected confidence percentile. The start is the PM's placement; the finish is computed.
 
-**BR-2 — The forecast is empirical, and it is the only one.** Design time from measured working-lane dwell, keyed on difficulty **and** lane. Review time from measured dwell in *Sent for Client Review* lanes. Percentiles at Average / 70 / 85 / 95. The spreadsheet model is not offered as an alternative — it was found to overstate review waits by 2.6–4.6× (BR-3), so presenting it beside measured data would invite use of a number known to be wrong. It survives in code purely so tests can prove the port was faithful before the workbook is retired.
+~~`Sketch Approved = WORKDAY(sketch delivery, review)`~~ · ~~render begins the **Friday of the
+sketch-approval week**~~ · ~~`Total Cycle Time = 1.28 × forecast review time + 2.96`~~ —
+**all withdrawn with review time, see BR-1b.**
 
-**BR-3 — The spreadsheet model is wrong and must be rebuilt.** Measured client review wait across 1,184 completed cycles: median 2.68 d, p70 4.80 d. The workbook uses 12.5 d (Medium) and 22 d (Hard) at p70 — **2.6× to 4.6× too high**. This is why every card in early prototypes rendered as late. Rebuilding the grid from ARES is a prerequisite for release, not an enhancement.
+**BR-1b — Review time is retired.** Ruled by Miles: Sirius schedules **work cards**, and a work
+card is done and closed internally. Client review is not part of its duration — it is something
+that happens to a deliverable afterwards, and nothing Sirius forecasts depends on it.
 
-**BR-4 — Difficulty must be paired with lane.** In aggregate, Easy cards appear slower than Medium (21.6 h vs 13.0 h median). Within the `design` lane the expected order holds: 4.2 h → 18.1 h → 28.1 h. The anomaly is lane mix — Easy cards cluster in the `assets` lane, median 231 h. Difficulty alone is not a valid key.
+Withdrawn with it: `Sketch Approved` as a computed date, the review percentile table, the review
+term in Total Cycle Time, **FR-7.5** (the review SLA override) and **AC-12**. Do not rehome
+FR-7.5 — an override with nothing to override is not homeless, it is finished.
 
-**BR-5 — Sprints are data, not a cadence.** Each project holds an editable list of sprints with explicit start and end dates. Length varies with client alignment, holidays and scope. A deliverable belongs to whichever sprint contains its slotted week; weeks covered by no sprint appear under *Outside any sprint* rather than being forced into a neighbour. Overlapping sprints are rejected on save — a week cannot belong to two. Gaps are permitted and surfaced. Reordering preserves each sprint's length and re-flows the calendar from the set's earliest start.
+---
+**The confidence percentile now applies to design time only.** Where a percentile is selected on
+a Sprint Schedules row, it selects from the measured design-time distribution for that card's
+difficulty and **work-type label** — ⚠️ *not lane; see BR-4.* There is no second percentile.
 
-**BR-6 — Conflict detection**, per week on Deadlines:
+**BR-3 becomes historical.** Its finding — that the spreadsheet overstated *review* waits by
+2.6–4.6× — was the reason the measured model replaced the workbook. With review out of the
+arithmetic the finding no longer governs any live calculation. Keep the record; it explains why
+the spreadsheet was retired, and why its numbers must not be reintroduced.
 
-| Conflict | Condition | Reported |
-|---|---|---|
-| Urgent overlap | ≥2 urgent milestones in one week | the urgent items |
-| Over capacity | cards due exceed the week's card capacity | non-urgent items, as displaced |
-| Past deadline | forecast date after the client deadline | the breaching milestones |
+⚠️ **One consequence to watch.** Client-review lanes still exist on the board and are classified
+**ongoing** in the lane mapping (§7a of the build spec). An ongoing card rolls forward daily. So
+a card sitting in *Sent for Client Review* will walk forward through the schedule for as long as
+the client holds it — a wait the team does not control, moving a bar the PM placed. Review is out
+of the forecast but not out of the board, and rollover does not know the difference.
 
-**BR-6a — Capacity is cards per week, sourced from ARES.** Each project's capacity comes from `steering.deliveryForecast.referenceWeeks` in ARES, which already models the least productive, typical and most productive week by card count. The typical week is the default; least and most bound the control. For rt-837 that is 1 / 120 / 367 cards, with an `effectiveWeeklyRate` of 90.2. Sirius does not invent a capacity unit.
+**BR-1a — The render-start clause no longer governs placement.** In Sprint Schedules the PM plots
+every work card by hand, render exactly as sketch. There is no cascade: a render row is not
+created, positioned or suggested when its sketch is forecast to finish. BR-1 still supplies each
+bar's right-hand end — `finish = WORKDAY(start, lead + design)` — but the *start* is the PM's
+click, not a derivation. Miles's reasoning: the PM should hold that control.
 
-*Caveat:* those reference weeks count every card on the board, including work cards and ops cards, while Sirius plans deliverables. Expect the deliverable-level typical to be lower, and revise once ARES can report it.
+⚠️ **Resolved, and this paragraph previously said otherwise.** It read that *"review is still
+computed"* and asked what still consumed it — a question **BR-1b answered by retiring review
+entirely.** Nothing computes it, nothing reads it, and `Sketch Approved` is gone rather than
+orphaned. The two paragraphs contradicted each other inside one document.
 
-**BR-6b — Hard mix ceiling.** Card count alone cannot distinguish a week of 120 easy cards from 120 hard ones, so a second axis applies. Difficulty weights (Easy 1, Medium 2, Hard 4) are used *only* for this test. Measured across 27 weeks on board `hLL7WW2V`: hard share median **8.3%** (ideal), p85 **12.9%** (ceiling), observed max 20.4%. Weeks above the median ran a median cycle of **24.1 h against 19.4 h** — roughly 24% slower per card. A week over the ideal is flagged amber, over the ceiling red.
+**BR-2 — The forecast is empirical, and it is the only one.** Design time from measured working-lane dwell, keyed on difficulty **and the work-type label** — ⚠️ *not the lane; see FR-7.3 and BR-4.* Percentiles at Average / 70 / 85 / 95, selected per work card. ~~Review time from measured dwell in *Sent for Client Review* lanes~~ — withdrawn, see BR-1b. The spreadsheet model is not offered as an alternative — it was found to overstate review waits by 2.6–4.6× (BR-3), so presenting it beside measured data would invite use of a number known to be wrong. It survives in code purely so tests can prove the port was faithful before the workbook is retired.
+
+**BR-3 — The spreadsheet model was wrong and HAS been rebuilt.** ✅ *Done; the gate passed and the PM accepted the model. This rule previously read "must be rebuilt … a prerequisite for release" and is kept as the record of why.* Measured client review wait across 1,184 completed cycles: median 2.68 d, p70 4.80 d. The workbook uses 12.5 d (Medium) and 22 d (Hard) at p70 — **2.6× to 4.6× too high**. This is why every card in early prototypes rendered as late.
+
+**BR-4 — Difficulty must be paired with the WORK-TYPE LABEL.** ⚠️ **Corrected 2026-09-09**; this rule previously said *lane*, and lane was the wrong axis.
+
+**The lane says where a card sat; a label says what the work was.** A card in the Design group might be a screen cascade, a refinement or QA, and those take very different times. The nature of work lives in labels shaped `Category: Specific` — `Design: Screen Cascade`, `Asset: Illustration`.
+
+**Difficulty alone remains invalid**, for the reason originally recorded: in aggregate Easy appears slower than Medium purely from mix. Easy/assets is 13.88 days at p70 against Easy/design at 0.94.
+
+⚠️ **Never classify on the card TITLE.** The old lane matcher hit `asset|illustrat|render|icon`, and every task prefix on this board (`Sketch Asset`, `Render Asset`, `Icon Clean Up`) matched it — picking a 13.88-day cell where a 0.94-day one belonged. **Fourteen times the duration, decided by a naming convention.**
+
+⚠️ **Figures quoted before 2026-09-09 are suspect.** ARES was asking Trello for list moves without a limit, so Trello silently returned only the **50 most recent** — and the cards that churn most are the slow ones, so **the slowest work was recorded as fast**. 26.3% of finished work cards measured under one hour. Fixed. Every Content and Motion cell now carries a **borrowed** figure rather than a measurement; those are placeholders, not numbers to defend to a client.
+
+**BR-5 — Sprints are data, not a cadence.** Each project holds an editable list of sprints with explicit start and end dates. Length varies with client alignment, holidays and scope. ⚠️ **A WORK CARD** — not a deliverable — belongs to whichever sprint contains its slotted week; weeks covered by no sprint appear under *Outside any sprint* rather than being forced into a neighbour. Overlapping sprints are rejected on save — a week cannot belong to two. Gaps are permitted and surfaced. Reordering preserves each sprint's length and re-flows the calendar from the set's earliest start.
+
+⚠️ **Membership is STORED, not derived.** Rollover moves cards across sprint boundaries (FR-6.13), so membership must follow the card rather than be recomputed from a week.
+
+⚠️ **Re-dating a sprint displaces cards to *Outside any sprint*, keeping their day.** Ruled 2026-09-10. They are **not** pushed into the next sprint — that can start a card **after its own deadline**, which the UI refuses, and it would silently discard the design lead's day. **There is no no-next-sprint case**, so a date edit never destroys a schedule. Sprint **deletion** does remove rows, audited and behind a confirmation naming the count; **a date edit must never be that destructive.**
+
+**~~BR-6 — Conflict detection.~~ WITHDRAWN ENTIRELY.** Ruled by Miles: *"those are just noise."* Gone: the three per-week rules (urgent overlap, over capacity, past deadline), the badges, the banners, the replot list, and acknowledgement — **whose server half was deleted 2026-09-07, not parked.**
+
+**A count replaced it** — `N Pending · N Urgent · N Done`. A count states the situation without asserting anything is wrong, and keeps discriminating when many weeks trip the same condition.
+
+⚠️ **That last clause is the whole lesson.** The predecessor was a full-row amber wash on Pipeline that lit **247 of 249 rows** and therefore said nothing. **A warning that fires almost always is not a warning.** Do not reintroduce this as a smaller warning — the smaller warning *was* the reduced version.
+
+**BR-6a — Capacity is cards per week, sourced from ARES.** Each project's capacity comes from
+`steering.deliveryForecast.referenceWeeks` in ARES, which already models the least productive, typical and most
+productive week by card count. The typical week is the default; least and most bound the control. For rt-837 that is
+1 / 120 / 367 cards, with an `effectiveWeeklyRate` of 90.2. Sirius does not invent a capacity unit.
+
+*Caveat:* those reference weeks count every card on the board, including ops cards. ⚠️ **Sirius now plans work cards, not deliverables**, so the unit is much closer than when this caveat was written — but ops cards are excluded from Sirius's own counts by identity (§7a of the build spec), so the two still differ. **Both the capacity figure and the hard-mix ceiling predate the work-card rework; if their denominator was deliverables, the thresholds do not mean what they meant.** Being confirmed with Engineering.
+
+**BR-6b — Hard mix ceiling.** Card count alone cannot distinguish a week of 120 easy cards from 120 hard ones, so a
+second axis applies. Difficulty weights (Easy 1, Medium 2, Hard 4) are used *only* for this test. Measured across 27
+weeks on board `hLL7WW2V`: hard share median **8.3%** (ideal), p85 **12.9%** (ceiling), observed max 20.4%. Weeks above
+the median ran a median cycle of **24.1 h against 19.4 h** — roughly 24% slower per card. A week over the ideal is
+flagged amber, over the ceiling red.
 
 **BR-6c — Row weight converts rows to card-equivalents.** *(Added 2026-08-12 from build spec v1.1 §5.4; resolves the BR-6a caveat.)* A schedule row is a deliverable, but capacity (BR-6a) counts every card. Each row therefore weighs `1 + (its MC group's work cards ÷ the group's deliverables)`: MC-805, with 13 deliverables and 40 work cards, weighs 4.08 per row and 53 as a group; the verified board sums to **478 = 269 deliverables + 209 work cards** (the 20 unkeyed cards weigh into no group). The weight feeds the weekly footer, the over-capacity tint and the BR-6 *over capacity* conflict. It does **not** feed the hard-mix test (BR-6b keeps its own difficulty weights) and does **not** alter Suggest plan's validated placement arithmetic (`lib/planner.ts` counts rows, golden-locked — invariant 5). *Count basis confirmed by the product team 2026-08-12 (`docs/product/errata-reply-v1.2.md`): this weight applies everywhere, Deadlines included — their §6.1 "counts 3" was a documentation error, fixed in build spec v1.2. Their rationale, kept for the record: a deliverable is real work, not a container — 244 of 269 deliverables carry no task cards, so a work-cards-only basis would hide 90% of the board from capacity.*
 
-**BR-7 — Smart plan.** Order by urgency, then deadline, then difficulty descending. A week fills at the empirical throughput ceiling for its difficulty mix. Blocked cards are not scheduled into the current week. Pinned rows are immovable. Nothing applies without explicit acceptance.
+⚠️ **BR-6c is ours, not v3.0's, and its SCOPE narrowed with the work-card rework.** v3.0
+names it once — to forbid it: `cardWeight()`'s `1 + tasks ÷ deliverables` must NOT be
+applied on Sprint Schedules or Deadlines. It existed only because a deliverable row had to
+absorb the weight of work cards that had no row of their own. **Work cards have rows now, so
+each row weighs 1** and the footer counts them directly — `N / 120 Work Cards`. The weight
+survives where rows are still deliverables. Proven by AC-30.
 
-**BR-7a — Unachievable mixes are reported, not refused.** Where the backlog's own hard share exceeds the ceiling, no arrangement of weeks can satisfy it. The planner spreads hard work as evenly as possible, places everything, and states plainly that the ceiling is unreachable. Refusing to schedule work would be worse than scheduling it with a warning.
+**~~BR-7 — Smart plan.~~ WITHDRAWN** with FR-5.7 / FR-5.8. The ordering it defined — urgency, then deadline, then difficulty descending — has no consumer while there is no suggester. Retained here rather than deleted because the feature may return in another form, and the ordering was derived from measured behaviour rather than chosen: *order by urgency, then deadline, then difficulty descending; a week fills at the empirical throughput ceiling for its difficulty mix; blocked cards are not scheduled into the current week; pinned rows are immovable; nothing applies without explicit acceptance.*
 
-**BR-8 — Multi-row move.** A drag applies the interval between the grabbed row's week and the drop week to every selected row.
+**BR-7a — Unachievable mixes are reported, not refused.** Still live and **not** dependent on smart plan — it governs how the hard-mix ceiling is reported wherever capacity is shown, including the Sprint Schedules footer and the Deadlines view. Where the backlog's own hard share exceeds the ceiling, no
+arrangement of weeks can satisfy it. The planner spreads hard work as evenly as possible, places everything, and states
+plainly that the ceiling is unreachable. Refusing to schedule work would be worse than scheduling it with a warning.
 
-**BR-9 — Deadline precedence.** Trello due date wins where present; otherwise the intake sheet's; otherwise none, and the card cannot raise a deadline conflict.
+**BR-8 — Multi-row move.** A drag applies the interval between the grabbed row's **week** and the drop week to every selected row, preserving spacing. *(Not yet built.)*
 
-**BR-9a — Conflicts can be acknowledged.** Overlaps sometimes happen by choice. Any conflict banner may be dismissed, which also removes its items from the replot list. A dismissal is keyed on *week + rule + the exact cards involved*, so it silences one specific situation rather than the rule: if a card is added, removed, replotted or moves phase, the conflict is a different one and surfaces again. Card-level indicators — the red render bar, the late flag — are never suppressed. The alert is dismissible; the fact is not.
+**BR-9 — Deadline precedence.** Trello due date wins where present; otherwise the intake sheet's; otherwise none. ⚠️ The old clause *"and the card cannot raise a deadline conflict"* is void — **there are no conflicts** (BR-6). A card without a deadline renders an **em-dash** and is not a fault; most sit that way for their whole planning life.
 
-**BR-10 — Status classification.** *(Rewritten 2026-09-08, owl #82.)* Lane state is a static table of named Trello lists (`LIST_STATES` in `src/services/status-rules.ts`) → pending | ongoing | done | excluded, exact match after normalisation, with Ready-for / family-stage / Backlog rules for the prefixed Ongoing lanes and unknown names defaulting to ongoing and logged per sync (spec v1.3 §7a). The keyword classifier of T031 is retired.
+**~~BR-9a — Conflicts can be acknowledged.~~ WITHDRAWN, and the implementation DELETED** 2026-09-07 — not parked pending a design.
+
+**There is nothing left to acknowledge.** The badges were replaced by a count, and a count does not assert that anything is wrong, so it never needs dismissing. Keeping dormant schema and endpoints would drag them through every migration and read to a future maintainer as a feature in flight.
+
+*The dismissal key that was recorded here — `week + rule + the exact cards involved`, so a dismissal silences one situation rather than the rule — is worth remembering only if a per-week warning ever returns. Its design would differ anyway.*
+
+**BR-9b — Daily placement, and it belongs to ONE role on ONE tab.** ⚠️ Rewritten 2026-09-10; the previous wording had the wrong default and the wrong owner.
+
+**Two owners, one row.** The PM owns the **deadline** and the **week**; the design lead owns the **day**. In the PM's own words: *"sa akin yung red line, kay Don yung orange na bar."* **The week is locked to the PM** — the design lead works inside the week he was given.
+
+⚠️ **The day is set in DEADLINES and nowhere else.** Sprint Schedules places at week grain and shows the resulting day **read-only**; the PM cannot move a card by a day on any surface. **A card placed into a week starts on that week's first working day** — not on its forecast delivery day, which is computed rather than chosen and would leave the lead arranging dates he cannot move.
+
+⚠️ **The design lead's drag is BOUNDED by the assigned week**, and a valid drop day satisfies four conditions at once: inside that week · inside the sprint's dates · no later than the card's deadline · a working day.
+
+**A card sits on its START day** — the day the team is slated to pick it up.
+
+Placement is stored per project and card, shared across users, and durable across sessions. It never alters the assigned week or the forecast.
+
+*Day capacity — the week's capacity split across non-holiday days by largest remainder, holidays taking none — is **recorded but has no surface**, the day planner it served having been retired. Whether it survives is open.*
+
+**BR-3a — Frost notes.** A request may carry a clarification flag with a reason, and an internal remark. ⚠️ **The flag does not replace a status — it adds one.** A clarified row is **both *For Filing* AND *For Clarification*** (FR-3.3); the two are not mutually exclusive, so status counts sum past the row count by design. It is the team's record of why something cannot be filed. Neither field is ever written to the client's sheet — the sheet is theirs, and Sirius does not edit it. Both are stored per project and shared.
+
+**BR-10 — Status classification. ⚠️ THE KEYWORD CLASSIFIER IS RETIRED.** This rule previously specified *"configurable keyword rules"*. **Do not build them.** Measured against real lane data they **misclassified 9 of 20** — `Ops Work Complete` counting as finished project work, `Passed QA` counting as nothing.
+
+**Every lane resolves to one of four outcomes: Pending · Ongoing · Done · excluded.** Three are states a card is *in*; **excluded is a visibility filter, not a state.**
+
+**Two different reasons to exclude, and they must not be merged.** Operations work is excluded **by identity** — ops cards carry perfectly good states, so state cannot exclude them. Three lanes are excluded because the source says they have **no equivalent status**.
+
+⚠️ **`Production Backlog` sits inside the OPS group and is IN SCOPE**, as Pending. A blanket `group == OPS` rule is wrong: exclude the five *named* lanes.
+
+**The source of truth is Apollo, read through the ARES lanes endpoint** — `GET /api/v1/trello/boards/:boardId/lanes` returns every list with its type and group, keyed by list ID so a rename does not break the mapping. **Neither side needs to maintain a second table of lane names.**
+
+⚠️ **An unmapped lane must be SURFACED, never guessed at.** That is the one case a static table cannot cover, and it has to fail loudly rather than quietly picking a state.
+
+*Why a keyword rule is tempting and still wrong: one does happen to hold across the current data, but it turns on single characters — `Released` is Done while `Ready for Release` is Ongoing, and `Pushed` matches `Pushed to Production` while `Production` would collide with `Production Backlog`. It holds by coincidence, not by structure.*
+
+**Requests' status model is separate and unaffected** — see FR-3.3.
+
+
+> **Engineering notes on the rules above.**
+>
+> ⚠️ **GAP 3 — BR-10's source of state** (asked in owl #74, 2026-09-11, unanswered). v3.0 and
+> build spec §7a say the ARES lanes endpoint **supersedes** product's name table. JP ruled
+> 2026-09-08 that the **name table stays the source of state** (pending · ongoing · done ·
+> excluded) and the endpoint is read for two narrower things: naming a list we hold no rule
+> for before a card sits in it, and Apollo's type and group. The endpoint cannot replace the
+> table — it knows only "work" and "process", has no *waiting on client* and no *excluded*,
+> and is a cache of the last manual sync. Built as JP ruled: `LIST_STATES` in
+> `src/services/status-rules.ts`, exact match after normalisation, unknown names logged per
+> sync.
+>
+> **BR-2 and BR-4 carry GAP 2** — see the engineering notes under the functional
+> requirements. The rules are built on lane and difficulty, not on the work-type label.
+>
+> **BR-6c is ours, not the BRD's** *(added 2026-08-12 from build spec v1.1 §5.4)* — a
+> scheduled row weighs `1 + tasks ÷ deliverables` in its MC group, converting rows to
+> card-equivalents so weekly load can be compared with a capacity counted in cards. It
+> resolves BR-6a's caveat and is proven by AC-30.
+>
+> **BR-3 is historical, not governing** (v3.0's own wording). It is why
+> `lib/forecast.legacy.ts` exists and why it is never imported by UI code — constitution
+> invariant 6.
 
 ### Non-Functional Requirements
 
@@ -418,14 +677,14 @@ NFR-3 amended 2026-08-04: with ARES push live (FR-9.4) the working target is **<
 
 - **Project**: A client engagement — name, client, status, its Trello board (and disambiguating label where the board is shared), its intake sheet, capacity in cards per week bounded by ARES reference weeks, and its own editable sprint list.
 - **Sprint**: An editable named date range belonging to a project. Not a cadence. Overlaps rejected; gaps legal and surfaced.
-- **Deliverable**: The planning and forecasting unit — a Trello card carrying the `Main Card` label (269 on the verified board). Identity is (project, Trello card); `mc_number` is **not** unique — MC-825 carries 99 deliverables; a display id such as `MC-655.3` is for humans. Fields divide by owner: Trello-owned (name, list, difficulty, lane, blockers, due date, links), sheet-owned (deadline, use case, brief, requestor), Sirius-owned (slotted week, pin, confidence, SLA overrides, status note) — and the written-back fields per the write registry: urgency and the due date (amended 2026-08-04).
-- **Work card**: A production task (209 on the verified board), prefixed by verb (`Render Asset:`, `Cascade Mobile Screen:`, `Icon Clean Up:`). Attaches to the MC group — there is no reliable task→deliverable edge (1 of 27 titles matched).
+- **Deliverable**: A Trello card carrying the `Main Card` label (269 on the verified board). Identity is (project, Trello card id) — `mc_number` is NOT unique, and MC-825 carries 99. ⚠️ **It is no longer the scheduled unit**: slotted week, pin, confidence, start day, deadline, sprint membership and urgency all live on the work card. A parent row offers no controls and reads em-dashes (AC-26).
+- **Work card**: A production task (209 on the verified board), prefixed by verb (`Render Asset:`, `Cascade Mobile Screen:`, `Icon Clean Up:`). ⚠️ **THE SCHEDULED UNIT** — one bar per work card, sketch and render as separate rows. Attaches to the MC group, never to a single deliverable: no reliable task→deliverable edge exists (1 of 27 titles matched), and none is modelled.
 - **Intake request**: One row of the project's intake sheet — MC #, name, requestor, type, use case, brief, deadline. Read-only mirror; vanished rows go inactive, never deleted.
 - **Card event**: A single Trello lane movement with its timestamp — the raw material for cycle times and the empirical model.
-- **Model grid / throughput grid**: Per-project percentiles (Average / 70 / 85 / 95) of design and review time keyed on difficulty × lane, and cards-per-week throughput per difficulty, recomputed on a schedule from a rolling window, each with visible sample sizes.
-- **Frost note**: A Sirius-owned annotation on an intake request — remark, clarification flag and reason — keyed (project, MC number); one per request, never written to the sheet (added 2026-08-12, FR-11).
-- **Milestone day placement**: A Mon–Fri day choice for one deliverable phase inside its slotted week; absent means follow the forecast; lapses when the week changes (added 2026-08-12, FR-12).
-- **Conflict acknowledgement**: A dismissal keyed on week + rule + the exact cards involved; lapses when the situation changes.
+- **Model grid / throughput grid**: Per-project percentiles (Average / 70 / 85 / 95) of **design** time keyed on difficulty × lane, and cards-per-week reference figures, read from ARES. ⚠️ **The review percentile table is retired with review time (BR-1b).** GAP 2: v3.0 keys design time on the work-type label; the build keys it on lane and difficulty, for sample depth — asked in owl #74.
+- **Frost note**: A Sirius-owned annotation on an intake request — remark, clarification flag and reason — keyed (project, MC number); one per request, never written back to the sheet (FR-3.7–FR-3.10).
+- **Milestone day placement**: A Mon–Fri day choice inside a card's assigned week; absent means follow the forecast; lapses when the week changes (FR-6.10, FR-12.6). ⚠️ **Re-keyed with the unit** — the swept engineering doc replaces the old `(deliverable, phase)` key with the work card's own start day.
+- ~~**Conflict acknowledgement**~~: **DELETED 2026-09-07**, not parked — with BR-6, BR-9a, FR-6.7 and FR-6.8. Stored rows were archived by migration 011. Nothing acknowledges anything now: the badges became a count, and a count asserts nothing that needs dismissing (constitution invariant 13).
 - **Audit log entry**: Immutable record of every state change — who, what, before, after, when.
 - **Sync run**: One execution of an ingestion or write job — source, outcome, stats, error.
 
@@ -444,7 +703,10 @@ From BRD §4, verbatim — the measured coverage that justifies BR-9 and AC-8.
 | Cycle times | Trello card movements via ARES | 78,401 movements |
 | **Deadline** | **Intake sheet** | **467 / 502** (Trello: 4 / 498) |
 | Use case, brief, requestor | Intake sheet | 98% / 99% / 100% |
-| Urgency | Set in Sirius, written to Trello as an `Urgent` label | 0 / 26 boards today — created on first use |
+| Urgency | Set in Sirius on the WORK CARD, written to Trello as an `Urgent` label (W1) | 0 / 26 boards today — created on first use |
+| Difficulty (written) | Set in Sirius, written as a `Difficulty: …` label swap (W3, FR-4.9) | label family already on every board |
+| Deadline (written) | Set in Sirius on the work card, written as the Trello due date (W2, FR-9) | preserves precedence by construction (BR-9) |
+| Business unit (written) | Assigned from an EXISTING board label only (W4, FR-4.11) | **built but inert** — surface and actor unruled |
 
 **BR-note on deadlines.** An earlier draft required the team to start setting Trello due dates. Measurement showed the sheet already holds them at 93% coverage while Trello holds 0.8%. Sirius therefore reads deadlines from the sheet and joins on MC number, raising pipeline deadline coverage from 1/269 to 169/269 with no behaviour change. A Trello due date, where present, wins — it was set deliberately.
 
@@ -515,9 +777,9 @@ is where the old mapping lives if a pre-adoption reference needs decoding.
 - Multi-project registry with per-project sources and settings
 - **Requests** — read-only mirror of each project's intake sheet
 - **Pipeline** — deliverables and work cards, sourced from Trello via ARES
-- **Sprint Schedules** — list-plus-gantt planning, drag scheduling, multi-select, smart suggestions
-- **Deadlines** — read-only operations view with conflict detection
-- **Forecast** — the empirical model rebuilt from ARES (the ported spreadsheet model exists in code for migration tests only, per FR-7.2)
+- **Sprint Schedules** — list-plus-gantt planning at **week grain**, click-to-place, multi-select, one bar per work card *(smart suggestions WITHDRAWN — FR-5.7/5.8, BR-7)*
+- **Deadlines** — the design lead's month view: the day a card starts, bounded day drag, per-week and per-day counts *(conflict detection WITHDRAWN — BR-6)*
+- **The forecast** — the empirical model rebuilt from ARES, surfaced on Pipeline, Sprint Schedules and Deadlines; **there is no Forecast tab**, and review time is retired (BR-1b). The ported spreadsheet model exists in code for migration tests only, per FR-7.2)
 - Google SSO restricted to `@frostdesigngroup.com`, with a named allow-list
 - Read-only ingestion from Trello (via ARES) and Google Sheets (via service account)
 
@@ -528,7 +790,7 @@ is where the old mapping lives if a pre-adoption reference needs decoding.
 | Client login and any client-visible surface | v2 |
 | Request filing inside the platform | v3 |
 | Google Chat notifications | v2 (they address clients) |
-| Any write-back to Trello or Sheets — except the enumerated write registry: `Urgent` label + card due date (amended 2026-08-04; §Data Protection) | Not planned |
+| Any write-back to Trello or Sheets — except the enumerated write registry, now **four** entries: `Urgent` label (W1), card due date (W2), `Difficulty: …` label (W3) and the business-unit tag (W4, built but inert). A fifth requires a BRD amendment (FR-4.10) | v1 carries exactly these four; **no write path to Sheets exists at any version** |
 | Per-designer resource assignment | Later |
 | Manual time tracking | Not planned — derived from Trello activity |
 | Native mobile apps | Not planned |
@@ -651,11 +913,13 @@ From BRD §13. Marked, not resolved — each is answered by its owner and record
 
 - **OD-1** — ✅ Resolved 2026-08-03, see Clarifications.
 - **OD-2** [NEEDS CLARIFICATION: Rolling window for the empirical model — 6 or 12 months? Owner: PM. Affects FR-7.6.]
-- **OD-4** — ✅ Closed 2026-09-08 as moot: conflict acknowledgements are retired (owl #87; CLAUDE.md invariant 13). Affects FR-6.7.
+- **OD-4** — ✅ **DEAD.** Conflicts and acknowledgement were withdrawn and the implementation deleted 2026-09-07 (owl #87; invariant 13). v3.0 records it the same way.
 - **OD-5** — ✅ Closed 2026-09-08: `Client Approval` lanes are Ongoing by §7a's enumeration (`Ready for Client Approval`, `Sent for Client Approval`).
 - **OD-6** [NEEDS CLARIFICATION: Which projects are in v1 beyond GCash? Owner: Leadership. Affects seed data and rollout.]
 - **OD-7** [NEEDS CLARIFICATION: Retention for closed requests and archived cards. Owner: Leadership.]
-- **OD-8** — ✅ Resolved 2026-08-03, see Clarifications.
+- **OD-8** — ✅ Resolved 2026-08-03 on the build side (deployed beside ARES, shared Mongo server, own
+  database), see Clarifications. ⚠️ **BRD v3.0 §13 still lists it open with leadership** — read that as
+  product paperwork, not an undecided build question. Put back to product in owl #79.
 
 ## Assumptions
 
@@ -674,9 +938,16 @@ From BRD §11, verbatim.
 
 Preserved exactly from BRD Appendix A. Measured from ARES, board `hLL7WW2V`, Jan–Jul 2026. These are a snapshot and are superseded by the scheduled refresh (FR-7.6).
 
-**Client review wait (days):** median 2.68 · p70 4.80 · p85 9.87 · p95 19.64 · mean 5.21 · n = 1,184
+~~**Client review wait (days):** median 2.68 · p70 4.80 · p85 9.87 · p95 19.64 · mean 5.21 · n = 1,184~~
+⚠️ **RETIRED with review time (BR-1b).** Kept struck through rather than deleted because it is the
+evidence behind BR-3 — the spreadsheet's 2.6–4.6× overstatement — and `lib/forecast.legacy.ts`'s
+migration tests still measure against it. No user-facing date uses it.
 
-**Design time (days) by difficulty × lane, at p70:**
+**Design time (days) by difficulty × lane, at p70** — ⚠️ **GAP 2**: v3.0 keys this on the work-type
+label; the build keys it on the folded lane, for sample depth (asked in owl #74, unanswered). The
+figures below are the January–July snapshot; ARES's live grid superseded them for the cards that have
+enough samples, and the refreshed grid is **held, not used**, until the unfreeze gate passes
+(invariant 7):
 
 | Difficulty | design | ops | assets |
 |---|---|---|---|
