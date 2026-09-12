@@ -19,6 +19,20 @@ import { MIGRATIONS, runMigrations } from '../scripts/migrate/migrations.ts';
 const SOURCE = 'conflict_acknowledgements';
 const ARCHIVE = 'conflict_acknowledgements_archive';
 
+/* Vitest's DEFAULT budget is five seconds a test and ten a hook, and this file
+   is the one suite that cannot live inside it. Every case here runs the whole
+   migration list against a real in-memory server and drops the database again
+   afterwards, while eighty-three other files compete for the machine. Under
+   that load a case would blow the five seconds and abort MID-FLIGHT, and the
+   half-torn-down database it left behind then failed a LATER case in this file
+   — which is why a different test went red each run while the suite passed
+   alone and passed on the re-run every time (state-log 2026-09-12).
+
+   This is a REALISTIC budget for the work, not a retry and not a mask: a case
+   that genuinely hangs still fails, a minute later. If these ever approach a
+   minute the answer is to look at why, not to raise this again. */
+const DB_MS = 60_000;
+
 let server: MongoMemoryServer;
 
 beforeAll(async () => {
@@ -29,11 +43,11 @@ beforeAll(async () => {
 afterAll(async () => {
   await mongoose.disconnect();
   await server.stop();
-});
+}, DB_MS);
 
 afterEach(async () => {
   await mongoose.connection.db!.dropDatabase();
-});
+}, DB_MS);
 
 /** The migration under test, taken from the shipped list by id — never a copy. */
 const migration011 = MIGRATIONS.find((m) => m.id === '011-archive-conflict-acknowledgements')!;
@@ -53,7 +67,7 @@ async function seedAcks(rows = 2): Promise<void> {
   );
 }
 
-describe('011-archive-conflict-acknowledgements', () => {
+describe('011-archive-conflict-acknowledgements', { timeout: DB_MS }, () => {
   /* Ordering asserted RELATIVELY, not as a position pin: `.at(-1)` said "011 is
      last", which is a snapshot of the list rather than the rule (test/CLAUDE.md
      rule 1) and made every later migration a red. The rule is that 011 runs
@@ -156,7 +170,7 @@ describe('011-archive-conflict-acknowledgements', () => {
  * does not backfill a default onto STORED documents. 012 makes the state
  * explicit on rows written before the field existed.
  */
-describe('012-work-card-labels', () => {
+describe('012-work-card-labels', { timeout: DB_MS }, () => {
   const migration012 = MIGRATIONS.find((m) => m.id === '012-work-card-labels')!;
   const workCards = () => mongoose.connection.db!.collection('work_cards');
 
